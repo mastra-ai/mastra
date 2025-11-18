@@ -1,9 +1,10 @@
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { convertArrayToReadableStream } from 'ai-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import type { Processor } from '../processors/index';
 import { RequestContext } from '../request-context';
 import type { MastraDBMessage } from './types';

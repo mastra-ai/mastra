@@ -13,9 +13,6 @@ import {
   createTestModels,
   defaultSettings,
   modelWithDocumentSources,
-  modelWithFiles,
-  modelWithReasoning,
-  modelWithSources,
   testUsage,
   createMessageListWithUserMessage,
 } from './utils';

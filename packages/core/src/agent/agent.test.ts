@@ -6,13 +6,13 @@ import type { CoreMessage, CoreSystemMessage, LanguageModelV1 } from '@internal/
 import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
 import { APICallError, stepCountIs } from 'ai-v5';
 import type { SystemModelMessage } from 'ai-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { convertArrayToReadableStream } from 'ai-v5/test';
 import { config } from 'dotenv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { noopLogger } from '../logger';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { Mastra } from '../mastra';
 import type { MastraDBMessage, StorageThreadType } from '../memory';
 import { MockMemory } from '../memory/mock';

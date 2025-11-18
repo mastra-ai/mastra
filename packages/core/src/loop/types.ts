@@ -1,10 +1,11 @@
 import type { WritableStream } from 'stream/web';
-import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { CallSettings, IdGenerator, StopCondition, ToolChoice, ToolSet, StepResult, ModelMessage } from 'ai-v5';
 import z from 'zod';
 import type { MessageList } from '../agent/message-list';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { ModelMethodType } from '../llm/model/model.loop.types';
+import type { MastraLanguageModelV2 } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { IModelSpanTracker } from '../observability';
@@ -25,7 +26,7 @@ export type StreamInternal = {
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
-  model?: LanguageModelV2;
+  model?: MastraLanguageModelV2;
   toolChoice?: ToolChoice<TOOLS>;
   activeTools?: Array<keyof TOOLS>;
   system?: string;
@@ -35,7 +36,7 @@ export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
 export type PrepareStepFunction<TOOLS extends ToolSet = ToolSet> = (options: {
   steps: Array<StepResult<TOOLS>>;
   stepNumber: number;
-  model: LanguageModelV2;
+  model: MastraLanguageModelV2;
   messages: Array<ModelMessage>;
 }) => PromiseLike<PrepareStepResult<TOOLS> | undefined> | PrepareStepResult<TOOLS> | undefined;
 
