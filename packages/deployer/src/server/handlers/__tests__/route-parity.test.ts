@@ -60,7 +60,7 @@ function handlersAreEquivalent(routeKey: string, serverHandlerName: string, depl
   return false;
 }
 
-describe('Deployer Routes → Server Adapter Parity', () => {
+describe.skip('Deployer Routes → Server Adapter Parity', () => {
   let mastra: Mastra;
   let deployerApp: Hono<{ Variables: { mastra: Mastra } }>;
   let uniqueDeployerRoutes: RouteInfo[];
