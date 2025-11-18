@@ -212,8 +212,9 @@ export interface ToolAction<
     TSuspendSchema,
     TResumeSchema
   >,
+  TId extends string = string,
 > {
-  id: string;
+  id: TId;
   description: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;

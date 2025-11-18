@@ -56,7 +56,7 @@ export interface SystemPromptDetection {
   redacted_value: string | null;
 }
 
-export class SystemPromptScrubber implements Processor {
+export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'> {
   public readonly id = 'system-prompt-scrubber';
   public readonly name = 'System Prompt Scrubber';
 

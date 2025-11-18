@@ -31,7 +31,7 @@ export interface TokenLimiterOptions {
  * Output processor that limits the number of tokens in generated responses.
  * Implements both processOutputStream for streaming and processOutputResult for non-streaming.
  */
-export class TokenLimiterProcessor implements Processor {
+export class TokenLimiterProcessor implements Processor<'token-limiter'> {
   public readonly id = 'token-limiter';
   public readonly name = 'Token Limiter';
   private encoder: Tiktoken;

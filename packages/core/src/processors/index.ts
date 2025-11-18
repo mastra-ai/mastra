@@ -2,8 +2,8 @@ import type { MastraDBMessage } from '../agent/message-list';
 import type { TracingContext } from '../observability';
 import type { ChunkType } from '../stream';
 
-export interface Processor {
-  readonly id: string;
+export interface Processor<TId extends string = string> {
+  readonly id: TId;
   readonly name?: string;
 
   /**

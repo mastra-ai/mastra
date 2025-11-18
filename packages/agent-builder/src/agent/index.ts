@@ -54,6 +54,7 @@ export class AgentBuilder extends Agent {
     const combinedInstructions = additionalInstructions + AgentBuilderDefaults.DEFAULT_INSTRUCTIONS(config.projectPath);
 
     const agentConfig = {
+      id: 'agent-builder',
       name: 'agent-builder',
       description:
         'An AI agent specialized in generating Mastra agents, tools, and workflows from natural language requirements.',

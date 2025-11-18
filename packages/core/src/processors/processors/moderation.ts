@@ -92,7 +92,7 @@ export interface ModerationOptions {
  * Provides flexible moderation with custom categories, thresholds, and strategies
  * while maintaining compatibility with OpenAI's moderation API structure.
  */
-export class ModerationProcessor implements Processor {
+export class ModerationProcessor implements Processor<'moderation'> {
   readonly id = 'moderation';
   readonly name = 'Moderation';
 

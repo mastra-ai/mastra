@@ -78,6 +78,7 @@ const planningIterationStep = createStep({
       const model = await resolveModel({ requestContext });
 
       const planningAgent = new Agent({
+        id: 'workflow-planning-agent',
         model,
         instructions: taskPlanningPrompts.planningAgent.instructions({
           storedQAPairs,

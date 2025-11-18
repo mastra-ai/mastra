@@ -9,6 +9,7 @@ import { lessComplexWorkflow, myWorkflow } from './workflows';
 import { chefModelV2Agent, errorAgent, networkAgent } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/evals';
 import { myWorkflowX, nestedWorkflow } from './workflows/other';
+import { moderationProcessor } from './agents/model-v2-agent';
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
@@ -33,6 +34,9 @@ export const mastra = new Mastra({
     evalAgent,
     chefModelV2Agent,
     networkAgent,
+  },
+  processors: {
+    moderationProcessor,
   },
   logger: new PinoLogger({ name: 'Chef', level: 'debug' }),
   storage,
