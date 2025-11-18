@@ -26,17 +26,17 @@ jobs:
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Setup Node.js
-        if: steps.mdx-changes.outputs.has_changes == 'true'
-        uses: actions/setup-node@v5
-        with:
-          node-version: '20.19.5'
-
       - name: Setup pnpm
         if: steps.mdx-changes.outputs.has_changes == 'true'
         uses: pnpm/action-setup@v4
         with:
           version: 10.18.2
+
+      - name: Setup Node.js
+        if: steps.mdx-changes.outputs.has_changes == 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20.19.5'
 
       - name: Install dependencies
         if: steps.mdx-changes.outputs.has_changes == 'true'
@@ -104,17 +104,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.2
+
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
           node-version: '20.19.5'
           cache: 'npm'
           cache-dependency-path: docs/package-lock.json
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.18.2
 
       - name: Install dependencies for docs
         run: npm ci
