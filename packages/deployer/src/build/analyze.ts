@@ -65,7 +65,6 @@ async function validateOutput(
     outputDir,
     projectRoot,
     workspaceMap,
-    nonWorkspaceDeps,
   }: {
     output: (OutputChunk | OutputAsset)[];
     reverseVirtualReferenceMap: Map<string, string>;
@@ -73,7 +72,6 @@ async function validateOutput(
     outputDir: string;
     projectRoot: string;
     workspaceMap: Map<string, WorkspacePackageInfo>;
-    nonWorkspaceDeps: Set<string>;
   },
   logger: IMastraLogger,
 ) {
@@ -91,11 +89,6 @@ async function validateOutput(
     for (const dep of Object.keys(deps)) {
       result.externalDependencies.add(dep);
     }
-  }
-
-  // Add non-workspace deps that were filtered out (from externals: true or dev mode)
-  for (const dep of nonWorkspaceDeps) {
-    result.externalDependencies.add(dep);
   }
 
   for (const file of output) {
@@ -248,9 +241,7 @@ If you think your configuration is valid, please open an issue.`);
   }
 
   /**
-   * Only during `mastra dev` we want to optimize workspace packages. In previous steps we might have added dependencies that are not workspace packages, so we gotta remove them again.
-   *
-   * Similarly, when `externals: true`, we only want to bundle workspace packages and mark all other dependencies as external.
+   * During `mastra dev` or when the user has set `bundler.externals: true`, we only want to bundle workspace packages. For this, we remove dependencies from `deptsToOptimize` that we might have added in previous steps. We also fill a `nonWorkspaceDeps` set that we can later add to the final result's `externalDependencies` set.
    */
   const externalizeAllDeps = typeof bundlerOptions?.externals === 'boolean' && bundlerOptions.externals === true;
   const shouldOnlyBundleWorkspace = isDev || externalizeAllDeps;
@@ -293,10 +284,14 @@ If you think your configuration is valid, please open an issue.`);
       outputDir,
       projectRoot: workspaceRoot || projectRoot,
       workspaceMap,
-      nonWorkspaceDeps,
     },
     logger,
   );
+
+  // Add non-workspace deps that were filtered out (from externals: true or dev mode)
+  for (const dep of nonWorkspaceDeps) {
+    result.externalDependencies.add(dep);
+  }
 
   return result;
 }
