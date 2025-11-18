@@ -27,7 +27,7 @@ reviews:
   suggested_reviewers: true
   auto_assign_reviewers: false
   in_progress_fortune: true
-  poem: true
+  poem: false
   path_filters: []
   path_instructions: []
   abort_on_close: true
@@ -52,7 +52,7 @@ reviews:
       threshold: 80
     title:
       mode: warning
-      requirements: ''
+      requirements: 'Title should be concise and descriptive, ideally under 50 characters. Avoid generic phrases like "Update code" or "Fix bug". Use imperative mood and proper capitalization.'
     description:
       mode: warning
     issue_assessment:
@@ -65,8 +65,6 @@ reviews:
       essential_rules: true
       packages: []
     shellcheck:
-      enabled: true
-    ruff:
       enabled: true
     markdownlint:
       enabled: true
@@ -85,62 +83,23 @@ reviews:
       enabled: true
     hadolint:
       enabled: true
-    swiftlint:
-      enabled: true
-    phpstan:
-      enabled: true
-      level: default
-    phpmd:
-      enabled: true
-    phpcs:
-      enabled: true
-    golangci-lint:
-      enabled: true
     yamllint:
       enabled: true
     gitleaks:
       enabled: true
     checkov:
       enabled: true
-    detekt:
-      enabled: true
     eslint:
-      enabled: true
-    flake8:
-      enabled: true
-    rubocop:
-      enabled: true
-    buf:
-      enabled: true
-    regal:
       enabled: true
     actionlint:
       enabled: true
-    pmd:
-      enabled: true
-    clang:
-      enabled: true
-    cppcheck:
-      enabled: true
     semgrep:
-      enabled: true
-    circleci:
-      enabled: true
-    clippy:
       enabled: true
     sqlfluff:
       enabled: true
     prismaLint:
       enabled: true
-    pylint:
-      enabled: true
     oxc:
-      enabled: true
-    shopifyThemeCheck:
-      enabled: true
-    luacheck:
-      enabled: true
-    brakeman:
       enabled: true
     dotenvLint:
       enabled: true
@@ -154,8 +113,6 @@ chat:
   art: true
   auto_reply: true
   integrations:
-    jira:
-      usage: auto
     linear:
       usage: auto
 knowledge_base:
@@ -169,9 +126,6 @@ knowledge_base:
     scope: auto
   issues:
     scope: auto
-  jira:
-    usage: auto
-    project_keys: []
   linear:
     usage: auto
     team_keys: []
