@@ -24,6 +24,9 @@ interface DeepgramWord {
 export class DeepgramVoice extends MastraVoice {
   private speechClient?: ReturnType<typeof createClient>;
   private listeningClient?: ReturnType<typeof createClient>;
+  private storedSpeechModel?: { name: DeepgramModel; apiKey?: string };
+  private storedListeningModel?: { name: DeepgramModel; apiKey?: string };
+  private storedSpeaker?: DeepgramVoiceId;
 
   constructor({
     speechModel,
@@ -32,12 +35,12 @@ export class DeepgramVoice extends MastraVoice {
   }: { speechModel?: DeepgramVoiceConfig; listeningModel?: DeepgramVoiceConfig; speaker?: DeepgramVoiceId } = {}) {
     const defaultApiKey = process.env.DEEPGRAM_API_KEY;
 
-    const defaultSpeechModel = {
+    const defaultSpeechModel: { name: DeepgramModel; apiKey?: string } = {
       name: 'aura',
       apiKey: defaultApiKey,
     };
 
-    const defaultListeningModel = {
+    const defaultListeningModel: { name: DeepgramModel; apiKey?: string } = {
       name: 'nova',
       apiKey: defaultApiKey,
     };
@@ -54,6 +57,15 @@ export class DeepgramVoice extends MastraVoice {
       speaker,
     });
 
+    this.storedSpeechModel = {
+      name: speechModel?.name ?? defaultSpeechModel.name,
+      apiKey: speechModel?.apiKey ?? defaultSpeechModel.apiKey,
+    };
+    this.storedListeningModel = {
+      name: listeningModel?.name ?? defaultListeningModel.name,
+      apiKey: listeningModel?.apiKey ?? defaultListeningModel.apiKey,
+    };
+
     const speechApiKey = speechModel?.apiKey || defaultApiKey;
     const listeningApiKey = listeningModel?.apiKey || defaultApiKey;
 
@@ -68,7 +80,7 @@ export class DeepgramVoice extends MastraVoice {
       this.listeningClient = createClient(listeningApiKey);
     }
 
-    this.speaker = speaker || 'aura-asteria-en';
+    this.storedSpeaker = speaker || 'asteria-en';
   }
 
   async getSpeakers() {
@@ -107,22 +119,15 @@ export class DeepgramVoice extends MastraVoice {
       throw new Error('Input text is empty');
     }
 
-    if (!this.speechClient) {
-      throw new Error('No speech client configured');
-    }
-
-    let model;
-    if (options?.speaker) {
-      model = this.speechModel?.name + '-' + options.speaker;
-    } else if (this.speaker) {
-      model = this.speechModel?.name + '-' + this.speaker;
-    }
+    const voiceId = options?.speaker || this.storedSpeaker;
+    const model = this.storedSpeechModel?.name;
 
     const speakClient = this.speechClient.speak;
     const response = await speakClient.request(
       { text },
       {
         model,
+        voiceId,
         ...options,
       },
     );
@@ -191,7 +196,7 @@ export class DeepgramVoice extends MastraVoice {
       throw new Error('No listening client configured');
     }
     const { result, error } = await this.listeningClient.listen.prerecorded.transcribeFile(buffer, {
-      model: this.listeningModel?.name,
+      model: this.storedListeningModel?.name,
       ...options,
     });
 
@@ -203,22 +208,27 @@ export class DeepgramVoice extends MastraVoice {
     const alt: {
       transcript?: string;
       words?: DeepgramWord[];
-    } = channel?.alternatives?.[0];
+    } | undefined = channel?.alternatives?.[0];
 
 
     if (!alt) {
       throw new Error("No transcript found in Deepgram response");
     }
 
-    return {
+    const response: any = {
       transcript: alt.transcript,
       words: alt.words,
-      speakerSegments: alt.words?.map((w: DeepgramWord)=> ({
-        word: w.word,
-        speaker: w.speaker
-      })),
       raw: result
     };
+
+    if (options?.diarize && alt.words) {
+      response.speakerSegments = alt.words.map((w: DeepgramWord) => ({
+        word: w.word,
+        speaker: w.speaker
+      }));
+    }
+
+    return response;
 
   }
 }
