@@ -13,6 +13,14 @@ interface DeepgramVoiceConfig {
   language?: string;
 }
 
+interface DeepgramWord {
+  word: string;
+  start?: number;
+  end?: number;
+  confidence?: number;
+  speaker?: number;
+}
+
 export class DeepgramVoice extends MastraVoice {
   private speechClient?: ReturnType<typeof createClient>;
   private listeningClient?: ReturnType<typeof createClient>;
@@ -60,7 +68,7 @@ export class DeepgramVoice extends MastraVoice {
       this.listeningClient = createClient(listeningApiKey);
     }
 
-    this.speaker = speaker || 'asteria-en';
+    this.speaker = speaker || 'aura-asteria-en';
   }
 
   async getSpeakers() {
@@ -160,9 +168,11 @@ export class DeepgramVoice extends MastraVoice {
   async listen(
     audioStream: NodeJS.ReadableStream,
     options?: {
+      diarize?: boolean;
+      diarize_speaker_count?: number;
       [key: string]: any;
     },
-  ): Promise<string> {
+  ): Promise<any> {
     if (!this.listeningClient) {
       throw new Error('Deepgram listening client not configured');
     }
@@ -189,12 +199,27 @@ export class DeepgramVoice extends MastraVoice {
       throw error;
     }
 
-    const transcript = result.results?.channels?.[0]?.alternatives?.[0]?.transcript;
-    if (!transcript) {
-      throw new Error('No transcript found in Deepgram response');
+    const channel = result.results?.channels?.[0];
+    const alt: {
+      transcript?: string;
+      words?: DeepgramWord[];
+    } = channel?.alternatives?.[0];
+
+
+    if (!alt) {
+      throw new Error("No transcript found in Deepgram response");
     }
 
-    return transcript;
+    return {
+      transcript: alt.transcript,
+      words: alt.words,
+      speakerSegments: alt.words?.map((w: DeepgramWord)=> ({
+        word: w.word,
+        speaker: w.speaker
+      })),
+      raw: result
+    };
+
   }
 }
 
