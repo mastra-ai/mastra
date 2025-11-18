@@ -177,9 +177,9 @@ export const mastra = new Mastra({
 });
 ```
 
-## Referencing an agent
+## Calling an agent
 
-You can call agents from workflow steps, tools, the Mastra Client, or the command line. Get a reference by calling `.getAgent()` on your `mastra` or `mastraClient` instance, depending on your setup:
+You can call agents from workflow steps, tools, or the Mastra Client. Get a reference by calling `.getAgent()` on your `mastra` or `mastraClient` instance, depending on your setup:
 
 ```typescript showLineNumbers copy
 const testAgent = mastra.getAgent("testAgent");
@@ -187,11 +187,70 @@ const testAgent = mastra.getAgent("testAgent");
 
 :::info
 
-`mastra.getAgent()` is preferred over a direct import, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
-
-See [Calling agents](/examples/agents/calling-agents) for more information.
+`mastra.getAgent()` is preferred over directly importing an agent in to your file, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
 
 :::
+
+### From a workflow step
+
+The `mastra` instance is passed as an argument to a workflow step’s `execute` function. It provides access to registered agents using `getAgent()`. Use this method to retrieve your agent, then call `generate()` with a prompt.
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  // ...
+  execute: async ({ mastra }) => {
+
+    const agent = mastra.getAgent("testAgent");
+    const response = await agent.generate("Help me organize my day");
+
+    console.log(response.text);
+  }
+});
+```
+
+### From a tool
+
+The `mastra` instance is available within a tool’s `execute` function. Use `getAgent()` to retrieve a registered agent and call `generate()` with a prompt.
+
+```typescript filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
+export const testTool = createTool({
+  // ...
+  execute: async ({ mastra }) => {
+
+    const agent = mastra.getAgent("testAgent");
+    const response = await agent.generate("Help me organize my day");
+
+    console.log(response!.text);
+  }
+});
+```
+
+### Using HTTP or curl
+
+You can interact with a registered agent by sending a `POST` request to your Mastra application's `/generate` endpoint. Include a `messages` array of role/content pairs.
+
+```bash
+curl -X POST http://localhost:4111/api/agents/testAgent/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {
+        "role": "user",
+        "content": "Help me organize my day"
+      }
+    ]
+  }'| jq -r '.text'
+```
+
+**Example output**
+
+```text
+1. What time do you plan to start your day?
+2. Do you have any specific tasks or appointments scheduled for today?
+3. Are there any personal goals or activities you want to include (e.g., exercise, reading, hobbies)?
+4. How much time do you want to allocate for work versus personal time?
+5. Do you have any deadlines or priorities that need to be addressed?
+```
 
 ## Generating responses
 
@@ -361,6 +420,68 @@ const response = await testAgentThatDoesntSupportStructuredOutput.generate(
 console.log(response.object);
 ```
 
+## Using tools
+
+Agents can use tools to go beyond language generation, enabling structured interactions with external APIs and services. Tools allow agents to access data and perform clearly defined operations in a reliable, repeatable way.
+
+```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers
+export const testAgent = new Agent({
+  // ...
+  tools: { testTool },
+});
+```
+
+> See [Using Tools](/docs/agents/using-tools) for more information.
+
+## Using `RuntimeContext`
+
+Use `RuntimeContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+
+```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+export const testAgent = new Agent({
+  // ...
+  model: ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+
+    return userTier === "enterprise"
+      ? openai("gpt-4o-mini")
+      : openai("gpt-4.1-nano");
+  },
+});
+```
+
+> See [Runtime Context](/docs/server-db/runtime-context) for more information.
+
+## Using `maxSteps`
+
+The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 5, but can be increased:
+
+```typescript showLineNumbers copy
+const response = await testAgent.generate("Help me organize my day", {
+  maxSteps: 10,
+});
+
+console.log(response.text);
+```
+
+## Using `onStepFinish`
+
+You can monitor the progress of multi-step operations using the `onStepFinish` callback. This is useful for debugging or providing progress updates to users.
+
+`onStepFinish` is only available when streaming or generating text without structured output.
+
+```typescript showLineNumbers copy
+const response = await testAgent.generate("Help me organize my day", {
+  onStepFinish: ({ text, toolCalls, toolResults, finishReason, usage }) => {
+    console.log({ text, toolCalls, toolResults, finishReason, usage });
+  },
+});
+```
+
 ## Working with images
 
 Agents can analyze and describe images by processing both the visual content and any text within them. To enable image analysis, pass an object with `type: 'image'` and the image URL in the `content` array. You can combine image content with text prompts to guide the agent's analysis.
@@ -386,77 +507,12 @@ const response = await testAgent.generate([
 console.log(response.text);
 ```
 
-For a detailed guide to creating and configuring tools, see the [Tools Overview](../tools-mcp/overview) page.
-
-### Using `maxSteps`
-
-The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 1, but can be increased:
-
-```typescript showLineNumbers copy
-const response = await testAgent.generate("Help me organize my day", {
-  maxSteps: 5,
-});
-
-console.log(response.text);
-```
-
-### Using `onStepFinish`
-
-You can monitor the progress of multi-step operations using the `onStepFinish` callback. This is useful for debugging or providing progress updates to users.
-
-`onStepFinish` is only available when streaming or generating text without structured output.
-
-```typescript showLineNumbers copy
-const response = await testAgent.generate("Help me organize my day", {
-  onStepFinish: ({ text, toolCalls, toolResults, finishReason, usage }) => {
-    console.log({ text, toolCalls, toolResults, finishReason, usage });
-  },
-});
-```
-
-## Using tools
-
-Agents can use tools to go beyond language generation, enabling structured interactions with external APIs and services. Tools allow agents to access data and perform clearly defined operations in a reliable, repeatable way.
-
-```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers
-export const testAgent = new Agent({
-  // ...
-  tools: { testTool },
-});
-```
-
-> See [Using Tools](./using-tools) for more information.
-
-## Using `RuntimeContext`
-
-Use `RuntimeContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
-
-```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers
-export type UserTier = {
-  "user-tier": "enterprise" | "pro";
-};
-
-export const testAgent = new Agent({
-  // ...
-  model: ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
-
-    return userTier === "enterprise"
-      ? openai("gpt-4o-mini")
-      : openai("gpt-4.1-nano");
-  },
-});
-```
-
-> See [Runtime Context](/docs/server-db/runtime-context) for more information.
-
 ## Testing with Studio
 
 Use [Studio](/docs/getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
 
 ## Related
 
-- [Using Tools](./using-tools)
-- [Agent Memory](./agent-memory)
-- [Runtime Context](/examples/agents/runtime-context)
-- [Calling Agents](/examples/agents/calling-agents)
+- [Using Tools](/docs/agents/using-tools)
+- [Agent Memory](/docs/agents/agent-memory)
+- [Runtime Context](/docs/server-db/runtime-context)

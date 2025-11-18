@@ -99,7 +99,7 @@
   --ifm-footer-background-color: #050505;
   --ifm-code-background: var(--mastra-surface-2);
 
-  --ifm-navbar-height: calc(58px);
+  --ifm-navbar-height: 47px;
 
   /* Code blocks */
   --docusaurus-highlighted-code-line-bg: color-mix(
@@ -364,9 +364,122 @@ h6 code {
   border-radius: 10px;
 }
 
+/* ==================== LINKS ==================== */
+article a {
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--mastra-green-muted);
+  color: var(--mastra-text-primary);
+}
+
+article a:hover {
+  color: var(--mastra-green-accent-2);
+  text-decoration-color: var(--mastra-green-accent-2);
+}
+
+[data-theme="dark"] .markdown a {
+  text-decoration-color: var(--mastra-green-accent);
+  color: var(--mastra-green-accent);
+}
+
+[data-theme="dark"] article a:hover {
+  color: var(--mastra-green-accent-2);
+}
+
+/* ==================== TYPOGRAPHY ==================== */
+article p {
+  line-height: 1.7;
+  color: var(--mastra-text-secondary);
+}
+
+article h1,
+article h2,
+article h3,
+article h4,
+article h5,
+article h6 {
+  color: var(--mastra-text-primary);
+}
+
+article li {
+  color: var(--mastra-text-secondary);
+}
+
+#docs-search-results {
+  scrollbar-width: none;
+}
+
+p {
+  @apply tracking-[-0.09px] leading-[1.6];
+}
+
+.docusaurus-mt-lg {
+  overflow-x: hidden;
+}
+
+.sidebar-hidden {
+  display: none !important;
+}
+
+.kapa-widget-container,
+.kapa-widget-container *,
+[class*="kapa"],
+[class*="Kapa"],
+[class*="roboto" i] {
+  font-family: var(--ifm-font-family-base) !important;
+}
+
+table {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+thead tr {
+  border: none;
+}
+
+thead th {
+  border: none;
+}
+
+table tbody tr {
+  border-color: var(--border);
+  background: none;
+}
+
+table tbody tr:nth-child(even) {
+  background: none;
+}
+
+tbody td {
+  border: none;
+  background: none;
+}
+
+iframe,
+img,
+video {
+  border-radius: 12px;
+  max-width: 100%;
+}
+
+ul {
+  list-style: disc;
+}
+
+ol {
+  list-style: decimal;
+}
+
 @media (min-width: 997px) {
   [class*="docSidebarContainer"] {
     width: 280px !important;
+  }
+
+  .docusaurus-mt-lg {
+    overflow-x: revert;
   }
 
   .theme-doc-sidebar-container [class*="sidebar"] {
@@ -380,6 +493,7 @@ h6 code {
   pre,
   [class*="tableOfContents"],
   .tabs,
+  [role="log"],
   .toc-wrapper {
     padding-inline: 0 !important;
     scrollbar-width: thin;
@@ -395,6 +509,7 @@ h6 code {
     .menu,
     pre,
     [class*="tableOfContents"],
+    [role="log"],
     .tabs,
     .toc-wrapper {
       scrollbar-color: #2a2a2a transparent;
@@ -463,21 +578,6 @@ h6 code {
     .markdown h3 {
       border-bottom-color: var(--border);
     }
-  }
-
-  iframe,
-  img,
-  video {
-    border-radius: 12px;
-    max-width: 100%;
-  }
-
-  ul {
-    list-style: disc;
-  }
-
-  ol {
-    list-style: decimal;
   }
 
   /* ==================== PAGINATION ==================== */
@@ -706,49 +806,6 @@ h6 code {
   .footer__copyright {
     color: var(--mastra-text-tertiary);
     font-size: 0.8125rem;
-  }
-
-  /* ==================== LINKS ==================== */
-  article a {
-    font-weight: 500;
-    text-decoration: underline;
-    text-decoration-thickness: 1px;
-    text-underline-offset: 2px;
-    text-decoration-color: var(--mastra-green-muted);
-    color: var(--mastra-text-primary);
-  }
-
-  article a:hover {
-    color: var(--mastra-green-accent-2);
-    text-decoration-color: var(--mastra-green-accent-2);
-  }
-
-  [data-theme="dark"] .markdown a {
-    text-decoration-color: var(--mastra-green-accent);
-    color: var(--mastra-green-accent);
-  }
-
-  [data-theme="dark"] article a:hover {
-    color: var(--mastra-green-accent-2);
-  }
-
-  /* ==================== TYPOGRAPHY ==================== */
-  article p {
-    line-height: 1.7;
-    color: var(--mastra-text-secondary);
-  }
-
-  article h1,
-  article h2,
-  article h3,
-  article h4,
-  article h5,
-  article h6 {
-    color: var(--mastra-text-primary);
-  }
-
-  article li {
-    color: var(--mastra-text-secondary);
   }
 
   /* ==================== TABLES ==================== */
@@ -1137,20 +1194,11 @@ h6 code {
     }
   }
 
-  /*/*
-
-  html[style*="--chatbot-sidebar-open: 0"] #doc-item-container {
-    max-width: 100% !important;
-  } */
-
   #doc-item-container {
     max-width: 64rem;
     margin: 0 auto;
   }
 
-  /* #toc-column {
-  display: none;
-} */
   .card__grid a {
     color: var(--mastra-text-secondary);
   }
@@ -1175,17 +1223,6 @@ h6 code {
       }
     }
   }
-}
-
-#docs-search-results {
-  scrollbar-width: none;
-}
-
-p {
-  @apply tracking-[-0.09px] leading-[1.6];
-}
-
-@media (min-width: 997px) {
   .theme-doc-sidebar-item-link.theme-doc-sidebar-item-link-level-1 > a {
     padding-inline-start: 0.5rem;
   }
@@ -1263,7 +1300,7 @@ p {
   }
 
   .toc-wrapper {
-    @apply sticky overflow-y-auto;
+    @apply overflow-y-auto sticky;
     top: calc(var(--ifm-navbar-height) + 1rem);
     max-height: calc(100vh - var(--ifm-navbar-height) - 2rem);
   }
@@ -1306,56 +1343,4 @@ p {
       right: 20.4%;
     }
   }
-}
-
-.docusaurus-mt-lg {
-  overflow-x: hidden;
-}
-
-@media (min-width: 997px) {
-  .docusaurus-mt-lg {
-    overflow-x: revert;
-  }
-}
-
-/* Hide sidebar items with sidebar-hidden class */
-.sidebar-hidden {
-  display: none !important;
-}
-
-/* ==================== OVERRIDE EXTERNAL FONT LOADING ==================== */
-/* Override Kapa SDK and any third-party components to use local fonts instead of Google Fonts Roboto */
-.kapa-widget-container,
-.kapa-widget-container *,
-[class*="kapa"],
-[class*="Kapa"],
-[class*="roboto" i] {
-  font-family: var(--ifm-font-family-base) !important;
-}
-
-table {
-  border: 1px solid var(--border);
-  border-radius: 12px;
-}
-
-thead tr {
-  border: none;
-}
-
-thead th {
-  border: none;
-}
-
-table tbody tr {
-  border-color: var(--border);
-  background: none;
-}
-
-table tbody tr:nth-child(even) {
-  background: none;
-}
-
-tbody td {
-  border: none;
-  background: none;
 }

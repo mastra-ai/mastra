@@ -62,17 +62,17 @@
     },
     {
       "source": "/:path(ja)?/docs/evals/01-textual-evals",
-      "destination": "/:path/docs/scorers/evals-old-api/textual-evals",
+      "destination": "/:path/docs/scorers/evals-legacy/textual-evals",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/docs/evals/02-custom-eval",
-      "destination": "/:path/docs/scorers/evals-old-api/custom-eval",
+      "destination": "/:path/docs/scorers/evals-legacy/custom-eval",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/docs/evals/03-running-in-ci",
-      "destination": "/:path/docs/scorers/evals-old-api/running-in-ci",
+      "destination": "/:path/docs/scorers/evals-legacy/running-in-ci",
       "permanent": true
     },
     {
@@ -242,7 +242,7 @@
     },
     {
       "source": "/:path(ja)?/docs/integrations",
-      "destination": "/:path/docs/tools-mcp/mcp-overview",
+      "destination": "/:path/docs/mcp/overview",
       "permanent": true
     },
     {
@@ -1131,33 +1131,33 @@
       "permanent": true
     },
     {
-      "source": "/:path(ja)?/docs/tools-mcp/runtime-context",
+      "source": "/:path(ja)?/docs/mcp/runtime-context",
       "destination": "/:path/docs/server-db/runtime-context",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/docs/evals",
-      "destination": "/:path/docs/scorers/evals-old-api/overview",
+      "destination": "/:path/docs/scorers/evals-legacy/overview",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/docs/evals/overview",
-      "destination": "/:path/docs/scorers/evals-old-api/overview",
+      "destination": "/:path/docs/scorers/evals-legacy/overview",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/docs/evals/custom-eval",
-      "destination": "/:path/docs/scorers/evals-old-api/custom-eval",
+      "destination": "/:path/docs/scorers/evals-legacy/custom-eval",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/docs/evals/running-in-ci",
-      "destination": "/:path/docs/scorers/evals-old-api/running-in-ci",
+      "destination": "/:path/docs/scorers/evals-legacy/running-in-ci",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/docs/evals/textual-evals",
-      "destination": "/:path/docs/scorers/evals-old-api/textual-evals",
+      "destination": "/:path/docs/scorers/evals-legacy/textual-evals",
       "permanent": true
     },
     {
@@ -1202,7 +1202,7 @@
     },
     {
       "source": "/:path(ja)?/docs/tools",
-      "destination": "/:path/docs/tools-mcp/overview",
+      "destination": "/:path/docs/mcp/overview",
       "permanent": true
     },
     {
@@ -1238,31 +1238,6 @@
     {
       "source": "/:path(ja)?/reference/core",
       "destination": "/:path/reference/core/mastra-class",
-      "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/templates/CONTRIBUTING.md",
-      "destination": "/:path/docs/community/contributing-templates",
-      "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/templates/EVALS.md",
-      "destination": "/:path/docs/community/contributing-templates",
-      "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/templates/LICENSE",
-      "destination": "/:path/docs/community/licensing",
-      "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/templates/docs",
-      "destination": "/:path/docs/getting-started/templates",
-      "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/templates/olde-maps-ai-directions-assistant",
-      "destination": "/:path/docs/getting-started/templates",
       "permanent": true
     },
     {
@@ -1328,6 +1303,491 @@
     {
       "source": "/:path(ja)?/docs/server-db/production-server",
       "destination": "/:path/docs/server-db/mastra-server",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/scorers/off-the-shelf-scorers",
+      "destination": "/:path/docs/scorers/built-in-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/scorers/evals-old-api/overview",
+      "destination": "/:path/docs/scorers/evals-legacy/overview",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/scorers/evals-old-api/textual-evals",
+      "destination": "/:path/docs/scorers/evals-legacy/textual-evals",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/scorers/evals-old-api/custom-eval",
+      "destination": "/:path/docs/scorers/evals-legacy/custom-eval",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/scorers/evals-old-api/running-in-ci",
+      "destination": "/:path/docs/scorers/evals-legacy/running-in-ci",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/tools-mcp/mcp-overview",
+      "destination": "/:path/docs/mcp/overview",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/tools-mcp/advanced-usage",
+      "destination": "/:path/docs/mcp/overview",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/examples/agents/deploying-mcp-server",
+      "destination": "/:path/docs/mcp/publishing-mcp-server",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/agents/listTools",
+      "destination": "/:path/reference/agents/getTools",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/core/listAgents",
+      "destination": "/:path/reference/core/getAgents",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/tools-mcp/overview",
+      "destination": "/:path/docs/mcp/overview",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/tools-mcp/deploying-mcp-server",
+      "destination": "/:path/docs/mcp/publishing-mcp-server",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/mcp/deploying-mcp-server",
+      "destination": "/:path/docs/mcp/publishing-mcp-server",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/examples/agents/request-context",
+      "destination": "/:path/examples/agents/runtime-context",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/observability/tracing/processors/sensitive-data-filter",
+      "destination": "/:path/docs/observability/ai-tracing/processors/sensitive-data-filter",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/observability/tracing/overview",
+      "destination": "/:path/docs/observability/ai-tracing/overview",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/observability/tracing/exporters/arize",
+      "destination": "/:path/docs/observability/ai-tracing/exporters/arize",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/observability/tracing/exporters/braintrust",
+      "destination": "/:path/docs/observability/ai-tracing/exporters/braintrust",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/observability/tracing/exporters/cloud",
+      "destination": "/:path/docs/observability/ai-tracing/exporters/cloud",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/observability/tracing/exporters/default",
+      "destination": "/:path/docs/observability/ai-tracing/exporters/default",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/observability/tracing/exporters/langfuse",
+      "destination": "/:path/docs/observability/ai-tracing/exporters/langfuse",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/observability/tracing/exporters/langsmith",
+      "destination": "/:path/docs/observability/ai-tracing/exporters/langsmith",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/observability/tracing/exporters/otel",
+      "destination": "/:path/docs/observability/ai-tracing/exporters/otel",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/examples/evals/running-in-ci",
+      "destination": "/:path/docs/scorers/evals-legacy/running-in-ci",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/overview",
+      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/agent",
+      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/agents/human-in-the-loop-with-tools",
+      "destination": "/:path/docs/workflows/human-in-the-loop",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/evals/custom-scorers",
+      "destination": "/:path/docs/scorers/custom-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/evals/off-the-shelf-scorers",
+      "destination": "/:path/docs/scorers/built-in-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/guides/03-stock-agent",
+      "destination": "/:path/guides/guide/stock-agent",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/logging",
+      "destination": "/:path/docs/observability/logging",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/reference/core",
+      "destination": "/:path/reference/core/mastra-class",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/reference/networks/agent-network",
+      "destination": "/:path/reference/agents/network",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/reference/tools/mcp-configuration",
+      "destination": "/:path/reference/tools/mcp-client",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/reference/voice/mastra-voice",
+      "destination": "/:path/reference/voice/mastra-voice",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/examples/observability/basic-tracing",
+      "destination": "/:path/examples/observability/basic-ai-tracing",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/examples/workflows/parallel-steps",
+      "destination": "/:path/docs/workflows/control-flow",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/examples/workflows/sequential-steps",
+      "destination": "/:path/docs/workflows/control-flow",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/cli",
+      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/client",
+      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/evals",
+      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/mastra",
+      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/mcp",
+      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/memory",
+      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/processors",
+      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/storage",
+      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/tools",
+      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/tracing",
+      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/vectors",
+      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/voice",
+      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/workflows",
+      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/models/providers/iflowcn",
+      "destination": "/:path/models/providers/",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/models/providers/minimax",
+      "destination": "/:path/models/providers/",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/models/providers/ovhcloud",
+      "destination": "/:path/models/providers/",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/agents/getDefaultOptions",
+      "destination": "/:path/reference/agents/getDefaultGenerateOptions",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/core/getMCPServerById",
+      "destination": "/:path/reference/core/getMCPServers",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/core/getScorerById",
+      "destination": "/:path/reference/core/getScorer",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/core/listMCPServers",
+      "destination": "/:path/reference/core/getMCPServers",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/core/listVectors",
+      "destination": "/:path/reference/core/getVectors",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/evals/answer-similarity",
+      "destination": "/:path/reference/evals/answer-relevancy",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/evals/context-relevance",
+      "destination": "/:path/reference/evals/context-relevancy",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/evals/create-scorer",
+      "destination": "/:path/reference/scorers/create-scorer",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/evals/mastra-scorer",
+      "destination": "/:path/reference/scorers/mastra-scorer",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/evals/noise-sensitivity",
+      "destination": "/:path/reference/evals/bias",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/evals/run-evals",
+      "destination": "/:path/docs/scorers/evals-legacy/overview",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/evals/tool-call-accuracy",
+      "destination": "/:path/docs/scorers/evals-legacy/overview",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/logging/pino-logger",
+      "destination": "/:path/reference/observability/logging/pino-logger",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/memory/listThreadsByResourceId",
+      "destination": "/:path/reference/memory/getThreadsByResourceId",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/memory/recall",
+      "destination": "/:path/reference/memory/memory-class",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/otel-tracing/arize-ax",
+      "destination": "/:path/reference/observability/otel-tracing/providers/arize-ax",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/otel-tracing/arize-phoenix",
+      "destination": "/:path/reference/observability/otel-tracing/providers/arize-phoenix",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/otel-tracing/braintrust",
+      "destination": "/:path/reference/observability/otel-tracing/providers/braintrust",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/otel-tracing/dash0",
+      "destination": "/:path/reference/observability/otel-tracing/providers/dash0",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/otel-tracing/laminar",
+      "destination": "/:path/reference/observability/otel-tracing/providers/laminar",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/otel-tracing/langfuse",
+      "destination": "/:path/reference/observability/otel-tracing/providers/langfuse",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/otel-tracing/langsmith",
+      "destination": "/:path/reference/observability/otel-tracing/providers/langsmith",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/otel-tracing/langwatch",
+      "destination": "/:path/reference/observability/otel-tracing/providers/langwatch",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/otel-tracing/new-relic",
+      "destination": "/:path/reference/observability/otel-tracing/providers/new-relic",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/otel-tracing/signoz",
+      "destination": "/:path/reference/observability/otel-tracing/providers/signoz",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/otel-tracing/traceloop",
+      "destination": "/:path/reference/observability/otel-tracing/providers/traceloop",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/tracing/configuration",
+      "destination": "/:path/reference/observability/ai-tracing/configuration",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/tracing/exporters/arize",
+      "destination": "/:path/reference/observability/ai-tracing/exporters/arize",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/tracing/exporters/braintrust",
+      "destination": "/:path/reference/observability/ai-tracing/exporters/braintrust",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/tracing/exporters/cloud-exporter",
+      "destination": "/:path/reference/observability/ai-tracing/exporters/cloud-exporter",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/tracing/exporters/console-exporter",
+      "destination": "/:path/reference/observability/ai-tracing/exporters/console-exporter",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/tracing/exporters/default-exporter",
+      "destination": "/:path/reference/observability/ai-tracing/exporters/default-exporter",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/tracing/exporters/langfuse",
+      "destination": "/:path/reference/observability/ai-tracing/exporters/langfuse",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/tracing/exporters/langsmith",
+      "destination": "/:path/reference/observability/ai-tracing/exporters/langsmith",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/tracing/exporters/otel",
+      "destination": "/:path/reference/observability/ai-tracing/exporters/otel",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/tracing/interfaces",
+      "destination": "/:path/reference/observability/ai-tracing/interfaces",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/tracing/processors/sensitive-data-filter",
+      "destination": "/:path/reference/observability/ai-tracing/processors/sensitive-data-filter",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/observability/tracing/spans",
+      "destination": "/:path/reference/observability/ai-tracing/span",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/templates/CONTRIBUTING.md",
+      "destination": "/:path/docs/getting-started/templates",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/templates/EVALS.md",
+      "destination": "/:path/docs/getting-started/templates",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/templates/LICENSE",
+      "destination": "/:path/docs/getting-started/templates",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/templates/docs",
+      "destination": "/:path/docs/getting-started/templates",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/templates/olde-maps-ai-directions-assistant",
+      "destination": "/:path/docs/getting-started/templates",
       "permanent": true
     }
   ]
