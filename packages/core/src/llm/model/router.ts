@@ -76,9 +76,7 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
     };
 
     // Resolve gateway once using the normalized ID
-    // Use custom gateways if provided, otherwise use default gateways
-    const gatewaysToUse = customGateways && customGateways.length > 0 ? customGateways : defaultGateways;
-    this.gateway = findGatewayForModel(normalizedConfig.id, gatewaysToUse);
+    this.gateway = findGatewayForModel(normalizedConfig.id, [...customGateways, ...defaultGateways]);
     // Extract provider from id if present
     const parsed = parseModelRouterId(normalizedConfig.id, this.gateway.prefix);
 
