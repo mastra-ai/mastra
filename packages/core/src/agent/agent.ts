@@ -90,6 +90,7 @@ import type {
   AgentInstructions,
   DynamicAgentInstructions,
   StructuredOutputOptions,
+  AgentMethodType,
 } from './types';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 
@@ -1296,6 +1297,7 @@ export class Agent<
           'input',
         );
       const result = (llm as MastraLLMVNext).stream({
+        methodType: 'generate',
         runtimeContext,
         tracingContext,
         messageList,
@@ -1898,7 +1900,7 @@ export class Agent<
     resourceId?: string;
     runtimeContext: RuntimeContext;
     tracingContext?: TracingContext;
-    methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+    methodType: AgentMethodType;
   }) {
     const convertedAgentTools: Record<string, CoreTool> = {};
     const agents = await this.listAgents({ runtimeContext });
@@ -2067,7 +2069,7 @@ export class Agent<
     resourceId?: string;
     runtimeContext: RuntimeContext;
     tracingContext?: TracingContext;
-    methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+    methodType: AgentMethodType;
   }) {
     const convertedWorkflowTools: Record<string, CoreTool> = {};
     const workflows = await this.getWorkflows({ runtimeContext });
@@ -2201,7 +2203,7 @@ export class Agent<
     runtimeContext: RuntimeContext;
     tracingContext?: TracingContext;
     writableStream?: WritableStream<ChunkType>;
-    methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+    methodType: AgentMethodType;
   }): Promise<Record<string, CoreTool>> {
     let mastraProxy = undefined;
     const logger = this.logger;
@@ -3890,7 +3892,6 @@ export class Agent<
     }
 
     // Warning already logged in stream() method
-
     return fullOutput as FORMAT extends 'aisdk'
       ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;

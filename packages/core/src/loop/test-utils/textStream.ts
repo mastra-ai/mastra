@@ -11,6 +11,7 @@ export function textStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         models: [
           {

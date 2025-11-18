@@ -10,6 +10,7 @@ import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { MessageList } from '../../message-list';
+import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 import { prepareMemoryStepOutputSchema } from './schema';
 
@@ -43,7 +44,7 @@ interface PrepareMemoryStepOptions<
   runId: string;
   runtimeContext: RuntimeContext;
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
-  methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+  methodType: AgentMethodType;
   /**
    * @deprecated When using format: 'aisdk', use the `@mastra/ai-sdk` package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming
    */

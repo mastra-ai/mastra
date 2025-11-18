@@ -1,6 +1,7 @@
 import type { AISpan, AISpanType, TracingContext } from '../../../ai-tracing';
 import type { SystemMessage } from '../../../llm';
-import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
+import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
+import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig } from '../../../memory/types';
 import { StructuredOutputProcessor } from '../../../processors';
@@ -9,6 +10,7 @@ import type { OutputSchema } from '../../../stream/base/schema';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
+import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
 
 interface MapResultsStepOptions<
@@ -26,6 +28,7 @@ interface MapResultsStepOptions<
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
   instructions: SystemMessage;
   agentId: string;
+  methodType: AgentMethodType;
 }
 
 export function createMapResultsStep<
@@ -43,6 +46,7 @@ export function createMapResultsStep<
   agentAISpan,
   instructions,
   agentId,
+  methodType,
 }: MapResultsStepOptions<OUTPUT, FORMAT>) {
   return async ({
     inputData,
@@ -140,7 +144,10 @@ export function createMapResultsStep<
 
     const messageList = memoryData.messageList!;
 
+    const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
+
     const loopOptions: ModelLoopStreamArgs<any, OUTPUT> = {
+      methodType: modelMethodType,
       agentId,
       runtimeContext: result.runtimeContext!,
       tracingContext: { currentSpan: agentAISpan },

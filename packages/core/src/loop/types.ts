@@ -14,6 +14,7 @@ import z from 'zod';
 import type { MessageList } from '../agent/message-list';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { ModelSpanTracker } from '../ai-tracing';
+import type { ModelMethodType } from '../llm/model/model.loop.types';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { OutputProcessor, ProcessorState } from '../processors';
@@ -93,6 +94,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   modelSpanTracker?: ModelSpanTracker;
   requireToolApproval?: boolean;
   agentId: string;
+  methodType: ModelMethodType;
 };
 
 export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = LoopOptions<
@@ -108,6 +110,7 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema
     serialize: () => any;
     deserialize: (state: any) => void;
   };
+  methodType: ModelMethodType;
   processorStates?: Map<string, ProcessorState<OUTPUT>>;
 };
 

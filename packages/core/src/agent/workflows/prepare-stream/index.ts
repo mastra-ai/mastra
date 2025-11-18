@@ -10,6 +10,7 @@ import type { OutputSchema } from '../../../stream/base/schema';
 import { createWorkflow } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
+import type { AgentMethodType } from '../../types';
 import { createMapResultsStep } from './map-results-step';
 import { createPrepareMemoryStep } from './prepare-memory-step';
 import { createPrepareToolsStep } from './prepare-tools-step';
@@ -27,7 +28,7 @@ interface CreatePrepareStreamWorkflowOptions<
   runId: string;
   runtimeContext: RuntimeContext;
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
-  methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+  methodType: AgentMethodType;
   /**
    * @deprecated When using format: 'aisdk', use the `@mastra/ai-sdk` package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming
    */
@@ -105,6 +106,7 @@ export function createPrepareStreamWorkflow<
     resumeContext,
     agentId,
     toolCallId,
+    methodType,
   });
 
   const mapResultsStep = createMapResultsStep({
@@ -119,6 +121,7 @@ export function createPrepareStreamWorkflow<
     agentAISpan,
     instructions,
     agentId,
+    methodType,
   });
 
   return createWorkflow({
