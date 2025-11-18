@@ -32,16 +32,12 @@ jobs:
         with:
           node-version: '20.19.5'
 
-      - name: Enable corepack
-        if: steps.mdx-changes.outputs.has_changes == 'true'
-        run: corepack enable
-
       - name: Install dependencies
         if: steps.mdx-changes.outputs.has_changes == 'true'
         run: |
           cd .github
           npm init -y
-          pnpm add path-to-regexp
+          npm install path-to-regexp --no-package-lock
 
       - name: Check for removed pages without redirects
         if: steps.mdx-changes.outputs.has_changes == 'true'
