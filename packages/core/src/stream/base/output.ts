@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import { ReadableStream, TransformStream } from 'stream/web';
 import { TripWire } from '../../agent';
-import type { MessageList } from '../../agent/message-list';
+import { MessageList } from '../../agent/message-list';
 import { MastraBase } from '../../base';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
@@ -581,6 +581,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 self.#delayedPromises.text.resolve(textContent);
                 self.#delayedPromises.finishReason.resolve(self.#finishReason);
               } catch (error) {
+                // Mark processors as run even if they threw an error, to prevent double execution
+                self.messageList.outputProcessorsRan = true;
                 if (error instanceof TripWire) {
                   self.#tripwire = true;
                   self.#tripwireReason = error.message;
