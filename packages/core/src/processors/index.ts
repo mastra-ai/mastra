@@ -11,10 +11,10 @@ export interface Processor {
    * Process input messages before they are sent to the LLM
    *
    * @param args.messages - The current messages being processed
-   * @param args.messageList - The MessageList instance for managing message sources
+   * @param args.messageList - Optional MessageList instance for managing message sources (used by memory processors)
    * @param args.abort - Function to abort processing with an optional reason
    * @param args.tracingContext - Optional tracing context for observability
-   * @param args.runtimeContext - Optional runtime context with execution metadata
+   * @param args.runtimeContext - Optional runtime context with execution metadata (used by memory processors)
    *
    * @returns Either:
    *  - MessageList: The same messageList instance passed in (indicates you've mutated it)
@@ -22,7 +22,7 @@ export interface Processor {
    */
   processInput?(args: {
     messages: MastraDBMessage[];
-    messageList: MessageList;
+    messageList?: MessageList;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
     runtimeContext?: RequestContext;
@@ -32,6 +32,13 @@ export interface Processor {
    * Process output stream chunks with built-in state management
    * This allows processors to accumulate chunks and make decisions based on larger context
    * Return null, or undefined to skip emitting the part
+   *
+   * @param args.part - The current chunk being processed
+   * @param args.streamParts - All chunks seen so far
+   * @param args.state - Mutable state object that persists across chunks
+   * @param args.abort - Function to abort processing with an optional reason
+   * @param args.tracingContext - Optional tracing context for observability
+   * @param args.runtimeContext - Optional runtime context with execution metadata
    */
   processOutputStream?(args: {
     part: ChunkType;
@@ -46,10 +53,10 @@ export interface Processor {
    * Process the complete output result after streaming/generate is finished
    *
    * @param args.messages - The current messages being processed
-   * @param args.messageList - The MessageList instance for managing message sources
+   * @param args.messageList - Optional MessageList instance for managing message sources (used by memory processors)
    * @param args.abort - Function to abort processing with an optional reason
    * @param args.tracingContext - Optional tracing context for observability
-   * @param args.runtimeContext - Optional runtime context with execution metadata
+   * @param args.runtimeContext - Optional runtime context with execution metadata (used by memory processors)
    *
    * @returns Either:
    *  - MessageList: The same messageList instance passed in (indicates you've mutated it)
@@ -57,7 +64,7 @@ export interface Processor {
    */
   processOutputResult?(args: {
     messages: MastraDBMessage[];
-    messageList: MessageList;
+    messageList?: MessageList;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
     runtimeContext?: RequestContext;

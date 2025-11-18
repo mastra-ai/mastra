@@ -566,16 +566,33 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               };
 
               try {
-                // Run output processors before resolving response
-                // Only run for non-LLM execution steps (e.g., structured output processor)
-                // For LLM execution steps, output processors run in #executeOnFinish
                 if (self.processorRunner && !self.#options.isLLMExecutionStep) {
-                  await self.processorRunner.runOutputProcessors(messageList, self.#options.tracingContext, undefined);
-                }
+                  self.messageList = await self.processorRunner.runOutputProcessors(
+                    self.messageList,
+                    options.tracingContext,
+                  );
+                  const outputText = self.messageList.get.response.aiV4
+                    .core()
+                    .map(m => MessageList.coreContentToString(m.content))
+                    .join('\n');
 
-                const textContent = self.#bufferedText.join('');
-                self.#delayedPromises.text.resolve(textContent);
-                self.#delayedPromises.finishReason.resolve(self.#finishReason);
+                  self.#delayedPromises.text.resolve(outputText);
+                  self.#delayedPromises.finishReason.resolve(self.#finishReason);
+
+                  // Update response with processed messages after output processors have run
+                  if (chunk.payload.metadata) {
+                    const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
+                    response = {
+                      ...otherMetadata,
+                      messages: messageList.get.response.aiV5.model(),
+                      uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
+                    };
+                  }
+                } else {
+                  const textContent = self.#bufferedText.join('');
+                  self.#delayedPromises.text.resolve(textContent);
+                  self.#delayedPromises.finishReason.resolve(self.#finishReason);
+                }
               } catch (error) {
                 if (error instanceof TripWire) {
                   self.#tripwire = true;

@@ -85,19 +85,17 @@ export class ProcessorRunner {
   async runOutputProcessors(
     messageList: MessageList,
     tracingContext?: TracingContext,
-    telemetry?: any,
     runtimeContext?: RequestContext,
   ): Promise<MessageList> {
-    const responseMessages = messageList.get.response.db();
+    const responseMessages = messageList.clear.response.db();
 
     let processableMessages: MastraDBMessage[] = [...responseMessages];
 
-    const ctx: { messages: MastraDBMessage[]; abort: () => never; runtimeContext?: RequestContext } = {
+    const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
       messages: processableMessages,
       abort: () => {
         throw new TripWire('Tripwire triggered');
       },
-      runtimeContext,
     };
 
     for (const [index, processor] of this.outputProcessors.entries()) {
@@ -128,54 +126,26 @@ export class ProcessorRunner {
         input: processableMessages,
       });
 
-      let result: MessageList | MastraDBMessage[];
+      const result = await processMethod({
+        messages: processableMessages,
+        messageList,
+        abort: ctx.abort,
+        tracingContext: { currentSpan: processorSpan },
+        runtimeContext,
+      });
 
-      if (!telemetry) {
-        result = await processMethod({
-          messages: processableMessages,
-          messageList,
-          abort: ctx.abort,
-          tracingContext: { currentSpan: processorSpan },
-          runtimeContext: ctx.runtimeContext,
-        });
-      } else {
-        result = await telemetry.traceMethod(
-          async () => {
-            const r = await processMethod({
-              messages: processableMessages,
-              messageList,
-              abort: ctx.abort,
-              tracingContext: { currentSpan: processorSpan },
-              runtimeContext: ctx.runtimeContext,
-            });
-            return r;
-          },
-          {
-            spanName: `agent.inputProcessor.${processor.name}`,
-            attributes: {
-              'processor.name': processor.name,
-              'processor.index': index.toString(),
-              'processor.total': this.inputProcessors.length.toString(),
-            },
-          },
-        )();
-      }
-
-      // Handle the new return type
+      // Handle the new return type - MessageList or MastraDBMessage[]
       if (result instanceof MessageList) {
-        // Processor returned the MessageList, validate it's the same instance
-        if (result !== messageList) {
-          throw new Error(`Processor ${processor.id} must return the same MessageList instance that was passed in`);
-        }
-        // Get all messages from the MessageList for the next processor
-        processableMessages = messageList.get.all.db();
-        // For trace output, show the full LLM prompt including system messages added by processors
-        processorSpan?.end({ output: result.get.all.aiV4.prompt() });
+        processableMessages = result.get.all.db();
       } else {
-        // Processor returned an array of messages
         processableMessages = result;
-        processorSpan?.end({ output: result });
       }
+
+      processorSpan?.end({ output: processableMessages });
+    }
+
+    if (processableMessages.length > 0) {
+      messageList.add(processableMessages, 'response');
     }
 
     return messageList;
@@ -188,7 +158,6 @@ export class ProcessorRunner {
     part: ChunkType<OUTPUT>,
     processorStates: Map<string, ProcessorState<OUTPUT>>,
     tracingContext?: TracingContext,
-    runtimeContext?: RequestContext,
   ): Promise<{
     part: ChunkType<OUTPUT> | null | undefined;
     blocked: boolean;
@@ -227,7 +196,6 @@ export class ProcessorRunner {
                 throw new TripWire(reason || `Stream part blocked by ${processor.id}`);
               },
               tracingContext: { currentSpan: state.span },
-              runtimeContext,
             });
 
             if (state.span && !state.span.isEvent) {
@@ -283,7 +251,6 @@ export class ProcessorRunner {
   async runOutputProcessorsForStream<OUTPUT extends OutputSchema = undefined>(
     streamResult: MastraModelOutput<OUTPUT>,
     tracingContext?: TracingContext,
-    runtimeContext?: RequestContext,
   ): Promise<ReadableStream<any>> {
     return new ReadableStream({
       start: async controller => {
@@ -304,7 +271,7 @@ export class ProcessorRunner {
               part: processedPart,
               blocked,
               reason,
-            } = await this.processPart(value, processorStates, tracingContext, runtimeContext);
+            } = await this.processPart(value, processorStates, tracingContext);
 
             if (blocked) {
               // Log that part was blocked
@@ -336,22 +303,17 @@ export class ProcessorRunner {
   async runInputProcessors(
     messageList: MessageList,
     tracingContext?: TracingContext,
-    telemetry?: any,
     runtimeContext?: RequestContext,
   ): Promise<MessageList> {
-    // Get all messages for processing (input + memory + context)
-    // This allows processors like ToolCallFilter to work with semantically recalled messages
-    const originalUserMessages = messageList.get.input.db();
-    const allMessages = messageList.get.all.db();
+    const userMessages = messageList.clear.input.db();
 
-    let processableMessages: MastraDBMessage[] = [...allMessages];
+    let processableMessages: MastraDBMessage[] = [...userMessages];
 
-    const ctx: { messages: MastraDBMessage[]; abort: () => never; runtimeContext?: RequestContext } = {
+    const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
       messages: processableMessages,
       abort: () => {
         throw new TripWire('Tripwire triggered');
       },
-      runtimeContext,
     };
 
     for (const [index, processor] of this.inputProcessors.entries()) {
@@ -382,66 +344,24 @@ export class ProcessorRunner {
         input: processableMessages,
       });
 
-      let result: MessageList | MastraDBMessage[];
+      const result = await processMethod({
+        messages: processableMessages,
+        abort: ctx.abort,
+        tracingContext: { currentSpan: processorSpan },
+        messageList,
+        runtimeContext,
+      });
 
-      if (!telemetry) {
-        result = await processMethod({
-          messages: processableMessages,
-          messageList,
-          abort: ctx.abort,
-          tracingContext: { currentSpan: processorSpan },
-          runtimeContext: ctx.runtimeContext,
-        });
-      } else {
-        result = await telemetry.traceMethod(
-          async () => {
-            const r = await processMethod({
-              messages: processableMessages,
-              messageList,
-              abort: ctx.abort,
-              tracingContext: { currentSpan: processorSpan },
-              runtimeContext: ctx.runtimeContext,
-            });
-            return r;
-          },
-          {
-            spanName: `agent.inputProcessor.${processor.name}`,
-            attributes: {
-              'processor.name': processor.name,
-              'processor.index': index.toString(),
-              'processor.total': this.inputProcessors.length.toString(),
-            },
-          },
-        )();
-      }
+      // Handle both MessageList and MastraDBMessage[] return types
+      processableMessages = 'get' in result ? result.get.all.db() : result;
 
-      // Handle the new return type
-      if (result instanceof MessageList) {
-        // Processor returned the MessageList, validate it's the same instance
-        if (result !== messageList) {
-          throw new Error(`Processor ${processor.id} must return the same MessageList instance that was passed in`);
-        }
-        // Get all messages from the MessageList for the next processor
-        processableMessages = messageList.get.all.db();
-        // For trace output, show the full LLM prompt including system messages added by processors
-        processorSpan?.end({ output: result.get.all.aiV4.prompt() });
-      } else {
-        // Processor returned an array of messages
-        processableMessages = result;
-        processorSpan?.end({ output: result });
-      }
+      processorSpan?.end({ output: processableMessages });
     }
 
     if (processableMessages.length > 0) {
       // Separate system messages from other messages since they need different handling
       const systemMessages = processableMessages.filter(m => m.role === 'system');
       const nonSystemMessages = processableMessages.filter(m => m.role !== 'system');
-
-      // Track IDs of original user messages to distinguish them from historical messages
-      const originalMessageIds = new Set(originalUserMessages.map(m => m.id).filter(Boolean));
-
-      // Clear the original input messages before adding processed ones
-      messageList.clear.input.db();
 
       // Add system messages using addSystem
       for (const sysMsg of systemMessages) {
@@ -452,22 +372,9 @@ export class ProcessorRunner {
         messageList.addSystem(systemText);
       }
 
-      // First, remove ALL original input messages from the MessageList
-      // This ensures messages filtered out by processors are actually removed
-      const originalMessageIdsToRemove = originalUserMessages.map(m => m.id).filter(Boolean) as string[];
-      messageList.removeByIds(originalMessageIdsToRemove);
-
-      // Add non-system messages with correct source
-      // Messages that were in the original input get source='input'
-      // Messages added by processors (e.g., MessageHistory) get source='memory'
+      // Add non-system messages normally
       if (nonSystemMessages.length > 0) {
-        for (const msg of nonSystemMessages) {
-          // Determine the correct source based on whether this was an original message
-          const isOriginalMessage = msg.id && originalMessageIds.has(msg.id);
-          const source = isOriginalMessage ? 'input' : 'memory';
-
-          messageList.add([msg], source);
-        }
+        messageList.add(nonSystemMessages, 'input');
       }
     }
 
