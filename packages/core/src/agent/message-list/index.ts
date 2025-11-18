@@ -2551,6 +2551,51 @@ export class MessageList {
   }
 
   /**
+   * Convert image or file to data URI or URL for V2 file part
+   */
+
+  private static getDataStringFromAIV5DataPart = (part: AIV5Type.ImagePart | AIV5.FilePart) => {
+    let mimeType: string;
+    let data: AIV5.FilePart['data'] | AIV5.ImagePart['image'];
+    if ('data' in part) {
+      mimeType = part.mediaType || 'application/octet-stream';
+      data = part.data;
+    } else if ('image' in part) {
+      mimeType = part.mediaType || 'image/jpeg';
+      data = part.image;
+    } else {
+      throw new MastraError({
+        id: 'MASTRA_AIV5_DATA_PART_INVALID',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'Invalid AIV5 data part in getDataStringFromAIV5DataPart',
+        details: {
+          part,
+        },
+      });
+    }
+
+    if (data instanceof URL) {
+      return data.toString();
+    } else {
+      if (data instanceof Buffer) {
+        const base64 = data.toString('base64');
+        return `data:${mimeType};base64,${base64}`;
+      } else if (typeof data === 'string') {
+        return data.startsWith('data:') || data.startsWith('http') ? data : `data:${mimeType};base64,${data}`;
+      } else if (data instanceof Uint8Array) {
+        const base64 = Buffer.from(data).toString('base64');
+        return `data:${mimeType};base64,${base64}`;
+      } else if (data instanceof ArrayBuffer) {
+        const base64 = Buffer.from(data).toString('base64');
+        return `data:${mimeType};base64,${base64}`;
+      } else {
+        return '';
+      }
+    }
+  };
+
+  /**
    * Direct conversion from AIV5 ModelMessage to MastraDBMessage
    * Combines logic from aiV5ModelMessageToMastraMessageV3 + mastraMessageV3ToV2
    */
@@ -2558,52 +2603,44 @@ export class MessageList {
     modelMsg: AIV5Type.ModelMessage,
     _messageSource?: MessageSource,
   ): MastraDBMessage {
-    const content = Array.isArray(modelMsg.content) ? modelMsg.content : [{ type: 'text', text: modelMsg.content }];
+    const content = Array.isArray(modelMsg.content)
+      ? modelMsg.content
+      : [{ type: 'text', text: modelMsg.content } satisfies AIV5.TextPart];
 
     // Process parts to build V2 content structure
-    const v2Parts: MastraMessageContentV2['parts'] = [];
+    const mastraDBParts: MastraMessageContentV2['parts'] = [];
     const toolInvocations: NonNullable<MastraDBMessage['content']['toolInvocations']> = [];
     const reasoningParts: string[] = [];
     const experimental_attachments: NonNullable<MastraDBMessage['content']['experimental_attachments']> = [];
-    const textParts: Array<{ text: string; providerMetadata?: Record<string, unknown> }> = [];
 
     let lastPartWasToolResult = false;
 
-    // Type helper for objects that may have providerMetadata at runtime
-    type WithProviderMetadata = { providerMetadata?: Record<string, unknown> };
-
     for (const part of content) {
-      // Merge part-level and message-level providerMetadata
-      const providerMetadata = {
-        ...((modelMsg as WithProviderMetadata).providerMetadata || {}),
-        ...((part as WithProviderMetadata).providerMetadata || {}),
-      };
-      const hasProviderMetadata = Object.keys(providerMetadata).length > 0;
-
       if (part.type === 'text') {
-        const textPart: AIV4Type.TextPart = {
-          type: 'text',
+        const textPart: MastraDBMessage['content']['parts'][number] = {
+          type: 'text' as const,
           text: part.text,
-          ...(hasProviderMetadata && { experimental_providerMetadata: providerMetadata as AIV5Type.ProviderMetadata }),
         };
-        v2Parts.push(textPart);
-        textParts.push({ text: part.text, providerMetadata: hasProviderMetadata ? providerMetadata : undefined });
+        if (part.providerOptions) {
+          textPart.providerMetadata = part.providerOptions;
+        }
+        mastraDBParts.push(textPart);
         lastPartWasToolResult = false;
       } else if (part.type === 'tool-call') {
         const toolCallPart = part as AIV5Type.ToolCallPart;
-        const toolInvocationPart: UIMessageV4['parts'][number] & {
-          providerMetadata?: AIV5Type.ProviderMetadata;
-        } = {
-          type: 'tool-invocation',
+        const toolInvocationPart: MastraDBMessage['content']['parts'][number] = {
+          type: 'tool-invocation' as const,
           toolInvocation: {
             toolCallId: toolCallPart.toolCallId,
             toolName: toolCallPart.toolName,
             args: toolCallPart.input,
             state: 'call',
           },
-          ...(hasProviderMetadata && { providerMetadata: providerMetadata as AIV5Type.ProviderMetadata }),
         };
-        v2Parts.push(toolInvocationPart);
+        if (part.providerOptions) {
+          toolInvocationPart.providerMetadata = part.providerOptions;
+        }
+        mastraDBParts.push(toolInvocationPart);
         toolInvocations.push({
           toolCallId: toolCallPart.toolCallId,
           toolName: toolCallPart.toolName,
@@ -2612,157 +2649,107 @@ export class MessageList {
         });
         lastPartWasToolResult = false;
       } else if (part.type === 'tool-result') {
-        const toolResultPart = part as AIV5Type.ToolResultPart;
+        const toolResultPart = part;
         // Find matching tool call and update it to result state
         const matchingCall = toolInvocations.find(inv => inv.toolCallId === toolResultPart.toolCallId);
 
         // Type guard for tool-invocation parts
-        type ToolInvocationPart = Extract<UIMessageV4['parts'][number], { type: 'tool-invocation' }>;
-        const matchingV2Part = v2Parts.find(
-          (p): p is ToolInvocationPart =>
+        const matchingV2Part = mastraDBParts.find(
+          (p): p is Extract<MastraDBMessage['content']['parts'][number], { type: 'tool-invocation' }> =>
             p.type === 'tool-invocation' &&
             'toolInvocation' in p &&
             p.toolInvocation.toolCallId === toolResultPart.toolCallId,
         );
 
-        if (matchingCall) {
+        const updateMatchingCallInvocationResult = (
+          toolResultPart: AIV5Type.ToolResultPart,
+          matchingCall: ToolInvocationV4,
+        ) => {
           // Update the matching call to result state
           matchingCall.state = 'result';
           (matchingCall as ToolInvocationV4 & { result: unknown }).result =
             typeof toolResultPart.output === 'object' && toolResultPart.output && 'value' in toolResultPart.output
-              ? (toolResultPart.output as { value: unknown }).value
+              ? toolResultPart.output.value
               : toolResultPart.output;
+        };
+
+        if (matchingCall) {
+          updateMatchingCallInvocationResult(toolResultPart, matchingCall);
         } else {
           // No matching call, create a result-only invocation
-          // toolResultPart may have toolName at runtime even though it's not in the type
-          type ToolResultWithName = AIV5Type.ToolResultPart & { toolName?: string };
-          const resultPartWithName = toolResultPart as ToolResultWithName;
-
-          toolInvocations.push({
+          const call: ToolInvocationV4 = {
+            state: 'call',
             toolCallId: toolResultPart.toolCallId,
-            toolName: resultPartWithName.toolName || 'unknown',
+            toolName: toolResultPart.toolName || 'unknown',
             args: {},
-            result:
-              typeof toolResultPart.output === 'object' && toolResultPart.output && 'value' in toolResultPart.output
-                ? (toolResultPart.output as { value: unknown }).value
-                : toolResultPart.output,
-            state: 'result',
-          });
+          };
+          updateMatchingCallInvocationResult(toolResultPart, call);
+          toolInvocations.push(call);
         }
 
         if (matchingV2Part && matchingV2Part.type === 'tool-invocation') {
           // Update the matching part to result state
-          matchingV2Part.toolInvocation.state = 'result';
-          (matchingV2Part.toolInvocation as ToolInvocationV4 & { result: unknown }).result =
-            typeof toolResultPart.output === 'object' && toolResultPart.output && 'value' in toolResultPart.output
-              ? (toolResultPart.output as { value: unknown }).value
-              : toolResultPart.output;
-          if (hasProviderMetadata) {
-            (
-              matchingV2Part as typeof matchingV2Part & { providerMetadata: AIV5Type.ProviderMetadata }
-            ).providerMetadata = providerMetadata as AIV5Type.ProviderMetadata;
-          }
+          updateMatchingCallInvocationResult(toolResultPart, matchingV2Part.toolInvocation);
         } else {
           // No matching call, create a result-only part
-          // toolResultPart may have toolName at runtime even though it's not in the type
-          type ToolResultWithName = AIV5Type.ToolResultPart & { toolName?: string };
-          const resultPartWithName = toolResultPart as ToolResultWithName;
-
-          const toolInvocationPart: UIMessageV4['parts'][number] & {
-            providerMetadata?: AIV5Type.ProviderMetadata;
-          } = {
-            type: 'tool-invocation',
+          const toolInvocationPart: MastraDBMessage['content']['parts'][number] = {
+            type: 'tool-invocation' as const,
             toolInvocation: {
               toolCallId: toolResultPart.toolCallId,
-              toolName: resultPartWithName.toolName || 'unknown',
+              toolName: toolResultPart.toolName || 'unknown',
               args: {},
-              result:
-                typeof toolResultPart.output === 'object' && toolResultPart.output && 'value' in toolResultPart.output
-                  ? (toolResultPart.output as { value: unknown }).value
-                  : toolResultPart.output,
-              state: 'result',
-            } as ToolInvocationV4 & { result: unknown },
-            ...(hasProviderMetadata && { providerMetadata: providerMetadata as AIV5Type.ProviderMetadata }),
+              state: 'call',
+            },
           };
-          v2Parts.push(toolInvocationPart);
+          updateMatchingCallInvocationResult(toolResultPart, toolInvocationPart.toolInvocation);
+          mastraDBParts.push(toolInvocationPart);
         }
         lastPartWasToolResult = true;
       } else if (part.type === 'reasoning') {
-        const reasoningPart = part as AIV5Type.ReasoningUIPart;
-        const v2ReasoningPart: UIMessageV4['parts'][number] & { providerMetadata?: AIV5Type.ProviderMetadata } = {
+        const v2ReasoningPart: MastraDBMessage['content']['parts'][number] = {
           type: 'reasoning',
-          reasoning: reasoningPart.text,
-          details: [{ type: 'text', text: reasoningPart.text }],
-          ...(hasProviderMetadata && { providerMetadata: providerMetadata as AIV5Type.ProviderMetadata }),
+          reasoning: part.text,
+          details: [{ type: 'text', text: part.text }],
         };
-        v2Parts.push(v2ReasoningPart);
-        reasoningParts.push(reasoningPart.text);
+        if (part.providerOptions) {
+          v2ReasoningPart.providerMetadata = part.providerOptions;
+        }
+        mastraDBParts.push(v2ReasoningPart);
+        reasoningParts.push(part.text);
         lastPartWasToolResult = false;
       } else if (part.type === 'image') {
-        const imagePart = part as AIV5Type.ImagePart;
-        // Convert image to data URI or URL for V2 file part
-        let imageData: string;
-        // ImagePart may have mimeType at runtime even though it's not in the type
-        type ImagePartWithMimeType = AIV5Type.ImagePart & { mimeType?: string };
-        const mimeType = (imagePart as ImagePartWithMimeType).mimeType || 'image/jpeg';
+        const imagePart = part;
+        const mimeType = imagePart.mediaType || 'image/jpeg';
+        const imageData = this.getDataStringFromAIV5DataPart(imagePart);
 
-        if ('url' in imagePart && typeof imagePart.url === 'string') {
-          imageData = imagePart.url;
-        } else if ('data' in imagePart) {
-          if (typeof imagePart.data === 'string') {
-            imageData =
-              imagePart.data.startsWith('data:') || imagePart.data.startsWith('http')
-                ? imagePart.data
-                : `data:${mimeType};base64,${imagePart.data}`;
-          } else {
-            const base64 = Buffer.from(imagePart.data as Uint8Array).toString('base64');
-            imageData = `data:${mimeType};base64,${base64}`;
-          }
-        } else {
-          imageData = '';
-        }
-
-        const imageFilePart: UIMessageV4['parts'][number] & { providerMetadata?: AIV5Type.ProviderMetadata } = {
+        const imageFilePart: MastraDBMessage['content']['parts'][number] = {
           type: 'file',
           data: imageData,
           mimeType,
-          ...(hasProviderMetadata && { providerMetadata: providerMetadata as AIV5Type.ProviderMetadata }),
         };
-        v2Parts.push(imageFilePart);
+        if (part.providerOptions) {
+          imageFilePart.providerMetadata = part.providerOptions;
+        }
+        mastraDBParts.push(imageFilePart);
         experimental_attachments.push({
           url: imageData,
           contentType: mimeType,
         });
         lastPartWasToolResult = false;
       } else if (part.type === 'file') {
-        const filePart = part as AIV5Type.FilePart;
-        // AIV5 ModelMessage file parts use 'mediaType'
-        // V2 file parts use 'mimeType'
+        const filePart = part;
         const mimeType = filePart.mediaType || 'application/octet-stream';
-        let fileData: string;
-        if ('url' in filePart && typeof filePart.url === 'string') {
-          fileData = filePart.url;
-        } else if ('data' in filePart) {
-          if (typeof filePart.data === 'string') {
-            fileData =
-              filePart.data.startsWith('data:') || filePart.data.startsWith('http')
-                ? filePart.data
-                : `data:${mimeType};base64,${filePart.data}`;
-          } else {
-            const base64 = Buffer.from(filePart.data as Uint8Array).toString('base64');
-            fileData = `data:${mimeType};base64,${base64}`;
-          }
-        } else {
-          fileData = '';
-        }
+        const fileData = this.getDataStringFromAIV5DataPart(filePart);
 
-        const v2FilePart: UIMessageV4['parts'][number] & { providerMetadata?: AIV5Type.ProviderMetadata } = {
+        const v2FilePart: MastraDBMessage['content']['parts'][number] = {
           type: 'file',
           data: fileData,
           mimeType,
-          ...(hasProviderMetadata && { providerMetadata: providerMetadata as AIV5Type.ProviderMetadata }),
         };
-        v2Parts.push(v2FilePart);
+        if (part.providerOptions) {
+          v2FilePart.providerMetadata = part.providerOptions;
+        }
+        mastraDBParts.push(v2FilePart);
         experimental_attachments.push({
           url: fileData,
           contentType: mimeType,
@@ -2772,20 +2759,19 @@ export class MessageList {
     }
 
     // Insert step-start if assistant message starts after tool result
-    if (modelMsg.role === 'assistant' && lastPartWasToolResult && v2Parts.length > 0) {
-      const lastPart = v2Parts[v2Parts.length - 1];
+    if (modelMsg.role === 'assistant' && lastPartWasToolResult && mastraDBParts.length > 0) {
+      const lastPart = mastraDBParts[mastraDBParts.length - 1];
       if (lastPart && lastPart.type !== 'text') {
-        const emptyTextPart: UIMessageV4['parts'][number] = { type: 'text', text: '' };
-        v2Parts.push(emptyTextPart);
-        textParts.push({ text: '' });
+        const emptyTextPart: MastraDBMessage['content']['parts'][number] = { type: 'text', text: '' };
+        mastraDBParts.push(emptyTextPart);
       }
     }
 
     // Build V2 content string
-    let contentString: MastraDBMessage['content']['content'] = undefined;
-    if (textParts.length > 0) {
-      contentString = textParts.map(p => p.text).join('\n');
-    }
+    const contentString = mastraDBParts
+      .filter(p => p.type === 'text')
+      .map(p => p.text)
+      .join('\n');
 
     // Store original content in metadata for round-trip
     const metadata: Record<string, unknown> = {};
@@ -2796,20 +2782,26 @@ export class MessageList {
         ? modelMsg.id
         : `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    return {
+    const message: MastraDBMessage = {
       id,
       role: MessageList.getRole(modelMsg),
       createdAt: new Date(),
       content: {
         format: 2,
-        parts: v2Parts,
+        parts: mastraDBParts,
         toolInvocations: toolInvocations.length > 0 ? toolInvocations : undefined,
         reasoning: reasoningParts.length > 0 ? reasoningParts.join('\n') : undefined,
         experimental_attachments: experimental_attachments.length > 0 ? experimental_attachments : undefined,
-        content: contentString,
+        content: contentString || undefined,
         metadata,
       },
     };
+    // Add message-level providerOptions if present (AIV5 ModelMessage uses providerOptions)
+    if ('providerOptions' in modelMsg && modelMsg.providerOptions) {
+      message.content.providerMetadata = modelMsg.providerOptions;
+    }
+
+    return message;
   }
 
   private aiV4CoreMessagesToAIV5ModelMessages(
