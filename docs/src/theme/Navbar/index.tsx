@@ -33,10 +33,6 @@ function NavbarContentDesktop() {
         <div className="flex items-center">
           <div className="hidden gap-2 items-center lg:flex">
             <GithubStarCount />
-            <VersionControl
-              size="sm"
-              className="px-[13px] bg-white dark:bg-(--mastra-primary) border-transparent rounded-full transition-colors cursor-pointer"
-            />
           </div>
         </div>
         <div className="hidden @[798px]:block">
