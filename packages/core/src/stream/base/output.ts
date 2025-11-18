@@ -570,8 +570,13 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               };
 
               try {
-                // Output processors are now run centrally in agent.#executeOnFinish
-                // to avoid duplication and simplify coordination
+                // Run output processors before resolving response
+                // Only run for non-LLM execution steps (e.g., structured output processor)
+                // For LLM execution steps, output processors run in #executeOnFinish
+                if (self.processorRunner && !self.#options.isLLMExecutionStep) {
+                  await self.processorRunner.runOutputProcessors(messageList, self.#options.tracingContext, undefined);
+                }
+
                 const textContent = self.#bufferedText.join('');
                 self.#delayedPromises.text.resolve(textContent);
                 self.#delayedPromises.finishReason.resolve(self.#finishReason);
