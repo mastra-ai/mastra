@@ -39,9 +39,9 @@ export const serverDetailSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
   version_detail: versionDetailSchema,
-  package_canonical: z.string(),
-  packages: z.array(z.unknown()),
-  remotes: z.array(z.unknown()),
+  package_canonical: z.string().optional(),
+  packages: z.array(z.unknown()).optional(),
+  remotes: z.array(z.unknown()).optional(),
 });
 
 // JSON-RPC error response schema
