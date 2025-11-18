@@ -333,6 +333,7 @@ describe('runEvals', () => {
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ output: z.string() }),
+        options: { validateInputs: false },
       })
         .then(mockStep)
         .commit();
@@ -366,6 +367,7 @@ describe('runEvals', () => {
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ output: z.string() }),
+        options: { validateInputs: false },
       })
         .then(mockStep)
         .commit();
@@ -398,6 +400,7 @@ describe('runEvals', () => {
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ output: z.string() }),
+        options: { validateInputs: false },
       })
         .then(mockStep)
         .commit();
@@ -439,6 +442,7 @@ describe('runEvals', () => {
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ output: z.string() }),
+        options: { validateInputs: false },
       })
         .then(mockStep)
         .commit();

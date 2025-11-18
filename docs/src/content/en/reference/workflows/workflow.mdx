@@ -75,7 +75,7 @@ export const workflow = createWorkflow({
       description:
         "Optional flag to determine whether to validate the workflow inputs. This also applies default values from zodSchemas on the workflow/step input/resume data. If input/resume data validation fails on start/resume, the workflow will not start/resume, it throws an error instead. If input data validation fails on a step execution, the step fails, causing the workflow to fail and the error is returned.",
       isOptional: true,
-      defaultValue: "false",
+      defaultValue: "true",
     },
     {
       name: "shouldPersistSnapshot",
