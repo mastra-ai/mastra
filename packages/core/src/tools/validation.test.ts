@@ -504,3 +504,359 @@ describe('Tool Input Validation Integration Tests', () => {
     });
   });
 });
+
+describe('Tool Output Validation Tests', () => {
+  it('should validate output against schema', async () => {
+    const tool = createTool({
+      id: 'output-validation',
+      description: 'Test output validation',
+      inputSchema: z.object({
+        name: z.string(),
+      }),
+      outputSchema: z.object({
+        id: z.string(),
+        name: z.string(),
+        email: z.string().email(),
+      }),
+      execute: async inputData => {
+        return { id: '123', name: inputData.name, email: 'test@example.com' };
+      },
+    });
+
+    const result = await tool.execute({ name: 'John' });
+
+    expect(result && 'error' in result ? result.error : undefined).toBeUndefined();
+    expect(result).toEqual({
+      id: '123',
+      name: 'John',
+      email: 'test@example.com',
+    });
+  });
+
+  it('should fail validation when output does not match schema', async () => {
+    const tool = createTool({
+      id: 'invalid-output',
+      description: 'Test invalid output',
+      inputSchema: z.object({
+        name: z.string(),
+      }),
+      outputSchema: z.object({
+        id: z.string(),
+        name: z.string(),
+        email: z.string().email(),
+      }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => {
+        // Return invalid output - missing required fields
+        return { id: '123' };
+      },
+    });
+
+    const result = await tool.execute({ name: 'John' });
+
+    if ('error' in result) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool output validation failed');
+      expect(result.message).toContain('- name: Required');
+      expect(result.message).toContain('- email: Required');
+    } else {
+      throw new Error('Result is not a validation error');
+    }
+  });
+
+  it('should validate output types correctly', async () => {
+    const tool = createTool({
+      id: 'type-mismatch',
+      description: 'Test type validation',
+      outputSchema: z.object({
+        count: z.number(),
+        active: z.boolean(),
+      }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => {
+        return { count: 'not-a-number', active: 'not-a-boolean' };
+      },
+    });
+
+    const result = await tool.execute({});
+
+    if ('error' in result) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool output validation failed');
+      expect(result.message).toContain('- count: Expected number, received string');
+      expect(result.message).toContain('- active: Expected boolean, received string');
+    } else {
+      throw new Error('Result is not a validation error');
+    }
+  });
+
+  it('should validate complex nested output', async () => {
+    const tool = createTool({
+      id: 'nested-output',
+      description: 'Test nested output validation',
+      outputSchema: z.object({
+        user: z.object({
+          id: z.string(),
+          name: z.string(),
+          age: z.number().min(0),
+        }),
+        metadata: z.object({
+          createdAt: z.string().datetime(),
+          tags: z.array(z.string()).min(1),
+        }),
+      }),
+      execute: async () => {
+        return {
+          user: { id: '123', name: 'John', age: -5 }, // Invalid: age is negative
+          metadata: { createdAt: 'invalid-date', tags: [] }, // Invalid: not datetime, empty array
+        };
+      },
+    });
+
+    const result = await tool.execute({});
+
+    if ('error' in result) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool output validation failed');
+      expect(result.message).toContain('- user.age');
+      expect(result.message).toContain('- metadata.createdAt');
+      expect(result.message).toContain('- metadata.tags');
+    } else {
+      throw new Error('Result is not a validation error');
+    }
+  });
+
+  it('should transform output data after validation', async () => {
+    const tool = createTool({
+      id: 'transform-output',
+      description: 'Test output transformation',
+      outputSchema: z.object({
+        name: z.string().trim().toUpperCase(),
+        count: z.string().transform(val => parseInt(val, 10)),
+      }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => {
+        return { name: '  john doe  ', count: '42' };
+      },
+    });
+
+    const result = await tool.execute({});
+
+    expect(result && 'error' in result ? result.error : undefined).toBeUndefined();
+    expect(result).toEqual({
+      name: 'JOHN DOE',
+      count: 42,
+    });
+  });
+
+  it('should allow tools without output schema', async () => {
+    const tool = createTool({
+      id: 'no-output-schema',
+      description: 'Tool without output schema',
+      inputSchema: z.object({
+        name: z.string(),
+      }),
+      execute: async inputData => {
+        // Return anything - no validation
+        return { anything: 'goes', name: inputData.name, extra: 123 };
+      },
+    });
+
+    const result = await tool.execute({ name: 'John' });
+
+    expect(result.error).toBeUndefined();
+    expect(result).toEqual({ anything: 'goes', name: 'John', extra: 123 });
+  });
+
+  it('should include tool ID in output validation error messages', async () => {
+    const tool = createTool({
+      id: 'user-service',
+      description: 'User service tool',
+      outputSchema: z.object({
+        userId: z.string().uuid(),
+      }),
+      execute: async () => {
+        return { userId: 'not-a-uuid' };
+      },
+    });
+
+    const result = await tool.execute({});
+
+    if ('error' in result) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool output validation failed for user-service');
+      expect(result.message).toContain('Invalid uuid');
+    } else {
+      throw new Error('Result is not a validation error');
+    }
+  });
+
+  it('should handle both input and output validation together', async () => {
+    const tool = createTool({
+      id: 'full-validation',
+      description: 'Tool with both input and output validation',
+      inputSchema: z.object({
+        email: z.string().email(),
+      }),
+      outputSchema: z.object({
+        verified: z.boolean(),
+        email: z.string().email(),
+      }),
+      execute: async inputData => {
+        return { verified: true, email: inputData.email };
+      },
+    });
+
+    // Test valid input and output
+    const validResult = await tool.execute({ email: 'test@example.com' });
+    expect(validResult && 'error' in validResult ? validResult.error : undefined).toBeUndefined();
+    expect(validResult).toEqual({ verified: true, email: 'test@example.com' });
+
+    // Test invalid input
+    const invalidInputResult = await tool.execute({ email: 'not-an-email' });
+    if ('error' in invalidInputResult) {
+      expect(invalidInputResult.error).toBe(true);
+      expect(invalidInputResult.message).toContain('Tool validation failed');
+    } else {
+      throw new Error('Result is not a validation error');
+    }
+  });
+
+  it('should validate output even when input validation passes', async () => {
+    const tool = createTool({
+      id: 'input-pass-output-fail',
+      description: 'Valid input but invalid output',
+      inputSchema: z.object({
+        name: z.string(),
+      }),
+      outputSchema: z.object({
+        result: z.string(),
+        count: z.number(),
+      }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => {
+        // Return invalid output even though input was valid
+        return { result: 'success' }; // Missing count
+      },
+    });
+
+    const result = await tool.execute({ name: 'John' });
+
+    if ('error' in result) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool output validation failed');
+      expect(result.message).toContain('- count: Required');
+    } else {
+      throw new Error('Result is not a validation error');
+    }
+  });
+
+  it('should validate output with optional fields', async () => {
+    const tool = createTool({
+      id: 'optional-output',
+      description: 'Test optional output fields',
+      outputSchema: z.object({
+        id: z.string(),
+        name: z.string().optional(),
+        metadata: z.object({ created: z.string() }).optional(),
+      }),
+      execute: async () => {
+        return { id: '123' }; // Optional fields are not present
+      },
+    });
+
+    const result = await tool.execute({});
+
+    expect(result && 'error' in result ? result.error : undefined).toBeUndefined();
+    expect(result).toEqual({ id: '123' });
+  });
+
+  it('should validate enums in output', async () => {
+    const tool = createTool({
+      id: 'enum-output',
+      description: 'Test enum validation in output',
+      outputSchema: z.object({
+        status: z.enum(['pending', 'approved', 'rejected']),
+      }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => {
+        return { status: 'unknown' }; // Invalid enum value
+      },
+    });
+
+    const result = await tool.execute({});
+
+    if ('error' in result) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool output validation failed');
+      expect(result.message).toContain("Invalid enum value. Expected 'pending' | 'approved' | 'rejected'");
+    } else {
+      throw new Error('Result is not a validation error');
+    }
+  });
+
+  it('should truncate large output in error messages to prevent PII exposure', async () => {
+    // Create a large object that would exceed 200 characters when stringified
+    const largeData = {
+      users: Array.from({ length: 50 }, (_, i) => ({
+        id: i,
+        name: `User ${i}`,
+        email: `user${i}@example.com`,
+        sensitiveData: 'This could contain PII',
+      })),
+    };
+
+    const tool = createTool({
+      id: 'large-output',
+      description: 'Test output truncation',
+      outputSchema: z.object({
+        status: z.literal('success'),
+      }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => {
+        return largeData; // Return large invalid output
+      },
+    });
+
+    const result = await tool.execute({});
+
+    if ('error' in result) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool output validation failed');
+      expect(result.message).toContain('... (truncated)');
+      // Ensure the full large data is NOT in the error message
+      expect(result.message.length).toBeLessThan(500); // Should be much smaller than full output
+      // Ensure sensitive data is not exposed
+      expect(result.message).not.toContain('user49@example.com');
+    } else {
+      throw new Error('Result is not a validation error');
+    }
+  });
+
+  it('should handle non-serializable output gracefully', async () => {
+    const tool = createTool({
+      id: 'non-serializable',
+      description: 'Test non-serializable output',
+      outputSchema: z.object({
+        value: z.string(),
+      }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => {
+        // Create circular reference
+        const obj: any = { name: 'test' };
+        obj.self = obj;
+        return obj;
+      },
+    });
+
+    const result = await tool.execute({});
+
+    if ('error' in result) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool output validation failed');
+      expect(result.message).toContain('[Unable to serialize data]');
+    } else {
+      throw new Error('Result is not a validation error');
+    }
+  });
+});

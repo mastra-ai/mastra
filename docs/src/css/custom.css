@@ -1,7 +1,8 @@
 @import "./fonts.css";
 @import "tailwindcss";
+@import "tw-animate-css";
 
-@custom-variant dark (&:is([data-theme="dark"] *));
+@custom-variant dark (&:is([data-theme= "dark"] *));
 
 /* ==================== LIGHT MODE ==================== */
 :root {
@@ -603,10 +604,6 @@ ol {
   .theme-doc-sidebar-container [class*="sidebar"] {
     width: 280px !important;
   }
-  /* [class*='docMainContainer'][class*='docMainContainer'] { */
-  /* use a container query to define behaviour below this point */
-  /* min-width: 69rem; */
-  /* } */
 
   .table-of-contents__left-border {
     border: none;

@@ -1,18 +1,20 @@
-import { useEffect, useState } from "react";
+import { Button } from "@site/src/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@site/src/components/ui/select";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@site/src/components/ui/dropdown";
+import { Check } from "lucide-react";
+import { useState } from "react";
+import { cn } from "../lib/utils";
+import { BetaIcon, StableIcon, TriggerIcon, VersionLabel } from "./icons/icon";
 
-/*
-This component is used to display a version selector in the navbar.
-It allows users to switch between different documentation versions:
-- Stable = 0.x (default /docs)
-- Beta = v1/main (/docs/v1)
-*/
+const versions = [
+  { value: "stable", label: "Stable" },
+  { value: "beta", label: "Beta" },
+];
+
 export default function VersionControl({
   className,
   size = "default",
@@ -25,18 +27,7 @@ export default function VersionControl({
   const [currentVersion, setCurrentVersion] = useState<"beta" | "stable">(
     "beta",
   );
-
-  // this is always stable on load
-  // useEffect(() => {
-  //   const path = window.location.pathname;
-  //   let pathChunks = path.split("/");
-
-  //   if (pathChunks.length > 2 && pathChunks[2] === "v1") {
-  //     setCurrentVersion("beta");
-  //   } else {
-  //     setCurrentVersion("stable");
-  //   }
-  // }, []);
+  const [open, setOpen] = useState(false);
 
   const onChange = (nextVersion: string) => {
     if (typeof window === "undefined") return;
@@ -63,20 +54,54 @@ export default function VersionControl({
   };
 
   return (
-    <Select value={currentVersion} onValueChange={onChange}>
-      <SelectTrigger
-        aria-label="Change version"
-        size={size}
-        className={className}
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="secondary"
+          size={size}
+          aria-label="Change version"
+          className={cn(
+            "w-full rounded-lg shadow-none justify-between dark:bg-(--mastra-surface-4) ",
+            "border-[0.5px] border-(--border) text-(--mastra-text-secondary) hover:bg-(--mastra-surface-2)",
+            "hover:text-(--mastra-text-primary)  px-3 py-2.5",
+            size === "sm" && "h-8",
+            size === "default" && "h-9",
+            className,
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <VersionLabel />
+            {currentVersion === "beta" ? "Beta" : "Stable"}
+          </div>
+          <TriggerIcon />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        side="bottom"
+        style={{ width: "var(--radix-dropdown-menu-trigger-width)" }}
       >
-        <SelectValue>
-          {currentVersion === "beta" ? "Beta" : "Stable"}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="stable">Stable</SelectItem>
-        <SelectItem value="beta">Beta</SelectItem>
-      </SelectContent>
-    </Select>
+        {versions.map((version) => {
+          const isActive = version.value === currentVersion;
+          return (
+            <DropdownMenuItem
+              key={version.value}
+              onClick={() => onChange(version.value)}
+              className={cn(
+                "flex items-center text-(--mastra-text-secondary) justify-between w-full",
+                isActive && " font-medium",
+              )}
+            >
+              <span className="inline-flex dark:text-white text-black items-center gap-2">
+                {version.value === "stable" ? <StableIcon /> : <BetaIcon />}
+                <span>{version.label}</span>
+              </span>
+              {isActive && (
+                <Check className="size-4 text-(--mastra-green-accent-2)" />
+              )}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
