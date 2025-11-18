@@ -228,7 +228,7 @@ export class Agent extends BaseResource {
       ...restParams,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
-      agentRequestContext: parseClientRequestContext(params.requestContext),
+      requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
     };
 
@@ -325,7 +325,7 @@ export class Agent extends BaseResource {
     const { requestContext: _omitRequestContext, ...restParams } = params;
     const processedParams = {
       ...restParams,
-      agentRequestContext: parseClientRequestContext(params.requestContext),
+      requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
       structuredOutput: params.structuredOutput
         ? {
@@ -721,7 +721,7 @@ export class Agent extends BaseResource {
       ...restParams,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
-      agentRequestContext: parseClientRequestContext(params.requestContext),
+      requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
     };
 
@@ -1375,7 +1375,7 @@ export class Agent extends BaseResource {
     const { requestContext: _omitRequestContext, ...restParams } = params;
     const processedParams = {
       ...restParams,
-      agentRequestContext: parseClientRequestContext(params.requestContext),
+      requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
       structuredOutput: params.structuredOutput
         ? {
@@ -1685,7 +1685,7 @@ export class Agent extends BaseResource {
   ): Promise<any> {
     const body = {
       data: params.data,
-      agentRequestContext: parseClientRequestContext(params.requestContext),
+      requestContext: parseClientRequestContext(params.requestContext),
     };
     return this.request(`/api/agents/${this.agentId}/tools/${toolId}/execute`, {
       method: 'POST',

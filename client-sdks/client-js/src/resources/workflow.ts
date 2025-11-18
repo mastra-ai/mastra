@@ -252,7 +252,11 @@ export class Workflow extends BaseResource {
     const workflowRequestContext = parseClientRequestContext(params.requestContext);
     return this.request(`/api/workflows/${this.workflowId}/start?runId=${params.runId}`, {
       method: 'POST',
-      body: { inputData: params?.inputData, workflowRequestContext, tracingOptions: params.tracingOptions },
+      body: {
+        inputData: params?.inputData,
+        requestContext: workflowRequestContext,
+        tracingOptions: params.tracingOptions,
+      },
     });
   }
 
@@ -280,7 +284,7 @@ export class Workflow extends BaseResource {
       body: {
         step,
         resumeData,
-        workflowRequestContext,
+        requestContext: workflowRequestContext,
         tracingOptions,
       },
     });
@@ -307,7 +311,11 @@ export class Workflow extends BaseResource {
 
     return this.request(`/api/workflows/${this.workflowId}/start-async?${searchParams.toString()}`, {
       method: 'POST',
-      body: { inputData: params.inputData, workflowRequestContext, tracingOptions: params.tracingOptions },
+      body: {
+        inputData: params.inputData,
+        requestContext: workflowRequestContext,
+        tracingOptions: params.tracingOptions,
+      },
     });
   }
 
@@ -333,7 +341,11 @@ export class Workflow extends BaseResource {
       `/api/workflows/${this.workflowId}/stream?${searchParams.toString()}`,
       {
         method: 'POST',
-        body: { inputData: params.inputData, workflowRequestContext, tracingOptions: params.tracingOptions },
+        body: {
+          inputData: params.inputData,
+          requestContext: workflowRequestContext,
+          tracingOptions: params.tracingOptions,
+        },
         stream: true,
       },
     );
@@ -469,7 +481,7 @@ export class Workflow extends BaseResource {
         method: 'POST',
         body: {
           inputData: params.inputData,
-          workflowRequestContext,
+          requestContext: workflowRequestContext,
           closeOnSuspend: params.closeOnSuspend,
           tracingOptions: params.tracingOptions,
         },
@@ -602,7 +614,7 @@ export class Workflow extends BaseResource {
       body: {
         step: params.step,
         resumeData: params.resumeData,
-        workflowRequestContext,
+        requestContext: workflowRequestContext,
         tracingOptions: params.tracingOptions,
       },
     });
@@ -630,7 +642,7 @@ export class Workflow extends BaseResource {
         body: {
           step: params.step,
           resumeData: params.resumeData,
-          workflowRequestContext,
+          requestContext: workflowRequestContext,
           tracingOptions: params.tracingOptions,
         },
         stream: true,

@@ -317,11 +317,6 @@ describe('Agent Handlers', () => {
         threadId: 'test-thread',
         // @ts-expect-error
         experimental_output: undefined,
-        agentRequestContext: {
-          user: {
-            name: 'test-user',
-          },
-        },
         requestContext: new RequestContext(),
       });
 
@@ -338,11 +333,6 @@ describe('Agent Handlers', () => {
           threadId: 'test-thread',
           // @ts-expect-error
           experimental_output: undefined,
-          agentRequestContext: {
-            user: {
-              name: 'test-user',
-            },
-          },
           requestContext: new RequestContext(),
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Agent with id non-existing not found' }));
@@ -364,11 +354,6 @@ describe('Agent Handlers', () => {
         resourceId: 'test-resource',
         threadId: 'test-thread',
         experimental_output: undefined,
-        agentRequestContext: {
-          user: {
-            name: 'test-user',
-          },
-        },
         requestContext: new RequestContext(),
       });
 
@@ -384,11 +369,6 @@ describe('Agent Handlers', () => {
           resourceId: 'test-resource',
           threadId: 'test-thread',
           experimental_output: undefined,
-          agentRequestContext: {
-            user: {
-              name: 'test-user',
-            },
-          },
           requestContext: new RequestContext(),
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Agent with id non-existing not found' }));
@@ -424,11 +404,6 @@ describe('Agent Handlers', () => {
         threadId: 'test-thread',
         // @ts-expect-error
         experimental_output: undefined,
-        agentRequestContext: {
-          user: {
-            name: 'test-user',
-          },
-        },
         requestContext: new RequestContext(),
       });
 

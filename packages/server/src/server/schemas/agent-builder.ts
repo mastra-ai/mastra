@@ -1,4 +1,3 @@
-import z from 'zod';
 import {
   streamWorkflowBodySchema,
   resumeBodySchema,
@@ -7,6 +6,8 @@ import {
 } from './workflows';
 
 // Path parameter schemas
+import z from 'zod';
+
 export const actionIdPathParams = z.object({
   actionId: z.string().describe('Unique identifier for the agent-builder action'),
 });
@@ -17,40 +18,29 @@ export const actionRunPathParams = z.object({
 });
 
 /**
- * Agent-builder schemas extend workflow schemas but replace workflowRequestContext with actionRequestContext
+ * Agent-builder schemas use the same body schemas as workflows
+ * Both use requestContext field
  */
 
 /**
  * Schema for stream agent-builder action body
  */
-export const streamAgentBuilderBodySchema = streamWorkflowBodySchema.omit({ workflowRequestContext: true }).extend({
-  actionRequestContext: z.record(z.string(), z.unknown()).optional(),
-});
+export const streamAgentBuilderBodySchema = streamWorkflowBodySchema;
 
 /**
  * Schema for legacy stream agent-builder action body
  */
-export const streamLegacyAgentBuilderBodySchema = streamLegacyWorkflowBodySchema
-  .omit({ workflowRequestContext: true })
-  .extend({
-    actionRequestContext: z.record(z.string(), z.unknown()).optional(),
-  });
+export const streamLegacyAgentBuilderBodySchema = streamLegacyWorkflowBodySchema;
 
 /**
  * Schema for resume agent-builder action body
  */
-export const resumeAgentBuilderBodySchema = resumeBodySchema.omit({ workflowRequestContext: true }).extend({
-  actionRequestContext: z.record(z.string(), z.unknown()).optional(),
-});
+export const resumeAgentBuilderBodySchema = resumeBodySchema;
 
 /**
  * Schema for start async agent-builder action body
  */
-export const startAsyncAgentBuilderBodySchema = startAsyncWorkflowBodySchema
-  .omit({ workflowRequestContext: true })
-  .extend({
-    actionRequestContext: z.record(z.string(), z.unknown()).optional(),
-  });
+export const startAsyncAgentBuilderBodySchema = startAsyncWorkflowBodySchema;
 
 // Agent-builder actions use the same response schemas as workflows since they're wrapped workflow handlers
 export {

@@ -125,9 +125,9 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Tool is not executable' });
       }
 
-      const { data, toolRequestContext } = bodyParams as {
+      const { data, requestContext: toolRequestContext } = bodyParams as {
         data?: unknown;
-        toolRequestContext?: Record<string, unknown>;
+        requestContext?: Record<string, unknown>;
       };
 
       validateBody({ data });

@@ -134,7 +134,7 @@ export class AgentBuilder extends BaseResource {
     const url = `/api/agent-builder/${this.actionId}/start-async${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
     const result = await this.request(url, {
       method: 'POST',
-      body: { ...actionParams, actionRequestContext },
+      body: { ...actionParams, requestContext: actionRequestContext },
     });
 
     return this.transformWorkflowResult(result);
@@ -154,7 +154,7 @@ export class AgentBuilder extends BaseResource {
     const url = `/api/agent-builder/${this.actionId}/start?${searchParams.toString()}`;
     return this.request(url, {
       method: 'POST',
-      body: { ...actionParams, actionRequestContext },
+      body: { ...actionParams, requestContext: actionRequestContext },
     });
   }
 
@@ -179,7 +179,7 @@ export class AgentBuilder extends BaseResource {
     const url = `/api/agent-builder/${this.actionId}/resume?${searchParams.toString()}`;
     return this.request(url, {
       method: 'POST',
-      body: { ...resumeParams, actionRequestContext },
+      body: { ...resumeParams, requestContext: actionRequestContext },
     });
   }
 
@@ -204,7 +204,7 @@ export class AgentBuilder extends BaseResource {
     const url = `/api/agent-builder/${this.actionId}/resume-async?${searchParams.toString()}`;
     const result = await this.request(url, {
       method: 'POST',
-      body: { ...resumeParams, actionRequestContext },
+      body: { ...resumeParams, requestContext: actionRequestContext },
     });
 
     return this.transformWorkflowResult(result);
@@ -299,7 +299,7 @@ export class AgentBuilder extends BaseResource {
     const url = `/api/agent-builder/${this.actionId}/stream${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
     const response: Response = await this.request(url, {
       method: 'POST',
-      body: { ...actionParams, actionRequestContext },
+      body: { ...actionParams, requestContext: actionRequestContext },
       stream: true,
     });
 
@@ -330,7 +330,7 @@ export class AgentBuilder extends BaseResource {
     const url = `/api/agent-builder/${this.actionId}/streamVNext${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
     const response: Response = await this.request(url, {
       method: 'POST',
-      body: { ...actionParams, actionRequestContext },
+      body: { ...actionParams, requestContext: actionRequestContext },
       stream: true,
     });
 
@@ -443,7 +443,7 @@ export class AgentBuilder extends BaseResource {
     const url = `/api/agent-builder/${this.actionId}/resume-stream?${searchParams.toString()}`;
     const response: Response = await this.request(url, {
       method: 'POST',
-      body: { ...resumeParams, actionRequestContext },
+      body: { ...resumeParams, requestContext: actionRequestContext },
       stream: true,
     });
 

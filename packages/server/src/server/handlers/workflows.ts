@@ -251,11 +251,16 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
   tags: ['Workflows'],
   handler: async ({ mastra, requestContext, workflowId, runId, ...params }) => {
     try {
-      const { inputData, closeOnSuspend, tracingOptions, workflowRequestContext } = params as {
+      const {
+        inputData,
+        closeOnSuspend,
+        tracingOptions,
+        requestContext: workflowRequestContext,
+      } = params as {
         inputData?: unknown;
         closeOnSuspend?: boolean;
         tracingOptions?: TracingOptions;
-        workflowRequestContext?: Record<string, unknown>;
+        requestContext?: Record<string, unknown>;
       };
 
       if (!workflowId) {
@@ -330,11 +335,16 @@ export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
   tags: ['Workflows'],
   handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
     try {
-      const { step, resumeData, tracingOptions, workflowRequestContext } = params as {
+      const {
+        step,
+        resumeData,
+        tracingOptions,
+        requestContext: workflowRequestContext,
+      } = params as {
         step: string | string[];
         resumeData?: unknown;
         tracingOptions?: TracingOptions;
-        workflowRequestContext?: Record<string, unknown>;
+        requestContext?: Record<string, unknown>;
       };
 
       if (!workflowId) {
@@ -444,10 +454,14 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
   tags: ['Workflows'],
   handler: async ({ mastra, requestContext, workflowId, runId, ...params }) => {
     try {
-      const { inputData, tracingOptions, workflowRequestContext } = params as {
+      const {
+        inputData,
+        tracingOptions,
+        requestContext: workflowRequestContext,
+      } = params as {
         inputData?: unknown;
         tracingOptions?: TracingOptions;
-        workflowRequestContext?: Record<string, unknown>;
+        requestContext?: Record<string, unknown>;
       };
 
       if (!workflowId) {
@@ -492,10 +506,14 @@ export const START_WORKFLOW_RUN_ROUTE = createRoute({
   tags: ['Workflows'],
   handler: async ({ mastra, requestContext, workflowId, runId, ...params }) => {
     try {
-      const { inputData, tracingOptions, workflowRequestContext } = params as {
+      const {
+        inputData,
+        tracingOptions,
+        requestContext: workflowRequestContext,
+      } = params as {
         inputData?: unknown;
         tracingOptions?: TracingOptions;
-        workflowRequestContext?: Record<string, unknown>;
+        requestContext?: Record<string, unknown>;
       };
 
       if (!workflowId) {
@@ -654,11 +672,16 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
   tags: ['Workflows'],
   handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
     try {
-      const { step, resumeData, tracingOptions, workflowRequestContext } = params as {
+      const {
+        step,
+        resumeData,
+        tracingOptions,
+        requestContext: workflowRequestContext,
+      } = params as {
         step: string | string[];
         resumeData?: unknown;
         tracingOptions?: TracingOptions;
-        workflowRequestContext?: Record<string, unknown>;
+        requestContext?: Record<string, unknown>;
       };
 
       if (!workflowId) {
@@ -715,11 +738,16 @@ export const RESUME_WORKFLOW_ROUTE = createRoute({
   tags: ['Workflows'],
   handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
     try {
-      const { step, resumeData, tracingOptions, workflowRequestContext } = params as {
+      const {
+        step,
+        resumeData,
+        tracingOptions,
+        requestContext: workflowRequestContext,
+      } = params as {
         step: string | string[];
         resumeData?: unknown;
         tracingOptions?: TracingOptions;
-        workflowRequestContext?: Record<string, unknown>;
+        requestContext?: Record<string, unknown>;
       };
 
       if (!workflowId) {
@@ -819,10 +847,14 @@ export const STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
   tags: ['Workflows', 'Legacy'],
   handler: async ({ mastra, requestContext, workflowId, runId, ...params }) => {
     try {
-      const { inputData, tracingOptions, workflowRequestContext } = params as {
+      const {
+        inputData,
+        tracingOptions,
+        requestContext: workflowRequestContext,
+      } = params as {
         inputData?: unknown;
         tracingOptions?: TracingOptions;
-        workflowRequestContext?: Record<string, unknown>;
+        requestContext?: Record<string, unknown>;
       };
 
       if (!workflowId) {

@@ -18,14 +18,15 @@ import { VECTORS_ROUTES } from './vectors';
 import { WORKFLOWS_ROUTES } from './workflows';
 
 /**
- * Runtime context fields that are always available to route handlers.
+ * Runtime context fields that are available to route handlers.
  * These are injected by the server adapters (Express, Hono, etc.)
+ * Fields other than `mastra` are optional to allow direct handler testing.
  */
 export type RuntimeContext = {
   mastra: Mastra;
-  requestContext: RequestContext;
-  tools: Record<string, Tool>;
-  taskStore: InMemoryTaskStore;
+  requestContext?: RequestContext;
+  tools?: Record<string, Tool>;
+  taskStore?: InMemoryTaskStore;
 };
 
 /**

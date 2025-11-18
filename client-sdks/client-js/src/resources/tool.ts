@@ -35,7 +35,7 @@ export class Tool extends BaseResource {
 
     const body = {
       data: params.data,
-      toolRequestContext: parseClientRequestContext(params.requestContext),
+      requestContext: parseClientRequestContext(params.requestContext),
     };
 
     return this.request(`/api/tools/${this.toolId}/execute?${url.toString()}`, {

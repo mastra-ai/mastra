@@ -498,10 +498,10 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, agentRequestContext, ...rest } = params as any;
+      const { messages, requestContext: agentRequestContext, ...rest } = params as any;
 
       const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext.entries()),
+        ...Array.from(requestContext?.entries() ?? []),
         ...Array.from(Object.entries(agentRequestContext ?? {})),
       ]);
 
@@ -539,12 +539,12 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, resourceId, resourceid, agentRequestContext, ...rest } = params as any;
+      const { messages, resourceId, resourceid, requestContext: agentRequestContext, ...rest } = params as any;
       // Use resourceId if provided, fall back to resourceid (deprecated)
       const finalResourceId = resourceId ?? resourceid;
 
       const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext.entries()),
+        ...Array.from(requestContext?.entries() ?? []),
         ...Array.from(Object.entries(agentRequestContext ?? {})),
       ]);
 
@@ -582,12 +582,12 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, resourceId, resourceid, agentRequestContext, ...rest } = params as any;
+      const { messages, resourceId, resourceid, requestContext: agentRequestContext, ...rest } = params as any;
       // Use resourceId if provided, fall back to resourceid (deprecated)
       const finalResourceId = resourceId ?? resourceid;
 
       const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext.entries()),
+        ...Array.from(requestContext?.entries() ?? []),
         ...Array.from(Object.entries(agentRequestContext ?? {})),
       ]);
 
@@ -692,9 +692,9 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, agentRequestContext, ...rest } = params as any;
+      const { messages, requestContext: agentRequestContext, ...rest } = params as any;
       const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext.entries()),
+        ...Array.from(requestContext?.entries() ?? []),
         ...Array.from(Object.entries(agentRequestContext ?? {})),
       ]);
 
@@ -753,10 +753,10 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { runId, agentRequestContext, ...rest } = params as any;
+      const { runId, requestContext: agentRequestContext, ...rest } = params as any;
 
       const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext.entries()),
+        ...Array.from(requestContext?.entries() ?? []),
         ...Array.from(Object.entries(agentRequestContext ?? {})),
       ]);
 
@@ -801,10 +801,10 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { runId, agentRequestContext, ...rest } = params as any;
+      const { runId, requestContext: agentRequestContext, ...rest } = params as any;
 
       const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext.entries()),
+        ...Array.from(requestContext?.entries() ?? []),
         ...Array.from(Object.entries(agentRequestContext ?? {})),
       ]);
 
@@ -841,9 +841,9 @@ export const STREAM_NETWORK_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, agentRequestContext, ...rest } = params as any;
+      const { messages, requestContext: agentRequestContext, ...rest } = params as any;
       const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext.entries()),
+        ...Array.from(requestContext?.entries() ?? []),
         ...Array.from(Object.entries(agentRequestContext ?? {})),
       ]);
 
