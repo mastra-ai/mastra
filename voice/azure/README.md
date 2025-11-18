@@ -10,14 +10,6 @@ npm install @mastra/voice-azure
 
 ## Configuration
 
-### Important: Azure Speech Services vs Azure OpenAI
-
-**⚠️ This package uses Azure Speech Services, NOT Azure OpenAI Services.**
-
-- **DO NOT** use your `AZURE_OPENAI_API_KEY` for this package
-- **DO** use an Azure Speech Services subscription key (obtain from Azure Portal under "Speech Services")
-- These are separate Azure resources with different API keys and endpoints
-
 ### Environment Variables
 
 The module requires Azure Speech Services credentials that can be provided through environment variables or directly in the configuration:
