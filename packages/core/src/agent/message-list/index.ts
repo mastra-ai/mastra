@@ -1509,74 +1509,90 @@ export class MessageList {
           }
 
           case 'tool-result':
-            // Try to find args from the corresponding tool-call in previous messages
-            let toolArgs: Record<string, unknown> = {};
+            {
+              // Try to find args from the corresponding tool-call in previous messages
+              let toolArgs: Record<string, unknown> = {};
 
-            // First, check if there's a tool-call in the same message
-            const toolCallInSameMsg = coreMessage.content.find(
-              p => p.type === 'tool-call' && p.toolCallId === aiV4Part.toolCallId,
-            );
-            if (toolCallInSameMsg && toolCallInSameMsg.type === 'tool-call') {
-              toolArgs = toolCallInSameMsg.args as Record<string, unknown>;
-            }
+              // First, check if there's a tool-call in the same message
+              const toolCallInSameMsg = coreMessage.content.find(
+                p => p.type === 'tool-call' && p.toolCallId === aiV4Part.toolCallId,
+              );
+              if (toolCallInSameMsg && toolCallInSameMsg.type === 'tool-call') {
+                toolArgs = toolCallInSameMsg.args as Record<string, unknown>;
+              }
 
-            // If not found, look in previous messages for the corresponding tool-call
-            // Search from most recent messages first (more likely to find the match)
-            if (Object.keys(toolArgs).length === 0) {
-              // Iterate in reverse order (most recent first) for better performance
-              for (let i = this.messages.length - 1; i >= 0; i--) {
-                const msg = this.messages[i];
-                if (msg && msg.role === 'assistant' && msg.content.parts) {
-                  const toolCallPart = msg.content.parts.find(
-                    p =>
-                      p.type === 'tool-invocation' &&
-                      p.toolInvocation.toolCallId === aiV4Part.toolCallId &&
-                      p.toolInvocation.state === 'call',
-                  );
-                  if (toolCallPart && toolCallPart.type === 'tool-invocation' && toolCallPart.toolInvocation.args) {
-                    toolArgs = toolCallPart.toolInvocation.args;
-                    break;
+              // If not found, look in previous messages for the corresponding tool-call
+              // Search from most recent messages first (more likely to find the match)
+              if (Object.keys(toolArgs).length === 0) {
+                // Iterate in reverse order (most recent first) for better performance
+                for (let i = this.messages.length - 1; i >= 0; i--) {
+                  const msg = this.messages[i];
+                  if (msg && msg.role === 'assistant' && msg.content.parts) {
+                    const toolCallPart = msg.content.parts.find(
+                      p =>
+                        p.type === 'tool-invocation' &&
+                        p.toolInvocation.toolCallId === aiV4Part.toolCallId &&
+                        p.toolInvocation.state === 'call',
+                    );
+                    if (toolCallPart && toolCallPart.type === 'tool-invocation' && toolCallPart.toolInvocation.args) {
+                      toolArgs = toolCallPart.toolInvocation.args;
+                      break;
+                    }
                   }
                 }
               }
-            }
 
-            // Only use part-level providerOptions if present
-            // Don't merge with message-level to avoid issues with features like cache breakpoints
-            const invocation: ToolInvocationV4 & { providerMetadata?: AIV5Type.ProviderMetadata } = {
-              state: 'result' as const,
-              toolCallId: aiV4Part.toolCallId,
-              toolName: aiV4Part.toolName,
-              result: aiV4Part.result ?? '', // undefined will cause AI SDK to throw an error, but for client side tool calls this really could be undefined
-              args: toolArgs, // Use the args from the corresponding tool-call
-            };
-            if (aiV4Part.providerOptions) {
-              invocation.providerMetadata = aiV4Part.providerOptions;
+              // Only use part-level providerOptions if present
+              // Don't merge with message-level to avoid issues with features like cache breakpoints
+              const invocation: ToolInvocationV4 = {
+                state: 'result' as const,
+                toolCallId: aiV4Part.toolCallId,
+                toolName: aiV4Part.toolName,
+                result: aiV4Part.result ?? '', // undefined will cause AI SDK to throw an error, but for client side tool calls this really could be undefined
+                args: toolArgs, // Use the args from the corresponding tool-call
+              };
+
+              const part: MastraDBMessage['content']['parts'][number] = {
+                type: 'tool-invocation',
+                toolInvocation: invocation,
+              };
+
+              if (aiV4Part.providerOptions) {
+                part.providerMetadata = aiV4Part.providerOptions;
+              }
+
+              parts.push(part);
+              toolInvocations.push(invocation);
             }
-            parts.push({
-              type: 'tool-invocation',
-              toolInvocation: invocation,
-            });
-            toolInvocations.push(invocation);
             break;
 
           case 'reasoning':
-            parts.push({
-              type: 'reasoning',
-              reasoning: '', // leave this blank so we aren't double storing it in the db along with details
-              details: [{ type: 'text', text: aiV4Part.text, signature: aiV4Part.signature }],
-            });
+            {
+              const part: MastraDBMessage['content']['parts'][number] = {
+                type: 'reasoning',
+                reasoning: '', // leave this blank so we aren't double storing it in the db along with details
+                details: [{ type: 'text', text: aiV4Part.text, signature: aiV4Part.signature }],
+              };
+              if (aiV4Part.providerOptions) {
+                part.providerMetadata = aiV4Part.providerOptions;
+              }
+              parts.push(part);
+            }
             break;
           case 'redacted-reasoning':
-            parts.push({
-              type: 'reasoning',
-              reasoning: '', // No text reasoning for redacted parts
-              details: [{ type: 'redacted', data: aiV4Part.data }],
-            });
+            {
+              const part: MastraDBMessage['content']['parts'][number] = {
+                type: 'reasoning',
+                reasoning: '', // No text reasoning for redacted parts
+                details: [{ type: 'redacted', data: aiV4Part.data }],
+              };
+              if (aiV4Part.providerOptions) {
+                part.providerMetadata = aiV4Part.providerOptions;
+              }
+              parts.push(part);
+            }
             break;
           case 'image': {
-            // Only use part-level providerOptions if present
-            // Don't merge with message-level to avoid issues with features like cache breakpoints
             const part: MastraDBMessage['content']['parts'][number] = {
               type: 'file' as const,
               data: imageContentToString(aiV4Part.image),
@@ -1589,9 +1605,6 @@ export class MessageList {
             break;
           }
           case 'file': {
-            // Only use part-level providerOptions if present
-            // Don't merge with message-level to avoid issues with features like cache breakpoints
-
             // CoreMessage file parts can have mimeType and data (binary/data URL) or just a URL
             if (aiV4Part.data instanceof URL) {
               const part: MastraDBMessage['content']['parts'][number] = {
@@ -2138,14 +2151,14 @@ export class MessageList {
             state: 'output-available',
             input: invocation.args,
             output: invocation.result,
-          } as unknown as AIV5Type.UIMessage['parts'][number]);
+          });
         } else {
           parts.push({
             type: `tool-${invocation.toolName}`,
             toolCallId: invocation.toolCallId,
             state: invocation.state === 'call' ? 'input-available' : 'input-streaming',
             input: invocation.args,
-          } as unknown as AIV5Type.UIMessage['parts'][number]);
+          });
         }
       }
     }
@@ -2207,30 +2220,23 @@ export class MessageList {
 
         // Handle reasoning parts
         if (part.type === 'reasoning') {
-          // V2 reasoning parts can have either text directly or details array
-          type V2ReasoningPart = {
-            type: 'reasoning';
-            text?: string;
-            reasoning?: string;
-            details?: Array<{ type: string; text?: string }>;
-            providerMetadata?: AIV5Type.ProviderMetadata;
-          };
-          const reasoningPart = part as V2ReasoningPart;
           const text =
-            reasoningPart.text ||
-            reasoningPart.reasoning ||
-            (reasoningPart.details?.reduce((p: string, c) => {
+            part.reasoning ||
+            (part.details?.reduce((p: string, c) => {
               if (c.type === `text` && c.text) return p + c.text;
               return p;
             }, '') ??
               '');
-          if (text || reasoningPart.details?.length) {
-            parts.push({
-              type: 'reasoning',
+          if (text || part.details?.length) {
+            const v5UIPart: AIV5Type.ReasoningUIPart = {
+              type: 'reasoning' as const,
               text: text || '',
-              state: 'done',
-              ...(part.providerMetadata && { providerMetadata: part.providerMetadata }),
-            });
+              state: 'done' as const,
+            };
+            if (part.providerMetadata) {
+              v5UIPart.providerMetadata = part.providerMetadata;
+            }
+            parts.push(v5UIPart);
           }
           continue;
         }
@@ -2254,12 +2260,15 @@ export class MessageList {
 
           if (categorized.type === 'url' && typeof part.data === 'string') {
             // It's a URL, use the 'url' field directly
-            parts.push({
-              type: 'file',
+            const v5UIPart: AIV5Type.FileUIPart = {
+              type: 'file' as const,
               url: part.data,
               mediaType: categorized.mimeType || 'image/png',
-              providerMetadata: part.providerMetadata,
-            });
+            };
+            if (part.providerMetadata) {
+              v5UIPart.providerMetadata = part.providerMetadata;
+            }
+            parts.push(v5UIPart);
           } else {
             // For AI SDK V5 compatibility with inline images (especially Google Gemini),
             // file parts need a 'url' field with data URI
@@ -2297,38 +2306,38 @@ export class MessageList {
               dataUri = createDataUri(filePartData, finalMimeType);
             }
 
-            parts.push({
-              type: 'file',
+            const v5UIPart: AIV5Type.FileUIPart = {
+              type: 'file' as const,
               url: dataUri, // Use url field with data URI
               mediaType: finalMimeType,
-              providerMetadata: part.providerMetadata,
-            });
+            };
+            if (part.providerMetadata) {
+              v5UIPart.providerMetadata = part.providerMetadata;
+            }
+            parts.push(v5UIPart);
           }
         } else if (part.type === 'source') {
-          // Convert V2 source parts to AIV5 source-url parts
-          type V2SourcePart = {
-            type: 'source';
-            source: {
-              url: string;
-              sourceType: string;
-              id: string;
-              providerMetadata?: AIV5Type.ProviderMetadata;
-            };
-            providerMetadata?: AIV5Type.ProviderMetadata;
+          // TODO: handle both SourceUrlUIPart | SourceDocumentUIPart. Currently we only have the old SourceUIPart. Probably extend LanguageModelV1Source and save as a different sourceType.
+          const v5UIPart: AIV5Type.SourceUrlUIPart = {
+            type: 'source-url' as const,
+            url: part.source.url,
+            sourceId: part.source.id,
+            title: part.source.title,
           };
-          const sourcePart = part as V2SourcePart;
-          parts.push({
-            type: 'source-url',
-            url: sourcePart.source.url,
-            ...(part.providerMetadata && { providerMetadata: part.providerMetadata }),
-          } as AIV5Type.SourceUrlUIPart);
+          if (part.providerMetadata) {
+            v5UIPart.providerMetadata = part.providerMetadata;
+          }
+
+          parts.push(v5UIPart);
         } else if (part.type === 'text') {
-          // Text parts need providerMetadata preserved (only if defined)
-          parts.push({
-            type: 'text',
+          const v5UIPart: AIV5Type.TextUIPart = {
+            type: 'text' as const,
             text: part.text,
-            ...(part.providerMetadata && { providerMetadata: part.providerMetadata }),
-          });
+          };
+          if (part.providerMetadata) {
+            v5UIPart.providerMetadata = part.providerMetadata;
+          }
+          parts.push(v5UIPart);
           hasNonToolReasoningParts = true;
         } else {
           // Other parts (step-start, etc.) can be pushed as-is
