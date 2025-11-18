@@ -9588,7 +9588,7 @@ If there are no specific instructions for your tool below, you may be able to ad
     "mastra": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@mastra/mcp-docs-server"]
+      "args": ["-y", "@mastra/mcp-docs-server@beta"]
     }
   }
 }
@@ -9599,7 +9599,7 @@ If there are no specific instructions for your tool below, you may be able to ad
 Install using the terminal command:
 
 ```bash copy
-claude mcp add mastra -- npx -y @mastra/mcp-docs-server
+claude mcp add mastra -- npx -y @mastra/mcp-docs-server@beta
 ```
 
 [More info on using MCP servers with Claude Code](https://docs.claude.com/en/docs/claude-code/mcp)
@@ -9609,7 +9609,7 @@ claude mcp add mastra -- npx -y @mastra/mcp-docs-server
 1. Register it from the terminal:
 
    ```bash copy
-   codex mcp add mastra-docs -- npx -y @mastra/mcp-docs-server
+   codex mcp add mastra-docs -- npx -y @mastra/mcp-docs-server@beta
    ```
 
 2. Run `codex mcp list` to confirm the server shows as `enabled`.
@@ -9643,7 +9643,7 @@ If you followed the automatic installation, you'll see a popup when you open cur
        "mastra": {
          "type": "stdio",
          "command": "npx",
-         "args": ["-y", "@mastra/mcp-docs-server"]
+         "args": ["-y", "@mastra/mcp-docs-server@beta"]
        }
      }
    }
@@ -9692,7 +9692,7 @@ After starting the MCP server, click the tools button in the Copilot pane to see
      "mcpServers": {
        "mastra": {
          "command": "npx",
-         "args": ["-y", "@mastra/mcp-docs-server"]
+         "args": ["-y", "@mastra/mcp-docs-server@beta"]
        }
      }
    }
@@ -35106,6 +35106,18 @@ npx @mastra/codemod@beta v1/workflow-list-runs .
 ```
 
 :::
+
+### Inputs are validated by default
+
+Previously, inputs weren't validated by default. The [`validateInputs`](/reference/v1/workflows/workflow#workflowoptions) flag determines whether to validate the workflow inputs or not. This boolean has been flipped to `true`. If you want the old behavior or have workflows whose schemas don't need to be validated, set `validateInputs: false`.
+
+```diff
+createWorkflow({
++  options: {
++    validateInputs: false
++  }
+})
+```
 
 ## Removed
 
@@ -91652,7 +91664,7 @@ export const workflow = createWorkflow({
       description:
         "Optional flag to determine whether to validate the workflow inputs. This also applies default values from zodSchemas on the workflow/step input/resume data. If input/resume data validation fails on start/resume, the workflow will not start/resume, it throws an error instead. If input data validation fails on a step execution, the step fails, causing the workflow to fail and the error is returned.",
       isOptional: true,
-      defaultValue: "false",
+      defaultValue: "true",
     },
     {
       name: "shouldPersistSnapshot",

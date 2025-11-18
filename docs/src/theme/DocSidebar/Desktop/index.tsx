@@ -9,6 +9,7 @@ import React from "react";
 import { ThemeSwitcher } from "@site/src/components/theme-switcher";
 
 import styles from "./styles.module.css";
+import VersionControl from "@site/src/components/version-control";
 
 function DocSidebarDesktop({ path, sidebar, onCollapse, isHidden }: Props) {
   const {
@@ -25,9 +26,12 @@ function DocSidebarDesktop({ path, sidebar, onCollapse, isHidden }: Props) {
         isHidden && styles.sidebarHidden,
       )}
     >
+      <div className="mr-[7px] my-4 mb-2">
+        <VersionControl />
+      </div>
       {hideOnScroll && <Logo tabIndex={-1} className={styles.sidebarLogo} />}
       <Content path={path} sidebar={sidebar} />
-      <footer className="py-4 pr-0.5 mr-4 flex justify-end border-t-[0.5px] border-(--border)">
+      <footer className="py-2 pr-0.5 mr-4 flex justify-end border-t-[0.5px] border-(--border)">
         <ThemeSwitcher />
       </footer>
       {hideable && <CollapseButton onClick={onCollapse} />}

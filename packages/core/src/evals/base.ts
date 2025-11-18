@@ -490,6 +490,7 @@ class MastraScorer<
         tracingPolicy: {
           internal: InternalSpans.ALL,
         },
+        validateInputs: false,
       },
     });
 

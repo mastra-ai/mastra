@@ -241,6 +241,7 @@ export const scoreTracesWorkflow = createWorkflow({
     tracingPolicy: {
       internal: InternalSpans.ALL,
     },
+    validateInputs: false,
   },
 });
 

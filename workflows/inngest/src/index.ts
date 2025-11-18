@@ -1741,7 +1741,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     const { inputData, validationError } = await validateStepInput({
       prevOutput,
       step,
-      validateInputs: this.options?.validateInputs ?? false,
+      validateInputs: this.options?.validateInputs ?? true,
     });
 
     const startedAt = await this.inngestStep.run(
