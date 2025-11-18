@@ -8095,8 +8095,6 @@ describe('Workflow', () => {
       const run = await counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
 
-      console.dir({ result }, { depth: null });
-
       expect(start).toHaveBeenCalledTimes(2);
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(2);
