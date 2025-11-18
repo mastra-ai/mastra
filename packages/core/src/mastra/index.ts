@@ -67,7 +67,7 @@ export interface Config<
     string,
     Workflow<any, any, any, any, any, any>
   >,
-  TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
+  TVectors extends Record<string, MastraVector<any>> = Record<string, MastraVector<any>>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
@@ -231,7 +231,7 @@ export class Mastra<
     string,
     Workflow<any, any, any, any, any, any>
   >,
-  TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
+  TVectors extends Record<string, MastraVector<any>> = Record<string, MastraVector<any>>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
