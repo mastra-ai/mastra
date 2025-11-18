@@ -140,5 +140,13 @@ export const mastra = new Mastra({
       isOptional: true,
       defaultValue: "{}",
     },
+    {
+      name: "gateways",
+      type: "Record<string, MastraModelGateway>",
+      description:
+        "Custom model gateways to register for accessing AI models through alternative providers or private deployments. Structured as a key-value pair, with keys being the registry key (used for getGateway()) and values being gateway instances.",
+      isOptional: true,
+      defaultValue: "{}",
+    },
   ]}
 />

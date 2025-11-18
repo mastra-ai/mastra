@@ -1,0 +1,59 @@
+---
+title: "Reference: Mastra.addGateway() | Core"
+description: "Add a gateway to the Mastra instance"
+---
+
+# Mastra.addGateway()
+
+Dynamically adds a gateway to the Mastra instance. Can be used during or after initialization.
+
+## Usage example
+
+```typescript
+import { Mastra } from '@mastra/core';
+
+const mastra = new Mastra();
+
+// Add with explicit key
+mastra.addGateway(new MyCustomGateway(), 'myGateway');
+
+// Add using gateway's ID as the key
+mastra.addGateway(new MyCustomGateway());
+// Stored with key 'my-custom-gateway' (the gateway's id)
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: 'gateway',
+      type: 'MastraModelGateway',
+      description: 'The gateway instance to add',
+    },
+    {
+      name: 'key',
+      type: 'string',
+      isOptional: true,
+      description: 'Optional registration key. If not provided, uses gateway.getId()',
+    },
+  ]}
+/>
+
+## Returns
+
+Void. The gateway is added to the internal registry.
+
+## Behavior
+
+- If a gateway with the same key already exists, the addition is skipped
+- In development mode (`MASTRA_DEV=true`), automatically triggers type generation for custom gateways
+- The gateway becomes available immediately for model resolution
+
+## Related
+
+- [Mastra.getGateway()](/reference/v1/core/getGateway) - Get gateway by registration key
+- [Mastra.getGatewayById()](/reference/v1/core/getGatewayById) - Get gateway by ID
+- [Mastra.listGateways()](/reference/v1/core/listGateways) - List all gateways
+- [MastraModelGateway](/reference/v1/core/mastra-model-gateway) - Gateway base class
+- [Custom Gateways Guide](/models/v1/gateways/custom-gateways) - Creating custom gateways
