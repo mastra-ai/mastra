@@ -31,6 +31,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '20.19.5'
+          package-manager-cache: false
 
       - name: Check for removed pages without redirects
         if: steps.mdx-changes.outputs.has_changes == 'true'
@@ -38,6 +39,7 @@ jobs:
         env:
           BASE_REF: origin/${{ github.event.pull_request.base.ref }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          COREPACK_ENABLE_STRICT: '0'
 
       - name: Comment on PR if redirects are missing
         if: failure()
