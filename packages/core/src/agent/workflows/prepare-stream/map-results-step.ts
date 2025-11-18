@@ -142,6 +142,7 @@ export function createMapResultsStep<
       requestContext: result.requestContext!,
       tracingContext: { currentSpan: agentSpan },
       runId,
+      methodType: 'stream',
       toolChoice: result.toolChoice,
       tools: result.tools,
       resourceId: result.resourceId,

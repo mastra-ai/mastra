@@ -303,22 +303,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     inputProcessorOverrides?: InputProcessor[];
     outputProcessorOverrides?: OutputProcessor[];
   }): Promise<ProcessorRunner> {
-    // Use overrides if provided, otherwise fall back to agent's default processors
+    // Use overrides if provided, otherwise resolve from agent config + memory
     const inputProcessors =
-      inputProcessorOverrides ??
-      (this.#inputProcessors
-        ? typeof this.#inputProcessors === 'function'
-          ? await this.#inputProcessors({ requestContext })
-          : this.#inputProcessors
-        : []);
+      inputProcessorOverrides ?? (await this.listResolvedInputProcessors(requestContext));
 
     const outputProcessors =
-      outputProcessorOverrides ??
-      (this.#outputProcessors
-        ? typeof this.#outputProcessors === 'function'
-          ? await this.#outputProcessors({ requestContext })
-          : this.#outputProcessors
-        : []);
+      outputProcessorOverrides ?? (await this.listResolvedOutputProcessors(requestContext));
 
     this.logger.debug('outputProcessors', outputProcessors);
 
@@ -335,15 +325,23 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * @internal
    */
   private async listResolvedOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessor[]> {
-    if (!this.#outputProcessors) {
-      return [];
-    }
+    // Get configured output processors
+    const configuredProcessors = this.#outputProcessors
+      ? typeof this.#outputProcessors === 'function'
+        ? await this.#outputProcessors({ requestContext: requestContext || new RequestContext() })
+        : this.#outputProcessors
+      : [];
 
-    if (typeof this.#outputProcessors === 'function') {
-      return await this.#outputProcessors({ requestContext: requestContext || new RequestContext() });
-    }
+    // Get memory output processors (with deduplication)
+    const memory =
+      typeof this.#memory === 'function'
+        ? await this.#memory({ requestContext: requestContext || new RequestContext() })
+        : this.#memory;
 
-    return this.#outputProcessors;
+    const memoryProcessors = memory ? memory.getOutputProcessors(configuredProcessors, requestContext) : [];
+
+    // Memory processors should run last (to persist messages after other processing)
+    return [...configuredProcessors, ...memoryProcessors];
   }
 
   /**
@@ -351,15 +349,23 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * @internal
    */
   private async listResolvedInputProcessors(requestContext?: RequestContext): Promise<InputProcessor[]> {
-    if (!this.#inputProcessors) {
-      return [];
-    }
+    // Get configured input processors
+    const configuredProcessors = this.#inputProcessors
+      ? typeof this.#inputProcessors === 'function'
+        ? await this.#inputProcessors({ requestContext: requestContext || new RequestContext() })
+        : this.#inputProcessors
+      : [];
 
-    if (typeof this.#inputProcessors === 'function') {
-      return await this.#inputProcessors({ requestContext: requestContext || new RequestContext() });
-    }
+    // Get memory input processors (with deduplication)
+    const memory =
+      typeof this.#memory === 'function'
+        ? await this.#memory({ requestContext: requestContext || new RequestContext() })
+        : this.#memory;
 
-    return this.#inputProcessors;
+    const memoryProcessors = memory ? memory.getInputProcessors(configuredProcessors, requestContext) : [];
+
+    // Memory processors should run first (to fetch history, semantic recall, working memory)
+    return [...memoryProcessors, ...configuredProcessors];
   }
 
   /**
@@ -1341,7 +1347,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     let tripwireTriggered = false;
     let tripwireReason = '';
 
-    if (inputProcessorOverrides?.length || this.#inputProcessors) {
+    if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory) {
       const runner = await this.getProcessorRunner({
         requestContext,
         inputProcessorOverrides,
@@ -1395,7 +1401,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     let tripwireTriggered = false;
     let tripwireReason = '';
 
-    if (outputProcessorOverrides?.length || this.#outputProcessors) {
+    if (outputProcessorOverrides?.length || this.#outputProcessors || this.#memory) {
       const runner = await this.getProcessorRunner({
         requestContext,
         outputProcessorOverrides,

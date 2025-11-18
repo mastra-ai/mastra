@@ -28,8 +28,8 @@ import { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream/types';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import type { MessageListInput, UIMessageWithMetadata } from './message-list';
 import { MessageList } from './message-list';
+import type { MastraDBMessage, MessageListInput, UIMessageWithMetadata } from './message-list/index';
 import { SaveQueueManager } from './save-queue';
 import type { AgentGenerateOptions, AgentStreamOptions, AgentInstructions, ToolsetsInput, ToolsInput } from './types';
 import { resolveThreadIdFromArgs } from './utils';
@@ -69,6 +69,14 @@ export interface AgentLegacyCapabilities {
   getLLM(options: { requestContext: RequestContext }): Promise<MastraLLMV1>;
   /** Get memory instance */
   getMemory(options: { requestContext: RequestContext }): Promise<MastraMemory | undefined>;
+  /** Get memory messages (deprecated - use input processors) */
+  getMemoryMessages(args: {
+    resourceId?: string;
+    threadId: string;
+    vectorMessageSearch: string;
+    memoryConfig?: MemoryConfig;
+    requestContext: RequestContext;
+  }): Promise<{ messages: MastraDBMessage[] }>;
   /** Convert tools for LLM */
   convertTools(args: {
     toolsets?: ToolsetsInput;
