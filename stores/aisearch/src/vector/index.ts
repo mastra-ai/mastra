@@ -399,7 +399,6 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
               prioritizedFields: semanticConfig.prioritizedFields ?? {
                 titleField: { fieldName: 'content' },
                 prioritizedContentFields: [{ fieldName: 'content' }],
-                prioritizedKeywordsFields: [{ fieldName: 'tags' }],
               },
             },
           ],
