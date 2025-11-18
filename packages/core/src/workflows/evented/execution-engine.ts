@@ -10,6 +10,7 @@ import type {
   RestartExecutionParams,
   TimeTravelExecutionParams,
 } from '../types';
+import { hydrateSerializedStepErrors } from '../utils';
 import type { WorkflowEventProcessor } from './workflow-event-processor';
 import { getStep } from './workflow-event-processor/utils';
 
@@ -128,6 +129,9 @@ export class EventedExecutionEngine extends ExecutionEngine {
         if (['workflow.end', 'workflow.fail', 'workflow.suspend'].includes(event.type)) {
           await ack?.();
           await pubsub.unsubscribe('workflows-finish', finishCb);
+          if (event.type === 'workflow.fail' && event.data.stepResults) {
+            event.data.stepResults = hydrateSerializedStepErrors(event.data.stepResults);
+          }
           resolve(event.data);
           return;
         }

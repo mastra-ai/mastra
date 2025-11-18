@@ -2,7 +2,6 @@ import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
 import type { RequestContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
-import type { IErrorDefinition } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
 import type { MastraScorers } from '../evals';
 import { runScorer } from '../evals/hooks';
@@ -27,6 +26,7 @@ import type {
   StepResult,
   StepSuccess,
   StepSuspended,
+  WorkflowStepStatus,
   TimeTravelExecutionParams,
 } from './types';
 import {
@@ -65,29 +65,6 @@ export type ExecutionContext = {
  */
 export class DefaultExecutionEngine extends ExecutionEngine {
   /**
-   * Preprocesses an error caught during workflow execution.
-   *
-   * - Wraps a non-MastraError exception
-   * - Logs error details
-   */
-  protected preprocessExecutionError(
-    e: unknown,
-    errorDefinition: IErrorDefinition<ErrorDomain, ErrorCategory>,
-    logPrefix: string,
-  ): MastraError {
-    const error = e instanceof MastraError ? e : new MastraError(errorDefinition, e);
-
-    // Preserve original stack trace
-    if (!(e instanceof MastraError) && e instanceof Error && e.stack) {
-      error.stack = e.stack;
-    }
-
-    this.logger?.trackException(error);
-    this.logger?.error(logPrefix + error?.stack);
-    return error;
-  }
-
-  /**
    * The retryCounts map is used to keep track of the retry count for each step.
    * The step id is used as the key and the retry count is the value.
    */
@@ -119,12 +96,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }
 
   protected async fmtReturnValue<TOutput>(
-    emitter: Emitter,
+    _emitter: Emitter,
     stepResults: Record<string, StepResult<any, any, any, any>>,
     lastOutput: StepResult<any, any, any, any>,
-    error?: Error | string,
+    error?: Error | unknown,
   ): Promise<TOutput> {
-    const base: any = {
+    const base: {
+      status: WorkflowStepStatus;
+      steps: Record<string, StepResult<any, any, any, any>>;
+      input?: StepResult<any, any, any, any>;
+      result?: StepSuccess<any, any, any, any>['output'];
+      error?: Error;
+      suspended?: string[][];
+    } = {
       status: lastOutput.status,
       steps: stepResults,
       input: stepResults.input,
@@ -135,10 +119,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     } else if (lastOutput.status === 'failed') {
       const errorSource = error || lastOutput.error;
       const errorInstance = getErrorFromUnknown(errorSource, {
-        includeStack: false,
+        serializeStack: false,
         fallbackMessage: 'Unknown workflow error',
       });
-      base.error = typeof errorSource === 'string' ? errorInstance.message : `Error: ${errorInstance.message}`;
+      base.error = errorInstance;
     } else if (lastOutput.status === 'suspended') {
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {
@@ -329,17 +313,20 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         // if error occurred during step execution, stop and return
       } catch (e) {
-        const error = this.preprocessExecutionError(
-          e,
+        const error = getErrorFromUnknown(e, { serializeStack: false });
+        const mastraError = new MastraError(
           {
             id: 'WORKFLOW_ENGINE_STEP_EXECUTION_FAILED',
             domain: ErrorDomain.MASTRA_WORKFLOW,
             category: ErrorCategory.USER,
             details: { workflowId, runId },
           },
-          'Error executing step: ',
+          error,
         );
-        const result = (await this.fmtReturnValue(params.emitter, stepResults, lastOutput.result, e as Error)) as any;
+        this.logger?.trackException(mastraError);
+        this.logger?.error('Error executing step: ' + error?.stack);
+
+        const result = (await this.fmtReturnValue(params.emitter, stepResults, lastOutput.result, error)) as any;
         await this.persistStepUpdate({
           workflowId,
           runId,
@@ -349,12 +336,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           executionContext: lastOutput.executionContext as ExecutionContext,
           workflowStatus: result.status,
           result: result.result,
-          error: result.error,
+          error: error,
           requestContext: params.requestContext,
         });
 
         workflowSpan?.error({
-          error,
+          error: mastraError,
           attributes: {
             status: result.status,
           },
@@ -895,31 +882,29 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         break;
       } catch (e) {
-        const error = this.preprocessExecutionError(
-          e,
+        const error = getErrorFromUnknown(e, { serializeStack: false });
+        const mastraError = new MastraError(
           {
             id: 'WORKFLOW_STEP_INVOKE_FAILED',
             domain: ErrorDomain.MASTRA_WORKFLOW,
             category: ErrorCategory.USER,
             details: { workflowId, runId, stepId: step.id },
           },
-          `Error executing step ${step.id}: `,
+          error,
         );
+        this.logger?.trackException(mastraError);
+        this.logger?.error('Error executing step: ' + error?.stack);
 
         stepSpan?.error({
-          error,
+          error: mastraError,
           attributes: {
             status: 'failed',
           },
         });
 
-        const errorInstance = getErrorFromUnknown(error, {
-          includeStack: false,
-          fallbackMessage: 'Unknown step execution error',
-        });
         execResults = {
           status: 'failed',
-          error: `Error: ${errorInstance.message}`,
+          error: error,
           endedAt: Date.now(),
         };
       }
@@ -997,9 +982,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         scorersToUse = await scorersToUse({
           requestContext: requestContext,
         });
-      } catch (error) {
-        this.preprocessExecutionError(
-          error,
+      } catch (e) {
+        const error = getErrorFromUnknown(e, { serializeStack: false });
+        const mastraError = new MastraError(
           {
             id: 'WORKFLOW_FAILED_TO_FETCH_SCORERS',
             domain: ErrorDomain.MASTRA_WORKFLOW,
@@ -1010,8 +995,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               stepId,
             },
           },
-          'Error fetching scorers: ',
+          error,
         );
+        this.logger?.trackException(mastraError);
+        this.logger?.error('Error fetching scorers: ' + error?.stack);
       }
     }
 
@@ -1193,9 +1180,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     if (execResults.status === 'failed') {
-      parallelSpan?.error({
-        error: new Error(execResults.error),
-      });
+      parallelSpan?.error({ error: execResults.error });
     } else {
       parallelSpan?.end({
         output: execResults.output || execResults,
@@ -1331,19 +1316,22 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
             return result ? index : null;
           } catch (e: unknown) {
-            const error = this.preprocessExecutionError(
-              e,
+            const error = getErrorFromUnknown(e, { serializeStack: false });
+            const mastraError = new MastraError(
               {
                 id: 'WORKFLOW_CONDITION_EVALUATION_FAILED',
                 domain: ErrorDomain.MASTRA_WORKFLOW,
                 category: ErrorCategory.USER,
                 details: { workflowId, runId },
               },
-              'Error evaluating condition: ',
+              error,
             );
 
+            this.logger?.trackException(mastraError);
+            this.logger?.error('Error evaluating condition' + error?.stack);
+
             evalSpan?.error({
-              error,
+              error: mastraError,
               attributes: {
                 result: false,
               },
@@ -1444,9 +1432,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     if (execResults.status === 'failed') {
-      conditionalSpan?.error({
-        error: new Error(execResults.error),
-      });
+      conditionalSpan?.error({ error: execResults.error });
     } else {
       conditionalSpan?.end({
         output: execResults.output || execResults,
@@ -1906,7 +1892,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     executionContext: ExecutionContext;
     workflowStatus: 'success' | 'failed' | 'suspended' | 'running' | 'waiting';
     result?: Record<string, any>;
-    error?: string | Error;
+    error?: Error;
     requestContext: RequestContext;
   }) {
     const shouldPersistSnapshot = this.options?.shouldPersistSnapshot?.({ stepResults, workflowStatus });

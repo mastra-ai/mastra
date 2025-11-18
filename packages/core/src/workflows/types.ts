@@ -1,5 +1,6 @@
 import type { TextStreamPart } from '@internal/ai-sdk-v4';
 import type { z } from 'zod';
+import type { SerializedError } from '../error';
 import type { Mastra } from '../mastra';
 import type { TracingPolicy, TracingProperties } from '../observability';
 import type { WorkflowStreamEvent } from '../stream/types';
@@ -53,7 +54,7 @@ export type StepSuccess<P, R, S, T> = {
 
 export type StepFailure<P, R, S, T> = {
   status: 'failed';
-  error: string | Error;
+  error: Error;
   payload: P;
   resumePayload?: R;
   suspendPayload?: S;
@@ -99,6 +100,18 @@ export type StepWaiting<P, R, S, T> = {
 
 export type StepResult<P, R, S, T> =
   | StepSuccess<P, R, S, T>
+  | StepFailure<P, R, S, T>
+  | StepSuspended<P, S, T>
+  | StepRunning<P, R, S, T>
+  | StepWaiting<P, R, S, T>;
+
+type SerializedStepFailure<P, R, S, T> = Omit<StepFailure<P, R, S, T>, 'error'> & {
+  error: SerializedError;
+};
+
+export type SerializedStepResult<P, R, S, T> =
+  | StepSuccess<P, R, S, T>
+  | SerializedStepFailure<P, R, S, T>
   | StepFailure<P, R, S, T>
   | StepSuspended<P, S, T>
   | StepRunning<P, R, S, T>
@@ -232,7 +245,7 @@ export interface WorkflowState {
   >;
   result?: Record<string, any>;
   payload?: Record<string, any>;
-  error?: string | Error;
+  error?: SerializedError;
 }
 
 export interface WorkflowRunState {
@@ -240,10 +253,10 @@ export interface WorkflowRunState {
   runId: string;
   status: WorkflowRunStatus;
   result?: Record<string, any>;
-  error?: string | Error;
+  error?: SerializedError;
   requestContext?: Record<string, any>;
   value: Record<string, string>;
-  context: { input?: Record<string, any> } & Record<string, StepResult<any, any, any, any>>;
+  context: { input?: Record<string, any> } & Record<string, SerializedStepResult<any, any, any, any>>;
   serializedStepGraph: SerializedStepFlowEntry[];
   activePaths: Array<number>;
   activeStepsPath: Record<string, number[]>;
