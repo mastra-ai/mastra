@@ -326,9 +326,9 @@ describe('MessageHistory', () => {
       expect(result2[1].role).toBe('user');
     });
 
-    it('should handle storage errors gracefully', async () => {
+    it('should propagate storage errors', async () => {
       const errorStorage = new MockStorage();
-      errorStorage.getMessages = vi.fn().mockRejectedValue(new Error('Storage error'));
+      errorStorage.listMessages = vi.fn().mockRejectedValue(new Error('Storage error'));
 
       processor = new MessageHistory({
         storage: errorStorage,
@@ -338,20 +338,20 @@ describe('MessageHistory', () => {
         {
           id: 'msg-1',
           role: 'user',
-          content: { format: 2, content: 'New', parts: [{ type: 'text', text: 'New' }] },
+          content: { format: 2, parts: [{ type: 'text', text: 'New' }] },
           threadId: 'thread-1',
           createdAt: new Date(),
         },
       ];
 
-      const result = await processor.processInput({
-        messages: newMessages,
-        abort: mockAbort,
-        runtimeContext: createRuntimeContextWithMemory('thread-1'),
-      });
-
-      // Should return original messages on error
-      expect(result).toEqual(newMessages);
+      // Should propagate the error instead of silently failing
+      await expect(
+        processor.processInput({
+          messages: newMessages,
+          abort: mockAbort,
+          runtimeContext: createRuntimeContextWithMemory('thread-1'),
+        })
+      ).rejects.toThrow('Storage error');
     });
 
     it('should return original messages when no threadId', async () => {
@@ -380,20 +380,22 @@ describe('MessageHistory', () => {
     });
 
     it('should handle assistant messages with tool calls', async () => {
-      const historicalMessages = [
+      const historicalMessages: MastraDBMessage[] = [
         {
           id: 'msg-1',
-          role: 'assistant',
+          role: 'assistant' as const,
           content: {
             format: 2,
-            content: 'Let me calculate that',
             parts: [
               { type: 'text', text: 'Let me calculate that' },
               {
-                type: 'tool-call',
-                toolCallId: 'call-1',
-                toolName: 'calculator',
-                args: { a: 1, b: 2 },
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'call',
+                  toolCallId: 'call-1',
+                  toolName: 'calculator',
+                  args: { a: 1, b: 2 },
+                },
               },
             ],
           },
@@ -417,23 +419,26 @@ describe('MessageHistory', () => {
       expect(result).toHaveLength(1);
       expect(result[0].role).toBe('assistant');
       expect(result[0].content.parts).toHaveLength(2);
-      expect(result[0].content.parts?.[1].type).toBe('tool-call');
+      expect(result[0].content.parts?.[1].type).toBe('tool-invocation');
     });
 
     it('should handle tool result messages', async () => {
-      const historicalMessages = [
+      const historicalMessages: MastraDBMessage[] = [
         {
           id: 'msg-1',
-          role: 'tool',
+          role: 'assistant' as const,
           content: {
             format: 2,
-            content: '3',
             parts: [
               {
-                type: 'tool-result',
-                toolCallId: 'call-1',
-                toolName: 'calculator',
-                result: { result: 3 },
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call-1',
+                  toolName: 'calculator',
+                  args: {},
+                  result: { result: 3 },
+                },
               },
             ],
           },
@@ -455,8 +460,8 @@ describe('MessageHistory', () => {
       });
 
       expect(result).toHaveLength(1);
-      expect(result[0].role).toBe('tool');
-      expect(result[0].content.parts?.[0].type).toBe('tool-result');
+      expect(result[0].role).toBe('assistant');
+      expect(result[0].content.parts?.[0].type).toBe('tool-invocation');
     });
   });
 
@@ -469,7 +474,6 @@ describe('MessageHistory', () => {
           title: 'Test Thread',
           metadata: {},
         }),
-        getMessages: vi.fn().mockResolvedValue([]),
         listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
         updateThread: vi.fn().mockResolvedValue(undefined),
       } as unknown as MemoryStorage;
@@ -479,30 +483,49 @@ describe('MessageHistory', () => {
       });
 
       const messages: MastraDBMessage[] = [
-        { role: 'system', content: { format: 2, parts: [{ type: 'text', text: 'You are a helpful assistant' }] } },
-        { role: 'user', content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] }, id: 'msg-1' },
-        { role: 'assistant', content: { format: 2, parts: [{ type: 'text', text: 'Hi there!' }] }, id: 'msg-2' },
+        { 
+          role: 'system', 
+          content: { format: 2, parts: [{ type: 'text', text: 'You are a helpful assistant' }] },
+          id: 'msg-0',
+          createdAt: new Date('2024-01-01T00:00:00Z'),
+        },
+        { 
+          role: 'user', 
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] }, 
+          id: 'msg-1',
+          createdAt: new Date('2024-01-01T00:00:01Z'),
+        },
+        { 
+          role: 'assistant', 
+          content: { format: 2, parts: [{ type: 'text', text: 'Hi there!' }] }, 
+          id: 'msg-2',
+          createdAt: new Date('2024-01-01T00:00:02Z'),
+        },
         {
           role: 'assistant',
           content: {
             format: 2,
-            parts: [{ type: 'tool-call', toolCallId: 'tool-1', toolName: 'search', args: {} }],
+            parts: [{ type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'search', args: {} } }],
           },
           id: 'msg-3',
+          createdAt: new Date('2024-01-01T00:00:03Z'),
         },
         {
-          role: 'tool',
+          role: 'assistant',
           content: {
             format: 2,
-            parts: [{ type: 'tool-result', toolCallId: 'tool-1', toolName: 'search', result: 'Tool result' }],
+            parts: [{ type: 'tool-invocation', toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'search', args: {}, result: 'Tool result' } }],
           },
           id: 'msg-4',
+          createdAt: new Date('2024-01-01T00:00:04Z'),
         },
       ];
 
       const result = await processor.processOutputResult({
         messages,
-        abort: vi.fn(),
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
         runtimeContext: createRuntimeContextWithMemory('thread-1'),
       });
 
@@ -510,32 +533,50 @@ describe('MessageHistory', () => {
       expect(mockStorage.saveMessages).toHaveBeenCalledWith({
         messages: expect.arrayContaining([
           expect.objectContaining({
+            id: 'msg-1',
             role: 'user',
             content: expect.objectContaining({
               format: 2,
               parts: expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Hello' })]),
             }),
+            createdAt: expect.any(Date),
           }),
           expect.objectContaining({
+            id: 'msg-2',
             role: 'assistant',
             content: expect.objectContaining({
               format: 2,
               parts: expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Hi there!' })]),
             }),
+            createdAt: expect.any(Date),
           }),
           expect.objectContaining({
+            id: 'msg-3',
             role: 'assistant',
             content: expect.objectContaining({
               format: 2,
-              parts: expect.arrayContaining([expect.objectContaining({ type: 'tool-call' })]),
+              parts: expect.arrayContaining([expect.objectContaining({ 
+                type: 'tool-invocation',
+                toolInvocation: expect.objectContaining({
+                  state: 'call',
+                }),
+              })]),
             }),
+            createdAt: expect.any(Date),
           }),
           expect.objectContaining({
-            role: 'tool',
+            id: 'msg-4',
+            role: 'assistant',
             content: expect.objectContaining({
               format: 2,
-              parts: expect.arrayContaining([expect.objectContaining({ type: 'tool-result', result: 'Tool result' })]),
+              parts: expect.arrayContaining([expect.objectContaining({ 
+                type: 'tool-invocation',
+                toolInvocation: expect.objectContaining({
+                  state: 'result',
+                }),
+              })]),
             }),
+            createdAt: expect.any(Date),
           }),
         ]),
       });
@@ -553,7 +594,6 @@ describe('MessageHistory', () => {
           title: 'Test Thread',
           metadata: {},
         }),
-        getMessages: vi.fn().mockResolvedValue([]),
         listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
         updateThread: vi.fn().mockResolvedValue(undefined),
       } as unknown as MemoryStorage;
@@ -597,7 +637,9 @@ describe('MessageHistory', () => {
 
       await processor.processOutputResult({
         messages,
-        abort: vi.fn(),
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
         runtimeContext: createRuntimeContextWithMemory('thread-1'),
       });
 
@@ -629,12 +671,19 @@ describe('MessageHistory', () => {
       });
 
       const messages: MastraDBMessage[] = [
-        { role: 'user', content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] } },
+        {
+          id: 'msg-1',
+          role: 'user' as const,
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+          createdAt: new Date(),
+        },
       ];
 
       await processor.processOutputResult({
         messages,
-        abort: vi.fn(),
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
         runtimeContext: createRuntimeContextWithMemory('thread-1'),
       });
 
@@ -665,13 +714,22 @@ describe('MessageHistory', () => {
         storage: mockStorage,
       });
 
-      const messages: MastraDBMessage[] = [{ role: 'user', content: 'Hello' }];
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user' as const,
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+          createdAt: new Date(),
+        },
+      ];
 
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const result = await processor.processOutputResult({
         messages,
-        abort: vi.fn(),
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
         runtimeContext: createRuntimeContextWithMemory('thread-1'),
       });
 
@@ -689,7 +747,7 @@ describe('MessageHistory', () => {
           title: 'Test Thread',
           metadata: {},
         }),
-        getMessages: vi.fn().mockResolvedValue([]),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
         updateThread: vi.fn().mockRejectedValue(new Error('Update failed')),
       } as unknown as MemoryStorage;
 
@@ -697,13 +755,22 @@ describe('MessageHistory', () => {
         storage: mockStorage,
       });
 
-      const messages: MastraDBMessage[] = [{ role: 'user', content: 'Hello' }];
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user' as const,
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+          createdAt: new Date(),
+        },
+      ];
 
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const result = await processor.processOutputResult({
         messages,
-        abort: vi.fn(),
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
         runtimeContext: createRuntimeContextWithMemory('thread-1'),
       });
 
@@ -725,11 +792,20 @@ describe('MessageHistory', () => {
         // No threadId
       });
 
-      const messages: MastraDBMessage[] = [{ role: 'user', content: 'Hello' }];
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user' as const,
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+          createdAt: new Date(),
+        },
+      ];
 
       const result = await processor.processOutputResult({
         messages,
-        abort: vi.fn(),
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
         // No runtimeContext, so no threadId
       });
 
@@ -747,13 +823,25 @@ describe('MessageHistory', () => {
       });
 
       const messages: MastraDBMessage[] = [
-        { role: 'system', content: 'System message 1' },
-        { role: 'system', content: 'System message 2' },
+        {
+          id: 'msg-1',
+          role: 'system' as const,
+          content: { format: 2, parts: [{ type: 'text', text: 'System message 1' }] },
+          createdAt: new Date(),
+        },
+        {
+          id: 'msg-2',
+          role: 'system' as const,
+          content: { format: 2, parts: [{ type: 'text', text: 'System message 2' }] },
+          createdAt: new Date(),
+        },
       ];
 
       const result = await processor.processOutputResult({
         messages,
-        abort: vi.fn(),
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
         runtimeContext: createRuntimeContextWithMemory('thread-1'),
       });
 
@@ -769,7 +857,7 @@ describe('MessageHistory', () => {
           title: 'Test Thread',
           metadata: {},
         }),
-        getMessages: vi.fn().mockResolvedValue([]),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
         updateThread: vi.fn().mockResolvedValue(undefined),
       } as unknown as MemoryStorage;
 
@@ -778,12 +866,18 @@ describe('MessageHistory', () => {
       });
 
       const messages: MastraDBMessage[] = [
-        { role: 'user', content: 'Hello' }, // No ID
+        {
+          role: 'user' as const,
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+          createdAt: new Date(),
+        } as MastraDBMessage, // No ID - will be auto-generated
       ];
 
       await processor.processOutputResult({
         messages,
-        abort: vi.fn(),
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
         runtimeContext: createRuntimeContextWithMemory('thread-1'),
       });
 
@@ -800,7 +894,7 @@ describe('MessageHistory', () => {
           title: 'Test Thread',
           metadata: {},
         }),
-        getMessages: vi.fn().mockResolvedValue([]),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
         updateThread: vi.fn().mockResolvedValue(undefined),
       } as unknown as MemoryStorage;
 
@@ -808,11 +902,20 @@ describe('MessageHistory', () => {
         storage: mockStorage,
       });
 
-      const messages: MastraDBMessage[] = [{ role: 'user', content: 'Hello', id: 'existing-id-123' }];
+      const messages: MastraDBMessage[] = [
+        {
+          role: 'user' as const,
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+          id: 'existing-id-123',
+          createdAt: new Date(),
+        },
+      ];
 
       await processor.processOutputResult({
         messages,
-        abort: vi.fn(),
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
         runtimeContext: createRuntimeContextWithMemory('thread-1'),
       });
 
