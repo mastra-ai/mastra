@@ -244,6 +244,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -3721,8 +3722,8 @@ describe('MastraInngestWorkflow', () => {
       });
 
       // @ts-ignore
-      const toolAction = vi.fn<any>().mockImplementation(async ({ context }) => {
-        return { name: context.name };
+      const toolAction = vi.fn<any>().mockImplementation(async ({ name }) => {
+        return { name };
       });
 
       const randomTool = createTool({
@@ -5972,7 +5973,7 @@ describe('MastraInngestWorkflow', () => {
     });
 
     //parallel steps tests seem to be failing in inngest
-    it.skip('should timeTravel workflow execution for workflow with parallel steps', async ctx => {
+    it('should timeTravel workflow execution for workflow with parallel steps', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -8131,6 +8132,8 @@ describe('MastraInngestWorkflow', () => {
 
       const run = await counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
+
+      console.dir({ result }, { depth: null });
 
       srv.close();
 
