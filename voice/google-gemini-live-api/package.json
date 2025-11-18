@@ -26,9 +26,7 @@
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
-    "test:simple": "npx tsx src/test.ts simple",
-    "test:comprehensive": "npx tsx src/test.ts comprehensive",
-    "test:tts": "npx tsx src/test.ts",
+    "test:integration": "vitest run tool-args-integration.test.ts",
     "lint": "eslint ."
   },
   "license": "Apache-2.0",
