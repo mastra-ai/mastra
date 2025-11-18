@@ -170,6 +170,9 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
                       toolCallId: part.toolInvocation.toolCallId,
                       toolName: part.toolInvocation.toolName,
                       args: part.toolInvocation.args,
+                      // Carry forward providerMetadata as providerOptions for next turn
+                      // This is critical for models like Gemini 3 that require thought signatures
+                      ...(part.providerMetadata && { providerOptions: part.providerMetadata }),
                     });
                   }
                   break;
@@ -190,26 +193,33 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
             });
 
             // check if there are tool invocations with results in the block
-            const stepInvocations = block
+            // Keep parts to preserve providerMetadata
+            const stepInvocationParts = block
               .filter(part => `type` in part && part.type === 'tool-invocation')
-              .map(part => part.toolInvocation)
-              .filter(ti => ti.toolName !== 'updateWorkingMemory');
+              .filter(part => part.toolInvocation.toolName !== 'updateWorkingMemory');
 
             // Only create tool-result message if there are actual results
-            const invocationsWithResults = stepInvocations.filter(ti => ti.state === 'result' && 'result' in ti);
+            const invocationsWithResults = stepInvocationParts.filter(
+              part => part.toolInvocation.state === 'result' && 'result' in part.toolInvocation,
+            );
 
             if (invocationsWithResults.length > 0) {
               pushOrCombine({
                 role: 'tool',
                 ...fields,
                 type: 'tool-result',
-                content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
-                  const { toolCallId, toolName, result } = toolInvocation;
+                content: invocationsWithResults.map((part): ToolResultPart => {
+                  const toolInvocation = part.toolInvocation;
+                  const { toolCallId, toolName } = toolInvocation;
+                  // TypeScript narrowing: result exists when state is 'result'
+                  const result = 'result' in toolInvocation ? toolInvocation.result : undefined;
                   return {
                     type: 'tool-result',
                     toolCallId,
                     toolName,
                     result,
+                    // Preserve providerMetadata from the tool call for providers like Gemini
+                    ...(part.providerMetadata && { providerOptions: part.providerMetadata }),
                   };
                 }),
               });

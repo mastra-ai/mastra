@@ -711,12 +711,19 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
       if (toolCalls.length > 0) {
         const assistantContent = [
           ...toolCalls.map(toolCall => {
-            return {
+            const toolCallContent: any = {
               type: 'tool-call' as const,
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
-              args: toolCall.args,
+              input: toolCall.args, // Use 'input' for AI V5 format
             };
+
+            // Preserve providerMetadata from the tool call
+            if (toolCall.providerMetadata) {
+              toolCallContent.providerMetadata = toolCall.providerMetadata;
+            }
+
+            return toolCallContent;
           }),
         ];
 

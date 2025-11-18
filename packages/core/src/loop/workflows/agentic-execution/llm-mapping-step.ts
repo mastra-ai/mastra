@@ -48,15 +48,18 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
               content: errorResults.map(toolCall => {
                 return {
                   type: 'tool-result',
-                  args: toolCall.args,
                   toolCallId: toolCall.toolCallId,
                   toolName: toolCall.toolName,
-                  result: {
-                    tool_execution_error: toolCall.error?.message ?? toolCall.error,
+                  output: {
+                    // Use 'output' for AI V5 format
+                    type: 'error-json' as const,
+                    value: {
+                      tool_execution_error: toolCall.error?.message ?? toolCall.error,
+                    },
                   },
                 };
               }),
-            },
+            } as any, // Cast to any to allow V5 format
             'response',
           );
         }
@@ -100,13 +103,12 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
               content: inputData.map(toolCall => {
                 return {
                   type: 'tool-result',
-                  args: toolCall.args,
                   toolCallId: toolCall.toolCallId,
                   toolName: toolCall.toolName,
-                  result: toolCall.result,
+                  output: toolCall.result, // Use 'output' for AI V5 format (result is already in the correct format)
                 };
               }),
-            },
+            } as any, // Cast to any to allow V5 format
             'response',
           );
         }
