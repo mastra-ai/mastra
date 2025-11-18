@@ -57,6 +57,7 @@ const OPENAI_COMPATIBLE_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
 };
 
 export class ModelsDevGateway extends MastraModelGateway {
+  readonly id = 'models.dev';
   readonly name = 'models.dev';
   readonly prefix = undefined; // No prefix for registry gateway
 

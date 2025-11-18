@@ -7,7 +7,7 @@ import { createScorer } from '@mastra/core/evals';
 import { MCPServer } from '@mastra/mcp';
 import { z } from 'zod';
 
-import { LibSQLStore } from '@mastra/libsql';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { PostgresStore } from '@mastra/pg';
 import { D1Store } from '@mastra/cloudflare-d1';
 import { MongoDBStore } from '@mastra/mongodb';
@@ -22,6 +22,11 @@ import { LanceVector } from '@mastra/lance';
 /* FIXME(mastra): Add a unique `id` parameter. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/mastra#required-id-parameter-for-all-mastra-primitives */
 const libsqlStorage = new LibSQLStore({
   url: ':memory:',
+});
+
+/* FIXME(mastra): Add a unique `id` parameter. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/mastra#required-id-parameter-for-all-mastra-primitives */
+const libsqlVector = new LibSQLVector({
+  connectionUrl: "file:../../mastra.db",
 });
 
 /* FIXME(mastra): Add a unique `id` parameter. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/mastra#required-id-parameter-for-all-mastra-primitives */

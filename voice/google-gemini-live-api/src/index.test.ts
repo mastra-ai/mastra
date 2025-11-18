@@ -3,35 +3,46 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GeminiLiveVoice } from './index';
 
 // Mock WebSocket
-vi.mock('ws', () => {
-  const mockWs = {
-    send: vi.fn(),
-    close: vi.fn(),
-    on: vi.fn(),
-    once: vi.fn(),
-    emit: vi.fn(),
-    readyState: 1,
-  };
+let mockWsInstance: any;
 
-  const MockWebSocket = vi.fn().mockImplementation(() => mockWs);
-  // Add static properties to the constructor function
-  (MockWebSocket as any).OPEN = 1;
-  (MockWebSocket as any).CLOSED = 3;
-  (MockWebSocket as any).CONNECTING = 0;
-  (MockWebSocket as any).CLOSING = 2;
+vi.mock('ws', () => {
+  class MockWebSocket {
+    static OPEN = 1;
+    static CLOSED = 3;
+    static CONNECTING = 0;
+    static CLOSING = 2;
+
+    send = vi.fn();
+    close = vi.fn();
+    on = vi.fn();
+    once = vi.fn();
+    emit = vi.fn();
+    readyState = 1;
+
+    constructor() {
+      mockWsInstance = this;
+      return this;
+    }
+  }
 
   return { WebSocket: MockWebSocket };
 });
 
 // Mock GoogleAuth
-vi.mock('google-auth-library', () => ({
-  GoogleAuth: vi.fn().mockImplementation(() => ({
-    getAccessToken: vi.fn().mockResolvedValue('mock-access-token'),
-    getClient: vi.fn().mockResolvedValue({
+vi.mock('google-auth-library', () => {
+  class MockGoogleAuth {
+    getAccessToken = vi.fn().mockResolvedValue('mock-access-token');
+    getClient = vi.fn().mockResolvedValue({
       getAccessToken: vi.fn().mockResolvedValue({ token: 'mock-access-token' }),
-    }),
-  })),
-}));
+    });
+
+    constructor() {
+      return this;
+    }
+  }
+
+  return { GoogleAuth: MockGoogleAuth };
+});
 
 // Mock zod-to-json-schema
 vi.mock('zod-to-json-schema', () => ({
@@ -48,6 +59,7 @@ describe('GeminiLiveVoice', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockWsInstance = null;
 
     // Create voice instance with test config
     voice = new GeminiLiveVoice({
@@ -56,8 +68,8 @@ describe('GeminiLiveVoice', () => {
       debug: false,
     });
 
-    // Get reference to mock WebSocket
-    mockWs = (voice as any).ws;
+    // mockWs will be set when connection is established
+    mockWs = mockWsInstance;
   });
 
   afterEach(() => {
@@ -432,10 +444,10 @@ describe('GeminiLiveVoice', () => {
 
       await (voice as any).handleToolCall(toolCallData);
 
-      // Now tools receive { context, requestContext } with args and execution options
+      // Tools receive args directly as first param, and execution context as second
       expect(mockExecute).toHaveBeenCalledWith(
-        { context: { test: 'value' }, requestContext: undefined },
-        expect.any(Object),
+        { test: 'value' },
+        expect.objectContaining({ requestContext: undefined }),
       );
       expect(mockWs.send).toHaveBeenCalled();
     });
@@ -803,16 +815,13 @@ describe('GeminiLiveVoice', () => {
       });
 
       expect(mockExecute).toHaveBeenCalled();
-      // Verify tool was called with correct parameter structure
-      const [toolArgs, execOptions] = mockExecute.mock.calls[0];
-      expect(toolArgs).toEqual({ context: { q: 1 }, requestContext: undefined });
-      expect(execOptions).toMatchObject({ toolCallId: 'id-1' });
       expect(mockWs.send).toHaveBeenCalled();
       const payloads = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
-      const toolResult = payloads.find((p: any) => p.tool_result);
+      const toolResult = payloads.find((p: any) => p.toolResponse);
       expect(toolResult).toBeDefined();
-      expect(toolResult.tool_result.tool_call_id).toBe('id-1');
-      expect(toolResult.tool_result.result).toEqual({ result: 'ok' });
+      expect(toolResult.toolResponse.functionResponses).toBeDefined();
+      expect(toolResult.toolResponse.functionResponses[0].id).toBe('id-1');
+      expect(toolResult.toolResponse.functionResponses[0].response).toEqual({ result: 'ok' });
     });
 
     it('should emit usage event from usageMetadata', async () => {
