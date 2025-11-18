@@ -809,10 +809,10 @@ describe('GeminiLiveVoice', () => {
       expect(execOptions).toMatchObject({ toolCallId: 'id-1' });
       expect(mockWs.send).toHaveBeenCalled();
       const payloads = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
-      const toolResult = payloads.find((p: any) => p.tool_result);
+      const toolResult = payloads.find((p: any) => p.toolResponse);
       expect(toolResult).toBeDefined();
-      expect(toolResult.tool_result.tool_call_id).toBe('id-1');
-      expect(toolResult.tool_result.result).toEqual({ result: 'ok' });
+      expect(toolResult.toolResponse.functionResponses[0].id).toBe('id-1');
+      expect(toolResult.toolResponse.functionResponses[0].response).toEqual({ result: 'ok' });
     });
 
     it('should emit usage event from usageMetadata', async () => {
