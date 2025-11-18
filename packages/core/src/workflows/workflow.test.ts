@@ -57,6 +57,9 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
+        options: {
+          validateInputs: false,
+        },
       });
       workflow.then(step1).then(step2).commit();
 
@@ -226,6 +229,9 @@ describe('Workflow', () => {
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({}),
         steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
+        options: {
+          validateInputs: false,
+        },
       });
 
       promptEvalWorkflow
@@ -366,6 +372,9 @@ describe('Workflow', () => {
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({}),
         steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
+        options: {
+          validateInputs: false,
+        },
       });
 
       promptEvalWorkflow
@@ -1046,6 +1055,9 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
+        options: {
+          validateInputs: false,
+        },
       });
       workflow.then(step1).sleep(1000).then(step2).commit();
 
@@ -1440,6 +1452,9 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
+        options: {
+          validateInputs: false,
+        },
       });
       workflow.then(step1).then(step2).commit();
 
@@ -1715,7 +1730,7 @@ describe('Workflow', () => {
       }
 
       const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
-      const errStreamResult = run.resumeStreamVNext({ resumeData: resumeData as any, step: getUserInput });
+      const errStreamResult = run.resumeStreamVNext({ resumeData, step: getUserInput });
       for await (const _data of errStreamResult.fullStream) {
       }
 
@@ -1728,7 +1743,7 @@ describe('Workflow', () => {
         );
       }
 
-      streamResult = run.resumeStreamVNext({ resumeData: resumeData as any, step: promptAgent });
+      streamResult = run.resumeStreamVNext({ resumeData, step: promptAgent });
       console.log('created stream');
       for await (const _data of streamResult.fullStream) {
         console.log('data===', _data);
@@ -1993,7 +2008,7 @@ describe('Workflow', () => {
       let result = await streamResult.result;
 
       const resumeData = { userInput: 'test input for resumption' };
-      streamResult = run.resumeStreamVNext({ resumeData: resumeData as any, step: promptAgent });
+      streamResult = run.resumeStreamVNext({ resumeData, step: promptAgent });
       for await (const data of streamResult.fullStream) {
         if (data.type === 'workflow-step-output') {
           expect(data.payload.output).toMatchObject({
@@ -2044,6 +2059,9 @@ describe('Workflow', () => {
           prompt2: z.string(),
         }),
         outputSchema: z.object({}),
+        options: {
+          validateInputs: false,
+        },
       });
 
       const agent = new Agent({
@@ -2693,6 +2711,9 @@ describe('Workflow', () => {
         outputSchema: z.object({
           text: z.string(),
         }),
+        options: {
+          validateInputs: false,
+        },
       });
 
       new Mastra({
@@ -2759,6 +2780,9 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
+        options: {
+          validateInputs: false,
+        },
       });
       workflow.then(step1).sleep(1000).then(step2).commit();
 
@@ -5037,6 +5061,9 @@ describe('Workflow', () => {
           inputSchema: z.object({}),
           outputSchema: z.object({}),
           steps: [step1, step2, step3],
+          options: {
+            validateInputs: false,
+          },
         });
         workflow
           .then(step1)
@@ -5113,6 +5140,9 @@ describe('Workflow', () => {
           id: 'test-workflow',
           inputSchema: z.object({}),
           outputSchema: z.object({}),
+          options: {
+            validateInputs: false,
+          },
         });
 
         workflow
@@ -6238,6 +6268,9 @@ describe('Workflow', () => {
       });
 
       const counterWorkflow = createWorkflow({
+        options: {
+          validateInputs: false,
+        },
         steps: [incrementStep, finalStep],
         id: 'counter-workflow',
         inputSchema: z.object({
@@ -6308,6 +6341,9 @@ describe('Workflow', () => {
       });
 
       const counterWorkflow = createWorkflow({
+        options: {
+          validateInputs: false,
+        },
         steps: [incrementStep, finalStep],
         id: 'counter-workflow',
         inputSchema: z.object({
@@ -6377,6 +6413,9 @@ describe('Workflow', () => {
         outputSchema: z.object({
           finalValue: z.number(),
         }),
+        options: {
+          validateInputs: false,
+        },
       });
 
       counterWorkflow.foreach(mapStep).then(finalStep).commit();
@@ -6443,6 +6482,9 @@ describe('Workflow', () => {
       });
 
       const counterWorkflow = createWorkflow({
+        options: {
+          validateInputs: false,
+        },
         steps: [mapStep, finalStep],
         id: 'counter-workflow',
         inputSchema: z.array(z.object({ value: z.number() })),
@@ -6535,6 +6577,9 @@ describe('Workflow', () => {
         outputSchema: z.object({
           finalValue: z.number(),
         }),
+        options: {
+          validateInputs: false,
+        },
       });
 
       counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
@@ -6609,6 +6654,9 @@ describe('Workflow', () => {
         outputSchema: z.object({
           finalValue: z.number(),
         }),
+        options: {
+          validateInputs: false,
+        },
       });
 
       counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
@@ -6692,6 +6740,9 @@ describe('Workflow', () => {
         outputSchema: z.object({
           finalValue: z.number(),
         }),
+        options: {
+          validateInputs: false,
+        },
       });
 
       counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
@@ -6819,6 +6870,9 @@ describe('Workflow', () => {
         outputSchema: z.object({
           finalValue: z.number(),
         }),
+        options: {
+          validateInputs: false,
+        },
       });
 
       counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
@@ -6903,6 +6957,9 @@ describe('Workflow', () => {
         outputSchema: z.object({
           finalValue: z.number(),
         }),
+        options: {
+          validateInputs: false,
+        },
       });
 
       counterWorkflow.foreach(mapStep, { concurrency: 2 }).then(finalStep).commit();
@@ -6976,6 +7033,9 @@ describe('Workflow', () => {
         outputSchema: z.object({
           finalValue: z.number(),
         }),
+        options: {
+          validateInputs: false,
+        },
       });
 
       counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
@@ -7064,6 +7124,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           finalValue: z.number(),
         }),
+        options: { validateInputs: false },
       });
 
       counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
@@ -9631,6 +9692,7 @@ describe('Workflow', () => {
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({}),
+        options: { validateInputs: false },
       });
 
       promptEvalWorkflow.then(getUserInput).then(promptAgent).then(requestContextStep).commit();
@@ -9699,6 +9761,7 @@ describe('Workflow', () => {
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({}),
+        options: { validateInputs: false },
       });
 
       promptEvalWorkflow.then(getUserInput).then(promptAgent).then(requestContextStep).commit();
@@ -11982,6 +12045,7 @@ describe('Workflow', () => {
           nestedFinal: z.number(),
         }),
         steps: [step2, step3],
+        options: { validateInputs: false },
       })
         .then(step2)
         .then(step3)
@@ -11993,6 +12057,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           final: z.number(),
         }),
+        options: { validateInputs: false },
       })
         .then(step1)
         .then(nestedWorkflow)
@@ -12830,6 +12895,7 @@ describe('Workflow', () => {
         id: 'test-parallel-workflow',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ result: z.string() }),
+        options: { validateInputs: false },
       })
         .then(initialStep)
         .then(nextStep)
@@ -14196,12 +14262,14 @@ describe('Workflow', () => {
           startValue: z.number(),
         }),
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       });
 
       const wfA = createWorkflow({
         id: 'nested-workflow-a',
         inputSchema: counterWorkflow.inputSchema,
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       })
         .then(startStep)
         .then(otherStep)
@@ -14211,6 +14279,7 @@ describe('Workflow', () => {
         id: 'nested-workflow-b',
         inputSchema: counterWorkflow.inputSchema,
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       })
         .then(startStep)
         .map({
@@ -14328,12 +14397,14 @@ describe('Workflow', () => {
           startValue: z.number(),
         }),
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       });
 
       const wfA = createWorkflow({
         id: 'nested-workflow-a',
         inputSchema: counterWorkflow.inputSchema,
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       })
         .then(startStep)
         .then(cloneStep(otherStep, { id: 'other-clone' }))
@@ -14343,6 +14414,7 @@ describe('Workflow', () => {
         id: 'nested-workflow-b',
         inputSchema: counterWorkflow.inputSchema,
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       })
         .then(startStep)
         .then(cloneStep(finalStep, { id: 'final-clone' }))
@@ -14448,12 +14520,14 @@ describe('Workflow', () => {
           startValue: z.number(),
         }),
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       });
 
       const wfA = createWorkflow({
         id: 'nested-workflow-a',
         inputSchema: counterWorkflow.inputSchema,
         outputSchema: finalStep.outputSchema,
+        options: { validateInputs: false },
       })
         .then(startStep)
         .then(otherStep)
@@ -14463,6 +14537,7 @@ describe('Workflow', () => {
         id: 'nested-workflow-b',
         inputSchema: counterWorkflow.inputSchema,
         outputSchema: z.object({ other: otherStep.outputSchema, final: finalStep.outputSchema }),
+        options: { validateInputs: false },
       })
         .then(startStep)
         .branch([
@@ -14579,12 +14654,14 @@ describe('Workflow', () => {
             startValue: z.number(),
           }),
           outputSchema: z.object({ success: z.boolean() }),
+          options: { validateInputs: false },
         });
 
         const wfA = createWorkflow({
           id: 'nested-workflow-a',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
           .then(otherStep)
@@ -14594,6 +14671,7 @@ describe('Workflow', () => {
           id: 'nested-workflow-b',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
           .map({
@@ -14724,12 +14802,14 @@ describe('Workflow', () => {
             startValue: z.number(),
           }),
           outputSchema: z.object({ success: z.boolean() }),
+          options: { validateInputs: false },
         });
 
         const wfA = createWorkflow({
           id: 'nested-workflow-a',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
           .then(otherStep)
@@ -14739,6 +14819,7 @@ describe('Workflow', () => {
           id: 'nested-workflow-b',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
           .map(async ({ inputData }) => {
@@ -14866,12 +14947,14 @@ describe('Workflow', () => {
             startValue: z.number(),
           }),
           outputSchema: z.object({ success: z.boolean() }),
+          options: { validateInputs: false },
         });
 
         const wfA = createWorkflow({
           id: 'nested-workflow-a',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
           .then(otherStep)
@@ -14881,6 +14964,7 @@ describe('Workflow', () => {
           id: 'nested-workflow-b',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
           .branch([
@@ -14890,6 +14974,7 @@ describe('Workflow', () => {
                 id: 'nested-workflow-c',
                 inputSchema: startStep.outputSchema,
                 outputSchema: otherStep.outputSchema,
+                options: { validateInputs: false },
               })
                 .then(otherStep)
                 .commit(),
@@ -14900,6 +14985,7 @@ describe('Workflow', () => {
                 id: 'nested-workflow-d',
                 inputSchema: startStep.outputSchema,
                 outputSchema: otherStep.outputSchema,
+                options: { validateInputs: false },
               })
                 .then(otherStep)
                 .commit(),
@@ -15051,12 +15137,14 @@ describe('Workflow', () => {
           outputSchema: z.object({
             finalValue: z.number(),
           }),
+          options: { validateInputs: false },
         });
 
         const wfA = createWorkflow({
           id: 'nested-workflow-a',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
           .then(otherStep)
@@ -15176,12 +15264,14 @@ describe('Workflow', () => {
           outputSchema: z.object({
             finalValue: z.number(),
           }),
+          options: { validateInputs: false },
         });
 
         const wfA = createWorkflow({
           id: 'nested-workflow-a',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
           .then(otherStep)
@@ -15524,6 +15614,7 @@ describe('Workflow', () => {
           outputSchema: z.object({
             finalValue: z.number(),
           }),
+          options: { validateInputs: false },
         })
           .then(startStep)
           .then(otherStep)
@@ -15538,6 +15629,7 @@ describe('Workflow', () => {
           outputSchema: z.object({
             finalValue: z.number(),
           }),
+          options: { validateInputs: false },
         });
 
         counterWorkflow
@@ -15653,6 +15745,7 @@ describe('Workflow', () => {
         id: 'nested-workflow-a',
         inputSchema: counterInputSchema,
         outputSchema: finalStep.outputSchema,
+        options: { validateInputs: false },
       })
         .then(startStep)
         .then(otherStep)
@@ -15663,6 +15756,7 @@ describe('Workflow', () => {
         id: 'nested-workflow-b',
         inputSchema: counterInputSchema,
         outputSchema: finalStep.outputSchema,
+        options: { validateInputs: false },
       })
         .then(passthroughStep)
         .then(wfA)
@@ -15672,6 +15766,7 @@ describe('Workflow', () => {
         id: 'nested-workflow-c',
         inputSchema: counterInputSchema,
         outputSchema: finalStep.outputSchema,
+        options: { validateInputs: false },
       })
         .then(passthroughStep)
         .then(wfB)
@@ -15682,6 +15777,7 @@ describe('Workflow', () => {
         inputSchema: counterInputSchema,
         outputSchema: counterOutputSchema,
         steps: [wfC, passthroughStep],
+        options: { validateInputs: false },
       });
 
       counterWorkflow
@@ -16034,7 +16130,12 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
-      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        options: { validateInputs: false },
+      });
       workflow.then(step).commit();
 
       const run = await workflow.createRun();
@@ -16076,6 +16177,7 @@ describe('Workflow', () => {
         mastra,
         inputSchema: z.object({ human: z.boolean() }),
         outputSchema: z.object({}),
+        options: { validateInputs: false },
       });
       workflow.then(step).commit();
 
@@ -16481,6 +16583,7 @@ describe('Workflow', () => {
         id: 'test-workflow',
         inputSchema: z.object({}),
         outputSchema: z.object({}),
+        options: { validateInputs: false },
       })
         .then(step)
         .then(step2)
