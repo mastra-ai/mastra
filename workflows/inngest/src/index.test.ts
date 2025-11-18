@@ -10407,7 +10407,7 @@ describe('MastraInngestWorkflow', () => {
       for await (const _data of streamOutput.fullStream) {
       }
       const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
-      const resumeStreamOutput = run.resumeStreamVNext({ resumeData: resumeData as any, step: promptAgent });
+      const resumeStreamOutput = run.resumeStreamVNext({ resumeData, step: promptAgent });
 
       for await (const _data of resumeStreamOutput.fullStream) {
       }

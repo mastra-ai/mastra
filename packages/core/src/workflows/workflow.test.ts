@@ -1730,7 +1730,7 @@ describe('Workflow', () => {
       }
 
       const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
-      const errStreamResult = run.resumeStreamVNext({ resumeData: resumeData as any, step: getUserInput });
+      const errStreamResult = run.resumeStreamVNext({ resumeData, step: getUserInput });
       for await (const _data of errStreamResult.fullStream) {
       }
 
@@ -1743,7 +1743,7 @@ describe('Workflow', () => {
         );
       }
 
-      streamResult = run.resumeStreamVNext({ resumeData: resumeData as any, step: promptAgent });
+      streamResult = run.resumeStreamVNext({ resumeData, step: promptAgent });
       console.log('created stream');
       for await (const _data of streamResult.fullStream) {
         console.log('data===', _data);
@@ -2008,7 +2008,7 @@ describe('Workflow', () => {
       let result = await streamResult.result;
 
       const resumeData = { userInput: 'test input for resumption' };
-      streamResult = run.resumeStreamVNext({ resumeData: resumeData as any, step: promptAgent });
+      streamResult = run.resumeStreamVNext({ resumeData, step: promptAgent });
       for await (const data of streamResult.fullStream) {
         if (data.type === 'workflow-step-output') {
           expect(data.payload.output).toMatchObject({
