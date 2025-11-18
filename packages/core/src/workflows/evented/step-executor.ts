@@ -46,7 +46,7 @@ export class StepExecutor extends MastraBase {
     const { inputData, validationError } = await validateStepInput({
       prevOutput: typeof params.foreachIdx === 'number' ? params.input?.[params.foreachIdx] : params.input,
       step,
-      validateInputs: params.validateInputs ?? false,
+      validateInputs: params.validateInputs ?? true,
     });
 
     let stepInfo: {
