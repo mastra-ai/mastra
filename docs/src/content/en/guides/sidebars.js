@@ -23,11 +23,6 @@ const sidebars = {
           id: "quickstarts/nextjs",
           label: "Next.js",
         },
-        {
-          type: "doc",
-          id: "quickstarts/manual-install",
-          label: "Manual Install",
-        },
       ],
     },
     {
@@ -64,6 +59,11 @@ const sidebars = {
           type: "doc",
           id: "guide/web-search",
           label: "Tools: Web Search",
+        },
+        {
+          type: "doc",
+          id: "guide/manual-install",
+          label: "Manual Install",
         },
       ],
     },

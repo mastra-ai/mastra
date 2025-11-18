@@ -11,21 +11,15 @@ import { VideoPlayer } from "@site/src/components/video-player";
 
 # Standalone Server Quickstart
 
-In this quickstart, you’ll build a tool-calling AI agent with Mastra and run it in [Studio](/docs/v1/getting-started/studio), Mastra’s interactive development environment.
+The `create mastra` CLI command is the quickest way to spin up a standalone Mastra server. It walks you through setup and creates example agents, workflows, and tools for you to run locally or adapt
 
-You’ll use the `create mastra` CLI to scaffold a new project with example agents, workflows, and tools you can learn from or adapt.
+If you need more control over the setup, see the [manual installation guide](/guides/v1/guide/manual-install). You can also use [`mastra init`](/reference/v1/cli/mastra#mastra-init) for existing projects.
 
-In a couple of minutes, you’ll have a standalone Mastra server running - ready to extend with your own tools and logic, and to integrate into your app when you’re ready.
-
-<figure>
-<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406022/local-dev-agents-playground_100_m3begx.mp4" />
-<figcaption class="text-sm text-center">What you'll build: an agent that can call a weather tool and stream back a weather summary. You’ll interact with it in Mastra Studio, an interactive UI for building and testing your agents.</figcaption>
-</figure>
 ## Before you begin
 
 * You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
 
-## Install with `create mastra`
+## Initialize Mastra
 
 You can run `create mastra` anywhere on your machine.
 
@@ -68,16 +62,19 @@ This creates a new directory for your project with a `src/mastra` folder contain
 - `tools/weather-tool.ts` - a tool to fetch weather for a given location
 - `agents/weather-agent.ts` - a weather agent with a prompt that uses the tool
 
-:::note
+:::tip
 
-You can use flags with `create mastra` like `--no-example` to skip the example weather agent or `--template` to start from a specific [template](/docs/v1/getting-started/templates). Read the [CLI reference](/reference/v1/cli/create-mastra) for all options.
+You can use [flags](/reference/v1/cli/create-mastra#cli-flags)  with `create mastra` like `--no-example` to skip the example weather agent or `--template` to start from a specific [template](/docs/v1/getting-started/templates)
 
 :::
 
 ## Test your agent
 
-1. Once setup is complete, follow the instructions in your terminal to start the Mastra development server
-2. Try asking about the weather. If your API key is set up correctly, you'll get a response
+Once setup is complete, follow the instructions in your terminal to start the Mastra dev server, then open Studio at [localhost:4111](http://localhost:4111).
+
+Try asking about the weather. If your API key is set up correctly, you'll get a response:
+
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406022/local-dev-agents-playground_100_m3begx.mp4" />
 
 [Studio](/docs/v1/getting-started/studio) lets you rapidly build and prototype agents without needing to build a UI. Once you're ready, you can integrate your Mastra agent into your app using the guides below.
 
