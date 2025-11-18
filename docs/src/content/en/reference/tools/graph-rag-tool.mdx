@@ -208,7 +208,7 @@ const graphTool = createGraphRAGTool({
 const graphTool = createGraphRAGTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small	",
   description:
     "Analyze document relationships to find complex patterns and connections in our company's historical data",
 });
@@ -222,7 +222,7 @@ This example shows how to customize the tool description for a specific use case
 const graphTool = createGraphRAGTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small	",
 });
 ```
 
