@@ -400,7 +400,7 @@ export async function bundleExternals(
   outputDir: string,
   options: {
     bundlerOptions?: {
-      externals?: string[];
+      externals?: boolean | string[];
       transpilePackages?: string[];
       isDev?: boolean;
       enableEsmShim?: boolean;
@@ -417,7 +417,13 @@ export async function bundleExternals(
     isDev = false,
     enableEsmShim = true,
   } = bundlerOptions || {};
-  const allExternals = [...GLOBAL_EXTERNALS, ...DEPRECATED_EXTERNALS, ...customExternals];
+
+  /**
+   * When externals is a boolean, we don't add any custom externals here as they're handled by filtering depsToOptimize in analyze.ts
+   */
+  const externalsList = Array.isArray(customExternals) ? customExternals : [];
+
+  const allExternals = [...GLOBAL_EXTERNALS, ...DEPRECATED_EXTERNALS, ...externalsList];
 
   const workspacePackagesNames = Array.from(workspaceMap.keys());
   const packagesToTranspile = new Set([...transpilePackages, ...workspacePackagesNames]);
