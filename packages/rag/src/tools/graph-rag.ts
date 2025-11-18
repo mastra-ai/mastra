@@ -76,7 +76,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
               return typeof filter === 'string' ? JSON.parse(filter) : filter;
             } catch (error) {
               if (logger) {
-                logger.error("Invalid filter", {filter, error });
+                logger.error('Invalid filter', { filter, error });
               }
               throw new Error(`Invalid filter format: ${error instanceof Error ? error.message : String(error)}`);
             }
