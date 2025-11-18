@@ -65,7 +65,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "stores/pg"
+    "directory": "server-adapters/express"
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
