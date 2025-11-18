@@ -80,7 +80,7 @@
     "format": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!@internal/playground\" lint -- --fix",
     "dev:services:up": "docker compose -f .dev/docker-compose.yaml up -d",
     "dev:services:down": "docker compose -f .dev/docker-compose.yaml down",
-    "setup": "pnpm install --ignore-scripts && pnpm run build:cli"
+    "setup": "pnpm install && pnpm run build"
   },
   "lint-staged": {
     "*.{js,mjs,ts,tsx,md,mdx,json,graphql,gql}": [
@@ -88,7 +88,7 @@
     ]
   },
   "engines": {
-    "pnpm": ">=9.7.0"
+    "pnpm": ">=10.18.0"
   },
   "resolutions": {
     "typescript": "^5.8.3",
