@@ -83,6 +83,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/aihubmix",
+          label: "AIHubMix",
+        },
+        {
+          type: "doc",
           id: "providers/alibaba",
           label: "Alibaba",
         },
@@ -90,6 +95,16 @@ const sidebars = {
           type: "doc",
           id: "providers/alibaba-cn",
           label: "Alibaba (China)",
+        },
+        {
+          type: "doc",
+          id: "providers/amazon-bedrock",
+          label: "Amazon Bedrock",
+        },
+        {
+          type: "doc",
+          id: "providers/azure",
+          label: "Azure",
         },
         {
           type: "doc",
@@ -105,6 +120,11 @@ const sidebars = {
           type: "doc",
           id: "providers/chutes",
           label: "Chutes",
+        },
+        {
+          type: "doc",
+          id: "providers/cloudflare-workers-ai",
+          label: "Cloudflare Workers AI",
         },
         {
           type: "doc",
@@ -130,6 +150,11 @@ const sidebars = {
           type: "doc",
           id: "providers/github-models",
           label: "GitHub Models",
+        },
+        {
+          type: "doc",
+          id: "providers/google-vertex",
+          label: "Google Vertex AI",
         },
         {
           type: "doc",
@@ -200,6 +225,11 @@ const sidebars = {
           type: "doc",
           id: "providers/nvidia",
           label: "Nvidia",
+        },
+        {
+          type: "doc",
+          id: "providers/ollama",
+          label: "Ollama",
         },
         {
           type: "doc",
