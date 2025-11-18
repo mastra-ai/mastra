@@ -590,12 +590,12 @@ await agent.generateLegacy(
         sentiment: z.enum(["positive", "negative", "neutral"]),
         confidence: z.number(),
       }),
-      model: openai("gpt-4o-mini"),
+      model: "openai/gpt-4.1-mini",
       errorStrategy: "warn",
     },
     // Output processors for response validation
     outputProcessors: [
-      new ModerationProcessor({ model: openai("gpt-4.1-nano") }),
+      new ModerationProcessor({ model: "openai/gpt-4.1-nano" }),
       new TokenLimiterProcessor({ maxTokens: 1000 }),
     ],
   },

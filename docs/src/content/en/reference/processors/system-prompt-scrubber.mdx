@@ -10,11 +10,10 @@ The `SystemPromptScrubber` is an **output processor** that detects and handles s
 ## Usage example
 
 ```typescript copy
-import { openai } from "@ai-sdk/openai";
 import { SystemPromptScrubber } from "@mastra/core/processors";
 
 const processor = new SystemPromptScrubber({
-  model: openai("gpt-4.1-nano"),
+  model: "openai/gpt-4.1-nano",
   strategy: "redact",
   redactionMethod: "mask",
   includeDetections: true

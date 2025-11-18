@@ -12,12 +12,11 @@ The `Memory` class provides a robust system for managing conversation history an
 ```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 
 export const agent = new Agent({
   name: "test-agent",
   instructions: "You are an agent with memory.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4.1-mini",
   memory: new Memory({
     options: {
       workingMemory: {
@@ -128,13 +127,12 @@ export const agent = new Agent({
 ```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 export const agent = new Agent({
   name: "test-agent",
   instructions: "You are an agent with memory.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4.1-mini",
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'test-agent-storage',
@@ -167,13 +165,12 @@ export const agent = new Agent({
 ```typescript title="src/mastra/agents/pg-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { PgStore, PgVector } from "@mastra/pg";
 
 export const agent = new Agent({
   name: "pg-agent",
   instructions: "You are an agent with optimized PostgreSQL memory.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4.1-mini",
   memory: new Memory({
     storage: new PgStore({
       id: 'pg-agent-storage',

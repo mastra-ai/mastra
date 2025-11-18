@@ -632,7 +632,6 @@ For tools where you have a single connection to the MCP server for you entire ap
 ```typescript
 import { MCPClient } from "@mastra/mcp";
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 
 const mcp = new MCPClient({
   servers: {
@@ -657,7 +656,7 @@ const mcp = new MCPClient({
 const agent = new Agent({
   name: "Multi-tool Agent",
   instructions: "You have access to multiple tool servers.",
-  model: openai("gpt-4"),
+  model: "openai/gpt-4.1-mini",
   tools: await mcp.listTools(),
 });
 
@@ -707,13 +706,12 @@ When you need a new MCP connection for each user, use `listToolsets()` and add t
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { MCPClient } from "@mastra/mcp";
-import { openai } from "@ai-sdk/openai";
 
 // Create the agent first, without any tools
 const agent = new Agent({
   name: "Multi-tool Agent",
   instructions: "You help users check stocks and weather.",
-  model: openai("gpt-4"),
+  model: "openai/gpt-4.1-mini",
 });
 
 // Later, configure MCP with user-specific settings

@@ -16,7 +16,6 @@ It supports both [stdio (subprocess) and SSE (HTTP) MCP transports](https://mode
 To create a new `MCPServer`, you need to provide some basic information about your server, the tools it will offer, and optionally, any agents you want to expose as tools.
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { createTool } from "@mastra/core/tools";
 import { MCPServer } from "@mastra/mcp";
@@ -28,7 +27,7 @@ const myAgent = new Agent({
   name: "MyExampleAgent",
   description: "A generalist to help with basic questions."
   instructions: "You are a helpful assistant.",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4.1-mini",
 });
 
 const weatherTool = createTool({

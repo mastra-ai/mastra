@@ -142,17 +142,16 @@ const result = await embedMany({
 
 ```typescript
 import { embed, embedMany } from "ai";
-import { openai } from "@ai-sdk/openai";
 
 // Single embedding
 const singleResult = await embed({
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
   value: "What is the meaning of life?",
 });
 
 // Multiple embeddings
 const multipleResult = await embedMany({
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
   values: [
     "First question about life",
     "Second question about universe",
