@@ -1,14 +1,19 @@
 import { createSampleScore } from '@internal/storage-test-utils';
 import { Agent } from '@mastra/core/agent';
+import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
 import type { StoragePagination } from '@mastra/core/storage';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createWorkflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
-import { listScorersHandler, listScoresByRunIdHandler, listScoresByEntityIdHandler, saveScoreHandler } from './scores';
+import {
+  LIST_SCORERS_ROUTE,
+  LIST_SCORES_BY_RUN_ID_ROUTE,
+  LIST_SCORES_BY_ENTITY_ID_ROUTE,
+  SAVE_SCORE_ROUTE,
+} from './scores';
 
 function createPagination(args: Partial<StoragePagination>): StoragePagination {
   return {
@@ -50,7 +55,7 @@ describe('Scores Handlers', () => {
 
   describe('listScorersHandler', () => {
     it('should return empty object', async () => {
-      const result = await listScorersHandler({
+      const result = await LIST_SCORERS_ROUTE.handler({
         mastra,
         requestContext: new RequestContext(),
       });
@@ -66,7 +71,7 @@ describe('Scores Handlers', () => {
 
       const pagination = createPagination({ page: 0, perPage: 10 });
 
-      const result = await listScoresByRunIdHandler({
+      const result = await LIST_SCORES_BY_RUN_ID_ROUTE.handler({
         mastra,
         runId: mockScores?.[0]?.runId,
         page: pagination.page,
@@ -91,7 +96,7 @@ describe('Scores Handlers', () => {
         logger: false,
       });
 
-      const result = await listScoresByRunIdHandler({
+      const result = await LIST_SCORES_BY_RUN_ID_ROUTE.handler({
         mastra: mastraWithoutStorage,
         runId: 'test-run-1',
         page: pagination.page,
@@ -116,7 +121,7 @@ describe('Scores Handlers', () => {
       mockStorage.listScoresByRunId = vi.fn().mockRejectedValue(error);
 
       await expect(
-        listScoresByRunIdHandler({
+        LIST_SCORES_BY_RUN_ID_ROUTE.handler({
           mastra,
           runId: 'test-run-1',
           page: pagination.page,
@@ -135,7 +140,7 @@ describe('Scores Handlers', () => {
       mockStorage.listScoresByRunId = vi.fn().mockRejectedValue(apiError);
 
       await expect(
-        listScoresByRunIdHandler({
+        LIST_SCORES_BY_RUN_ID_ROUTE.handler({
           mastra,
           runId: 'test-run-1',
           page: pagination.page,
@@ -152,7 +157,7 @@ describe('Scores Handlers', () => {
 
       await mockStorage.saveScore(mockScores[0]);
 
-      const result = await listScoresByEntityIdHandler({
+      const result = await LIST_SCORES_BY_ENTITY_ID_ROUTE.handler({
         mastra,
         entityId: 'test-agent',
         entityType: 'AGENT',
@@ -178,7 +183,7 @@ describe('Scores Handlers', () => {
         logger: false,
       });
 
-      const result = await listScoresByEntityIdHandler({
+      const result = await LIST_SCORES_BY_ENTITY_ID_ROUTE.handler({
         mastra: mastraWithoutStorage,
         entityId: 'test-agent',
         entityType: 'agent',
@@ -204,7 +209,7 @@ describe('Scores Handlers', () => {
       mockStorage.listScoresByEntityId = vi.fn().mockRejectedValue(error);
 
       await expect(
-        listScoresByEntityIdHandler({
+        LIST_SCORES_BY_ENTITY_ID_ROUTE.handler({
           mastra,
           entityId: 'test-agent',
           entityType: 'agent',
@@ -224,7 +229,7 @@ describe('Scores Handlers', () => {
       mockStorage.listScoresByEntityId = vi.fn().mockRejectedValue(apiError);
 
       await expect(
-        listScoresByEntityIdHandler({
+        LIST_SCORES_BY_ENTITY_ID_ROUTE.handler({
           mastra,
           entityId: 'test-agent',
           entityType: 'agent',
@@ -242,7 +247,7 @@ describe('Scores Handlers', () => {
 
       await mockStorage.saveScore(mockScores[0]);
 
-      const result = await listScoresByEntityIdHandler({
+      const result = await LIST_SCORES_BY_ENTITY_ID_ROUTE.handler({
         mastra,
         entityId: 'test-workflow',
         entityType: 'WORKFLOW',
@@ -265,7 +270,7 @@ describe('Scores Handlers', () => {
       const score = createSampleScore({ scorerId: 'new-score-1' });
       const savedScore = { score };
 
-      const result = await saveScoreHandler({
+      const result = await SAVE_SCORE_ROUTE.handler({
         mastra,
         score,
       });
@@ -273,7 +278,7 @@ describe('Scores Handlers', () => {
       expect(result).toEqual(savedScore);
     });
 
-    it('should return empty array when storage method is not available', async () => {
+    it('should throw error when storage method is not available', async () => {
       const score = createSampleScore({ scorerId: 'new-score-1' });
 
       // Create mastra instance without storage
@@ -281,12 +286,12 @@ describe('Scores Handlers', () => {
         logger: false,
       });
 
-      const result = await saveScoreHandler({
-        mastra: mastraWithoutStorage,
-        score,
-      });
-
-      expect(result).toEqual([]);
+      await expect(
+        SAVE_SCORE_ROUTE.handler({
+          mastra: mastraWithoutStorage,
+          score,
+        }),
+      ).rejects.toThrow(HTTPException);
     });
 
     it('should handle storage errors gracefully', async () => {
@@ -296,7 +301,7 @@ describe('Scores Handlers', () => {
       mockStorage.saveScore = vi.fn().mockRejectedValue(error);
 
       await expect(
-        saveScoreHandler({
+        SAVE_SCORE_ROUTE.handler({
           mastra,
           score,
         }),
@@ -313,7 +318,7 @@ describe('Scores Handlers', () => {
       mockStorage.saveScore = vi.fn().mockRejectedValue(apiError);
 
       await expect(
-        saveScoreHandler({
+        SAVE_SCORE_ROUTE.handler({
           mastra,
           score,
         }),
@@ -325,7 +330,7 @@ describe('Scores Handlers', () => {
 
       const savedScore = { score };
 
-      const result = await saveScoreHandler({
+      const result = await SAVE_SCORE_ROUTE.handler({
         mastra,
         score,
       });

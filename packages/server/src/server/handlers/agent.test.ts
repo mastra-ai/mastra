@@ -11,14 +11,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import {
-  listAgentsHandler,
-  getAgentByIdHandler,
-  generateHandler,
-  updateAgentModelHandler,
-  reorderAgentModelListHandler,
-  updateAgentModelInModelListHandler,
-  streamGenerateLegacyHandler,
-  streamGenerateHandler,
+  LIST_AGENTS_ROUTE,
+  GET_AGENT_BY_ID_ROUTE,
+  GENERATE_AGENT_ROUTE,
+  UPDATE_AGENT_MODEL_ROUTE,
+  REORDER_AGENT_MODEL_LIST_ROUTE,
+  UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE,
+  STREAM_GENERATE_LEGACY_ROUTE,
+  STREAM_GENERATE_ROUTE,
 } from './agents';
 class MockAgent extends Agent {
   constructor(config: AgentConfig) {
@@ -92,7 +92,7 @@ describe('Agent Handlers', () => {
 
   describe('listAgentsHandler', () => {
     it('should return serialized agents', async () => {
-      const result = await listAgentsHandler({ mastra: mockMastra, requestContext });
+      const result = await LIST_AGENTS_ROUTE.handler({ mastra: mockMastra, requestContext });
 
       expect(result).toEqual({
         'test-agent': {
@@ -170,7 +170,7 @@ describe('Agent Handlers', () => {
         },
       });
 
-      const result = await listAgentsHandler({ mastra: mastraWithCoreProcessors, requestContext });
+      const result = await LIST_AGENTS_ROUTE.handler({ mastra: mastraWithCoreProcessors, requestContext });
 
       expect(result['agent-with-core-processors']).toMatchObject({
         name: 'agent-with-core-processors',
@@ -227,7 +227,7 @@ describe('Agent Handlers', () => {
       workflow.then(firstStep).then(secondStep);
       mockAgent = makeMockAgent({ workflows: { hello: workflow } });
       mockMastra = makeMastraMock({ agents: { 'test-agent': mockAgent } });
-      const result = await getAgentByIdHandler({ mastra: mockMastra, agentId: 'test-agent', requestContext });
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({ mastra: mockMastra, agentId: 'test-agent', requestContext });
 
       expect(result).toEqual({
         name: 'test-agent',
@@ -263,7 +263,7 @@ describe('Agent Handlers', () => {
     });
 
     it('should return serialized agent with model list', async () => {
-      const result = await getAgentByIdHandler({
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
         mastra: mockMastra,
         agentId: 'test-multi-model-agent',
         requestContext,
@@ -295,7 +295,7 @@ describe('Agent Handlers', () => {
 
     it('should throw 404 when agent not found', async () => {
       await expect(
-        getAgentByIdHandler({ mastra: mockMastra, requestContext, agentId: 'non-existing' }),
+        GET_AGENT_BY_ID_ROUTE.handler({ mastra: mockMastra, requestContext, agentId: 'non-existing' }),
       ).rejects.toThrow(
         new HTTPException(404, {
           message: 'Agent with id non-existing not found',
@@ -309,7 +309,7 @@ describe('Agent Handlers', () => {
       const mockResult = { response: 'test' };
       (mockAgent.generate as any).mockResolvedValue(mockResult);
 
-      const result = await generateHandler({
+      const result = await GENERATE_AGENT_ROUTE.handler({
         mastra: mockMastra,
         agentId: 'test-agent',
         messages: ['test message'],
@@ -325,7 +325,7 @@ describe('Agent Handlers', () => {
 
     it('should throw 404 when agent not found', async () => {
       await expect(
-        generateHandler({
+        GENERATE_AGENT_ROUTE.handler({
           mastra: mockMastra,
           agentId: 'non-existing',
           messages: ['test message'],
@@ -347,7 +347,7 @@ describe('Agent Handlers', () => {
       };
       (mockAgent.stream as any).mockResolvedValue(mockStreamResult);
 
-      const result = await streamGenerateLegacyHandler({
+      const result = await STREAM_GENERATE_LEGACY_ROUTE.handler({
         mastra: mockMastra,
         agentId: 'test-agent',
         messages: ['test message'],
@@ -362,7 +362,7 @@ describe('Agent Handlers', () => {
 
     it('should throw 404 when agent not found', async () => {
       await expect(
-        streamGenerateLegacyHandler({
+        STREAM_GENERATE_LEGACY_ROUTE.handler({
           mastra: mockMastra,
           agentId: 'non-existing',
           messages: ['test message'],
@@ -377,12 +377,14 @@ describe('Agent Handlers', () => {
 
   describe('updateAgentModelHandler', () => {
     it('should update agent model', async () => {
+      const mockFullStream = new ReadableStream();
       const mockStreamResult = {
         toTextStreamResponse: vi.fn().mockReturnValue(new Response()),
         toDataStreamResponse: vi.fn().mockReturnValue(new Response()),
+        fullStream: mockFullStream,
       };
       (mockAgent.stream as any).mockResolvedValue(mockStreamResult);
-      const updateResult = await updateAgentModelHandler({
+      const updateResult = await UPDATE_AGENT_MODEL_ROUTE.handler({
         mastra: mockMastra,
         agentId: 'test-agent',
         modelId: 'gpt-4o-mini',
@@ -396,7 +398,7 @@ describe('Agent Handlers', () => {
       expect(modelId).toEqual('gpt-4o-mini');
       //confirm that stream works fine after the model update
 
-      const result = await streamGenerateHandler({
+      const result = await STREAM_GENERATE_ROUTE.handler({
         mastra: mockMastra,
         agentId: 'test-agent',
         messages: ['test message'],
@@ -423,7 +425,7 @@ describe('Agent Handlers', () => {
       const modelListIds = modelList.map(m => m.id);
       const reversedModelListIds = modelListIds.reverse();
 
-      await reorderAgentModelListHandler({
+      await REORDER_AGENT_MODEL_LIST_ROUTE.handler({
         mastra: mockMastra,
         agentId: 'test-multi-model-agent',
         reorderedModelIds: reversedModelListIds,
@@ -443,7 +445,7 @@ describe('Agent Handlers', () => {
       const modelList = await agent.getModelList();
       expect(modelList?.length).toBe(3);
       const model1Id = modelList?.[1].id!;
-      await updateAgentModelInModelListHandler({
+      await UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE.handler({
         mastra: mockMastra,
         agentId: 'test-multi-model-agent',
         modelConfigId: model1Id,

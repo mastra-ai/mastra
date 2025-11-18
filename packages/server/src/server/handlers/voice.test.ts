@@ -3,7 +3,7 @@ import { Mastra } from '@mastra/core/mastra';
 import type { MastraVoice } from '@mastra/core/voice';
 import { CompositeVoice } from '@mastra/core/voice';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getSpeakersHandler, generateSpeechHandler, transcribeSpeechHandler } from './voice';
+import { GET_SPEAKERS_ROUTE, GENERATE_SPEECH_ROUTE, TRANSCRIBE_SPEECH_ROUTE } from './voice';
 
 vi.mock('@mastra/core/voice');
 
@@ -46,11 +46,11 @@ describe('Voice Handlers', () => {
 
   describe('getSpeakersHandler', () => {
     it('should throw error when agentId is not provided', async () => {
-      await expect(getSpeakersHandler({ mastra })).rejects.toThrow('Agent ID is required');
+      await expect(GET_SPEAKERS_ROUTE.handler({ mastra })).rejects.toThrow('Agent ID is required');
     });
 
     it('should throw error when agent is not found', async () => {
-      await expect(getSpeakersHandler({ mastra, agentId: 'non-existent' })).rejects.toThrow(
+      await expect(GET_SPEAKERS_ROUTE.handler({ mastra, agentId: 'non-existent' })).rejects.toThrow(
         'Agent with id non-existent not found',
       );
     });
@@ -58,7 +58,7 @@ describe('Voice Handlers', () => {
     it('should throw error when agent does not have voice capabilities', async () => {
       const agentWithoutVoice = createAgentWithVoice();
       await expect(
-        getSpeakersHandler({
+        GET_SPEAKERS_ROUTE.handler({
           mastra: new Mastra({ logger: false, agents: { 'test-agent': agentWithoutVoice } }),
           agentId: 'test-agent',
         }),
@@ -73,7 +73,7 @@ describe('Voice Handlers', () => {
         getSpeakers: vi.fn().mockResolvedValue(mockSpeakers),
       } as any);
 
-      const result = await getSpeakersHandler({
+      const result = await GET_SPEAKERS_ROUTE.handler({
         mastra: new Mastra({ logger: false, agents: { 'test-agent': agent } }),
         agentId: 'test-agent',
       });
@@ -85,7 +85,7 @@ describe('Voice Handlers', () => {
   describe('generateSpeechHandler', () => {
     it('should throw error when agentId is not provided', async () => {
       await expect(
-        generateSpeechHandler({
+        GENERATE_SPEECH_ROUTE.handler({
           mastra,
           text: 'test',
           speakerId: '1',
@@ -95,7 +95,7 @@ describe('Voice Handlers', () => {
 
     it('should throw error when text or speakerId is not provided', async () => {
       await expect(
-        generateSpeechHandler({
+        GENERATE_SPEECH_ROUTE.handler({
           mastra,
           agentId: 'test-agent',
           text: 'test',
@@ -105,7 +105,7 @@ describe('Voice Handlers', () => {
 
     it('should throw error when agent is not found', async () => {
       await expect(
-        generateSpeechHandler({
+        GENERATE_SPEECH_ROUTE.handler({
           mastra,
           agentId: 'non-existent',
           text: 'test',
@@ -118,7 +118,7 @@ describe('Voice Handlers', () => {
       const agentWithoutVoice = createAgentWithVoice({ voice: undefined });
 
       await expect(
-        generateSpeechHandler({
+        GENERATE_SPEECH_ROUTE.handler({
           mastra: new Mastra({ logger: false, agents: { 'test-agent': agentWithoutVoice } }),
           agentId: 'test-agent',
           text: 'test',
@@ -136,7 +136,7 @@ describe('Voice Handlers', () => {
       });
 
       await expect(
-        generateSpeechHandler({
+        GENERATE_SPEECH_ROUTE.handler({
           mastra: new Mastra({ logger: false, agents: { 'test-agent': agent } }),
           agentId: 'test-agent',
           text: 'test',
@@ -158,7 +158,7 @@ describe('Voice Handlers', () => {
         speak: vi.fn().mockResolvedValue(mockAudioStream),
       } as any);
 
-      const audioStream = await generateSpeechHandler({
+      const audioStream = await GENERATE_SPEECH_ROUTE.handler({
         mastra: new Mastra({ logger: false, agents: { 'test-agent': agent } }),
         agentId: 'test-agent',
         text: 'test',
@@ -185,7 +185,7 @@ describe('Voice Handlers', () => {
         speak: vi.fn().mockResolvedValue(mockAudioStream),
       } as any);
 
-      const audioStream = await generateSpeechHandler({
+      const audioStream = await GENERATE_SPEECH_ROUTE.handler({
         mastra: new Mastra({ logger: false, agents: { 'test-agent': agent } }),
         agentId: 'test-agent',
         text: 'test',
@@ -200,7 +200,7 @@ describe('Voice Handlers', () => {
   describe('transcribeSpeechHandler', () => {
     it('should throw error when agentId is not provided', async () => {
       await expect(
-        transcribeSpeechHandler({
+        TRANSCRIBE_SPEECH_ROUTE.handler({
           mastra,
           audioData: Buffer.from('test'),
         }),
@@ -209,7 +209,7 @@ describe('Voice Handlers', () => {
 
     it('should throw error when audioData is not provided', async () => {
       await expect(
-        transcribeSpeechHandler({
+        TRANSCRIBE_SPEECH_ROUTE.handler({
           mastra,
           agentId: 'test-agent',
         }),
@@ -218,7 +218,7 @@ describe('Voice Handlers', () => {
 
     it('should throw error when agent is not found', async () => {
       await expect(
-        transcribeSpeechHandler({
+        TRANSCRIBE_SPEECH_ROUTE.handler({
           mastra,
           agentId: 'non-existent',
           audioData: Buffer.from('test'),
@@ -230,7 +230,7 @@ describe('Voice Handlers', () => {
       const agentWithoutVoice = createAgentWithVoice({ voice: undefined });
 
       await expect(
-        transcribeSpeechHandler({
+        TRANSCRIBE_SPEECH_ROUTE.handler({
           mastra: new Mastra({ logger: false, agents: { 'test-agent': agentWithoutVoice } }),
           agentId: 'test-agent',
           audioData: Buffer.from('test'),
@@ -246,7 +246,7 @@ describe('Voice Handlers', () => {
         listen: mockListen,
       } as any);
 
-      const result = await transcribeSpeechHandler({
+      const result = await TRANSCRIBE_SPEECH_ROUTE.handler({
         mastra,
         agentId: 'test-agent',
         audioData: Buffer.from('test'),
