@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fix usage tracking. stream.usage is the usage of the last step.
+Fix a bug where `.usage` wasn't correctly tracking the counts
