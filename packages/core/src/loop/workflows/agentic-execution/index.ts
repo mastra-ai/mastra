@@ -45,6 +45,7 @@ export function createAgenticExecutionWorkflow<
         internal: InternalSpans.WORKFLOW,
       },
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      validateInputs: false,
     },
   })
     .then(llmExecutionStep)

@@ -1404,6 +1404,27 @@ export class GeminiLiveVoice extends MastraVoice<
           });
         }
 
+        // Handle function calls (tool calls) embedded in parts
+        // Gemini Live API sends tool calls inside serverContent.modelTurn.parts
+        if (part.functionCall) {
+          this.log('Found function call in serverContent.modelTurn.parts', part.functionCall);
+
+          // Convert to toolCall format and handle
+          const toolCallData: GeminiLiveServerMessage = {
+            toolCall: {
+              name: part.functionCall.name,
+              args: part.functionCall.args || {},
+              id: part.functionCall.id || randomUUID(),
+            },
+          };
+
+          // Handle the tool call asynchronously
+          void this.handleToolCall(toolCallData);
+
+          // Continue to next part without processing audio/text
+          continue;
+        }
+
         // Handle audio content - implement chunk concatenation with proper response ID tracking
         if (part.inlineData?.mimeType?.includes('audio') && typeof part.inlineData.data === 'string') {
           try {
@@ -1508,10 +1529,34 @@ export class GeminiLiveVoice extends MastraVoice<
       return;
     }
 
-    const toolName = data.toolCall.name || '';
-    const toolArgs = data.toolCall.args || {};
-    const toolId = data.toolCall.id || randomUUID();
+    // Handle both formats:
+    // 1. Direct format: { toolCall: { name, args, id } }
+    // 2. Array format: { toolCall: { functionCalls: [{ name, args, id }] } }
+    let toolCalls: Array<{ name?: string; args?: Record<string, any>; id?: string }> = [];
 
+    if (data.toolCall.functionCalls && Array.isArray(data.toolCall.functionCalls)) {
+      // Array format (actual Gemini API format)
+      toolCalls = data.toolCall.functionCalls;
+    } else if (data.toolCall.name) {
+      // Direct format (for backward compatibility)
+      toolCalls = [{ name: data.toolCall.name, args: data.toolCall.args, id: data.toolCall.id }];
+    }
+
+    // Process each tool call
+    for (const toolCall of toolCalls) {
+      const toolName = toolCall.name || '';
+      const toolArgs = toolCall.args || {};
+      const toolId = toolCall.id || randomUUID();
+
+      await this.processSingleToolCall(toolName, toolArgs, toolId);
+    }
+  }
+
+  /**
+   * Process a single tool call
+   * @private
+   */
+  private async processSingleToolCall(toolName: string, toolArgs: Record<string, any>, toolId: string): Promise<void> {
     this.log('Processing tool call', { toolName, toolArgs, toolId });
 
     // Emit tool call event
@@ -1550,13 +1595,17 @@ export class GeminiLiveVoice extends MastraVoice<
 
       // Send tool result back to Gemini Live API
       const toolResultMessage = {
-        tool_result: {
-          tool_call_id: toolId,
-          result: result,
+        toolResponse: {
+          functionResponses: [
+            {
+              id: toolId,
+              response: result,
+            },
+          ],
         },
       };
 
-      this.sendEvent('tool_result', toolResultMessage);
+      this.sendEvent('toolResponse', toolResultMessage);
       this.log('Tool result sent', { toolName, toolId, result });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1564,13 +1613,17 @@ export class GeminiLiveVoice extends MastraVoice<
 
       // Send error result back to Gemini Live API
       const errorResultMessage = {
-        tool_result: {
-          tool_call_id: toolId,
-          result: { error: errorMessage },
+        toolResponse: {
+          functionResponses: [
+            {
+              id: toolId,
+              response: { error: errorMessage },
+            },
+          ],
         },
       };
 
-      this.sendEvent('tool_result', errorResultMessage);
+      this.sendEvent('toolResponse', errorResultMessage);
 
       // Emit error event
       this.createAndEmitError(GeminiLiveErrorCode.TOOL_EXECUTION_ERROR, `Tool execution failed: ${errorMessage}`, {
@@ -1877,6 +1930,9 @@ export class GeminiLiveVoice extends MastraVoice<
       message = data;
     } else if (type === 'realtime_input' && data.realtime_input) {
       // For realtime_input messages, use the data as-is
+      message = data;
+    } else if (type === 'toolResponse' && data.toolResponse) {
+      // For toolResponse messages, use the data as-is
       message = data;
     } else if (type === 'session.update' && data.session) {
       // For session update messages, use the data as-is
