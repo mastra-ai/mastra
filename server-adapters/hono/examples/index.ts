@@ -1,22 +1,19 @@
 import { openai } from '@ai-sdk/openai';
+import { serve } from '@hono/node-server';
+import { swaggerUI } from '@hono/swagger-ui';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { createScorer } from '@mastra/core/evals';
 import { createTool } from '@mastra/core/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
-import { createToolCallAccuracyScorerCode, createCompletenessScorer } from '@mastra/evals/scorers/prebuilt';
-import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '@mastra/evals/scorers/utils';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { Observability } from '@mastra/observability';
-import cors from 'cors';
-import express from 'express';
-import swaggerUi from 'swagger-ui-express';
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { z } from 'zod';
-import { ExpressServerAdapter } from '..';
+import { HonoServerAdapter } from '../src/index';
 
 const storage = new LibSQLStore({
-  id: 'express-storage',
+  id: 'hono-storage',
   url: 'file:./mastra.db',
 });
 
@@ -36,7 +33,8 @@ export const weatherTool = createTool({
     location: z.string(),
   }),
   execute: async inputData => {
-    console.info('tool context', inputData);
+    // eslint-disable-next-line no-console
+    console.log('tool context', inputData);
     const location = inputData.location;
     const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`;
     const geocodingResponse = await fetch(geocodingUrl);
@@ -70,6 +68,32 @@ const newAgent = new Agent({
   name: 'New Agent',
   instructions: 'This is a new agent',
   model: openai('gpt-4o'),
+});
+
+export const weatherAgent = new Agent({
+  name: 'Weather Agent',
+  instructions: `
+      You are a helpful weather assistant that provides accurate weather information.
+
+      Your primary function is to help users get weather details for specific locations. When responding:
+      - Always ask for a location if none is provided
+      - If the location name isn’t in English, please translate it
+      - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
+      - Include relevant details like humidity, wind conditions, and precipitation
+      - Keep responses concise but informative
+
+      Use the weatherTool to fetch current weather data.
+`,
+  model: openai('gpt-4o'),
+  tools: {
+    weatherTool,
+  },
+  memory: new Memory({
+    storage,
+    options: {
+      lastMessages: 10,
+    },
+  }),
 });
 
 export const planningAgent = new Agent({
@@ -230,6 +254,21 @@ const planActivities = createStep({
   },
 });
 
+const weatherWorkflow = createWorkflow({
+  steps: [fetchWeather, planActivities],
+  id: 'weather-workflow-step1-single-day',
+  inputSchema: z.object({
+    city: z.string().describe('The city to get the weather for'),
+  }),
+  outputSchema: z.object({
+    activities: z.string(),
+  }),
+})
+  .then(fetchWeather)
+  .then(planActivities);
+
+weatherWorkflow.commit();
+
 export const summaryAgent = new Agent({
   name: 'summaryAgent',
   model: openai('gpt-4o'),
@@ -361,139 +400,6 @@ const travelAgentWorkflow = createWorkflow({
 
 travelAgentWorkflow.commit();
 
-export const toolCallAppropriatenessScorer = createToolCallAccuracyScorerCode({
-  expectedTool: 'weatherTool',
-  strictMode: false,
-});
-
-export const completenessScorer = createCompletenessScorer();
-
-// Custom LLM-judged scorer: evaluates if non-English locations are translated appropriately
-export const translationScorer = createScorer({
-  id: 'translation-quality-scorer',
-  name: 'Translation Quality',
-  description: 'Checks that non-English location names are translated and used correctly',
-  type: 'agent',
-  judge: {
-    model: 'openai/gpt-4o-mini',
-    instructions:
-      'You are an expert evaluator of translation quality for geographic locations. ' +
-      'Determine whether the user text mentions a non-English location and whether the assistant correctly uses an English translation of that location. ' +
-      'Be lenient with transliteration differences and diacritics. ' +
-      'Return only the structured JSON matching the provided schema.',
-  },
-})
-  .preprocess(({ run }) => {
-    const userText = getUserMessageFromRunInput(run.input) || '';
-    const assistantText = getAssistantMessageFromRunOutput(run.output) || '';
-    return { userText, assistantText };
-  })
-  .analyze({
-    description: 'Extract location names and detect language/translation adequacy',
-    outputSchema: z.object({
-      nonEnglish: z.boolean(),
-      translated: z.boolean(),
-      confidence: z.number().min(0).max(1).default(1),
-      explanation: z.string().default(''),
-    }),
-    createPrompt: ({ results }) => `
-            You are evaluating if a weather assistant correctly handled translation of a non-English location.
-            User text:
-            """
-            ${results.preprocessStepResult.userText}
-            """
-            Assistant response:
-            """
-            ${results.preprocessStepResult.assistantText}
-            """
-            Tasks:
-            1) Identify if the user mentioned a location that appears non-English.
-            2) If non-English, check whether the assistant used a correct English translation of that location in its response.
-            3) Be lenient with transliteration differences (e.g., accents/diacritics).
-            Return JSON with fields:
-            {
-            "nonEnglish": boolean,
-            "translated": boolean,
-            "confidence": number, // 0-1
-            "explanation": string
-            }
-        `,
-  })
-  .generateScore(({ results }) => {
-    const r = (results as any)?.analyzeStepResult || {};
-    if (!r.nonEnglish) return 1; // If not applicable, full credit
-    if (r.translated) return Math.max(0, Math.min(1, 0.7 + 0.3 * (r.confidence ?? 1)));
-    return 0; // Non-English but not translated
-  })
-  .generateReason(({ results, score }) => {
-    const r = (results as any)?.analyzeStepResult || {};
-    return `Translation scoring: nonEnglish=${r.nonEnglish ?? false}, translated=${r.translated ?? false}, confidence=${r.confidence ?? 0}. Score=${score}. ${r.explanation ?? ''}`;
-  });
-
-const weatherWorkflow = createWorkflow({
-  steps: [fetchWeather, planActivities],
-  id: 'weather-workflow-step1-single-day',
-  inputSchema: z.object({
-    city: z.string().describe('The city to get the weather for'),
-  }),
-  outputSchema: z.object({
-    activities: z.string(),
-  }),
-})
-  .then(fetchWeather)
-  .then(planActivities);
-
-weatherWorkflow.commit();
-
-export const weatherAgent = new Agent({
-  name: 'Weather Agent',
-  instructions: `
-      You are a helpful weather assistant that provides accurate weather information.
-
-      Your primary function is to help users get weather details for specific locations. When responding:
-      - Always ask for a location if none is provided
-      - If the location name isn’t in English, please translate it
-      - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
-      - Include relevant details like humidity, wind conditions, and precipitation
-      - Keep responses concise but informative
-
-      Use the weatherTool to fetch current weather data.
-`,
-  model: openai('gpt-4o'),
-  tools: {
-    weatherTool,
-  },
-  memory: new Memory({
-    storage,
-    options: {
-      lastMessages: 10,
-    },
-  }),
-  scorers: {
-    toolCallAppropriateness: {
-      scorer: toolCallAppropriatenessScorer,
-      sampling: {
-        type: 'ratio',
-        rate: 1,
-      },
-    },
-    completeness: {
-      scorer: completenessScorer,
-      sampling: {
-        type: 'ratio',
-        rate: 1,
-      },
-    },
-    translation: {
-      scorer: translationScorer,
-      sampling: {
-        type: 'ratio',
-        rate: 1,
-      },
-    },
-  },
-});
-
 const mastra = new Mastra({
   agents: {
     newAgent,
@@ -506,33 +412,33 @@ const mastra = new Mastra({
     weatherWorkflow,
     travelAgentWorkflow,
   },
-  tools: {
-    weatherTool,
-  },
   storage,
-  observability: new Observability({
-    default: {
-      enabled: true,
-    },
-  }),
 });
 
-const app = express();
-app.use(express.json());
-app.use(cors());
+const app = new Hono();
+app.use('*', cors());
 
-const expressServerAdapter = new ExpressServerAdapter({ mastra });
-expressServerAdapter.registerContextMiddleware(app);
-await expressServerAdapter.registerRoutes(app, { openapiPath: '/openapi.json' });
+const honoServerAdapter = new HonoServerAdapter({ mastra });
+honoServerAdapter.registerContextMiddleware(app);
+await honoServerAdapter.registerRoutes(app, { openapiPath: '/openapi.json' });
 
 // Add Swagger UI
-app.use('/swagger-ui', swaggerUi.serve, swaggerUi.setup(undefined, { swaggerUrl: '/openapi.json' }));
+app.use('/swagger-ui/*', swaggerUI({ url: '/openapi.json' }));
 
-app.listen(3001, () => {
-  console.info('Server is running on port 3001');
-  console.info('OpenAPI spec: http://localhost:3001/openapi.json');
-  console.info('Swagger UI: http://localhost:3001/swagger-ui');
-});
+serve(
+  {
+    fetch: app.fetch,
+    port: 3001,
+  },
+  () => {
+    // eslint-disable-next-line no-console
+    console.log('Server is running on port 3001');
+    // eslint-disable-next-line no-console
+    console.log('OpenAPI spec: http://localhost:3001/openapi.json');
+    // eslint-disable-next-line no-console
+    console.log('Swagger UI: http://localhost:3001/swagger-ui');
+  },
+);
 
 // TODOs
 /*
