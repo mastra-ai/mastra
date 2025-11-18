@@ -206,13 +206,14 @@ describe('Custom Gateway Integration', () => {
       expect(model.provider).toBe('my-provider');
     });
 
-    it('should throw error when no gateway can handle the model ID', () => {
+    it('should fall back to default gateways when custom gateways cannot handle the model ID', () => {
       const customGateway = new TestCustomGateway();
 
-      // Model ID doesn't match any gateway prefix
-      expect(() => {
-        new ModelRouterLanguageModel('unknown/provider/model', [customGateway]);
-      }).toThrow();
+      // Model ID doesn't match custom gateway prefix, but should fall back to default gateways
+      const model = new ModelRouterLanguageModel('openai/gpt-4', [customGateway]);
+
+      // Should use default gateway (models.dev) since custom gateway doesn't handle 'openai' prefix
+      expect(model).toBeDefined();
     });
   });
 
@@ -334,13 +335,14 @@ describe('Custom Gateway Integration', () => {
       }).toThrow();
     });
 
-    it('should handle missing gateway prefix errors', () => {
+    it('should fall back to default gateways for unknown prefixes', () => {
       const customGateway = new TestCustomGateway();
 
-      // Model ID with unknown prefix
-      expect(() => {
-        new ModelRouterLanguageModel('unknown/provider/model', [customGateway]);
-      }).toThrow();
+      // Model ID with unknown prefix should fall back to default gateways
+      const model = new ModelRouterLanguageModel('anthropic/claude-3-5-sonnet-20241022', [customGateway]);
+
+      // Should use default gateway (models.dev) since prefix doesn't match custom gateway
+      expect(model).toBeDefined();
     });
   });
 
