@@ -51,6 +51,7 @@ export type MastraMessageContentV2 = {
   reasoning?: UIMessageV4['reasoning'];
   annotations?: UIMessageV4['annotations'];
   metadata?: Record<string, unknown>;
+  providerMetadata?: AIV5Type.ProviderMetadata; // Store message-level provider metadata separately from parts
 };
 
 // maps to AI SDK V4 UIMessage
@@ -1468,55 +1469,44 @@ export class MessageList {
       parts.push({
         type: 'text',
         text: coreMessage.content,
-        // Preserve providerOptions from CoreMessage (e.g., for system messages with cacheControl)
-        ...('providerOptions' in coreMessage && coreMessage.providerOptions
-          ? { providerMetadata: coreMessage.providerOptions }
-          : {}),
       });
     } else if (Array.isArray(coreMessage.content)) {
-      for (const part of coreMessage.content) {
-        switch (part.type) {
-          case 'text':
+      for (const aiV4Part of coreMessage.content) {
+        switch (aiV4Part.type) {
+          case 'text': {
             // Add step-start only after tool invocations, not at the beginning
             const prevPart = parts.at(-1);
             if (coreMessage.role === 'assistant' && prevPart && prevPart.type === 'tool-invocation') {
               parts.push({ type: 'step-start' });
             }
-            // Merge part-level and message-level providerOptions
-            // Part-level takes precedence over message-level
-            const mergedProviderMetadata = {
-              ...('providerOptions' in coreMessage && coreMessage.providerOptions ? coreMessage.providerOptions : {}),
-              ...('providerOptions' in part && part.providerOptions ? part.providerOptions : {}),
-            };
 
-            parts.push({
-              type: 'text',
-              text: part.text,
-              ...(Object.keys(mergedProviderMetadata).length > 0 ? { providerMetadata: mergedProviderMetadata } : {}),
-            });
+            const part: MastraDBMessage['content']['parts'][number] = {
+              type: 'text' as const,
+              text: aiV4Part.text,
+            };
+            if (aiV4Part.providerOptions) {
+              part.providerMetadata = aiV4Part.providerOptions;
+            }
+            parts.push(part);
             break;
+          }
 
-          case 'tool-call':
-            // Merge part-level and message-level providerOptions
-            // Part-level takes precedence over message-level
-            const toolCallProviderMetadata = {
-              ...('providerOptions' in coreMessage && coreMessage.providerOptions ? coreMessage.providerOptions : {}),
-              ...('providerOptions' in part && part.providerOptions ? part.providerOptions : {}),
-            };
-
-            parts.push({
-              type: 'tool-invocation',
+          case 'tool-call': {
+            const part: MastraDBMessage['content']['parts'][number] = {
+              type: 'tool-invocation' as const,
               toolInvocation: {
                 state: 'call',
-                toolCallId: part.toolCallId,
-                toolName: part.toolName,
-                args: part.args,
+                toolCallId: aiV4Part.toolCallId,
+                toolName: aiV4Part.toolName,
+                args: aiV4Part.args,
               },
-              ...(Object.keys(toolCallProviderMetadata).length > 0
-                ? { providerMetadata: toolCallProviderMetadata }
-                : {}),
-            });
+            };
+            if (aiV4Part.providerOptions) {
+              part.providerMetadata = aiV4Part.providerOptions;
+            }
+            parts.push(part);
             break;
+          }
 
           case 'tool-result':
             // Try to find args from the corresponding tool-call in previous messages
@@ -1524,7 +1514,7 @@ export class MessageList {
 
             // First, check if there's a tool-call in the same message
             const toolCallInSameMsg = coreMessage.content.find(
-              p => p.type === 'tool-call' && p.toolCallId === part.toolCallId,
+              p => p.type === 'tool-call' && p.toolCallId === aiV4Part.toolCallId,
             );
             if (toolCallInSameMsg && toolCallInSameMsg.type === 'tool-call') {
               toolArgs = toolCallInSameMsg.args as Record<string, unknown>;
@@ -1540,7 +1530,7 @@ export class MessageList {
                   const toolCallPart = msg.content.parts.find(
                     p =>
                       p.type === 'tool-invocation' &&
-                      p.toolInvocation.toolCallId === part.toolCallId &&
+                      p.toolInvocation.toolCallId === aiV4Part.toolCallId &&
                       p.toolInvocation.state === 'call',
                   );
                   if (toolCallPart && toolCallPart.type === 'tool-invocation' && toolCallPart.toolInvocation.args) {
@@ -1551,22 +1541,18 @@ export class MessageList {
               }
             }
 
-            // Merge part-level and message-level providerOptions for tool-result
-            const toolResultProviderMetadata = {
-              ...('providerOptions' in coreMessage && coreMessage.providerOptions ? coreMessage.providerOptions : {}),
-              ...('providerOptions' in part && part.providerOptions ? part.providerOptions : {}),
-            };
-
-            const invocation = {
+            // Only use part-level providerOptions if present
+            // Don't merge with message-level to avoid issues with features like cache breakpoints
+            const invocation: ToolInvocationV4 & { providerMetadata?: AIV5Type.ProviderMetadata } = {
               state: 'result' as const,
-              toolCallId: part.toolCallId,
-              toolName: part.toolName,
-              result: part.result ?? '', // undefined will cause AI SDK to throw an error, but for client side tool calls this really could be undefined
+              toolCallId: aiV4Part.toolCallId,
+              toolName: aiV4Part.toolName,
+              result: aiV4Part.result ?? '', // undefined will cause AI SDK to throw an error, but for client side tool calls this really could be undefined
               args: toolArgs, // Use the args from the corresponding tool-call
-              ...(Object.keys(toolResultProviderMetadata).length > 0
-                ? { providerMetadata: toolResultProviderMetadata }
-                : {}),
             };
+            if (aiV4Part.providerOptions) {
+              invocation.providerMetadata = aiV4Part.providerOptions;
+            }
             parts.push({
               type: 'tool-invocation',
               toolInvocation: invocation,
@@ -1578,65 +1564,71 @@ export class MessageList {
             parts.push({
               type: 'reasoning',
               reasoning: '', // leave this blank so we aren't double storing it in the db along with details
-              details: [{ type: 'text', text: part.text, signature: part.signature }],
+              details: [{ type: 'text', text: aiV4Part.text, signature: aiV4Part.signature }],
             });
             break;
           case 'redacted-reasoning':
             parts.push({
               type: 'reasoning',
               reasoning: '', // No text reasoning for redacted parts
-              details: [{ type: 'redacted', data: part.data }],
+              details: [{ type: 'redacted', data: aiV4Part.data }],
             });
             break;
-          case 'image':
-            // Merge part-level and message-level providerOptions for image
-            const imageProviderMetadata = {
-              ...('providerOptions' in coreMessage && coreMessage.providerOptions ? coreMessage.providerOptions : {}),
-              ...('providerOptions' in part && part.providerOptions ? part.providerOptions : {}),
+          case 'image': {
+            // Only use part-level providerOptions if present
+            // Don't merge with message-level to avoid issues with features like cache breakpoints
+            const part: MastraDBMessage['content']['parts'][number] = {
+              type: 'file' as const,
+              data: imageContentToString(aiV4Part.image),
+              mimeType: aiV4Part.mimeType!,
             };
-
-            parts.push({
-              type: 'file',
-              data: imageContentToString(part.image),
-              mimeType: part.mimeType!,
-              ...(Object.keys(imageProviderMetadata).length > 0 ? { providerMetadata: imageProviderMetadata } : {}),
-            });
+            if (aiV4Part.providerOptions) {
+              part.providerMetadata = aiV4Part.providerOptions;
+            }
+            parts.push(part);
             break;
-          case 'file':
-            // Merge part-level and message-level providerOptions for file
-            const fileProviderMetadata = {
-              ...('providerOptions' in coreMessage && coreMessage.providerOptions ? coreMessage.providerOptions : {}),
-              ...('providerOptions' in part && part.providerOptions ? part.providerOptions : {}),
-            };
+          }
+          case 'file': {
+            // Only use part-level providerOptions if present
+            // Don't merge with message-level to avoid issues with features like cache breakpoints
 
             // CoreMessage file parts can have mimeType and data (binary/data URL) or just a URL
-            if (part.data instanceof URL) {
-              parts.push({
-                type: 'file',
-                data: part.data.toString(),
-                mimeType: part.mimeType,
-                ...(Object.keys(fileProviderMetadata).length > 0 ? { providerMetadata: fileProviderMetadata } : {}),
-              });
-            } else if (typeof part.data === 'string') {
-              const categorized = categorizeFileData(part.data, part.mimeType);
+            if (aiV4Part.data instanceof URL) {
+              const part: MastraDBMessage['content']['parts'][number] = {
+                type: 'file' as const,
+                data: aiV4Part.data.toString(),
+                mimeType: aiV4Part.mimeType,
+              };
+              if (aiV4Part.providerOptions) {
+                part.providerMetadata = aiV4Part.providerOptions;
+              }
+              parts.push(part);
+            } else if (typeof aiV4Part.data === 'string') {
+              const categorized = categorizeFileData(aiV4Part.data, aiV4Part.mimeType);
 
               if (categorized.type === 'url' || categorized.type === 'dataUri') {
                 // It's a URL or data URI, use it directly
-                parts.push({
-                  type: 'file',
-                  data: part.data,
+                const part: MastraDBMessage['content']['parts'][number] = {
+                  type: 'file' as const,
+                  data: aiV4Part.data,
                   mimeType: categorized.mimeType || 'image/png',
-                  ...(Object.keys(fileProviderMetadata).length > 0 ? { providerMetadata: fileProviderMetadata } : {}),
-                });
+                };
+                if (aiV4Part.providerOptions) {
+                  part.providerMetadata = aiV4Part.providerOptions;
+                }
+                parts.push(part);
               } else {
                 // Raw data, convert to base64
                 try {
-                  parts.push({
-                    type: 'file',
+                  const part: MastraDBMessage['content']['parts'][number] = {
+                    type: 'file' as const,
                     mimeType: categorized.mimeType || 'image/png',
-                    data: convertDataContentToBase64String(part.data),
-                    ...(Object.keys(fileProviderMetadata).length > 0 ? { providerMetadata: fileProviderMetadata } : {}),
-                  });
+                    data: convertDataContentToBase64String(aiV4Part.data),
+                  };
+                  if (aiV4Part.providerOptions) {
+                    part.providerMetadata = aiV4Part.providerOptions;
+                  }
+                  parts.push(part);
                 } catch (error) {
                   console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
                 }
@@ -1644,17 +1636,21 @@ export class MessageList {
             } else {
               // If it's binary data, convert to base64 and add to parts
               try {
-                parts.push({
-                  type: 'file',
-                  mimeType: part.mimeType,
-                  data: convertDataContentToBase64String(part.data),
-                  ...(Object.keys(fileProviderMetadata).length > 0 ? { providerMetadata: fileProviderMetadata } : {}),
-                });
+                const part: MastraDBMessage['content']['parts'][number] = {
+                  type: 'file' as const,
+                  mimeType: aiV4Part.mimeType,
+                  data: convertDataContentToBase64String(aiV4Part.data),
+                };
+                if (aiV4Part.providerOptions) {
+                  part.providerMetadata = aiV4Part.providerOptions;
+                }
+                parts.push(part);
               } catch (error) {
                 console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
               }
             }
             break;
+          }
         }
       }
     }
@@ -1669,6 +1665,11 @@ export class MessageList {
 
     if (experimentalAttachments.length) content.experimental_attachments = experimentalAttachments;
 
+    // Preserve message-level providerOptions (e.g., for cache breakpoints)
+    if ('providerOptions' in coreMessage && coreMessage.providerOptions) {
+      content.providerMetadata = coreMessage.providerOptions;
+    }
+
     return {
       id,
       role: MessageList.getRole(coreMessage),
@@ -1676,7 +1677,7 @@ export class MessageList {
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
       content,
-    };
+    } satisfies MastraDBMessage;
   }
 
   static isAIV4UIMessage(msg: MessageInput): msg is UIMessageV4 {
