@@ -51,7 +51,7 @@ export type MastraMessageContentV2 = {
   reasoning?: UIMessageV4['reasoning'];
   annotations?: UIMessageV4['annotations'];
   metadata?: Record<string, unknown>;
-  providerMetadata?: AIV5Type.ProviderMetadata; // Store message-level provider metadata separately from parts
+  providerMetadata?: AIV5Type.ProviderMetadata;
 };
 
 // maps to AI SDK V4 UIMessage
