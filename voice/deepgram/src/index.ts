@@ -180,8 +180,6 @@ export class DeepgramVoice extends MastraVoice {
     audioStream: NodeJS.ReadableStream,
     options?: {
       diarize?: boolean;
-      // diarize_speaker_count is intentionally not forwarded to Deepgram;
-      // consider removing this if not part of a cross-provider contract.
       diarize_speaker_count?: number;
       [key: string]: any;
     },
@@ -215,9 +213,12 @@ export class DeepgramVoice extends MastraVoice {
       words?: DeepgramWord[];
     } | undefined = channel?.alternatives?.[0];
 
-
     if (!alt) {
-      throw new Error("No transcript found in Deepgram response");
+      return {
+       transcript: '',
+       words: [],
+       raw: result,
+      };
     }
 
     const response: any = {
