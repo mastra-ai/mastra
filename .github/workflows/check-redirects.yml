@@ -41,7 +41,7 @@ jobs:
         run: |
           cd .github
           npm init -y
-          npm install path-to-regexp
+          pnpm add path-to-regexp
 
       - name: Check for removed pages without redirects
         if: steps.mdx-changes.outputs.has_changes == 'true'
