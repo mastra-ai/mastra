@@ -34,10 +34,6 @@ function NavbarContentDesktop() {
           />
         </div>
 
-        <div className="hidden lg:block">
-          <ThemeSwitcher />
-        </div>
-
         <div className="hidden @[798px]:block">
           <div className="flex gap-2 items-center">
             <SearchContainer locale="en" />
