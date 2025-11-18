@@ -31,17 +31,12 @@ function NavbarContentDesktop() {
 
       <div className="flex gap-2 items-center">
         <div className="flex items-center">
-          <GithubStarCount />
           <div className="hidden gap-2 items-center lg:flex">
+            <GithubStarCount />
             <VersionControl
               size="sm"
               className="px-[13px] bg-white dark:bg-(--mastra-primary) border-transparent rounded-full transition-colors cursor-pointer"
             />
-            <LocaleControl
-              size="sm"
-              className="px-[13px] bg-white dark:bg-(--mastra-primary) border-transparent rounded-full transition-colors cursor-pointer"
-            />
-            <ThemeSwitcher />
           </div>
         </div>
         <div className="hidden @[798px]:block">
