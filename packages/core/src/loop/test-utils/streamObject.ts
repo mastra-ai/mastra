@@ -542,8 +542,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
           expect(await result.usage).toMatchInlineSnapshot(`
             {
+              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
+              "reasoningTokens": undefined,
               "totalTokens": 13,
             }
           `);
