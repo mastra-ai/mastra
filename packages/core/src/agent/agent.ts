@@ -364,6 +364,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const memoryProcessors = memory ? memory.getInputProcessors(configuredProcessors, requestContext) : [];
 
+    console.log('DEBUG: Memory processors:', memoryProcessors.map(p => p.constructor.name));
+
     // Memory processors should run first (to fetch history, semantic recall, working memory)
     return [...memoryProcessors, ...configuredProcessors];
   }
@@ -2420,7 +2422,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       getMemoryMessages: this.getMemoryMessages.bind(this),
       runInputProcessors: this.__runInputProcessors.bind(this),
       executeOnFinish: this.#executeOnFinish.bind(this),
-      outputProcessors: this.#outputProcessors,
+      outputProcessors: async ({ requestContext }: { requestContext: RequestContext }) =>
+        this.listResolvedOutputProcessors(requestContext),
       llm,
     };
 

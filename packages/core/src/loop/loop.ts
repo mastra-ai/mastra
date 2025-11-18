@@ -131,6 +131,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       outputProcessors,
       returnScorerData,
       tracingContext: rest.modelSpanTracker?.getTracingContext(),
+      requestContext: rest.requestContext,
     },
     initialState: initialStreamState,
   });

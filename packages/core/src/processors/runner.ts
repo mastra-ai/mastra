@@ -305,9 +305,8 @@ export class ProcessorRunner {
     tracingContext?: TracingContext,
     runtimeContext?: RequestContext,
   ): Promise<MessageList> {
-    const userMessages = messageList.clear.input.db();
-
-    let processableMessages: MastraDBMessage[] = [...userMessages];
+    // Get ALL current messages (including those added by previous processors with different sources)
+    let processableMessages: MastraDBMessage[] = messageList.get.all.db();
 
     const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
       messages: processableMessages,
@@ -353,28 +352,35 @@ export class ProcessorRunner {
       });
 
       // Handle both MessageList and MastraDBMessage[] return types
-      processableMessages = 'get' in result ? result.get.all.db() : result;
+      if ('get' in result) {
+        // Processor returned a MessageList - it has been modified in place
+        // Update processableMessages to reflect ALL current messages for next processor
+        processableMessages = messageList.get.all.db();
+        processorSpan?.end({ output: processableMessages });
+      } else {
+        // Processor returned an array - clear and re-add since processor worked with array
+        messageList.clear.input.db();
+        
+        // Separate system messages from other messages since they need different handling
+        const systemMessages = result.filter(m => m.role === 'system');
+        const nonSystemMessages = result.filter(m => m.role !== 'system');
 
-      processorSpan?.end({ output: processableMessages });
-    }
+        // Add system messages using addSystem
+        for (const sysMsg of systemMessages) {
+          const systemText =
+            (sysMsg.content.content as string | undefined) ??
+            sysMsg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
+            '';
+          messageList.addSystem(systemText);
+        }
 
-    if (processableMessages.length > 0) {
-      // Separate system messages from other messages since they need different handling
-      const systemMessages = processableMessages.filter(m => m.role === 'system');
-      const nonSystemMessages = processableMessages.filter(m => m.role !== 'system');
-
-      // Add system messages using addSystem
-      for (const sysMsg of systemMessages) {
-        const systemText =
-          (sysMsg.content.content as string | undefined) ??
-          sysMsg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
-          '';
-        messageList.addSystem(systemText);
-      }
-
-      // Add non-system messages normally
-      if (nonSystemMessages.length > 0) {
-        messageList.add(nonSystemMessages, 'input');
+        // Add non-system messages normally
+        if (nonSystemMessages.length > 0) {
+          messageList.add(nonSystemMessages, 'input');
+        }
+        
+        processableMessages = result;
+        processorSpan?.end({ output: processableMessages });
       }
     }
 

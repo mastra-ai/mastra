@@ -8,6 +8,7 @@ import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { IModelSpanTracker } from '../observability';
 import type { OutputProcessor, ProcessorState } from '../processors';
+import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream/base/schema';
 import type {
   ChunkType,
@@ -83,6 +84,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   modelSpanTracker?: IModelSpanTracker;
   requireToolApproval?: boolean;
   agentId: string;
+  requestContext?: RequestContext;
 };
 
 export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = LoopOptions<
