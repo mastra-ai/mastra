@@ -119,7 +119,15 @@ export class DeepgramVoice extends MastraVoice {
       throw new Error('Input text is empty');
     }
 
-    const modelName = `${this.storedSpeechModel?.name}-${options?.speaker || this.storedSpeaker}`;
+   const baseModel = this.storedSpeechModel?.name;
+   const speakerId = options?.speaker || this.storedSpeaker;
+
+   const modelName =
+    baseModel && speakerId
+      ? speakerId.startsWith(`${baseModel}-`)
+        ? speakerId
+        : `${baseModel}-${speakerId}`
+      : baseModel || speakerId;
 
     const speakClient = this.speechClient.speak;
     const response = await speakClient.request(
