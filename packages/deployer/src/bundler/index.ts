@@ -249,7 +249,8 @@ export abstract class Bundler extends MastraBundler {
       projectRoot,
       outputDirectory,
       enableEsmShim = true,
-    }: { projectRoot: string; outputDirectory: string; enableEsmShim?: boolean },
+      externals = [],
+    }: { projectRoot: string; outputDirectory: string; enableEsmShim?: boolean; externals?: boolean | string[] },
     toolsPaths: (string | string[])[] = [],
     bundleLocation: string = join(outputDirectory, this.outputDir),
   ): Promise<void> {
@@ -275,6 +276,7 @@ export abstract class Bundler extends MastraBundler {
           platform: 'node',
           bundlerOptions: {
             enableEsmShim,
+            externals,
           },
         },
         this.logger,

@@ -1,3 +1,4 @@
+import type { Config } from '@mastra/core/mastra';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
@@ -399,12 +400,12 @@ export async function bundleExternals(
   depsToOptimize: Map<string, DependencyMetadata>,
   outputDir: string,
   options: {
-    bundlerOptions?: {
-      externals?: boolean | string[];
-      transpilePackages?: string[];
-      isDev?: boolean;
-      enableEsmShim?: boolean;
-    } | null;
+    bundlerOptions?:
+      | ({
+          isDev?: boolean;
+          enableEsmShim?: boolean;
+        } & Config['bundler'])
+      | null;
     projectRoot?: string;
     workspaceRoot?: string;
     workspaceMap?: Map<string, WorkspacePackageInfo>;
