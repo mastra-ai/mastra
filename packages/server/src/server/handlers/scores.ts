@@ -1,5 +1,5 @@
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 import type { StoragePagination } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import { runIdSchema } from '../schemas/common';
@@ -130,7 +130,7 @@ export const LIST_SCORERS_ROUTE = createRoute({
   handler: async ({ mastra, requestContext }) => {
     const scorers = await listScorersFromSystem({
       mastra,
-      requestContext,
+      requestContext: requestContext ?? new RequestContext(),
     });
     return scorers;
   },
@@ -148,7 +148,7 @@ export const GET_SCORER_ROUTE = createRoute({
   handler: async ({ mastra, scorerId, requestContext }) => {
     const scorers = await listScorersFromSystem({
       mastra,
-      requestContext,
+      requestContext: requestContext ?? new RequestContext(),
     });
 
     const scorer = scorers[scorerId as string];

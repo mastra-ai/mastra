@@ -437,7 +437,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
       const serializedAgentsMap = await Promise.all(
         Object.entries(agents).map(async ([id, agent]) => {
-          return formatAgentList({ id, mastra, agent, requestContext });
+          return formatAgentList({ id, mastra, agent, requestContext: requestContext ?? new RequestContext() });
         }),
       );
 
@@ -469,7 +469,12 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
       const isPlayground = false; // TODO: Get from context if needed
-      const result = await formatAgent({ mastra, agent, requestContext, isPlayground });
+      const result = await formatAgent({
+        mastra,
+        agent,
+        requestContext: requestContext ?? new RequestContext(),
+        isPlayground,
+      });
       return result;
     } catch (error) {
       return handleError(error, 'Error getting agent');
