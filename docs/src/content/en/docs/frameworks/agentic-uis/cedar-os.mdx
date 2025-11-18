@@ -1,6 +1,6 @@
 ---
-title: "Integrate Cedar-OS with Mastra | Frameworks"
-description: "Build AI-native frontends for your Mastra agents with Cedar-OS"
+title: "Using Cedar-OS | Frameworks"
+description: "Learn how to integrate Cedar-OS with Mastra"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -8,29 +8,17 @@ import TabItem from "@theme/TabItem";
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Integrate Cedar-OS with Mastra
+# Using Cedar-OS
 
-Cedar-OS is an open-source agentic UI framework designed specifically for building the most ambitious AI-native applications. Cedar was built with Mastra in mind.
+[Cedar-OS](https://docs.cedarcopilot.com/introduction/overview) is an open-source agentic UI framework designed specifically for building the most ambitious AI-native applications. Cedar was built with Mastra in mind.
 
-## Should you use Cedar?
+:::info
 
-There are a few pillars Cedar cares about strongly that you can read more about [here](https://docs.cedarcopilot.com/introduction/philosophy):
+Also see the [Extending Mastra](https://docs.cedarcopilot.com/agent-backend-connection/mastra) and [Custom Backend Implementation](https://docs.cedarcopilot.com/agent-backend-connection/custom) guides on Cedar's documentation site for more advanced integration patterns.
 
-#### 1. Developer experience
+:::
 
-- **Every single component is downloaded shadcn-style** – You own all the code and can style it however you want
-- **Works out of the box** – Just drop in the chat component, and it'll work
-- **Fully extensible** - Built on a [Zustand store architecture](https://docs.cedarcopilot.com/introduction/architecture) that you can customize completely. Every single internal function can be overridden in one line.
-
-#### 2. Enabling truly AI-native applications
-
-For the first time in history, products can come to life. Cedar is aimed at helping you build something with life.
-
-- **[Spells](https://docs.cedarcopilot.com/spells/spells#what-are-spells)** - Users can trigger AI from keyboard shortcuts, mouse events, text selection, and other components
-- **[State Diff Management](https://docs.cedarcopilot.com/state-diff/using-state-diff)** - Give users control over accepting/rejecting agent outputs
-- **[Voice Integration](https://docs.cedarcopilot.com/voice/voice-integration)** - Let users control your app with their voice
-
-## Quick Start
+## Integration Guide
 
 <Steps>
 
@@ -112,12 +100,3 @@ Your backend and frontend are now linked! You're ready to start building AI-nati
 </StepItem>
 
 </Steps>
-
-## More information
-
-- Check out the [detailed Mastra integration guide](https://docs.cedarcopilot.com/agent-backend-connection/mastra#extending-mastra) for more configuration options (or for manual installation instructions if something goes wrong)
-- Explore Mastra-specific optimizations and features Cedar has built
-  - **Seamless event streaming** - Automatic rendering of [Mastra streamed events](https://docs.cedarcopilot.com/chat/custom-message-rendering#mastra-event-renderer)
-  - **Voice endpoint support** - Built-in [voice backend integration](https://docs.cedarcopilot.com/voice/agentic-backend#endpoint-configuration)
-  - **End-to-End type safety** - [Types](https://docs.cedarcopilot.com/type-safety/typing-agent-requests) for communicating between your app and Mastra backend
-- [Join the Discord!](https://discord.gg/4AWawRjNdZ) The Cedar team is excited to have you :)
