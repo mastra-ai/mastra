@@ -62,7 +62,7 @@ describe('docsTool', () => {
 
     it('should handle MDX files with frontmatter', async () => {
       const result = await callTool(tools.mastra_mastraDocs, { paths: ['reference/rag/document.mdx'] });
-      expect(result).toContain('title: "Reference: MDocument | Document Processing | RAG | Mastra Docs"');
+      expect(result).toContain('title: "Reference: MDocument | Document Processing | RAG"');
       expect(result).toContain('description: Documentation for the MDocument class in Mastra');
       expect(result).toContain('# MDocument');
     });
