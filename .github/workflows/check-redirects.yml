@@ -26,29 +26,31 @@ jobs:
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Setup pnpm
-        if: steps.mdx-changes.outputs.has_changes == 'true'
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.18.2
-
       - name: Setup Node.js
         if: steps.mdx-changes.outputs.has_changes == 'true'
         uses: actions/setup-node@v5
         with:
           node-version: '20.19.5'
 
+      - name: Enable corepack
+        if: steps.mdx-changes.outputs.has_changes == 'true'
+        run: corepack enable
+
       - name: Install dependencies
         if: steps.mdx-changes.outputs.has_changes == 'true'
-        run: pnpm add -D path-to-regexp
+        run: |
+          mkdir -p /tmp/node_modules
+          cd /tmp
+          npm init -y
+          npm install path-to-regexp
 
       - name: Check for removed pages without redirects
         if: steps.mdx-changes.outputs.has_changes == 'true'
-        run: |
-          node .github/scripts/check-deleted-pages.js
+        run: node .github/scripts/check-deleted-pages.js
         env:
           BASE_REF: origin/${{ github.event.pull_request.base.ref }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          NODE_PATH: /tmp/node_modules
 
       - name: Comment on PR if redirects are missing
         if: failure()
@@ -103,11 +105,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.18.2
 
       - name: Set up Node.js
         uses: actions/setup-node@v5
