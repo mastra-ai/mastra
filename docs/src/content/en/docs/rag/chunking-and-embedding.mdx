@@ -129,7 +129,7 @@ OpenAI (text-embedding-3 models):
 
 ```ts
 const { embeddings } = await embedMany({
-  model: "openai/text-embedding-3-small, {
+  model: "openai/text-embedding-3-small", {
     dimensions: 256, // Only supported in text-embedding-3 and later
   }),
   values: chunks.map((chunk) => chunk.text),

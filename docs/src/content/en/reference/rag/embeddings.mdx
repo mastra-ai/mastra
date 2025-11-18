@@ -80,7 +80,7 @@ For embedding multiple texts at once, use the `embedMany` function:
 import { embedMany } from "ai";
 
 const result = await embedMany({
-  model: "openai/text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
   values: ["First text", "Second text", "Third text"],
   maxRetries: 2, // optional, defaults to 2
 });
