@@ -39,8 +39,7 @@ jobs:
       - name: Install dependencies
         if: steps.mdx-changes.outputs.has_changes == 'true'
         run: |
-          mkdir -p /tmp/node_modules
-          cd /tmp
+          cd .github
           npm init -y
           npm install path-to-regexp
 
@@ -50,7 +49,6 @@ jobs:
         env:
           BASE_REF: origin/${{ github.event.pull_request.base.ref }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          NODE_PATH: /tmp/node_modules
 
       - name: Comment on PR if redirects are missing
         if: failure()
