@@ -8133,8 +8133,6 @@ describe('MastraInngestWorkflow', () => {
       const run = await counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
 
-      console.dir({ result }, { depth: null });
-
       srv.close();
 
       expect(start).toHaveBeenCalledTimes(2);
