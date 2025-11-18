@@ -6,7 +6,7 @@ import {
   DropdownMenuTrigger,
 } from "@site/src/components/ui/dropdown";
 import { Check } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "../lib/utils";
 import {
   BetaIcon,
@@ -33,6 +33,15 @@ export default function VersionControl({
     "beta",
   );
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const path = window.location.pathname;
+    if (path.includes("/docs/v1")) {
+      setCurrentVersion("beta");
+    } else {
+      setCurrentVersion("stable");
+    }
+  }, []);
 
   const onChange = (nextVersion: string) => {
     if (typeof window === "undefined") return;
