@@ -29,7 +29,18 @@ reviews:
   in_progress_fortune: true
   poem: false
   path_filters: []
-  path_instructions: []
+  path_instructions:
+    - path: '.changeset/*.md'
+      instructions: |
+        Review the changeset file (which will become part of a CHANGELOG.md file) according to these guidelines:
+        - The target audience are developers
+        - Write short, direct sentences that anyone can understand. Avoid commit messages, technical jargon, and acronyms. Use action-oriented verbs (Added, Fixed, Improved, Deprecated, Removed)
+        - Avoid generic phrases like "Update code", "Miscellaneous improvements", or "Bug fixes"
+        - Highlight outcomes rather than internal code details
+        - Add context like links to issues or PRs when relevant
+        - If the change is a breaking change or is adding a new feature, ensure that a code example is provided showing its (changed) usage
+        - Keep the formatting easy-to-read and scannable. If necessary, use bullet points or subheadings (subheadings must start with heading level 4 - ####)
+        - For larger, more substantial changes, also answer the "Why" behind the changes
   abort_on_close: true
   disable_cache: false
   auto_review:
