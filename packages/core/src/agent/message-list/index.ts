@@ -127,6 +127,18 @@ export class MessageList {
   private generateMessageId?: IdGenerator;
   private _agentNetworkAppend = false;
 
+  // Event recording for observability
+  private isRecording = false;
+  private recordedEvents: Array<{
+    type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
+    source?: MessageSource;
+    count?: number;
+    ids?: string[];
+    text?: string;
+    tag?: string;
+    message?: CoreMessageV4;
+  }> = [];
+
   constructor({
     threadId,
     resourceId,
@@ -141,11 +153,48 @@ export class MessageList {
     this._agentNetworkAppend = _agentNetworkAppend || false;
   }
 
+  /**
+   * Start recording mutations to the MessageList for observability/tracing
+   */
+  public startRecording(): void {
+    this.isRecording = true;
+    this.recordedEvents = [];
+  }
+
+  /**
+   * Stop recording and return the list of recorded events
+   */
+  public stopRecording(): Array<{
+    type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
+    source?: MessageSource;
+    count?: number;
+    ids?: string[];
+    text?: string;
+    tag?: string;
+    message?: CoreMessageV4;
+  }> {
+    this.isRecording = false;
+    const events = [...this.recordedEvents];
+    this.recordedEvents = [];
+    return events;
+  }
+
   public add(messages: MessageListInput, messageSource: MessageSource) {
     if (messageSource === `user`) messageSource = `input`;
 
     if (!messages) return this;
-    for (const message of Array.isArray(messages) ? messages : [messages]) {
+    const messageArray = Array.isArray(messages) ? messages : [messages];
+    
+    // Record event if recording is enabled
+    if (this.isRecording) {
+      this.recordedEvents.push({
+        type: 'add',
+        source: messageSource,
+        count: messageArray.length,
+      });
+    }
+    
+    for (const message of messageArray) {
       this.addOne(
         typeof message === `string`
           ? {
@@ -248,6 +297,13 @@ export class MessageList {
           const userMessages = Array.from(this.newUserMessages);
           this.messages = this.messages.filter(m => !this.newUserMessages.has(m));
           this.newUserMessages.clear();
+          if (this.isRecording && userMessages.length > 0) {
+            this.recordedEvents.push({
+              type: 'clear',
+              source: 'input',
+              count: userMessages.length,
+            });
+          }
           return userMessages;
         },
       },
@@ -256,6 +312,13 @@ export class MessageList {
           const responseMessages = Array.from(this.newResponseMessages);
           this.messages = this.messages.filter(m => !this.newResponseMessages.has(m));
           this.newResponseMessages.clear();
+          if (this.isRecording && responseMessages.length > 0) {
+            this.recordedEvents.push({
+              type: 'clear',
+              source: 'response',
+              count: responseMessages.length,
+            });
+          }
           return responseMessages;
         },
       },
@@ -277,6 +340,13 @@ export class MessageList {
       }
       return true;
     });
+    if (this.isRecording && removed.length > 0) {
+      this.recordedEvents.push({
+        type: 'removeByIds',
+        ids,
+        count: removed.length,
+      });
+    }
     return removed;
   }
 
@@ -773,8 +843,21 @@ export class MessageList {
     if (tag && !this.isDuplicateSystem(coreMessage, tag)) {
       this.taggedSystemMessages[tag] ||= [];
       this.taggedSystemMessages[tag].push(coreMessage);
+      if (this.isRecording) {
+        this.recordedEvents.push({
+          type: 'addSystem',
+          tag,
+          message: coreMessage,
+        });
+      }
     } else if (!tag && !this.isDuplicateSystem(coreMessage)) {
       this.systemMessages.push(coreMessage);
+      if (this.isRecording) {
+        this.recordedEvents.push({
+          type: 'addSystem',
+          message: coreMessage,
+        });
+      }
     }
   }
 

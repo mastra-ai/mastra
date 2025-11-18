@@ -126,6 +126,9 @@ export class ProcessorRunner {
         input: processableMessages,
       });
 
+      // Start recording MessageList mutations for this processor
+      messageList.startRecording();
+
       const result = await processMethod({
         messages: processableMessages,
         messageList,
@@ -134,6 +137,9 @@ export class ProcessorRunner {
         runtimeContext,
       });
 
+      // Stop recording and get mutations for this processor
+      const mutations = messageList.stopRecording();
+
       // Handle the new return type - MessageList or MastraDBMessage[]
       if (result instanceof MessageList) {
         processableMessages = result.get.all.db();
@@ -141,7 +147,10 @@ export class ProcessorRunner {
         processableMessages = result;
       }
 
-      processorSpan?.end({ output: processableMessages });
+      processorSpan?.end({ 
+        output: processableMessages,
+        attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
+      });
     }
 
     if (processableMessages.length > 0) {
@@ -343,6 +352,9 @@ export class ProcessorRunner {
         input: processableMessages,
       });
 
+      // Start recording MessageList mutations for this processor
+      messageList.startRecording();
+
       const result = await processMethod({
         messages: processableMessages,
         abort: ctx.abort,
@@ -352,13 +364,28 @@ export class ProcessorRunner {
       });
 
       // Handle both MessageList and MastraDBMessage[] return types
+      let mutations: Array<{
+        type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
+        source?: string;
+        count?: number;
+        ids?: string[];
+        text?: string;
+        tag?: string;
+        message?: any;
+      }>;
+      
       if ('get' in result) {
         // Processor returned a MessageList - it has been modified in place
         // Update processableMessages to reflect ALL current messages for next processor
         processableMessages = messageList.get.all.db();
-        processorSpan?.end({ output: processableMessages });
+        
+        // Stop recording and capture mutations
+        mutations = messageList.stopRecording();
       } else {
-        // Processor returned an array - clear and re-add since processor worked with array
+        // Processor returned an array - stop recording before clear/add (that's just internal plumbing)
+        mutations = messageList.stopRecording();
+        
+        // Clear and re-add since processor worked with array
         messageList.clear.input.db();
         
         // Separate system messages from other messages since they need different handling
@@ -380,8 +407,12 @@ export class ProcessorRunner {
         }
         
         processableMessages = result;
-        processorSpan?.end({ output: processableMessages });
       }
+
+      processorSpan?.end({ 
+        output: processableMessages,
+        attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
+      });
     }
 
     return messageList;
