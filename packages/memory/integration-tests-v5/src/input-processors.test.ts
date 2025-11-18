@@ -64,8 +64,6 @@ describe('Input Processor Verification - MessageHistory', () => {
     // Check the actual request sent to the LLM
     const requestMessages: CoreMessage[] = thirdResponse.request.body.input;
 
-    
-
     // Should have system + previous 4 messages + current message = 6 total
     // OR at minimum: previous user + assistant + previous user + assistant + current user = 5
     expect(requestMessages.length).toBeGreaterThanOrEqual(5);
@@ -130,8 +128,6 @@ describe('Input Processor Verification - MessageHistory', () => {
     });
 
     const requestMessages: CoreMessage[] = fourthResponse.request.body.input;
-
-
 
     // Should have: system + last 2 historical messages + current user message
     // With lastMessages: 2, we fetch the 2 most recent messages from storage
@@ -210,8 +206,6 @@ describe('Input Processor Verification - WorkingMemory', () => {
     // Check the actual request sent to the LLM
     const requestMessages: CoreMessage[] = response.request.body.input;
 
-
-
     // Should have at least 2 messages: working memory system message + user message
     expect(requestMessages.length).toBeGreaterThanOrEqual(2);
 
@@ -282,8 +276,6 @@ describe('Input Processor Verification - WorkingMemory', () => {
     });
 
     const requestMessages: CoreMessage[] = response.request.body.input;
-
-
 
     // Should include the custom template text
     const customTemplateMessage = requestMessages.find((msg: any) => {
@@ -510,8 +502,6 @@ describe('Input Processor Verification - Combined Processors', () => {
     });
 
     const requestMessages: CoreMessage[] = response.request.body.input;
-
-
 
     // Should have multiple messages from different processors
     expect(requestMessages.length).toBeGreaterThan(2);
