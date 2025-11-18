@@ -1,0 +1,48 @@
+{
+  "name": "mastra-bundler-true",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "dependencies": {
+    "@mastra/core": "1.0.0-beta.2",
+    "@mastra/evals": "1.0.0-beta.0",
+    "@mastra/libsql": "1.0.0-beta.0",
+    "@mastra/loggers": "1.0.0-beta.0",
+    "@mastra/memory": "1.0.0-beta.0",
+    "@mastra/observability": "1.0.0-beta.0",
+    "tinyrainbow": "^3.0.3",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "mastra": "1.0.0-beta.1",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../packages/core",
+      "@mastra/loggers": "link:../packages/loggers",
+      "@mastra/voice-openai": "link:../voice/openai",
+      "@mastra/memory": "link:../packages/memory",
+      "@mastra/client-js": "link:../client-sdks/client-js",
+      "@mastra/mcp": "link:../packages/mcp",
+      "@mastra/libsql": "link:../stores/libsql",
+      "@mastra/observability": "link:../observability/mastra",
+      "@mastra/evals": "link:../packages/evals",
+      "mastra": "link:../packages/cli"
+    }
+  }
+}
