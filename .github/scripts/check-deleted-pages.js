@@ -75,8 +75,7 @@ function patternToRegex(pattern) {
   // Then escape remaining special regex characters (but preserve the groups we just created)
   // We need to escape: . + ^ $ { } | [ ] \
   // But NOT: ( ) ? < > : * which are part of our regex groups
-  regexStr = regexStr
-    .replace(/[.+^${}|\[\]\\]/g, '\\$&');
+  regexStr = regexStr.replace(/[.+^${}|\[\]\\]/g, '\\$&');
 
   return new RegExp(`^${regexStr}$`);
 }
