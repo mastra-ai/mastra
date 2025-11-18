@@ -77,9 +77,7 @@ const METRIC_MAPPING = {
   dotproduct: 'dotProduct',
 } as const;
 
-// Type removed as it's not used
-
-type AzureAISearchQueryVectorParams = QueryVectorParams<AzureAISearchVectorFilter>;
+export type AzureAISearchQueryVectorParams = QueryVectorParams<AzureAISearchVectorFilter>;
 
 /**
  * Extended index creation parameters for Azure AI Search specific features
