@@ -241,16 +241,13 @@ If you think your configuration is valid, please open an issue.`);
   }
 
   /**
-   * During `mastra dev` or when the user has set `bundler.externals: true`, we only want to bundle workspace packages. For this, we remove dependencies from `deptsToOptimize` that we might have added in previous steps. We also fill a `nonWorkspaceDeps` set that we can later add to the final result's `externalDependencies` set.
+   * Only during `mastra dev` we want to optimize workspace packages. In previous steps we might have added dependencies that are not workspace packages, so we gotta remove them again.
+   *
+   * Note: When `bundler.externals: true`, the filtering is handled inside bundleExternals.
    */
-  const externalizeAllDeps = typeof bundlerOptions?.externals === 'boolean' && bundlerOptions.externals === true;
-  const shouldOnlyBundleWorkspace = isDev || externalizeAllDeps;
-  const nonWorkspaceDeps = new Set<string>();
-
-  if (shouldOnlyBundleWorkspace) {
+  if (isDev) {
     for (const [dep, metadata] of depsToOptimize.entries()) {
       if (!metadata.isWorkspace) {
-        nonWorkspaceDeps.add(dep);
         depsToOptimize.delete(dep);
       }
     }
@@ -287,11 +284,6 @@ If you think your configuration is valid, please open an issue.`);
     },
     logger,
   );
-
-  // Add non-workspace deps that were filtered out (from externals: true or dev mode)
-  for (const dep of nonWorkspaceDeps) {
-    result.externalDependencies.add(dep);
-  }
 
   return result;
 }
