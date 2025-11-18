@@ -53,6 +53,9 @@
     "express": "^5.1.0",
     "@types/express": "^5.0.5"
   },
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "files": [
     "dist",
     "CHANGELOG.md"
