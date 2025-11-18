@@ -180,7 +180,7 @@ export const agent = new Agent({
       id: 'pg-agent-vector',
       connectionString: process.env.DATABASE_URL,
     }),
-    embedder: openai.embedding("text-embedding-3-small"),
+    embedder: "openai/text-embedding-3-small",
     options: {
       lastMessages: 20,
       semanticRecall: {
