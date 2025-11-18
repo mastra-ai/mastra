@@ -364,8 +364,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const memoryProcessors = memory ? memory.getInputProcessors(configuredProcessors, requestContext) : [];
 
-    console.log('DEBUG: Memory processors:', memoryProcessors.map(p => p.constructor.name));
-
     // Memory processors should run first (to fetch history, semantic recall, working memory)
     return [...memoryProcessors, ...configuredProcessors];
   }
