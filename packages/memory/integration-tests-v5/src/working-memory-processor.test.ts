@@ -1,17 +1,11 @@
-import type { Storage } from '@mastra/core';
+import type { MemoryStorage } from '@mastra/core/storage';
 import type { MastraDBMessage } from '@mastra/core/memory';
-import { WorkingMemory } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { WorkingMemory } from '@mastra/memory';
 
 // Mock storage for testing
-const mockStorage: Storage = {
-  get: async () => null,
-  set: async () => {},
-  delete: async () => {},
-  list: async () => ({ messages: [], hasNextPage: false }),
-  listMessages: async () => ({ messages: [], hasNextPage: false }),
-  update: async () => ({}),
+const mockStorage = {
   getThreadById: vi.fn().mockResolvedValue({
     id: 'test-thread',
     metadata: { workingMemory: '# User Information\nname: John Doe\nlocation: submarine under the sea' },
@@ -20,25 +14,7 @@ const mockStorage: Storage = {
     id: 'test-resource',
     workingMemory: '# User Information\nname: John Doe\nlocation: submarine under the sea',
   }),
-  stores: {
-    memory: {
-      get: async () => null,
-      set: async () => {},
-      delete: async () => {},
-      list: async () => ({ messages: [], hasNextPage: false }),
-      listMessages: async () => ({ messages: [], hasNextPage: false }),
-      update: async () => ({}),
-    },
-    threads: {
-      get: async () => null,
-      set: async () => {},
-      delete: async () => {},
-      list: async () => ({ messages: [], hasNextPage: false }),
-      listMessages: async () => ({ messages: [], hasNextPage: false }),
-      update: async () => ({}),
-    },
-  },
-};
+} as unknown as MemoryStorage;
 
 describe('Working Memory Processor Unit Tests', () => {
   let workingMemoryProcessor: WorkingMemory;
@@ -80,22 +56,22 @@ describe('Working Memory Processor Unit Tests', () => {
         id: 'msg1',
         threadId: 'test-thread-id',
         resourceId: 'test-resource-id',
-        source: 'input',
+        role: 'user',
         content: {
+          format: 2,
           parts: [{ type: 'text', text: 'Hello, how are you?' }],
           metadata: {},
         },
         createdAt: new Date(),
-        updatedAt: new Date(),
       },
     ];
 
     const result = await workingMemoryProcessor.processInput({
       messages,
       runtimeContext: mockContext,
-      abort: () => {
+      abort: (() => {
         throw new Error('Aborted');
-      },
+      }) as any,
     });
 
     // Should have added a system message with working memory
@@ -123,13 +99,13 @@ describe('Working Memory Processor Unit Tests', () => {
         id: 'msg1',
         threadId: 'test-thread-id',
         resourceId: 'test-resource-id',
-        source: 'input',
+        role: 'user',
         content: {
+          format: 2,
           parts: [{ type: 'text', text: 'Update my name to John' }],
           metadata: {},
         },
         createdAt: new Date(),
-        updatedAt: new Date(),
       },
     ];
 
@@ -137,7 +113,7 @@ describe('Working Memory Processor Unit Tests', () => {
     const firstResult = await workingMemoryProcessor.processInput({
       messages,
       runtimeContext: mockContext,
-      abort: () => {},
+      abort: (() => {}) as any,
     });
 
     expect(firstResult[0].content.content).toContain('submarine under the sea');
@@ -158,7 +134,7 @@ describe('Working Memory Processor Unit Tests', () => {
     const secondResult = await workingMemoryProcessor.processInput({
       messages,
       runtimeContext: mockContext,
-      abort: () => {},
+      abort: (() => {}) as any,
     });
 
     expect(secondResult[0].content.content).toContain('John');
@@ -177,22 +153,22 @@ describe('Working Memory Processor Unit Tests', () => {
         id: 'msg1',
         threadId: 'test-thread-id',
         resourceId: 'test-resource-id',
-        source: 'input',
+        role: 'user',
         content: {
+          format: 2,
           parts: [{ type: 'text', text: 'What do you know about me?' }],
           metadata: {},
         },
         createdAt: new Date(),
-        updatedAt: new Date(),
       },
     ];
 
     const result = await workingMemoryProcessor.processInput({
       messages,
       runtimeContext: mockContext,
-      abort: () => {
+      abort: (() => {
         throw new Error('Aborted');
-      },
+      }) as any,
     });
 
     // Should still have added a system message (with template but no data)
