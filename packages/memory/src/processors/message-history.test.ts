@@ -350,7 +350,7 @@ describe('MessageHistory', () => {
           messages: newMessages,
           abort: mockAbort,
           runtimeContext: createRuntimeContextWithMemory('thread-1'),
-        })
+        }),
       ).rejects.toThrow('Storage error');
     });
 
@@ -483,21 +483,21 @@ describe('MessageHistory', () => {
       });
 
       const messages: MastraDBMessage[] = [
-        { 
-          role: 'system', 
+        {
+          role: 'system',
           content: { format: 2, parts: [{ type: 'text', text: 'You are a helpful assistant' }] },
           id: 'msg-0',
           createdAt: new Date('2024-01-01T00:00:00Z'),
         },
-        { 
-          role: 'user', 
-          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] }, 
+        {
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
           id: 'msg-1',
           createdAt: new Date('2024-01-01T00:00:01Z'),
         },
-        { 
-          role: 'assistant', 
-          content: { format: 2, parts: [{ type: 'text', text: 'Hi there!' }] }, 
+        {
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'Hi there!' }] },
           id: 'msg-2',
           createdAt: new Date('2024-01-01T00:00:02Z'),
         },
@@ -505,7 +505,12 @@ describe('MessageHistory', () => {
           role: 'assistant',
           content: {
             format: 2,
-            parts: [{ type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'search', args: {} } }],
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'search', args: {} },
+              },
+            ],
           },
           id: 'msg-3',
           createdAt: new Date('2024-01-01T00:00:03Z'),
@@ -514,7 +519,18 @@ describe('MessageHistory', () => {
           role: 'assistant',
           content: {
             format: 2,
-            parts: [{ type: 'tool-invocation', toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'search', args: {}, result: 'Tool result' } }],
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'tool-1',
+                  toolName: 'search',
+                  args: {},
+                  result: 'Tool result',
+                },
+              },
+            ],
           },
           id: 'msg-4',
           createdAt: new Date('2024-01-01T00:00:04Z'),
@@ -555,12 +571,14 @@ describe('MessageHistory', () => {
             role: 'assistant',
             content: expect.objectContaining({
               format: 2,
-              parts: expect.arrayContaining([expect.objectContaining({ 
-                type: 'tool-invocation',
-                toolInvocation: expect.objectContaining({
-                  state: 'call',
+              parts: expect.arrayContaining([
+                expect.objectContaining({
+                  type: 'tool-invocation',
+                  toolInvocation: expect.objectContaining({
+                    state: 'call',
+                  }),
                 }),
-              })]),
+              ]),
             }),
             createdAt: expect.any(Date),
           }),
@@ -569,12 +587,14 @@ describe('MessageHistory', () => {
             role: 'assistant',
             content: expect.objectContaining({
               format: 2,
-              parts: expect.arrayContaining([expect.objectContaining({ 
-                type: 'tool-invocation',
-                toolInvocation: expect.objectContaining({
-                  state: 'result',
+              parts: expect.arrayContaining([
+                expect.objectContaining({
+                  type: 'tool-invocation',
+                  toolInvocation: expect.objectContaining({
+                    state: 'result',
+                  }),
                 }),
-              })]),
+              ]),
             }),
             createdAt: expect.any(Date),
           }),

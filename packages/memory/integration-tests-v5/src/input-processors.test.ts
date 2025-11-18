@@ -52,8 +52,7 @@ describe('Input Processor Verification - MessageHistory', () => {
 
     // Verify messages were saved
     const { messages: savedMessages } = await memory.recall({ threadId });
-    console.log('=== Saved messages count:', savedMessages.length);
-    console.log('=== Saved messages:', JSON.stringify(savedMessages, null, 2));
+
     expect(savedMessages.length).toBe(4); // 2 user + 2 assistant
 
     // Third message - MessageHistory processor should include previous conversation
@@ -65,9 +64,7 @@ describe('Input Processor Verification - MessageHistory', () => {
     // Check the actual request sent to the LLM
     const requestMessages: CoreMessage[] = thirdResponse.request.body.input;
 
-    console.log('=== MessageHistory Test: LLM Request Messages ===');
-    console.log(JSON.stringify(requestMessages, null, 2));
-    console.log('=== Request message count:', requestMessages.length);
+    
 
     // Should have system + previous 4 messages + current message = 6 total
     // OR at minimum: previous user + assistant + previous user + assistant + current user = 5
@@ -134,9 +131,7 @@ describe('Input Processor Verification - MessageHistory', () => {
 
     const requestMessages: CoreMessage[] = fourthResponse.request.body.input;
 
-    console.log('=== MessageHistory Limit Test: LLM Request Messages ===');
-    console.log(JSON.stringify(requestMessages, null, 2));
-    console.log('=== Request message count:', requestMessages.length);
+
 
     // Should have: system + last 2 historical messages + current user message
     // With lastMessages: 2, we fetch the 2 most recent messages from storage
@@ -215,9 +210,7 @@ describe('Input Processor Verification - WorkingMemory', () => {
     // Check the actual request sent to the LLM
     const requestMessages: CoreMessage[] = response.request.body.input;
 
-    console.log('=== WorkingMemory Test: LLM Request Messages ===');
-    console.log(JSON.stringify(requestMessages, null, 2));
-    console.log('=== Request message count:', requestMessages.length);
+
 
     // Should have at least 2 messages: working memory system message + user message
     expect(requestMessages.length).toBeGreaterThanOrEqual(2);
@@ -290,8 +283,7 @@ describe('Input Processor Verification - WorkingMemory', () => {
 
     const requestMessages: CoreMessage[] = response.request.body.input;
 
-    console.log('=== Custom Template Test: LLM Request Messages ===');
-    console.log(JSON.stringify(requestMessages, null, 2));
+
 
     // Should include the custom template text
     const customTemplateMessage = requestMessages.find((msg: any) => {
@@ -370,10 +362,6 @@ describe('Input Processor Verification - SemanticRecall', () => {
 
     const requestMessages: CoreMessage[] = response.request.body.input;
 
-    console.log('=== SemanticRecall Test: LLM Request Messages ===');
-    console.log(JSON.stringify(requestMessages, null, 2));
-    console.log('=== Request message count:', requestMessages.length);
-
     // Should have more than just the current message
     // Should include: system + semantically recalled messages + current message
     expect(requestMessages.length).toBeGreaterThan(2);
@@ -446,10 +434,6 @@ describe('Input Processor Verification - SemanticRecall', () => {
     });
 
     const requestMessages: CoreMessage[] = response.request.body.input;
-
-    console.log('=== SemanticRecall TopK Test: LLM Request Messages ===');
-    console.log(JSON.stringify(requestMessages, null, 2));
-    console.log('=== Request message count:', requestMessages.length);
 
     // Should have: system + 1 recalled message + current message = 3 total
     // (or possibly just recalled + current = 2 if no system message)
@@ -527,9 +511,7 @@ describe('Input Processor Verification - Combined Processors', () => {
 
     const requestMessages: CoreMessage[] = response.request.body.input;
 
-    console.log('=== Combined Processors Test: LLM Request Messages ===');
-    console.log(JSON.stringify(requestMessages, null, 2));
-    console.log('=== Request message count:', requestMessages.length);
+
 
     // Should have multiple messages from different processors
     expect(requestMessages.length).toBeGreaterThan(2);
