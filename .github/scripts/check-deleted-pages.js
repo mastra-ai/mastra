@@ -61,8 +61,15 @@ function stripLocalePattern(source) {
 
 // Convert path pattern to regex (handles :param, :param*, :param+, :param?)
 function patternToRegex(pattern) {
-  // First, convert path-to-regexp patterns to regex patterns
-  let regexStr = pattern
+  // First, escape special regex characters in the original pattern
+  // This escapes literals like dots in '/api.v1/:id' before processing :id
+  // We need to escape: . + ^ $ { } | [ ] \ ( )
+  // But NOT: : which we use to identify parameters
+  let regexStr = pattern.replace(/[.+^${}()|\[\]\\]/g, '\\$&');
+
+  // Then convert path-to-regexp patterns to regex patterns
+  // These replacements work on the escaped string, converting :param patterns
+  regexStr = regexStr
     // Replace :param* with catch-all (.*)
     .replace(/:(\w+)\*/g, '(?<$1>.*)')
     // Replace :param+ with one or more segments ([^/]+(?:/[^/]+)*)
@@ -71,11 +78,6 @@ function patternToRegex(pattern) {
     .replace(/:(\w+)\?/g, '(?<$1>[^/]*)')
     // Replace :param with single segment ([^/]+)
     .replace(/:(\w+)/g, '(?<$1>[^/]+)');
-
-  // Then escape remaining special regex characters (but preserve the groups we just created)
-  // We need to escape: . + ^ $ { } | [ ] \
-  // But NOT: ( ) ? < > : * which are part of our regex groups
-  regexStr = regexStr.replace(/[.+^${}|\[\]\\]/g, '\\$&');
 
   return new RegExp(`^${regexStr}$`);
 }
