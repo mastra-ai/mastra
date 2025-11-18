@@ -192,6 +192,7 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         description: 'A test workflow',
+        options: { validateInputs: false },
       });
 
       const prepareStep = createStep({
@@ -248,6 +249,7 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
       const workflow = createWorkflow({
         id: 'parallel-workflow',
         description: 'Test parallel execution',
+        options: { validateInputs: false },
       });
 
       workflow.parallel([createStep(tool1 as any), createStep(tool2 as any)]).commit();

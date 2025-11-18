@@ -6,10 +6,10 @@
   "main": "index.js",
   "version": "0.0.1",
   "dependencies": {
-    "@ai-sdk/provider": "^2.0.0",
     "@ai-sdk/google": "^1.2.22",
     "@ai-sdk/openai": "^1.3.24",
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.15",
+    "@ai-sdk/provider": "^2.0.0",
     "@mastra/client-js": "latest",
     "@mastra/core": "latest",
     "@mastra/evals": "latest",
@@ -49,5 +49,8 @@
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
-  "packageManager": "pnpm@10.9.0+sha512.0486e394640d3c1fb3c9d43d49cf92879ff74f8516959c235308f5a8f62e2e19528a65cdc2a3058f587cde71eba3d5b56327c8c33a97e4c4051ca48a10ca2d5f"
+  "packageManager": "pnpm@10.9.0+sha512.0486e394640d3c1fb3c9d43d49cf92879ff74f8516959c235308f5a8f62e2e19528a65cdc2a3058f587cde71eba3d5b56327c8c33a97e4c4051ca48a10ca2d5f",
+  "devDependencies": {
+    "msw": "^2.12.2"
+  }
 }
