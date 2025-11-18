@@ -119,16 +119,14 @@ export class DeepgramVoice extends MastraVoice {
       throw new Error('Input text is empty');
     }
 
-    const voiceId = options?.speaker || this.storedSpeaker;
-    const model = this.storedSpeechModel?.name;
+    const modelName = `${this.storedSpeechModel?.name}-${options?.speaker || this.storedSpeaker}`;
 
     const speakClient = this.speechClient.speak;
     const response = await speakClient.request(
       { text },
       {
-        model,
-        voiceId,
-        ...options,
+        model:modelName,
+        ...Object.fromEntries(Object.entries(options ?? {}).filter(([k]) => k !== 'speaker')),
       },
     );
 
@@ -191,13 +189,11 @@ export class DeepgramVoice extends MastraVoice {
       }
     }
     const buffer = Buffer.concat(chunks);
-
-    if (!this.listeningClient) {
-      throw new Error('No listening client configured');
-    }
     const { result, error } = await this.listeningClient.listen.prerecorded.transcribeFile(buffer, {
       model: this.storedListeningModel?.name,
-      ...options,
+      diarize: options?.diarize,
+      utterances: options?.utterances,
+      language: options?.language,
     });
 
     if (error) {
@@ -224,7 +220,9 @@ export class DeepgramVoice extends MastraVoice {
     if (options?.diarize && alt.words) {
       response.speakerSegments = alt.words.map((w: DeepgramWord) => ({
         word: w.word,
-        speaker: w.speaker
+        speaker: w.speaker,
+        start: w.start,
+        end: w.end,
       }));
     }
 
