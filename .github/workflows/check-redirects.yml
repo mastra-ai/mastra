@@ -36,6 +36,10 @@ jobs:
         if: steps.mdx-changes.outputs.has_changes == 'true'
         run: corepack enable
 
+      - name: Install pnpm
+        if: steps.mdx-changes.outputs.has_changes == 'true'
+        run: corepack prepare pnpm@10.18.2 --activate
+
       - name: Install dependencies
         if: steps.mdx-changes.outputs.has_changes == 'true'
         run: npm install path-to-regexp
@@ -108,6 +112,12 @@ jobs:
           node-version: '20.19.5'
           cache: 'npm'
           cache-dependency-path: docs/package-lock.json
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install pnpm (for root package manager)
+        run: corepack prepare pnpm@10.18.2 --activate
 
       - name: Install dependencies for docs
         run: npm ci
