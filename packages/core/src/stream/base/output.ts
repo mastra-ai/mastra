@@ -147,10 +147,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    */
   public traceId?: string;
   public messageId: string;
-  /**
-   * Flag to track whether output processors ran in the stream.
-   */
-  public outputProcessorsRan = false;
 
   constructor({
     model: _model,
@@ -581,8 +577,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 self.#delayedPromises.text.resolve(textContent);
                 self.#delayedPromises.finishReason.resolve(self.#finishReason);
               } catch (error) {
-                // Mark processors as run even if they threw an error, to prevent double execution
-                self.messageList.outputProcessorsRan = true;
                 if (error instanceof TripWire) {
                   self.#tripwire = true;
                   self.#tripwireReason = error.message;

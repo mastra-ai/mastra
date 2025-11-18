@@ -127,12 +127,6 @@ export class MessageList {
   private generateMessageId?: IdGenerator;
   private _agentNetworkAppend = false;
 
-  /**
-   * Flag to track whether output processors have run on this MessageList.
-   * Used to prevent double-processing when both stream and agent.ts try to run processors.
-   */
-  public outputProcessorsRan = false;
-
   constructor({
     threadId,
     resourceId,
