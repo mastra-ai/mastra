@@ -1695,6 +1695,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               let result: any;
 
               if ((methodType === 'generate' || methodType === 'generateLegacy') && modelVersion === 'v2') {
+                if (!agent.hasOwnMemory() && this.#memory) {
+                  agent.__setMemory(this.#memory);
+                }
                 const subAgentThreadId = randomUUID();
                 const slugify = await import(`@sindresorhus/slugify`); // this is an esm package, need to dynamic import incase we're running in cjs
                 const subAgentResourceId = `${slugify.default(this.id)}-${agentName}`;
