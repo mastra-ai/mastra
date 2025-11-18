@@ -827,7 +827,6 @@ export class InngestWorkflow<
   TOutput extends z.ZodType<any> = z.ZodType<any>,
   TPrevSchema extends z.ZodType<any> = TInput,
 > extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
-  #mastra: Mastra;
   public inngest: Inngest;
 
   private function: ReturnType<Inngest['createFunction']> | undefined;
@@ -1041,7 +1040,7 @@ export class InngestWorkflow<
           },
         };
 
-        const engine = new InngestExecutionEngine(this.mastra, step, attempt, this.options);
+        const engine = new InngestExecutionEngine(this.mastra as Mastra, step, attempt, this.options);
         const result = await engine.execute<
           z.infer<TState>,
           z.infer<TInput>,
