@@ -64,6 +64,11 @@
       "source": "/docs/server-db/production-server",
       "destination": "/docs/server-db/mastra-server",
       "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/agents/human-in-the-loop-with-tools",
+      "destination": "/:path/docs/agents/agent-approval",
+      "permanent": true
     }
   ]
 }

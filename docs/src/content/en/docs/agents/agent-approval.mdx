@@ -1,9 +1,9 @@
 ---
-title: "Human in the Loop with Tools | Agents"
+title: "Agent Approval | Agents"
 description: Learn how to require approvals and suspend tool execution while keeping humans in control of agent workflows.
 ---
 
-# Human in the Loop with Tools
+# Agent Approval
 
 Sometimes agents need human oversight before they can run potentially sensitive tools or long-running workflows. Mastra lets you pause tool execution to wait for approval, decline a tool call entirely, or suspend a tool mid-flight until the required data is available.
 
@@ -11,7 +11,7 @@ Sometimes agents need human oversight before they can run potentially sensitive 
 
 ### Enforcing approval on every tool
 
-Pass `requireToolApproval: true` when calling `stream` (or `generate`) to automatically pause execution whenever the agent tries to invoke a tool. The stream closes until you explicitly approve or decline the tool call using the original run’s `runId`.
+Pass `requireToolApproval: true` when calling `stream` (or `generate`) to automatically pause execution whenever the agent tries to invoke a tool. The stream closes until you explicitly approve or decline the tool call using the original run's `runId`.
 
 ```typescript {2,6} title="Require approval before executing any tool" showLineNumbers copy
 const stream = await myAgent.stream("Find the user with name - John Smith", {
@@ -44,7 +44,7 @@ When the agent reaches this tool, it emits a tool-call event you can approve or 
 
 ## Tool suspension
 
-Sometimes a tool can’t finish immediately—maybe it’s waiting for external confirmation or extra input. You can suspend and later resume execution using `workflow.suspend`, `resumeStream`, and optional schemas that define what data is required at each step.
+Sometimes a tool can't finish immediately—maybe it's waiting for external confirmation or extra input. You can suspend and later resume execution using `workflow.suspend`, `resumeStream`, and optional schemas that define what data is required at each step.
 
 ```typescript {10,14} title="Suspend and resume a tool" showLineNumbers copy
 const findUserTool = createTool({
@@ -72,7 +72,7 @@ const findUserTool = createTool({
 });
 ```
 
-To continue execution, call `resumeStream` with the run’s `runId` and the `resumeData` that satisfies the `resumeSchema`. The workflow resumes from the suspension point and the tool completes with the new data.
+To continue execution, call `resumeStream` with the run's `runId` and the `resumeData` that satisfies the `resumeSchema`. The workflow resumes from the suspension point and the tool completes with the new data.
 
 ```typescript {1} title="Resume a suspended tool call" showLineNumbers copy
 const resumedStream = await myAgent.resumeStream(
@@ -89,3 +89,4 @@ const resumedStream = await myAgent.resumeStream(
 - [Agent Memory](./agent-memory)
 - [Request Context](/docs/v1/server-db/request-context)
 - [Calling Agents](/examples/v1/agents/calling-agents)
+
