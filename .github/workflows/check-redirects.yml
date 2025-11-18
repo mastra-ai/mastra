@@ -32,13 +32,6 @@ jobs:
         with:
           node-version: '20.19.5'
 
-      - name: Install dependencies
-        if: steps.mdx-changes.outputs.has_changes == 'true'
-        run: |
-          cd .github
-          npm init -y
-          npm install path-to-regexp --no-package-lock
-
       - name: Check for removed pages without redirects
         if: steps.mdx-changes.outputs.has_changes == 'true'
         run: node .github/scripts/check-deleted-pages.js
