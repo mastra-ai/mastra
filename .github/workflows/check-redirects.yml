@@ -32,9 +32,11 @@ jobs:
         with:
           node-version: '20.19.5'
 
-      - name: Install pnpm
+      - name: Setup pnpm
         if: steps.mdx-changes.outputs.has_changes == 'true'
-        run: npm install -g pnpm@10.18.2
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.2
 
       - name: Install dependencies
         if: steps.mdx-changes.outputs.has_changes == 'true'
@@ -109,8 +111,10 @@ jobs:
           cache: 'npm'
           cache-dependency-path: docs/package-lock.json
 
-      - name: Install pnpm
-        run: npm install -g pnpm@10.18.2
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.2
 
       - name: Install dependencies for docs
         run: npm ci
