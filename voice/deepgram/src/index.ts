@@ -133,7 +133,7 @@ export class DeepgramVoice extends MastraVoice {
     const response = await speakClient.request(
       { text },
       {
-        model:modelName,
+        model: modelName,
         ...Object.fromEntries(Object.entries(options ?? {}).filter(([k]) => k !== 'speaker')),
       },
     );
