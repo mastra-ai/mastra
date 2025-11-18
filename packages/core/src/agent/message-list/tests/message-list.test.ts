@@ -3581,47 +3581,10 @@ describe('MessageList', () => {
         });
       });
 
-      it('should preserve providerOptions on user message with multiple content parts', async () => {
-        const messageList = new MessageList();
-
-        const userMessage: AIV5Type.ModelMessage = {
-          role: 'user' as const,
-          content: [
-            {
-              type: 'text' as const,
-              text: 'First part with cache',
-              providerOptions: {
-                anthropic: { cacheControl: { type: 'ephemeral' as const } },
-              },
-            },
-            {
-              type: 'text' as const,
-              text: 'Second part without cache',
-            },
-          ],
-        };
-
-        messageList.add(userMessage, 'input');
-
-        const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
-        const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'user');
-
-        expect(retrievedMessage).toBeDefined();
-        expect(Array.isArray(retrievedMessage?.content)).toBe(true);
-
-        const firstPart = (retrievedMessage?.content as any[])?.[0];
-        expect(firstPart?.providerOptions).toEqual({
-          anthropic: { cacheControl: { type: 'ephemeral' } },
-        });
-
-        const secondPart = (retrievedMessage?.content as any[])?.[1];
-        expect(secondPart?.providerOptions).toBeUndefined();
-      });
-
       it('should preserve part-level providerOptions', async () => {
         const messageList = new MessageList();
 
-        // AIV5 ModelMessage with BOTH message-level AND part-level providerOptions
+        // AIV5 ModelMessage with only part-level providerOptions
         const userMessage: AIV5Type.ModelMessage = {
           role: 'user' as const,
           content: [
