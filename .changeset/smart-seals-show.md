@@ -9,10 +9,8 @@ For workflows whose schemas and step schemas you don't want validated, do this
 
 ```diff
 createWorkflow({
-  //...workflow info
 +  options: {
-+    //...other options
-+    validateInputs: true
++    validateInputs: false
 +  }
 })
 ```

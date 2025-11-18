@@ -132,10 +132,8 @@ To migrate, set `validateInputs` to `false` in your workflow options.
 
 ```diff
 createWorkflow({
-  //...workflow info
 +  options: {
-+    //...other options
-+    validateInputs: true
++    validateInputs: false
 +  }
 })
 ```
