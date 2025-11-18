@@ -36,7 +36,6 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers title="index.ts"
-import { openai } from "@ai-sdk/openai";
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
 import { PgVector } from "@mastra/pg";
@@ -56,11 +55,11 @@ Using createVectorQueryTool imported from @mastra/rag, you can create a tool tha
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
   reranker: {
     model: new MastraAgentRelevanceScorer(
       "relevance-scorer",
-      openai("gpt-4o-mini"),
+      "openai/gpt-4.1-mini",
     ),
   },
 });
@@ -75,9 +74,9 @@ export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
-    Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
+    Important: When asked to answer a question, please base your answer only on the context provided in the tool.
     If the context doesn't contain enough information to fully answer the question, please state that explicitly.`,
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4.1-mini",
   tools: {
     vectorQueryTool,
   },
@@ -142,7 +141,7 @@ Generate embeddings for the chunks and store them in the vector database:
 
 ```typescript copy showLineNumbers{66} title="index.ts"
 const { embeddings } = await embedMany({
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
   values: chunks.map((chunk) => chunk.text),
 });
 

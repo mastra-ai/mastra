@@ -17,7 +17,6 @@ After generating embeddings, you need to store them in a database that supports 
 The `PgVector` class provides methods to create indexes and insert embeddings into PostgreSQL with the pgvector extension.
 
 ```tsx copy
-import { openai } from "@ai-sdk/openai";
 import { PgVector } from "@mastra/pg";
 import { MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
@@ -28,7 +27,7 @@ const chunks = await doc.chunk();
 
 const { embeddings } = await embedMany({
   values: chunks.map((chunk) => chunk.text),
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
 });
 
 const pgVector = new PgVector({
@@ -64,7 +63,6 @@ await pgVector.upsert({
 The `PineconeVector` class provides methods to create indexes and insert embeddings into Pinecone, a managed vector database service.
 
 ```tsx copy
-import { openai } from "@ai-sdk/openai";
 import { PineconeVector } from "@mastra/pinecone";
 import { MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
@@ -75,7 +73,7 @@ const chunks = await doc.chunk();
 
 const { embeddings } = await embedMany({
   values: chunks.map((chunk) => chunk.text),
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
 });
 
 const pinecone = new PineconeVector({
@@ -111,7 +109,6 @@ await pinecone.upsert({
 The `QdrantVector` class provides methods to create collections and insert embeddings into Qdrant, a high-performance vector database.
 
 ```tsx copy
-import { openai } from "@ai-sdk/openai";
 import { QdrantVector } from "@mastra/qdrant";
 import { MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
@@ -122,7 +119,7 @@ const chunks = await doc.chunk();
 
 const { embeddings } = await embedMany({
   values: chunks.map((chunk) => chunk.text),
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
   maxRetries: 3,
 });
 
@@ -151,7 +148,6 @@ await qdrant.upsert({
 The `ChromaVector` class provides methods to create collections and insert embeddings into Chroma, an open-source embedding database.
 
 ```tsx copy
-import { openai } from "@ai-sdk/openai";
 import { ChromaVector } from "@mastra/chroma";
 import { MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
@@ -162,7 +158,7 @@ const chunks = await doc.chunk();
 
 const { embeddings } = await embedMany({
   values: chunks.map((chunk) => chunk.text),
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
 });
 
 // Running Chroma locally
@@ -207,7 +203,6 @@ await chroma.upsert({
 he `AstraVector` class provides methods to create collections and insert embeddings into DataStax Astra DB, a cloud-native vector database.
 
 ```tsx copy
-import { openai } from "@ai-sdk/openai";
 import { AstraVector } from "@mastra/astra";
 import { MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
@@ -217,7 +212,7 @@ const doc = MDocument.fromText("Your text content...");
 const chunks = await doc.chunk();
 
 const { embeddings } = await embedMany({
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
   values: chunks.map((chunk) => chunk.text),
 });
 
@@ -246,7 +241,6 @@ await astra.upsert({
 The `LibSQLVector` class provides methods to create collections and insert embeddings into LibSQL, a fork of SQLite with vector extensions.
 
 ```tsx copy
-import { openai } from "@ai-sdk/openai";
 import { LibSQLVector } from "@mastra/core/vector/libsql";
 import { MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
@@ -257,7 +251,7 @@ const chunks = await doc.chunk();
 
 const { embeddings } = await embedMany({
   values: chunks.map((chunk) => chunk.text),
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
 });
 
 const libsql = new LibSQLVector({
@@ -294,7 +288,6 @@ await libsql.upsert({
 The `UpstashVector` class provides methods to create collections and insert embeddings into Upstash Vector, a serverless vector database.
 
 ```tsx copy
-import { openai } from "@ai-sdk/openai";
 import { UpstashVector } from "@mastra/upstash";
 import { MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
@@ -305,7 +298,7 @@ const chunks = await doc.chunk();
 
 const { embeddings } = await embedMany({
   values: chunks.map((chunk) => chunk.text),
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
 });
 
 const upstash = new UpstashVector({
@@ -330,7 +323,6 @@ await upstash.upsert({
 The `CloudflareVector` class provides methods to create collections and insert embeddings into Cloudflare Vectorize, a serverless vector database service.
 
 ```tsx copy
-import { openai } from "@ai-sdk/openai";
 import { CloudflareVector } from "@mastra/vectorize";
 import { MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
@@ -341,7 +333,7 @@ const chunks = await doc.chunk();
 
 const { embeddings } = await embedMany({
   values: chunks.map((chunk) => chunk.text),
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
 });
 
 const vectorize = new CloudflareVector({
@@ -367,7 +359,6 @@ await vectorize.upsert({
 The `MongoDBVector` class provides methods to create indexes and insert embeddings into MongoDB with Atlas Search.
 
 ```tsx copy
-import { openai } from "@ai-sdk/openai";
 import { MongoDBVector } from "@mastra/mongodb";
 import { MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
@@ -378,7 +369,7 @@ const chunks = await doc.chunk();
 
 const { embeddings } = await embedMany({
   values: chunks.map((chunk) => chunk.text),
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
 });
 
 const vectorDB = new MongoDBVector({
@@ -405,7 +396,6 @@ await vectorDB.upsert({
 The `OpenSearchVector` class provides methods to create indexes and insert embeddings into OpenSearch, a distributed search engine with vector search capabilities.
 
 ```tsx copy
-import { openai } from "@ai-sdk/openai";
 import { OpenSearchVector } from "@mastra/opensearch";
 import { MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
@@ -416,7 +406,7 @@ const chunks = await doc.chunk();
 
 const { embeddings } = await embedMany({
   values: chunks.map((chunk) => chunk.text),
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
 });
 
 const vectorDB = new OpenSearchVector({
@@ -442,7 +432,6 @@ await vectorDB.upsert({
 The `CouchbaseVector` class provides methods to create indexes and insert embeddings into Couchbase, a distributed NoSQL database with vector search capabilities.
 
 ```tsx copy
-import { openai } from "@ai-sdk/openai";
 import { CouchbaseVector } from "@mastra/couchbase";
 import { MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
@@ -453,7 +442,7 @@ const chunks = await doc.chunk();
 
 const { embeddings } = await embedMany({
   values: chunks.map((chunk) => chunk.text),
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
 });
 
 const couchbase = new CouchbaseVector({
@@ -484,7 +473,6 @@ await couchbase.upsert({
 The `LanceVectorStore` class provides methods to create tables, indexes and insert embeddings into LanceDB, an embedded vector database built on the Lance columnar format.
 
 ```tsx copy
-import { openai } from "@ai-sdk/openai";
 import { LanceVectorStore } from "@mastra/lance";
 import { MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
@@ -495,7 +483,7 @@ const chunks = await doc.chunk();
 
 const { embeddings } = await embedMany({
   values: chunks.map((chunk) => chunk.text),
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
 });
 
 const lance = await LanceVectorStore.create("/path/to/db");

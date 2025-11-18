@@ -35,7 +35,6 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers title="src/index.ts"
-import { openai } from "@ai-sdk/openai";
 import { PgVector } from "@mastra/pg";
 import {
   MDocument,
@@ -73,7 +72,7 @@ Generate embeddings for the chunks and store them in the vector database:
 ```typescript copy showLineNumbers{36} title="src/index.ts"
 const { embeddings } = await embedMany({
   values: chunks.map((chunk) => chunk.text),
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
 });
 
 const pgVector = new PgVector({
@@ -103,7 +102,7 @@ const query = "explain technical trading analysis";
 // Get query embedding
 const { embedding: queryEmbedding } = await embed({
   value: query,
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
 });
 
 // Get initial results
@@ -119,7 +118,7 @@ const rerankedResults = await rerank({
   query,
   scorer: new MastraAgentRelevanceScorer(
     "relevance-scorer",
-    openai("gpt-4o-mini"),
+    "openai/gpt-4.1-mini",
   ),
   options: {
     weights: {

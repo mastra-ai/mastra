@@ -18,7 +18,6 @@ Use different configurations for different environments:
   <TabItem value="typescript" label="TypeScript">
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
 import { createVectorQueryTool } from "@mastra/rag";
 import { RequestContext } from "@mastra/core/request-context";
 
@@ -27,7 +26,7 @@ const createSearchTool = (environment: "dev" | "staging" | "prod") => {
   return createVectorQueryTool({
     vectorStoreName: "pinecone",
     indexName: "documents",
-    model: openai.embedding("text-embedding-3-small"),
+    model: "openai/text-embedding-3-small",
     databaseConfig: {
       pinecone: {
         namespace: environment,
@@ -44,7 +43,7 @@ const prodSearchTool = createSearchTool("prod");
 const dynamicSearchTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "documents",
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
 });
 
 // Switch environment at runtime
@@ -68,7 +67,6 @@ const switchEnvironment = async (environment: string, query: string) => {
   <TabItem value="javascript" label="JavaScript">
 
 ```javascript
-import { openai } from "@ai-sdk/openai";
 import { createVectorQueryTool } from "@mastra/rag";
 import { RequestContext } from "@mastra/core/request-context";
 
@@ -77,7 +75,7 @@ const createSearchTool = (environment) => {
   return createVectorQueryTool({
     vectorStoreName: "pinecone",
     indexName: "documents",
-    model: openai.embedding("text-embedding-3-small"),
+    model: "openai/text-embedding-3-small",
     databaseConfig: {
       pinecone: {
         namespace: environment,
@@ -94,7 +92,7 @@ const prodSearchTool = createSearchTool("prod");
 const dynamicSearchTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "documents",
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
 });
 
 // Switch environment at runtime
@@ -129,7 +127,7 @@ Optimize search performance for different use cases:
 const highAccuracyTool = createVectorQueryTool({
   vectorStoreName: "postgres",
   indexName: "embeddings",
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
   databaseConfig: {
     pgvector: {
       ef: 400, // High accuracy for HNSW
@@ -159,7 +157,7 @@ const criticalSearch = async (query: string) => {
 const highSpeedTool = createVectorQueryTool({
   vectorStoreName: "postgres",
   indexName: "embeddings",
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
   databaseConfig: {
     pgvector: {
       ef: 50, // Lower accuracy for speed
@@ -189,7 +187,7 @@ const realtimeSearch = async (query: string) => {
 const balancedTool = createVectorQueryTool({
   vectorStoreName: "postgres",
   indexName: "embeddings",
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
   databaseConfig: {
     pgvector: {
       ef: 150, // Moderate accuracy
@@ -243,7 +241,7 @@ class MultiTenantSearchService {
     this.searchTool = createVectorQueryTool({
       vectorStoreName: "pinecone",
       indexName: "shared-documents",
-      model: openai.embedding("text-embedding-3-small"),
+      model: "openai/text-embedding-3-small",
     });
   }
 
@@ -306,7 +304,7 @@ Combine semantic and keyword search:
 const hybridSearchTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "documents",
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
   databaseConfig: {
     pinecone: {
       namespace: "production",
@@ -376,7 +374,7 @@ const createQualityGatedSearch = () => {
   const baseConfig = {
     vectorStoreName: "postgres",
     indexName: "embeddings",
-    model: openai.embedding("text-embedding-3-small"),
+    model: "openai/text-embedding-3-small",
   };
 
   return {

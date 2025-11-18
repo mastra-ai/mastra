@@ -39,7 +39,6 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers title="index.ts"
-import { openai } from "@ai-sdk/openai";
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
 import { PgVector } from "@mastra/pg";
@@ -55,7 +54,7 @@ Using createGraphRAGTool imported from @mastra/rag, you can create a tool that q
 const graphRagTool = createGraphRAGTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
   graphOptions: {
     dimension: 1536,
     threshold: 0.7,
@@ -79,9 +78,9 @@ const ragAgent = new Agent({
 
 Keep each section brief and focus on the most important points.
 
-Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
+Important: When asked to answer a question, please base your answer only on the context provided in the tool.
 If the context doesn't contain enough information to fully answer the question, please state that explicitly.`,
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4.1-mini",
   tools: {
     graphRagTool,
   },
@@ -129,7 +128,7 @@ Generate embeddings for the chunks and store them in the vector database:
 
 ```typescript copy showLineNumbers{56} title="index.ts"
 const { embeddings } = await embedMany({
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
   values: chunks.map((chunk) => chunk.text),
 });
 

@@ -35,7 +35,6 @@ export const mastra = new Mastra({
 
 ```typescript showLineNumbers copy title="src/mastra/agents/index.ts"
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
 import { weatherTool } from "../tools";
@@ -67,7 +66,7 @@ export const weatherAgent = new Agent({
 
     Use the weatherTool to fetch current weather data.
   `,
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4.1-mini",
   tools: {
     weatherTool,
   },

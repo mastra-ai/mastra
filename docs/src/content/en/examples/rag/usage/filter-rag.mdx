@@ -43,7 +43,6 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers title="index.ts"
-import { openai } from "@ai-sdk/openai";
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
 import { PgVector, PGVECTOR_PROMPT } from "@mastra/pg";
@@ -60,7 +59,7 @@ const vectorQueryTool = createVectorQueryTool({
   id: "vectorQueryTool",
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
   enableFilter: true,
 });
 ```
@@ -123,12 +122,12 @@ The agent requires both the vector query tool and a system prompt containing:
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4.1-mini",
   instructions: `
   You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
 
   Filter the context by searching the metadata.
-  
+
   The metadata is structured as follows:
 
   {
@@ -142,7 +141,7 @@ export const ragAgent = new Agent({
 
   ${PGVECTOR_PROMPT}
 
-  Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
+  Important: When asked to answer a question, please base your answer only on the context provided in the tool.
   If the context doesn't contain enough information to fully answer the question, please state that explicitly.
   `,
   tools: { vectorQueryTool },
@@ -181,7 +180,7 @@ Generate embeddings and store them with metadata:
 
 ```typescript copy showLineNumbers{78} title="index.ts"
 const { embeddings } = await embedMany({
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
   values: chunks.map((chunk) => chunk.text),
 });
 

@@ -36,7 +36,6 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Import the necessary dependencies:
 
 ```typescript copy showLineNumbers title="index.ts"
-import { openai } from "@ai-sdk/openai";
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
 import { Step, Workflow } from "@mastra/core/workflows";
@@ -67,7 +66,7 @@ Create a tool for querying the vector database:
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
 });
 ```
 
@@ -80,7 +79,7 @@ export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context.`,
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4.1-mini",
   tools: {
     vectorQueryTool,
   },
@@ -292,7 +291,7 @@ Generate and store embeddings:
 
 ```typescript copy showLineNumbers{186} title="index.ts"
 const { embeddings } = await embedMany({
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
   values: chunks.map((chunk) => chunk.text),
 });
 
