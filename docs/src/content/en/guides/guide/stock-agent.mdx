@@ -38,7 +38,7 @@ export const stockAgent = new Agent({
   name: "Stock Agent",
   instructions:
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4.1-mini",
 });
 ```
 
@@ -114,7 +114,7 @@ export const stockAgent = new Agent({
   name: "Stock Agent",
   instructions:
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4.1-mini",
   tools: {
     stockPrices,
   },
