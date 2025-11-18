@@ -2554,7 +2554,7 @@ export class MessageList {
    * Convert image or file to data URI or URL for V2 file part
    */
 
-  private static getDataStringFromAIV5DataPart = (part: AIV5Type.ImagePart | AIV5.FilePart) => {
+  private static getDataStringFromAIV5DataPart = (part: AIV5Type.ImagePart | AIV5Type.FilePart) => {
     let mimeType: string;
     let data: AIV5.FilePart['data'] | AIV5.ImagePart['image'];
     if ('data' in part) {
