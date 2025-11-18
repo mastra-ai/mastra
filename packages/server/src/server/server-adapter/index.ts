@@ -46,6 +46,7 @@ export abstract class MastraServerAdapter<TApp, TRequest, TResponse> {
   ): Promise<{ urlParams: Record<string, string>; queryParams: Record<string, string>; body: unknown }>;
   abstract sendResponse(route: ServerRoute, response: TResponse, result: unknown): Promise<unknown>;
   abstract registerRoute(app: TApp, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void>;
+  abstract registerContextMiddleware(app: TApp): void;
 
   async registerOpenAPIRoute(app: TApp, config: OpenAPIConfig = {}, { prefix }: { prefix?: string }): Promise<void> {
     const {

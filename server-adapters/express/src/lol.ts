@@ -522,6 +522,7 @@ app.use(express.json());
 app.use(cors());
 
 const expressServerAdapter = new ExpressServerAdapter({ mastra });
+expressServerAdapter.registerContextMiddleware(app);
 await expressServerAdapter.registerRoutes(app, { openapiPath: '/openapi.json' });
 
 // Add Swagger UI
