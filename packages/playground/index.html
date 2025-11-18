@@ -38,6 +38,10 @@
       connectSSE();
     </script>
     <div id="root" class="dark"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module">
+      // Use relative import to work with any base path
+      // Vite transforms this during build to reference compiled output with correct paths
+      import('./src/main.tsx');
+    </script>
   </body>
 </html>
