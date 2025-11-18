@@ -54,6 +54,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       shouldPersistSnapshot: params => {
         return params.workflowStatus === 'suspended';
       },
+      validateInputs: false,
     },
   })
     .dowhile(agenticExecutionWorkflow, async ({ inputData }) => {

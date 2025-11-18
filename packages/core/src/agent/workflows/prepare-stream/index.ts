@@ -128,6 +128,7 @@ export function createPrepareStreamWorkflow<
       tracingPolicy: {
         internal: InternalSpans.WORKFLOW,
       },
+      validateInputs: false,
     },
   })
     .parallel([prepareToolsStep, prepareMemoryStep])
