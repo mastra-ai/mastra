@@ -18,7 +18,7 @@ test('text stream', async () => {
   await page.click('text=Stream');
 
   await page.locator('textarea').fill('Give me the Lorem Ipsum thing');
-  await page.click('button:has-text("Send")');
+  await page.click('button[aria-label="Send"]');
 
   // Assert partial streaming chunks
   await expect(page.getByTestId('thread-wrapper').getByText(`I can help you get accurate`)).toBeVisible({
@@ -50,7 +50,7 @@ test('tool stream', async () => {
   await page.click('text=Stream');
 
   await page.locator('textarea').fill('Give me the weather in Paris');
-  await page.click('button:has-text("Send")');
+  await page.click('button[aria-label="Send"]');
 
   await assertToolStream(page);
   await page.reload();
@@ -87,7 +87,7 @@ test('workflow stream', async () => {
   await page.click('text=Stream');
 
   await page.locator('textarea').fill('Give me the weather in Paris');
-  await page.click('button:has-text("Send")');
+  await page.click('button[aria-label="Send"]');
 
   // Assert partial streaming chunks
   await expect(page.getByTestId('thread-wrapper').getByRole('button', { name: `lessComplexWorkflow` })).toBeVisible({
