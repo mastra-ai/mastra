@@ -1,6 +1,7 @@
 import type { MastraDBMessage } from '../agent/message-list';
 import { MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
+import { MastraError } from '../error';
 import type { IMastraLogger } from '../logger';
 import { SpanType } from '../observability';
 import type { Span, TracingContext } from '../observability';
@@ -142,6 +143,14 @@ export class ProcessorRunner {
 
       // Handle the new return type - MessageList or MastraDBMessage[]
       if (result instanceof MessageList) {
+        if (result !== messageList) {
+          throw new MastraError({
+            category: 'USER',
+            domain: 'AGENT',
+            id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+            text: `Processor ${processor.id} returned a MessageList instance other than the one that was passed in as an argument. New external message list instances are not supported. Use the messageList argument instead.`,
+          });
+        }
         processableMessages = result.get.all.db();
       } else {
         processableMessages = result;
@@ -374,7 +383,15 @@ export class ProcessorRunner {
         message?: any;
       }>;
 
-      if ('get' in result) {
+      if (result instanceof MessageList) {
+        if (result !== messageList) {
+          throw new MastraError({
+            category: 'USER',
+            domain: 'AGENT',
+            id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+            text: `Processor ${processor.id} returned a MessageList instance other than the one that was passed in as an argument. New external message list instances are not supported. Use the messageList argument instead.`,
+          });
+        }
         // Processor returned a MessageList - it has been modified in place
         // Update processableMessages to reflect ALL current messages for next processor
         processableMessages = messageList.get.all.db();
