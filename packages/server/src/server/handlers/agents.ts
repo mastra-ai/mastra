@@ -46,6 +46,13 @@ export interface SerializedTool {
   requireApproval?: boolean;
 }
 
+interface SerializedToolInput {
+  id?: string;
+  description?: string;
+  inputSchema?: { jsonSchema?: unknown } | unknown;
+  outputSchema?: { jsonSchema?: unknown } | unknown;
+}
+
 export interface SerializedWorkflow {
   name: string;
   steps?: Record<string, { id: string; description?: string }>;
@@ -82,57 +89,52 @@ export interface SerializedAgentWithId extends SerializedAgent {
   id: string;
 }
 
-export async function getSerializedAgentTools(tools: Record<string, unknown>): Promise<Record<string, SerializedTool>> {
+export async function getSerializedAgentTools(
+  tools: Record<string, SerializedToolInput>,
+): Promise<Record<string, SerializedTool>> {
   return Object.entries(tools || {}).reduce<Record<string, SerializedTool>>((acc, [key, tool]) => {
-    const _tool = tool as {
-      id?: string;
-      description?: string;
-      inputSchema?: { jsonSchema?: unknown } | unknown;
-      outputSchema?: { jsonSchema?: unknown } | unknown;
-    };
-
-    const toolId = _tool.id ?? `tool-${key}`;
+    const toolId = tool.id ?? `tool-${key}`;
 
     let inputSchemaForReturn: string | undefined = undefined;
     let outputSchemaForReturn: string | undefined = undefined;
 
     try {
-      if (_tool.inputSchema) {
-        if (_tool.inputSchema && typeof _tool.inputSchema === 'object' && 'jsonSchema' in _tool.inputSchema) {
-          inputSchemaForReturn = stringify(_tool.inputSchema.jsonSchema);
-        } else if (typeof _tool.inputSchema === 'function') {
-          const inputSchema = _tool.inputSchema();
+      if (tool.inputSchema) {
+        if (tool.inputSchema && typeof tool.inputSchema === 'object' && 'jsonSchema' in tool.inputSchema) {
+          inputSchemaForReturn = stringify(tool.inputSchema.jsonSchema);
+        } else if (typeof tool.inputSchema === 'function') {
+          const inputSchema = tool.inputSchema();
           if (inputSchema && inputSchema.jsonSchema) {
             inputSchemaForReturn = stringify(inputSchema.jsonSchema);
           }
-        } else if (_tool.inputSchema) {
-          inputSchemaForReturn = stringify(zodToJsonSchema(_tool.inputSchema as Parameters<typeof zodToJsonSchema>[0]));
+        } else if (tool.inputSchema) {
+          inputSchemaForReturn = stringify(zodToJsonSchema(tool.inputSchema as Parameters<typeof zodToJsonSchema>[0]));
         }
       }
 
-      if (_tool.outputSchema) {
-        if (_tool.outputSchema && typeof _tool.outputSchema === 'object' && 'jsonSchema' in _tool.outputSchema) {
-          outputSchemaForReturn = stringify(_tool.outputSchema.jsonSchema);
-        } else if (typeof _tool.outputSchema === 'function') {
-          const outputSchema = _tool.outputSchema();
+      if (tool.outputSchema) {
+        if (tool.outputSchema && typeof tool.outputSchema === 'object' && 'jsonSchema' in tool.outputSchema) {
+          outputSchemaForReturn = stringify(tool.outputSchema.jsonSchema);
+        } else if (typeof tool.outputSchema === 'function') {
+          const outputSchema = tool.outputSchema();
           if (outputSchema && outputSchema.jsonSchema) {
             outputSchemaForReturn = stringify(outputSchema.jsonSchema);
           }
-        } else if (_tool.outputSchema) {
+        } else if (tool.outputSchema) {
           outputSchemaForReturn = stringify(
-            zodToJsonSchema(_tool.outputSchema as Parameters<typeof zodToJsonSchema>[0]),
+            zodToJsonSchema(tool.outputSchema as Parameters<typeof zodToJsonSchema>[0]),
           );
         }
       }
     } catch (error) {
       console.error(`Error getting serialized tool`, {
-        toolId: _tool.id,
+        toolId: tool.id,
         error,
       });
     }
 
     acc[key] = {
-      ..._tool,
+      ...tool,
       id: toolId,
       inputSchema: inputSchemaForReturn,
       outputSchema: outputSchemaForReturn,
