@@ -1142,4 +1142,306 @@ describe('PgVector - Source Management', () => {
       expect(stats.count).toBeLessThan(100);
     });
   });
+
+  describe('deleteVectors() with IDs', () => {
+    it('should delete vectors by array of IDs', async () => {
+      // Insert test vectors
+      const ids = await vectorDB.upsert({
+        indexName: testIndexName,
+        vectors: [
+          [0.1, 0.2, 0.3],
+          [0.4, 0.5, 0.6],
+          [0.7, 0.8, 0.9],
+          [0.2, 0.3, 0.4],
+        ],
+        metadata: [{ name: 'vec1' }, { name: 'vec2' }, { name: 'vec3' }, { name: 'vec4' }],
+      });
+
+      const stats1 = await vectorDB.describeIndex({ indexName: testIndexName });
+      expect(stats1.count).toBe(4);
+
+      // Delete 2 vectors by IDs
+      await vectorDB.deleteVectors({
+        indexName: testIndexName,
+        ids: [ids[0], ids[2]], // Delete vec1 and vec3
+      });
+
+      const stats2 = await vectorDB.describeIndex({ indexName: testIndexName });
+      expect(stats2.count).toBe(2);
+
+      // Verify the correct vectors remain
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [0.5, 0.5, 0.5],
+        topK: 10,
+      });
+      const names = results.map(r => r.metadata?.name).sort();
+      expect(names).toEqual(['vec2', 'vec4']);
+    });
+
+    it('should handle empty ids array', async () => {
+      await expect(
+        vectorDB.deleteVectors({
+          indexName: testIndexName,
+          ids: [],
+        }),
+      ).rejects.toThrow(/empty ids array/i);
+    });
+
+    it('should handle deletion of non-existent IDs gracefully', async () => {
+      // Insert one vector
+      await vectorDB.upsert({
+        indexName: testIndexName,
+        vectors: [[0.1, 0.2, 0.3]],
+        metadata: [{ name: 'vec1' }],
+      });
+
+      const stats1 = await vectorDB.describeIndex({ indexName: testIndexName });
+      expect(stats1.count).toBe(1);
+
+      // Try to delete non-existent IDs (should not error)
+      await vectorDB.deleteVectors({
+        indexName: testIndexName,
+        ids: ['nonexistent-1', 'nonexistent-2'],
+      });
+
+      // Should still have 1 vector
+      const stats2 = await vectorDB.describeIndex({ indexName: testIndexName });
+      expect(stats2.count).toBe(1);
+    });
+
+    it('should delete large batch of vectors by IDs', async () => {
+      // Insert 100 vectors
+      const vectors: number[][] = [];
+      const metadata: Record<string, any>[] = [];
+
+      for (let i = 0; i < 100; i++) {
+        vectors.push([Math.random(), Math.random(), Math.random()]);
+        metadata.push({ index: i });
+      }
+
+      const ids = await vectorDB.upsert({
+        indexName: testIndexName,
+        vectors,
+        metadata,
+      });
+
+      const stats1 = await vectorDB.describeIndex({ indexName: testIndexName });
+      expect(stats1.count).toBe(100);
+
+      // Delete 50 vectors
+      const idsToDelete = ids.slice(0, 50);
+      await vectorDB.deleteVectors({
+        indexName: testIndexName,
+        ids: idsToDelete,
+      });
+
+      const stats2 = await vectorDB.describeIndex({ indexName: testIndexName });
+      expect(stats2.count).toBe(50);
+    });
+
+    it('should reject when both filter and ids are provided', async () => {
+      await expect(
+        vectorDB.deleteVectors({
+          indexName: testIndexName,
+          filter: { source_id: 'doc.pdf' },
+          ids: ['vec_1', 'vec_2'],
+        }),
+      ).rejects.toThrow(/mutually exclusive/i);
+    });
+
+    it('should reject when neither filter nor ids are provided', async () => {
+      await expect(
+        vectorDB.deleteVectors({
+          indexName: testIndexName,
+        }),
+      ).rejects.toThrow(/Either filter or ids must be provided/i);
+    });
+  });
+
+  describe('updateVector() with filter', () => {
+    it('should update multiple vectors matching a filter', async () => {
+      // Insert test vectors
+      await vectorDB.upsert({
+        indexName: testIndexName,
+        vectors: [
+          [0.1, 0.2, 0.3],
+          [0.4, 0.5, 0.6],
+          [0.7, 0.8, 0.9],
+          [0.2, 0.3, 0.4],
+        ],
+        metadata: [
+          { userId: 'user_1', status: 'active' },
+          { userId: 'user_1', status: 'active' },
+          { userId: 'user_2', status: 'active' },
+          { userId: 'user_2', status: 'active' },
+        ],
+      });
+
+      // Update all vectors for user_1 to archived
+      await vectorDB.updateVector({
+        indexName: testIndexName,
+        filter: { userId: 'user_1' },
+        update: { metadata: { userId: 'user_1', status: 'archived' } },
+      });
+
+      // Verify the updates
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [0.5, 0.5, 0.5],
+        topK: 10,
+      });
+
+      const user1Vectors = results.filter(r => r.metadata?.userId === 'user_1');
+      const user2Vectors = results.filter(r => r.metadata?.userId === 'user_2');
+
+      // All user_1 vectors should be archived
+      expect(user1Vectors.every(v => v.metadata?.status === 'archived')).toBe(true);
+      expect(user1Vectors.length).toBe(2);
+
+      // All user_2 vectors should still be active
+      expect(user2Vectors.every(v => v.metadata?.status === 'active')).toBe(true);
+      expect(user2Vectors.length).toBe(2);
+    });
+
+    it('should update vectors with complex filter', async () => {
+      await vectorDB.upsert({
+        indexName: testIndexName,
+        vectors: [
+          [0.1, 0.2, 0.3],
+          [0.4, 0.5, 0.6],
+          [0.7, 0.8, 0.9],
+          [0.2, 0.3, 0.4],
+        ],
+        metadata: [
+          { tenant: 'acme', env: 'prod', version: 1 },
+          { tenant: 'acme', env: 'dev', version: 1 },
+          { tenant: 'globex', env: 'prod', version: 1 },
+          { tenant: 'acme', env: 'prod', version: 2 },
+        ],
+      });
+
+      // Update only acme prod v1 vectors
+      await vectorDB.updateVector({
+        indexName: testIndexName,
+        filter: {
+          $and: [{ tenant: 'acme' }, { env: 'prod' }, { version: 1 }],
+        },
+        update: { metadata: { tenant: 'acme', env: 'prod', version: 1, marked: true } },
+      });
+
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [0.5, 0.5, 0.5],
+        topK: 10,
+      });
+
+      // Only one vector should be marked
+      const markedVectors = results.filter(r => r.metadata?.marked === true);
+      expect(markedVectors.length).toBe(1);
+      expect(markedVectors[0]?.metadata?.tenant).toBe('acme');
+      expect(markedVectors[0]?.metadata?.env).toBe('prod');
+      expect(markedVectors[0]?.metadata?.version).toBe(1);
+    });
+
+    it('should update vectors when no matches exist', async () => {
+      await vectorDB.upsert({
+        indexName: testIndexName,
+        vectors: [[0.1, 0.2, 0.3]],
+        metadata: [{ name: 'vec1' }],
+      });
+
+      // Update with non-matching filter (should not error, just update 0 vectors)
+      await vectorDB.updateVector({
+        indexName: testIndexName,
+        filter: { name: 'nonexistent' },
+        update: { metadata: { name: 'nonexistent', updated: true } },
+      });
+
+      // Verify original vector is unchanged
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [0.1, 0.2, 0.3],
+        topK: 1,
+      });
+      expect(results[0]?.metadata?.name).toBe('vec1');
+      expect(results[0]?.metadata?.updated).toBeUndefined();
+    });
+
+    it('should reject when both id and filter are provided', async () => {
+      await expect(
+        vectorDB.updateVector({
+          indexName: testIndexName,
+          id: 'vec_1',
+          filter: { userId: 'user_1' },
+          update: { metadata: { status: 'archived' } },
+        }),
+      ).rejects.toThrow(/mutually exclusive/i);
+    });
+
+    it('should reject when neither id nor filter are provided', async () => {
+      await expect(
+        vectorDB.updateVector({
+          indexName: testIndexName,
+          update: { metadata: { status: 'archived' } },
+        }),
+      ).rejects.toThrow(/Either id or filter must be provided/i);
+    });
+
+    it('should reject update with empty filter', async () => {
+      await expect(
+        vectorDB.updateVector({
+          indexName: testIndexName,
+          filter: {},
+          update: { metadata: { status: 'archived' } },
+        }),
+      ).rejects.toThrow(/empty filter/i);
+    });
+
+    it('should handle batch metadata updates efficiently', async () => {
+      // Insert 100 vectors
+      const vectors: number[][] = [];
+      const metadata: Record<string, any>[] = [];
+
+      for (let i = 0; i < 100; i++) {
+        vectors.push([Math.random(), Math.random(), Math.random()]);
+        metadata.push({
+          category: i % 5,
+          status: 'pending',
+        });
+      }
+
+      await vectorDB.upsert({
+        indexName: testIndexName,
+        vectors,
+        metadata,
+      });
+
+      const startTime = Date.now();
+
+      // Update all vectors with category 0 (20 vectors)
+      await vectorDB.updateVector({
+        indexName: testIndexName,
+        filter: { category: 0 },
+        update: { metadata: { category: 0, status: 'completed' } },
+      });
+
+      const updateTime = Date.now() - startTime;
+      console.log(`Updated 20 vectors in ${updateTime}ms`);
+
+      // Verify updates
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [0.5, 0.5, 0.5],
+        topK: 100,
+      });
+
+      const completedVectors = results.filter(r => r.metadata?.status === 'completed');
+      expect(completedVectors.length).toBe(20);
+      expect(completedVectors.every(v => v.metadata?.category === 0)).toBe(true);
+
+      // Should be reasonably fast (under 1 second for 20 updates)
+      expect(updateTime).toBeLessThan(1000);
+    });
+  });
 });
