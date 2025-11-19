@@ -1735,6 +1735,7 @@ export class GeminiLiveVoice extends MastraVoice<
         }>;
       }>;
     }
+
     // Build the Live API setup message
     const setupMessage: { setup: LiveGenerateContentSetup } = {
       setup: {
