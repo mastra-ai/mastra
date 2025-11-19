@@ -118,6 +118,61 @@ export function createChunkStreamFromResponse<OUTPUT extends OutputSchema = unde
 }
 
 /**
+ * Convert a Response with record-separated body into a typed chunk stream
+ * Used for workflow streaming which uses \x1E record separator instead of SSE format
+ */
+export function createWorkflowChunkStreamFromResponse<T = any>(
+  response: Response,
+  recordSeparator: string = '\x1E',
+): ReadableStream<T> {
+  if (!response.body) {
+    throw new Error('Response body is null');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let failedChunk: string | undefined = undefined;
+
+  return new ReadableStream<T>({
+    async start(controller) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+
+          if (done) {
+            controller.close();
+            break;
+          }
+
+          // Decode binary data to text
+          const decoded = decoder.decode(value, { stream: true });
+
+          // Split by record separator
+          const chunks = decoded.split(recordSeparator);
+
+          // Process each chunk
+          for (const chunk of chunks) {
+            if (chunk) {
+              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
+              try {
+                const parsedChunk = JSON.parse(newChunk) as T;
+                controller.enqueue(parsedChunk);
+                failedChunk = undefined;
+              } catch {
+                // If JSON parsing fails, save it to combine with next chunk
+                failedChunk = newChunk;
+              }
+            }
+          }
+        }
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+  });
+}
+
+/**
  * Convert a Response with SSE body into a typed NetworkChunkType stream
  */
 export function createNetworkChunkStreamFromResponse(response: Response): ReadableStream<NetworkChunkType> {
@@ -762,6 +817,244 @@ export class MastraClientNetworkOutput {
   async processDataStream(options: { onChunk: (chunk: NetworkChunkType) => Promise<void> }): Promise<void> {
     for await (const chunk of this.fullStream) {
       await options.onChunk(chunk);
+    }
+  }
+}
+
+/**
+ * MastraClientWorkflowOutput - Client-side wrapper for workflow streaming
+ */
+export class MastraClientWorkflowOutput extends ReadableStream<ChunkType> {
+  #baseStream: ReadableStream<ChunkType>;
+  #bufferedChunks: ChunkType[] = [];
+  #streamFinished = false;
+  #error: Error | undefined;
+  #consumptionStarted = false;
+
+  // Buffered data from finish event
+  #bufferedUsage: any = undefined;
+  #bufferedResult: any = undefined;
+  #bufferedStatus: string | undefined = undefined;
+
+  // Delayed promises for properties
+  #delayedPromises = {
+    usage: new DelayedPromise<any>(),
+    result: new DelayedPromise<any>(),
+    status: new DelayedPromise<string>(),
+  };
+
+  constructor({ stream }: { stream: ReadableStream<ChunkType> }) {
+    // Capture state in closures for use in the start callback
+    const state = {
+      bufferedChunks: [] as ChunkType[],
+      streamFinished: false,
+      error: undefined as Error | undefined,
+      consumptionStarted: false,
+      bufferedUsage: undefined as any,
+      bufferedResult: undefined as any,
+      bufferedStatus: undefined as string | undefined,
+      delayedPromises: {
+        usage: new DelayedPromise<any>(),
+        result: new DelayedPromise<any>(),
+        status: new DelayedPromise<string>(),
+      },
+    };
+
+    // Create the ReadableStream that this class extends
+    super({
+      async start(controller) {
+        // Mark consumption as started
+        if (!state.consumptionStarted) {
+          state.consumptionStarted = true;
+        }
+
+        // Process the incoming stream and buffer chunks
+        const reader = stream.getReader();
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              state.streamFinished = true;
+              // Resolve promises
+              try {
+                if (state.bufferedUsage) {
+                  state.delayedPromises.usage.resolve(state.bufferedUsage);
+                } else {
+                  state.delayedPromises.usage.resolve(undefined);
+                }
+              } catch (error) {
+                console.error('Error resolving usage promise:', error);
+              }
+              if (state.bufferedResult === undefined) {
+                try {
+                  state.delayedPromises.result.resolve(undefined);
+                } catch (error) {
+                  console.error('Error resolving result promise:', error);
+                }
+              }
+              if (state.bufferedStatus === undefined) {
+                try {
+                  state.delayedPromises.status.resolve('unknown');
+                } catch (error) {
+                  console.error('Error resolving status promise:', error);
+                }
+              }
+              controller.close();
+              break;
+            }
+
+            // Buffer the chunk
+            state.bufferedChunks.push(value);
+
+            // Process chunk to extract metadata
+            if (value.type === 'workflow-finish') {
+              const payload = value.payload as any;
+              state.bufferedStatus = payload?.workflowStatus ?? 'unknown';
+              state.bufferedUsage = payload?.output?.usage;
+              state.bufferedResult = payload;
+
+              state.delayedPromises.status.resolve(state.bufferedStatus!);
+              state.delayedPromises.result.resolve(state.bufferedResult);
+              if (state.bufferedUsage) {
+                state.delayedPromises.usage.resolve(state.bufferedUsage);
+              }
+            }
+
+            // Enqueue the chunk
+            controller.enqueue(value);
+          }
+        } catch (error) {
+          state.error = error instanceof Error ? error : new Error(String(error));
+          state.delayedPromises.status.reject(state.error);
+          controller.error(error);
+        } finally {
+          reader.releaseLock();
+        }
+      },
+    });
+
+    // Copy state to instance after super() is called
+    this.#baseStream = stream;
+    this.#bufferedChunks = state.bufferedChunks;
+    this.#streamFinished = state.streamFinished;
+    this.#error = state.error;
+    this.#consumptionStarted = state.consumptionStarted;
+    this.#bufferedUsage = state.bufferedUsage;
+    this.#bufferedResult = state.bufferedResult;
+    this.#bufferedStatus = state.bufferedStatus;
+    this.#delayedPromises = state.delayedPromises;
+  }
+
+  /**
+   * Creates a MastraClientWorkflowOutput from a Response with record-separated body
+   * This abstracts the createWorkflowChunkStreamFromResponse logic
+   */
+  static fromResponse(response: Response, recordSeparator: string = '\x1E'): MastraClientWorkflowOutput {
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let failedChunk: string | undefined = undefined;
+
+    const chunkStream = new ReadableStream<ChunkType>({
+      async start(controller) {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+
+            if (done) {
+              controller.close();
+              break;
+            }
+
+            // Decode binary data to text
+            const decoded = decoder.decode(value, { stream: true });
+
+            // Split by record separator
+            const chunks = decoded.split(recordSeparator);
+
+            // Process each chunk
+            for (const chunk of chunks) {
+              if (chunk) {
+                const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
+                try {
+                  const parsedChunk = JSON.parse(newChunk) as ChunkType;
+                  controller.enqueue(parsedChunk);
+                  failedChunk = undefined;
+                } catch {
+                  // If JSON parsing fails, save it to combine with next chunk
+                  failedChunk = newChunk;
+                }
+              }
+            }
+          }
+        } catch (error) {
+          controller.error(error);
+        }
+      },
+    });
+
+    return new MastraClientWorkflowOutput({ stream: chunkStream });
+  }
+
+  /**
+   * The stream itself - since this class extends ReadableStream, you can iterate over it directly
+   * This getter is provided for backward compatibility and clarity
+   */
+  get fullStream(): ReadableStream<ChunkType> {
+    return this;
+  }
+
+  /**
+   * Promise that resolves to the usage count from the workflow-finish event
+   */
+  get usage(): Promise<any> {
+    this.#ensureConsumption();
+    return this.#delayedPromises.usage.promise;
+  }
+
+  /**
+   * Promise that resolves to the workflow execution result
+   */
+  get result(): Promise<any> {
+    this.#ensureConsumption();
+    return this.#delayedPromises.result.promise;
+  }
+
+  /**
+   * Promise that resolves to the workflow execution status
+   */
+  get status(): Promise<string> {
+    this.#ensureConsumption();
+    return this.#delayedPromises.status.promise;
+  }
+
+  /**
+   * Returns the error if one occurred during streaming
+   */
+  get error(): Error | undefined {
+    return this.#error;
+  }
+
+  /**
+   * Ensure stream consumption is triggered
+   * Since this class IS a ReadableStream, we trigger consumption by getting a reader
+   */
+  #ensureConsumption(): void {
+    if (!this.#consumptionStarted) {
+      this.#consumptionStarted = true;
+      // Start consuming the stream (this class itself) in the background
+      void consumeStream({
+        stream: this,
+        onError: error => {
+          this.#error = error instanceof Error ? error : new Error(String(error));
+          this.#delayedPromises.status.reject(this.#error);
+          this.#delayedPromises.result.reject(this.#error);
+          this.#delayedPromises.usage.reject(this.#error);
+        },
+      });
     }
   }
 }
