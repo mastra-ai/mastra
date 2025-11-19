@@ -128,7 +128,7 @@ describe('Agent.stream', () => {
     });
   });
 
-  it('should return a Response object with processDataStream method', async () => {
+  it('should return a MastraClientModelOutput with stream methods', async () => {
     // Arrange: Create minimal params
     const params: StreamParams<undefined> = {
       messages: [],
@@ -138,10 +138,11 @@ describe('Agent.stream', () => {
     const response = await agent.stream(params);
 
     // Assert: Verify response structure
-    expect(response).toBeInstanceOf(Response);
+    expect(response).toBeDefined();
     expect(response.processDataStream).toBeInstanceOf(Function);
-    expect(response.status).toBe(200);
-    expect(response.headers.get('content-type')).toBe('text/event-stream');
+    expect(response.fullStream).toBeDefined();
+    expect(typeof response.text).toBe('object'); // Promise
+    expect(typeof response.usage).toBe('object'); // Promise
   });
 
   it('should invoke onChunk callback when processing stream data', async () => {
