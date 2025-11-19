@@ -90,6 +90,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     describe('result.object auto consume promise', () => {
       it('should resolve object promise without manual stream consumption', async () => {
         const result = loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: createTestModels(),
@@ -108,6 +109,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       it('should work with array schemas too', async () => {
         const result = loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: createTestModels({
@@ -134,6 +136,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       it('should still work when stream is manually consumed first', async () => {
         const result = loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: createTestModels(),
@@ -159,6 +162,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const mockModel = createTestModels();
           const messageList = createMessageListWithUserMessage();
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: mockModel,
@@ -204,6 +208,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should use name and description', async () => {
           const models = createTestModels();
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models,
@@ -261,6 +266,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         it('should suppress error in partialObjectStream', async () => {
           const result = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             runId,
             models: [
@@ -291,6 +297,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const errors: Array<{ error: unknown }> = [];
 
           const output = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: [
@@ -326,6 +333,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.fullStream', () => {
         it.todo('should send full stream data', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels(),
@@ -408,6 +416,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.textStream', () => {
         it('should send text stream', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels(),
@@ -439,6 +448,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.toTextStreamResponse', () => {
         it('should create a Response with a text stream', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels(),
@@ -469,6 +479,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const mockResponse = createMockServerResponse();
 
           const result = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             models: createTestModels(),
             structuredOutput: { schema: z.object({ content: z.string() }) },
@@ -507,6 +518,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.usage', () => {
         it('should resolve with token usage', async () => {
           const result = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
@@ -541,6 +553,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.providerMetadata', () => {
         it('should resolve with provider metadata', async () => {
           const result = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
@@ -580,6 +593,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.response', () => {
         it('should resolve with response information', async () => {
           const result = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
@@ -670,6 +684,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.request', () => {
         it('should contain request information', async () => {
           const result = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             models: [
               {
@@ -715,6 +730,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.object', () => {
         it('should resolve with typed object', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: [
@@ -756,6 +772,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         it('should reject object promise when the streamed object does not match the schema', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: [
@@ -795,6 +812,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         it('should not lead to unhandled promise rejections when the streamed object does not match the schema', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: [
@@ -836,6 +854,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.finishReason', () => {
         it('should resolve with finish reason', async () => {
           const result = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             models: [
               {
@@ -875,6 +894,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should be called when a valid object is generated', async () => {
           let result: any;
           const { objectStream } = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             models: [
               {
@@ -1092,6 +1112,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it("should be called when object doesn't match the schema without destructuring", async () => {
           let result: any;
           const output = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             models: [
               {
@@ -1304,6 +1325,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it("should be called when object doesn't match the schema with destructuring", async () => {
           let result: any;
           const { consumeStream, objectStream, object } = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             models: [
               {
@@ -1517,6 +1539,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('options.headers', () => {
         it('should pass headers to model', async () => {
           const result = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             models: [
               {
@@ -1567,6 +1590,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('options.providerOptions', () => {
         it('should pass provider options to model', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: [
@@ -1622,6 +1646,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const models = createTestModels();
 
           const result = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             runId,
             models,
@@ -1675,6 +1700,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('error handling', () => {
         it('should throw zod validation error when zod schema validation fails', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: [
@@ -1732,6 +1758,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('object format with complete code blocks', () => {
         it('should handle complete ```json...``` code blocks', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels({
@@ -1771,6 +1798,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         it('should handle ```json code blocks without newlines', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels({
@@ -1798,6 +1826,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('object format with partial streaming', () => {
         it('should handle ```json prefix during streaming', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels({
@@ -1841,6 +1870,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('array format with JSON code blocks', () => {
         it('should handle array wrapped in ```json...``` blocks', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels({
@@ -1869,6 +1899,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         it('should handle partial array streaming with ```json prefix', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels({
@@ -1905,6 +1936,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('enum format with JSON code blocks', () => {
         it('should handle enum wrapped in ```json...``` blocks', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels({
@@ -1930,6 +1962,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         it('should handle partial enum streaming with ```json prefix', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels({
@@ -1969,6 +2002,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         beforeEach(async () => {
           result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels({
@@ -2072,6 +2106,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         beforeEach(async () => {
           result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels({
@@ -2145,6 +2180,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('error handling', () => {
         it('should reject object promise when the streamed object does not match the schema', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels({
@@ -2212,6 +2248,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         });
 
         const result = loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: mockModels,
@@ -2279,6 +2316,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         ];
 
         const result = loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: mockModels,
@@ -2308,6 +2346,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         });
 
         const result = loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: mockModels,
@@ -2343,6 +2382,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         });
 
         const result = loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: mockModels,
@@ -2361,6 +2401,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     describe.todo('options.experimental_repairText', () => {
       it('should be able to repair a JSONParseError', async () => {
         const result = loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: [
@@ -2415,6 +2456,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       it('should be able to repair a TypeValidationError', async () => {
         const result = loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: [
@@ -2469,6 +2511,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       it('should be able to handle repair that returns null', async () => {
         const result = loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: [
@@ -2525,6 +2568,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       it('should be able to repair JSON wrapped with markdown code blocks', async () => {
         const result = loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: [
@@ -2582,6 +2626,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       it('should throw NoObjectGeneratedError when parsing fails with repairText', async () => {
         const result = loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: [

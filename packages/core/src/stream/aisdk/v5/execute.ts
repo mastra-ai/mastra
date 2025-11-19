@@ -4,6 +4,7 @@ import type { Span } from '@opentelemetry/api';
 import { APICallError } from 'ai-v5';
 import type { CallSettings, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
 import type { StructuredOutputOptions } from '../../../agent/types';
+import type { ModelMethodType } from '../../../llm/model/model.loop.types';
 import { getResponseFormat } from '../../base/schema';
 import type { OutputSchema } from '../../base/schema';
 import type { LanguageModelV2StreamResult, OnResult } from '../../types';
@@ -46,6 +47,7 @@ type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   */
   headers?: Record<string, string | undefined>;
   shouldThrowError?: boolean;
+  methodType: ModelMethodType;
 };
 
 let hasLoggedModelSettingsAbortSignalDeprecation = false;

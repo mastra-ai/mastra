@@ -18,6 +18,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
       const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         models: createTestModels(),
         messageList,
@@ -36,6 +37,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
       const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         models: createTestModels(),
         messageList,
@@ -74,6 +76,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
       const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         models: createTestModels({
           stream: convertArrayToReadableStream([
@@ -117,6 +120,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
       const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         models: createTestModels({
           stream: convertArrayToReadableStream([
@@ -185,6 +189,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
       const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         models: createTestModels({
           stream: convertArrayToReadableStream([

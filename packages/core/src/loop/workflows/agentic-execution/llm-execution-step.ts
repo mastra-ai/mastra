@@ -449,6 +449,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   downloadRetries,
   downloadConcurrency,
   processorStates,
+  methodType,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'llm-execution',
@@ -541,6 +542,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
               includeRawChunks,
               structuredOutput,
               headers,
+              methodType,
               onResult: ({
                 warnings: warningsFromStream,
                 request: requestFromStream,
