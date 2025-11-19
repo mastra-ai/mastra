@@ -2139,6 +2139,11 @@ export class MessageList {
     if (dbMsg.threadId) metadata.threadId = dbMsg.threadId;
     if (dbMsg.resourceId) metadata.resourceId = dbMsg.resourceId;
 
+    // Preserve message-level providerMetadata in metadata so it survives UI → Model conversion
+    if (dbMsg.content.providerMetadata) {
+      metadata.providerMetadata = dbMsg.content.providerMetadata;
+    }
+
     // 1. Handle tool invocations (only if not already in parts array)
     // Parts array takes precedence because it has providerMetadata
     const hasToolInvocationParts = dbMsg.content.parts?.some(p => p.type === 'tool-invocation');
@@ -2822,7 +2827,24 @@ export class MessageList {
     const sanitized = this.sanitizeV5UIMessages(messages, filterIncompleteToolCalls);
     const preprocessed = this.addStartStepPartsForAIV5(sanitized);
     const result = AIV5.convertToModelMessages(preprocessed);
-    return result;
+
+    // Restore message-level providerOptions from metadata.providerMetadata
+    // This preserves providerOptions through the DB → UI → Model conversion
+    return result.map((modelMsg, index) => {
+      const uiMsg = preprocessed[index];
+      if (
+        uiMsg?.metadata &&
+        typeof uiMsg.metadata === 'object' &&
+        'providerMetadata' in uiMsg.metadata &&
+        uiMsg.metadata.providerMetadata
+      ) {
+        return {
+          ...modelMsg,
+          providerOptions: uiMsg.metadata.providerMetadata as AIV5Type.ProviderMetadata,
+        } satisfies AIV5Type.ModelMessage;
+      }
+      return modelMsg;
+    });
   }
 
   private addStartStepPartsForAIV5(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
