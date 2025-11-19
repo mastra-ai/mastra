@@ -83,12 +83,8 @@ The simplest way is to use Mastra's model router with `provider/model` strings:
 import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { embedMany } from "ai";
 
-const embeddingModel = new ModelRouterEmbeddingModel(
-  "openai/text-embedding-3-small",
-);
-
 const { embeddings } = await embedMany({
-  model: embeddingModel,
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   values: chunks.map((chunk) => chunk.text),
 });
 ```
@@ -106,9 +102,10 @@ You can also use AI SDK embedding models directly:
 
 ```ts showLineNumbers copy
 import { embedMany } from "ai";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
 const { embeddings } = await embedMany({
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   values: chunks.map((chunk) => chunk.text),
 });
 ```
@@ -128,10 +125,13 @@ Here are some supported models:
 OpenAI (text-embedding-3 models):
 
 ```ts
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
 const { embeddings } = await embedMany({
-  model: "openai/text-embedding-3-small", {
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  options: {
     dimensions: 256, // Only supported in text-embedding-3 and later
-  }),
+  },
   values: chunks.map((chunk) => chunk.text),
 });
 ```
@@ -174,8 +174,10 @@ const chunks = await doc.chunk({
 });
 
 // Generate embeddings with OpenAI
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
 const { embeddings } = await embedMany({
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   values: chunks.map((chunk) => chunk.text),
 });
 

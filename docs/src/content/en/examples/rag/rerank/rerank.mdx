@@ -42,6 +42,7 @@ import {
   MastraAgentRelevanceScorer,
 } from "@mastra/rag";
 import { embedMany, embed } from "ai";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 ```
 
 ## Document Processing
@@ -72,7 +73,7 @@ Generate embeddings for the chunks and store them in the vector database:
 ```typescript copy showLineNumbers{36} title="src/index.ts"
 const { embeddings } = await embedMany({
   values: chunks.map((chunk) => chunk.text),
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
 });
 
 const pgVector = new PgVector({
@@ -102,7 +103,7 @@ const query = "explain technical trading analysis";
 // Get query embedding
 const { embedding: queryEmbedding } = await embed({
   value: query,
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
 });
 
 // Get initial results

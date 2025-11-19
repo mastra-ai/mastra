@@ -14,11 +14,12 @@ The `createVectorQueryTool()` function creates a tool for semantic search over v
 
 ```typescript
 import { createVectorQueryTool } from "@mastra/rag";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
 });
 ```
 
@@ -302,7 +303,7 @@ The tool determines the number of results to return based on the user's query, w
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   enableFilter: true,
 });
 ```
@@ -333,7 +334,7 @@ For an example of how agent-driven filtering works, see the [Agent-Driven Metada
 const queryTool = createVectorQueryTool({
   vectorStoreName: "milvus",
   indexName: "documentation",
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   reranker: {
     model: "openai/gpt-4.1-mini",
     options: {
@@ -363,7 +364,7 @@ The reranker processes the initial vector search results and returns a reordered
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   description:
     "Search through document archives to find relevant information for answering questions about company policies and procedures",
 });
@@ -383,7 +384,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     const pineconeQueryTool = createVectorQueryTool({
       vectorStoreName: "pinecone",
       indexName: "docs",
-      model: "openai/text-embedding-3-small",
+      model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
       databaseConfig: {
         pinecone: {
           namespace: "production",  // Organize vectors by environment
@@ -410,7 +411,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     const pgVectorQueryTool = createVectorQueryTool({
       vectorStoreName: "postgres",
       indexName: "embeddings",
-      model: "openai/text-embedding-3-small",
+      model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
       databaseConfig: {
         pgvector: {
           minScore: 0.7,    // Only return results above 70% similarity
@@ -436,7 +437,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     const chromaQueryTool = createVectorQueryTool({
       vectorStoreName: "chroma",
       indexName: "documents",
-      model: "openai/text-embedding-3-small",
+      model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
       databaseConfig: {
         chroma: {
           where: {                    // Metadata filtering
@@ -466,7 +467,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     const multiDbQueryTool = createVectorQueryTool({
       vectorStoreName: "dynamic-store", // Will be set at runtime
       indexName: "docs",
-      model: "openai/text-embedding-3-small",
+      model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
       databaseConfig: {
         pinecone: {
           namespace: "default"
@@ -500,7 +501,7 @@ import { RequestContext } from "@mastra/core/request-context";
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-      model: "openai/text-embedding-3-small",
+      model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   databaseConfig: {
     pinecone: {
       namespace: "development",
@@ -533,7 +534,7 @@ This approach allows you to:
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-      model: "openai/text-embedding-3-small",
+      model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
 });
 ```
 
@@ -587,7 +588,7 @@ const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector", // optional since we're passing in a store
   vectorStore: pgVector,
   indexName: "embeddings",
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
 });
 
 const requestContext = new RequestContext();

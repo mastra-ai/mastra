@@ -11,14 +11,15 @@ After chunking documents, you need to convert the text chunks into numerical vec
 
 ```tsx copy
 import { MDocument } from "@mastra/rag";
-import { embed } from "ai";
+import { embedMany } from "ai";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
 const doc = MDocument.fromText("Your text content...");
 
 const chunks = await doc.chunk();
 
 const { embeddings } = await embedMany({
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   values: chunks.map((chunk) => chunk.text),
 });
 ```

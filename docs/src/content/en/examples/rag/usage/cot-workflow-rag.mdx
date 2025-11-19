@@ -38,6 +38,7 @@ Import the necessary dependencies:
 ```typescript copy showLineNumbers title="index.ts"
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { Step, Workflow } from "@mastra/core/workflows";
 import { PgVector } from "@mastra/pg";
 import { createVectorQueryTool, MDocument } from "@mastra/rag";
@@ -66,7 +67,7 @@ Create a tool for querying the vector database:
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
 });
 ```
 
@@ -291,7 +292,7 @@ Generate and store embeddings:
 
 ```typescript copy showLineNumbers{186} title="index.ts"
 const { embeddings } = await embedMany({
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   values: chunks.map((chunk) => chunk.text),
 });
 

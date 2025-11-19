@@ -38,6 +38,7 @@ Import the necessary dependencies:
 ```typescript copy showLineNumbers title="src/index.ts"
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { createVectorQueryTool } from "@mastra/rag";
 import { PgVector } from "@mastra/pg";
 ```
@@ -46,11 +47,11 @@ import { PgVector } from "@mastra/pg";
 
 Create a tool that can query the vector database:
 
-```typescript copy showLineNumbers{7} title="src/index.ts"
+```typescript copy showLineNumbers{4} title="src/index.ts"
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
 });
 ```
 

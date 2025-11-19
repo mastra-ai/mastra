@@ -41,6 +41,7 @@ Then, import the necessary dependencies:
 ```typescript copy showLineNumbers title="index.ts"
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { PgVector } from "@mastra/pg";
 import { MDocument, createGraphRAGTool } from "@mastra/rag";
 import { embedMany } from "ai";
@@ -54,7 +55,7 @@ Using createGraphRAGTool imported from @mastra/rag, you can create a tool that q
 const graphRagTool = createGraphRAGTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   graphOptions: {
     dimension: 1536,
     threshold: 0.7,
@@ -128,7 +129,7 @@ Generate embeddings for the chunks and store them in the vector database:
 
 ```typescript copy showLineNumbers{56} title="index.ts"
 const { embeddings } = await embedMany({
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   values: chunks.map((chunk) => chunk.text),
 });
 

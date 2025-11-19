@@ -12,13 +12,14 @@ When working with individual text chunks, you need to convert them into numerica
 ```tsx copy
 import { MDocument } from "@mastra/rag";
 import { embed } from "ai";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
 const doc = MDocument.fromText("Your text content...");
 
 const chunks = await doc.chunk();
 
 const { embedding } = await embed({
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   value: chunks[0].text,
 });
 ```

@@ -76,13 +76,14 @@ Create a new file `src/mastra/agents/researchAgent.ts` and define your agent:
 
 ```ts copy title="src/mastra/agents/researchAgent.ts"
 import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { createVectorQueryTool } from "@mastra/rag";
 
 // Create a tool for semantic search over the paper embeddings
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "libSqlVector",
   indexName: "papers",
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
 });
 
 export const researchAgent = new Agent({
@@ -249,7 +250,7 @@ const chunks = await doc.chunk({
 
 // Generate embeddings
 const { embeddings } = await embedMany({
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   values: chunks.map((chunk) => chunk.text),
 });
 

@@ -29,11 +29,12 @@ The simplest approach is direct semantic search. This method uses vector similar
 ```ts showLineNumbers copy
 import { embed } from "ai";
 import { PgVector } from "@mastra/pg";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
 // Convert query to embedding
 const { embedding } = await embed({
   value: "What are the main points in the article?",
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
 });
 
 // Query vector store
@@ -155,7 +156,7 @@ Sometimes you want to give your agent the ability to query a vector database dir
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
 });
 ```
 
@@ -176,7 +177,7 @@ The Vector Query Tool supports database-specific configurations that enable you 
 const pineconeQueryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   databaseConfig: {
     pinecone: {
       namespace: "production", // Isolate data by environment
@@ -188,7 +189,7 @@ const pineconeQueryTool = createVectorQueryTool({
 const pgVectorQueryTool = createVectorQueryTool({
   vectorStoreName: "postgres",
   indexName: "embeddings",
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   databaseConfig: {
     pgvector: {
       minScore: 0.7, // Filter low-quality results
@@ -202,7 +203,7 @@ const pgVectorQueryTool = createVectorQueryTool({
 const chromaQueryTool = createVectorQueryTool({
   vectorStoreName: "chroma",
   indexName: "documents",
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   databaseConfig: {
     chroma: {
       where: { category: "technical" },
@@ -215,7 +216,7 @@ const chromaQueryTool = createVectorQueryTool({
 const lanceQueryTool = createVectorQueryTool({
   vectorStoreName: "lance",
   indexName: "documents",
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   databaseConfig: {
     lance: {
       tableName: "myVectors", // Specify which table to query
@@ -548,7 +549,7 @@ Example setup:
 const graphQueryTool = createGraphQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   graphOptions: {
     threshold: 0.7,
   },

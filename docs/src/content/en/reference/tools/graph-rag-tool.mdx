@@ -11,11 +11,12 @@ The `createGraphRAGTool()` creates a tool that enhances RAG by building a graph 
 
 ```typescript
 import { createGraphRAGTool } from "@mastra/rag";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
 const graphTool = createGraphRAGTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   graphOptions: {
     dimension: 1536,
     threshold: 0.7,
@@ -192,7 +193,7 @@ The default description focuses on:
 const graphTool = createGraphRAGTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: "openai/text-embedding-3-small",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   graphOptions: {
     dimension: 1536,
     threshold: 0.8, // Higher similarity threshold

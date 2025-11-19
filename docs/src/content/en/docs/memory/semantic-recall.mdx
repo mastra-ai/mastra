@@ -108,11 +108,12 @@ The simplest way is to use a `provider/model` string with autocomplete support:
 ```ts {7}
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
 const agent = new Agent({
   memory: new Memory({
     // ... other memory options
-    embedder: "openai/text-embedding-3-small", // TypeScript autocomplete supported
+    embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   }),
 });
 ```
@@ -131,11 +132,12 @@ You can also use AI SDK embedding models directly:
 ```ts {2,7}
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
 const agent = new Agent({
   memory: new Memory({
     // ... other memory options
-    embedder: "openai/text-embedding-3-small",
+    embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   }),
 });
 ```

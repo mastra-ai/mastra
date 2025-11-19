@@ -165,6 +165,7 @@ export const agent = new Agent({
 ```typescript title="src/mastra/agents/pg-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { PgStore, PgVector } from "@mastra/pg";
 
 export const agent = new Agent({
@@ -180,7 +181,7 @@ export const agent = new Agent({
       id: 'pg-agent-vector',
       connectionString: process.env.DATABASE_URL,
     }),
-    embedder: "openai/text-embedding-3-small",
+    embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
     options: {
       lastMessages: 20,
       semanticRecall: {
