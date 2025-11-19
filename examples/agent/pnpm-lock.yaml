@@ -77,9 +77,6 @@ importers:
       zod:
         specifier: ^3.25.76
         version: 3.25.76
-      zod-to-json-schema:
-        specifier: ^3.21.0
-        version: 3.24.6(zod@3.25.76)
     devDependencies:
       msw:
         specifier: ^2.12.2
