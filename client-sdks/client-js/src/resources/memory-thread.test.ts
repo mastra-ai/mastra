@@ -129,7 +129,7 @@ describe('MemoryThread', () => {
       const result = await thread.listMessages();
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `http://localhost:4111/api/memory/threads/${threadId}/messages`,
+        `http://localhost:4111/api/memory/threads/${threadId}/messages?agentId=${agentId}`,
         expect.objectContaining({
           headers: expect.objectContaining({
             Authorization: 'Bearer test-key',
@@ -150,7 +150,7 @@ describe('MemoryThread', () => {
       const result = await thread.listMessages({ perPage: 5 });
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `http://localhost:4111/api/memory/threads/${threadId}/messages?perPage=5`,
+        `http://localhost:4111/api/memory/threads/${threadId}/messages?agentId=${agentId}&perPage=5`,
         expect.objectContaining({
           headers: expect.objectContaining({
             Authorization: 'Bearer test-key',
