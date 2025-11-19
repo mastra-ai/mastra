@@ -200,7 +200,7 @@ export const GET_TRACES_PAGINATED_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Storage is not available' });
       }
 
-      const { page, perPage, name, spanType, dateRange, entityId, entityType } = params as any;
+      const { page, perPage, name, spanType, dateRange, entityId, entityType } = params;
       const pagination = { page, perPage, dateRange: dateRange ? JSON.parse(dateRange) : undefined };
       const filters = Object.fromEntries(
         Object.entries({ name, spanType, entityId, entityType }).filter(([_, v]) => v !== undefined),
@@ -253,7 +253,7 @@ export const GET_TRACE_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Storage is not available' });
       }
 
-      const trace = await storage.getTrace(traceId as string);
+      const trace = await storage.getTrace(traceId);
 
       if (!trace) {
         throw new HTTPException(404, { message: `Trace with ID '${traceId}' not found` });
@@ -277,7 +277,7 @@ export const SCORE_TRACES_ROUTE = createRoute({
   tags: ['Observability'],
   handler: async ({ mastra, ...params }) => {
     try {
-      const { scorerName, targets } = params as { scorerName?: string; targets?: any[] };
+      const { scorerName, targets } = params;
 
       if (!scorerName) {
         throw new HTTPException(400, { message: 'Scorer ID is required' });
@@ -339,10 +339,10 @@ export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Trace ID and span ID are required' });
       }
 
-      const { page, perPage } = params as { page?: number; perPage?: number };
+      const { page, perPage } = params;
       return await storage.listScoresBySpan({
-        traceId: traceId as string,
-        spanId: spanId as string,
+        traceId,
+        spanId,
         pagination: { page: page ?? 0, perPage: perPage ?? 10 },
       });
     } catch (error) {

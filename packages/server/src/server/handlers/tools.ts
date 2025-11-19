@@ -35,7 +35,7 @@ export const LIST_TOOLS_ROUTE = createRoute({
 
       const serializedTools = Object.entries(allTools).reduce(
         (acc, [id, _tool]) => {
-          const tool = _tool as any;
+          const tool = _tool;
           acc[id] = {
             ...tool,
             inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
@@ -70,7 +70,7 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
       if (tools && Object.keys(tools).length > 0) {
         tool = Object.values(tools).find((t: any) => t.id === toolId);
       } else {
-        tool = mastra.getToolById(toolId as string);
+        tool = mastra.getToolById(toolId);
       }
 
       if (!tool) {
@@ -113,7 +113,7 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
       if (tools && Object.keys(tools).length > 0) {
         tool = Object.values(tools).find((t: any) => t.id === toolId);
       } else {
-        tool = mastra.getToolById(toolId as string);
+        tool = mastra.getToolById(toolId);
       }
 
       if (!tool) {
