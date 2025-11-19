@@ -26,20 +26,22 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@lancedb/lancedb": "^0.22.2",
+    "@lancedb/lancedb": "^0.22.3",
     "apache-arrow": "^18.1.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:^",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "22.13.17",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4",
-    "@internal/types-builder": "workspace:*"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"

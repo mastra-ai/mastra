@@ -1,4 +1,3 @@
-import { MockLanguageModelV2 } from 'ai-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { openai, openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { createTool } from '@mastra/core/tools';
@@ -44,17 +43,6 @@ const testAPICallError = new APICallError({
   statusCode: 401,
   isRetryable: false,
   responseBody: 'Test API error response',
-});
-
-export const errorAgent = new Agent({
-  id: 'error-agent',
-  name: 'Error Agent',
-  instructions: 'You are an error agent that always errors',
-  model: new MockLanguageModelV2({
-    doStream: async () => {
-      throw testAPICallError;
-    },
-  }),
 });
 
 export const chefModelV2Agent = new Agent({

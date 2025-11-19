@@ -311,7 +311,15 @@ export class MessageList {
 
         let messages = [...systemMessages, ...modelMessages];
 
-        if (Object.keys(downloadedAssets || {}).length > 0) {
+        // Check if any messages have image/file content that needs processing
+        const hasImageOrFileContent = modelMessages.some(
+          message =>
+            message.role === 'user' &&
+            typeof message.content !== 'string' &&
+            message.content.some(part => part.type === 'image' || part.type === 'file'),
+        );
+
+        if (hasImageOrFileContent) {
           messages = messages.map(message => {
             if (message.role === 'user') {
               if (typeof message.content === 'string') {

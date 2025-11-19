@@ -26,11 +26,16 @@ export async function fetchProvidersFromGateways(
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const providers = await gateway.fetchProviders();
+        const gatewayPrefix = gateway.prefix;
 
         for (const [providerId, config] of Object.entries(providers)) {
-          allProviders[providerId] = config;
+          // If gateway has a prefix, prepend it to the provider ID for type generation
+          // This creates paths like: prefix/provider/model
+          const typeProviderId = gatewayPrefix ? `${gatewayPrefix}/${providerId}` : providerId;
+
+          allProviders[typeProviderId] = config;
           // Sort models alphabetically for consistent ordering
-          allModels[providerId] = config.models.sort();
+          allModels[typeProviderId] = config.models.sort();
         }
 
         lastError = null;

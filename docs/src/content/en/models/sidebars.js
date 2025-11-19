@@ -21,6 +21,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "gateways/custom-gateways",
+          label: "Custom Gateways",
+        },
+        {
+          type: "doc",
           id: "gateways/netlify",
           label: "Netlify",
         },
@@ -190,6 +195,11 @@ const sidebars = {
           type: "doc",
           id: "providers/lucidquery",
           label: "LucidQuery AI",
+        },
+        {
+          type: "doc",
+          id: "providers/minimax",
+          label: "Minimax",
         },
         {
           type: "doc",

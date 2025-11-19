@@ -516,6 +516,7 @@ describe('Gemini Model Compatibility Tests', () => {
         steps: [],
         inputSchema: z.object({ topic: z.string() }),
         outputSchema: z.object({ summary: z.string() }),
+        options: { validateInputs: false },
       })
         .then(researchStep)
         .commit();

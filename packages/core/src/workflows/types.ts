@@ -1,8 +1,11 @@
 import type { TextStreamPart } from '@internal/ai-sdk-v4';
 import type { z } from 'zod';
+import type { MastraScorers } from '../evals';
 import type { Mastra } from '../mastra';
 import type { TracingPolicy, TracingProperties } from '../observability';
 import type { WorkflowStreamEvent } from '../stream/types';
+import type { Tool, ToolExecutionContext } from '../tools';
+import type { DynamicArgument } from '../types';
 import type { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } from './step';
 
@@ -10,6 +13,23 @@ export type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
 
 export type WorkflowEngineType = string;
+
+export type RestartExecutionParams = {
+  activePaths: number[];
+  activeStepsPath: Record<string, number[]>;
+  stepResults: Record<string, StepResult<any, any, any, any>>;
+  state?: Record<string, any>;
+};
+
+export type TimeTravelExecutionParams = {
+  executionPath: number[];
+  inputData?: any;
+  stepResults: Record<string, StepResult<any, any, any, any>>;
+  nestedStepResults?: Record<string, Record<string, StepResult<any, any, any, any>>>;
+  steps: string[];
+  state?: Record<string, any>;
+  resumeData?: any;
+};
 
 export type Emitter = {
   emit: (event: string, data: any) => Promise<void>;
@@ -87,6 +107,23 @@ export type StepResult<P, R, S, T> =
   | StepRunning<P, R, S, T>
   | StepWaiting<P, R, S, T>;
 
+export type TimeTravelContext<P, R, S, T> = Record<
+  string,
+  {
+    status: WorkflowRunStatus;
+    payload: P;
+    output: T;
+    resumePayload?: R;
+    suspendPayload?: S;
+    suspendOutput?: T;
+    startedAt?: number;
+    endedAt?: number;
+    suspendedAt?: number;
+    resumedAt?: number;
+    metadata?: StepMetadata;
+  }
+>;
+
 export type WorkflowStepStatus = StepResult<any, any, any, any>['status'];
 
 export type StepsRecord<T extends readonly Step<any, any, any>[]> = {
@@ -154,7 +191,15 @@ export type StreamEvent =
   // vnext events
   | WorkflowStreamEvent;
 
-export type WorkflowRunStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'pending' | 'canceled';
+export type WorkflowRunStatus =
+  | 'running'
+  | 'success'
+  | 'failed'
+  | 'suspended'
+  | 'waiting'
+  | 'pending'
+  | 'canceled'
+  | 'bailed';
 
 // Type to get the inferred type at a specific path in a Zod schema
 export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
@@ -327,6 +372,45 @@ export type SerializedStepFlowEntry =
 export type StepWithComponent = Step<string, any, any, any, any, any> & {
   component?: string;
   steps?: Record<string, StepWithComponent>;
+};
+
+export type StepParams<
+  TStepId extends string,
+  TState extends z.ZodObject<any>,
+  TStepInput extends z.ZodType<any>,
+  TStepOutput extends z.ZodType<any>,
+  TResumeSchema extends z.ZodType<any>,
+  TSuspendSchema extends z.ZodType<any>,
+> = {
+  id: TStepId;
+  description?: string;
+  inputSchema: TStepInput;
+  outputSchema: TStepOutput;
+  resumeSchema?: TResumeSchema;
+  suspendSchema?: TSuspendSchema;
+  stateSchema?: TState;
+  retries?: number;
+  scorers?: DynamicArgument<MastraScorers>;
+  execute: ExecuteFunction<
+    z.infer<TState>,
+    z.infer<TStepInput>,
+    z.infer<TStepOutput>,
+    z.infer<TResumeSchema>,
+    z.infer<TSuspendSchema>,
+    DefaultEngineType
+  >;
+};
+
+export type ToolStep<
+  TSchemaIn extends z.ZodType<any>,
+  TSuspendSchema extends z.ZodType<any>,
+  TResumeSchema extends z.ZodType<any>,
+  TSchemaOut extends z.ZodType<any>,
+  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
+> = Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
+  inputSchema: TSchemaIn;
+  outputSchema: TSchemaOut;
+  execute: (input: z.infer<TSchemaIn>, context?: TContext) => Promise<any>;
 };
 
 export type WorkflowResult<
