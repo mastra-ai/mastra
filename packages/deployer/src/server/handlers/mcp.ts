@@ -330,8 +330,7 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
     serverId,
     toolId,
     data,
-    requestContext,
-  }: RuntimeContext & { serverId: string; toolId: string; data?: unknown; requestContext?: unknown }) => {
+  }: RuntimeContext & { serverId: string; toolId: string; data?: unknown }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
@@ -346,7 +345,7 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
       throw new HTTPException(501, { message: `Server '${serverId}' cannot execute tools in this way.` });
     }
 
-    const result = await server.executeTool(toolId, data, requestContext);
+    const result = await server.executeTool(toolId, data);
     return { result };
   },
 });

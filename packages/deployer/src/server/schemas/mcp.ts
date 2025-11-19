@@ -16,7 +16,6 @@ export const mcpServerToolPathParams = z.object({
 
 export const executeToolBodySchema = z.object({
   data: z.unknown().optional(),
-  requestContext: z.unknown().optional(),
 });
 
 // Query parameters
