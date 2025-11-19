@@ -112,7 +112,7 @@ Setup the tool:
     </TabItem>
     <TabItem value="gemini" label="Gemini">
 
-    ```ts copy title="src/mastra/agents/searchAgent.ts" {9-12}
+    ```ts copy title="src/mastra/agents/searchAgent.ts" {9-14}
     import { google } from "@ai-sdk/google";
     import { Agent } from "@mastra/core/agent";
 
@@ -123,7 +123,9 @@ Setup the tool:
             "You are a search agent that can search the web for information.",
         model: "google/gemini-2.5-flash",
         tools: {
-            webSearch: google.tools.googleSearch
+          webSearch: google.tools.googleSearch({
+            mode: "MODE_DYNAMIC"
+          })
         }
     });
     ```
