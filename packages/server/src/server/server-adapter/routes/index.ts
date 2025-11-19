@@ -9,7 +9,6 @@ import { AGENT_BUILDER_ROUTES } from './agent-builder';
 import { AGENTS_ROUTES } from './agents';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
-import { MCP_ROUTES } from './mcp';
 import { MEMORY_ROUTES } from './memory';
 import { OBSERVABILITY_ROUTES } from './observability';
 import { SCORES_ROUTES } from './scorers';
@@ -84,7 +83,6 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...VECTORS_ROUTES,
   ...A2A_ROUTES,
   ...AGENT_BUILDER_ROUTES,
-  ...MCP_ROUTES,
   ...LEGACY_ROUTES,
 ];
 

@@ -19,6 +19,7 @@ import { authenticationMiddleware, authorizationMiddleware } from './handlers/au
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
+import { MCP_ROUTES } from './handlers/mcp';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
@@ -196,6 +197,11 @@ export async function createHonoServer(
   // Register adapter routes (adapter was created earlier with configuration)
   // Cast needed due to Hono type variance - safe because registerRoutes is generic
   await honoServerAdapter.registerRoutes(app as any, { openapiPath: '/openapi.json' });
+
+  // Register MCP routes (separate from SERVER_ROUTES due to fetch-to-node bundling requirements)
+  for (const route of MCP_ROUTES) {
+    await honoServerAdapter.registerRoute(app as any, route, { prefix: '' });
+  }
 
   if (options?.isDev || server?.build?.swaggerUI) {
     app.get(

@@ -3,12 +3,8 @@
 import type { Mastra } from '@mastra/core/mastra';
 // Consolidate imports from @mastra/core/mcp
 import type { MCPServerBase as MastraMCPServerImplementation, ServerInfo, ServerDetailInfo } from '@mastra/core/mcp';
-import {
-  getMcpServerMessageHandler,
-  listMcpRegistryServersHandler,
-  getMcpRegistryServerDetailHandler,
-} from '@mastra/server/handlers/mcp';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
+import { getMcpServerMessageHandler, listMcpRegistryServersHandler, getMcpRegistryServerDetailHandler } from '../mcp';
 import type { Context } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
