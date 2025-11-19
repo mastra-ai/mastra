@@ -61,6 +61,26 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
 
       // Create a mock model using MockLanguageModelV2 with doStream
       const mockModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: `Agent model response`,
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId: 'agent-call-123',
+                toolName: 'test-tool',
+                input: JSON.stringify({
+                  text: 'Hello from agent',
+                  count: 42,
+                }),
+              },
+            ],
+            warnings: [],
+          };
+        },
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -97,11 +117,14 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
       });
 
       // Generate with the agent (this will call the tool)
-      const result = await agent.generate('Use the test tool');
+      const result = await agent.generate('Use the test tool', { maxSteps: 1 });
+      console.log('finishReason:', result.finishReason);
+      console.log('toolCalls:', result.toolCalls);
       console.log(
         'Tool results:',
         result.toolResults?.map((r: any) => r.payload),
       );
+      console.log('executeSpy called:', executeSpy.mock.calls.length, 'times');
 
       // Verify the tool was called with correct arguments
       expect(executeSpy).toHaveBeenCalled();
