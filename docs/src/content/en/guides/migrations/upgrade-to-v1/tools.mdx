@@ -114,6 +114,44 @@ npx @mastra/codemod@beta v1/runtime-context .
 
 :::
 
+This applies to all tool executions, whether called directly or through agents and workflows. The type narrowing ensures you handle validation errors appropriately and prevents runtime errors when accessing output properties.
+
+### Tool output validation with `outputSchema`
+
+Tools with an `outputSchema` now validate their return values at runtime. Previously, `outputSchema` was only used for type inference - the output was never validated.
+
+If your tool returns data that doesn't match its `outputSchema`, it will now return a `ValidationError` instead of the invalid data.
+
+To fix validation errors, ensure the tool's output matches the schema definition:
+
+```diff
+  const getUserTool = createTool({
+    id: "get-user",
+    outputSchema: z.object({
+      id: z.string(),
+      name: z.string(),
+      email: z.string().email(),
+    }),
+    execute: async (inputData) => {
+-     return { id: "123", name: "John" }; // Missing email
++     return { id: "123", name: "John", email: "john@example.com" };
+    },
+  });
+```
+
+When validation fails, the tool returns a `ValidationError`:
+
+```diff
++ // Before v1 - invalid output would silently pass through
+  await getUserTool.execute({});
+- // { id: "123", name: "John" } - missing email
++ // {
++ //   error: true,
++ //   message: "Tool output validation failed for get-user. The tool returned invalid output:\n- email: Required\n\nReturned output: {...}",
++ //   validationErrors: { ... }
++ // }
+```
+
 ### `tool.execute` return type includes `ValidationError`
 
 The return type of `tool.execute` now includes `ValidationError` to handle validation failures. You must narrow the result type before accessing output schema properties to satisfy TypeScript's type checking.
@@ -121,16 +159,17 @@ The return type of `tool.execute` now includes `ValidationError` to handle valid
 When calling `tool.execute`, check if the result contains an error before accessing output properties:
 
 ```typescript
-const result = await tool.execute(inputData, context);
+const result = await getUserTool.execute({});
 
-if ('error' in result) {
-  // Handle validation error
-  console.error('Tool execution failed:', result.error);
+// Type-safe check for validation errors
+if ('error' in result && result.error) {
+  console.error('Validation failed:', result.message);
+  console.error('Details:', result.validationErrors);
   return;
 }
 
-// Now TypeScript knows result is the success type
-console.log(result.yourOutputSchemaProperty);
+// TypeScript knows result is valid here
+console.log(result.id, result.name, result.email);
 ```
 
-This applies to all tool executions, whether called directly or through agents and workflows. The type narrowing ensures you handle validation errors appropriately and prevents runtime errors when accessing output properties.
+Alternatively, update the `outputSchema` to match your actual output, or remove `outputSchema` entirely if you don't need validation.

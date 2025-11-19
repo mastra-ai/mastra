@@ -714,7 +714,7 @@
       "gateway": "models.dev"
     },
     "minimax": {
-      "url": "https://api.minimax.io/v1",
+      "url": "https://api.minimax.io/anthropic/v1",
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Minimax",
@@ -745,6 +745,7 @@
         "gemini-2.5-pro-preview-05-06",
         "gemini-2.5-pro-preview-06-05",
         "gemini-2.5-pro-preview-tts",
+        "gemini-3-pro-preview",
         "gemini-embedding-001",
         "gemini-flash-latest",
         "gemini-flash-lite-latest",
@@ -1336,9 +1337,7 @@
       "gateway": "netlify",
       "models": [
         "anthropic/claude-3-5-haiku-20241022",
-        "anthropic/claude-3-5-haiku-latest",
         "anthropic/claude-3-7-sonnet-20250219",
-        "anthropic/claude-3-7-sonnet-latest",
         "anthropic/claude-3-haiku-20240307",
         "anthropic/claude-haiku-4-5-20251001",
         "anthropic/claude-opus-4-1-20250805",
@@ -1354,6 +1353,7 @@
         "gemini/gemini-2.5-flash-lite-preview-09-2025",
         "gemini/gemini-2.5-flash-preview-09-2025",
         "gemini/gemini-2.5-pro",
+        "gemini/gemini-3-pro-preview",
         "gemini/gemini-flash-latest",
         "gemini/gemini-flash-lite-latest",
         "openai/codex-mini-latest",
@@ -1371,7 +1371,7 @@
         "openai/gpt-5-pro",
         "openai/gpt-5.1",
         "openai/gpt-5.1-2025-11-13",
-        "openai/gpt-image-1",
+        "openai/gpt-5.1-codex",
         "openai/o3",
         "openai/o3-mini",
         "openai/o4-mini"
@@ -1925,6 +1925,7 @@
       "gemini-2.5-pro-preview-05-06",
       "gemini-2.5-pro-preview-06-05",
       "gemini-2.5-pro-preview-tts",
+      "gemini-3-pro-preview",
       "gemini-embedding-001",
       "gemini-flash-latest",
       "gemini-flash-lite-latest",
@@ -2321,9 +2322,7 @@
     "cerebras": ["gpt-oss-120b", "qwen-3-235b-a22b-instruct-2507", "qwen-3-coder-480b", "zai-glm-4.6"],
     "netlify": [
       "anthropic/claude-3-5-haiku-20241022",
-      "anthropic/claude-3-5-haiku-latest",
       "anthropic/claude-3-7-sonnet-20250219",
-      "anthropic/claude-3-7-sonnet-latest",
       "anthropic/claude-3-haiku-20240307",
       "anthropic/claude-haiku-4-5-20251001",
       "anthropic/claude-opus-4-1-20250805",
@@ -2339,6 +2338,7 @@
       "gemini/gemini-2.5-flash-lite-preview-09-2025",
       "gemini/gemini-2.5-flash-preview-09-2025",
       "gemini/gemini-2.5-pro",
+      "gemini/gemini-3-pro-preview",
       "gemini/gemini-flash-latest",
       "gemini/gemini-flash-lite-latest",
       "openai/codex-mini-latest",
@@ -2356,7 +2356,7 @@
       "openai/gpt-5-pro",
       "openai/gpt-5.1",
       "openai/gpt-5.1-2025-11-13",
-      "openai/gpt-image-1",
+      "openai/gpt-5.1-codex",
       "openai/o3",
       "openai/o3-mini",
       "openai/o4-mini"

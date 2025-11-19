@@ -35,6 +35,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       const toolExecuteMock = vi.fn().mockResolvedValue('tool result');
 
       const result = loopFn({
+        methodType: 'stream',
         runId,
         models: createTestModels({
           stream: convertArrayToReadableStream([
@@ -89,6 +90,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       const result: Array<{ error: unknown }> = [];
 
       const resultObject = await loopFn({
+        methodType: 'stream',
         runId,
         models: [
           {
@@ -124,6 +126,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       const messageList = createMessageListWithUserMessage();
 
       const result = loopFn({
+        methodType: 'stream',
         runId,
         models: [
           {
@@ -173,6 +176,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       let tools: (LanguageModelV2FunctionTool | LanguageModelV2ProviderDefinedTool)[] | undefined;
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         models: [
           {
@@ -266,6 +270,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
         let responseCount = 0;
         result = await loopFn({
+          methodType: 'stream',
           runId,
           models: [
             {
@@ -1381,6 +1386,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         prepareStepCalls = [];
 
         result = await loopFn({
+          methodType: 'stream',
           runId,
           models: [
             {
@@ -1906,6 +1912,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
     //     let responseCount = 0;
     //     result = await loopFn({
+    //   methodType: 'stream',
     //       runId,
     //       model: new MockLanguageModelV2({
     //         doStream: async ({ prompt, tools, toolChoice }) => {
@@ -2885,6 +2892,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
         let responseCount = 0;
         result = await loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: [
@@ -3164,6 +3172,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       let result!: any;
 
       const resultObject = await loopFn({
+        methodType: 'stream',
         runId,
         messageList,
         models: createTestModels({
@@ -3432,6 +3441,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       let result!: any;
 
       const resultObject = await loopFn({
+        methodType: 'stream',
         runId,
         messageList,
         models: [{ id: 'test-model', maxRetries: 0, model: modelWithSources }],
@@ -3617,6 +3627,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       let result!: any;
 
       const resultObject = await loopFn({
+        methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
         models: [{ id: 'test-model', maxRetries: 0, model: modelWithFiles }],
@@ -3802,6 +3813,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         agentId: 'agent-id',
         models: [
@@ -3854,6 +3866,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       result = [];
 
       const resultObject = await loopFn({
+        methodType: 'stream',
         runId,
         agentId: 'agent-id',
         models: createTestModels({
@@ -5745,6 +5758,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   //       const model = new MockLanguageModelWithImageSupport();
   //       const result = await loopFn({
+  //         methodType: 'stream',
   //         runId,
   //         model,
   //         messages: [
@@ -5794,6 +5808,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       });
 
       const result = await loopFn({
+        methodType: 'stream',
         agentId: 'agent-id',
         runId,
         models: modelWithRawChunks,
@@ -5847,6 +5862,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       });
 
       const result = await loopFn({
+        methodType: 'stream',
         agentId: 'agent-id',
         runId,
         models: modelWithRawChunks,
@@ -5883,6 +5899,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       ];
 
       const result = await loopFn({
+        methodType: 'stream',
         agentId: 'agent-id',
         runId,
         models,
@@ -5944,6 +5961,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       });
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         agentId: 'agent-id',
         models: modelWithRawChunks,
@@ -6056,6 +6074,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       ];
 
       const result = await loopFn({
+        methodType: 'stream',
         agentId: 'agent-id',
         runId,
         models,
@@ -6067,6 +6086,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       expect(capturedOptions.includeRawChunks).toBe(true);
 
       const result2 = await loopFn({
+        methodType: 'stream',
         agentId: 'agent-id',
         runId,
         models,
@@ -6078,6 +6098,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       expect(capturedOptions.includeRawChunks).toBe(false);
 
       const result3 = await loopFn({
+        methodType: 'stream',
         agentId: 'agent-id',
         runId,
         models,
@@ -6096,6 +6117,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       beforeEach(async () => {
         result = await loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: createTestModels({
@@ -6404,6 +6426,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         let pullCalls = 0;
 
         result = await loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           options: {
@@ -6547,6 +6570,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         let streamCalls = 0;
 
         result = loopFn({
+          methodType: 'stream',
           runId,
           messageList: createMessageListWithUserMessage(),
           models: [
