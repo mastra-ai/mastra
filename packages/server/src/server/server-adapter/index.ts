@@ -44,13 +44,21 @@ export abstract class MastraServerAdapter<TApp, TRequest, TResponse> {
     paramsRequestContext,
     bodyRequestContext,
   }: {
-    paramsRequestContext: Record<string, any>;
-    bodyRequestContext: Record<string, any>;
+    paramsRequestContext?: Record<string, any>;
+    bodyRequestContext?: Record<string, any>;
   }): RequestContext {
-    return new RequestContext([
-      ...Array.from(Object.entries(bodyRequestContext)),
-      ...Array.from(Object.entries(paramsRequestContext)),
-    ]);
+    const requestContext = new RequestContext();
+    if (bodyRequestContext) {
+      for (const [key, value] of Object.entries(bodyRequestContext)) {
+        requestContext.set(key, value);
+      }
+    }
+    if (paramsRequestContext) {
+      for (const [key, value] of Object.entries(paramsRequestContext)) {
+        requestContext.set(key, value);
+      }
+    }
+    return requestContext;
   }
 
   abstract stream(route: ServerRoute, response: TResponse, result: unknown): Promise<unknown>;

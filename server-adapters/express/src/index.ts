@@ -55,8 +55,8 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
   createContextMiddleware(): (req: Request, res: Response, next: NextFunction) => Promise<void> {
     return async (req: Request, res: Response, next: NextFunction) => {
       // Parse request context from request body and add to context
-      let bodyRequestContext: Record<string, any> = {};
-      let paramsRequestContext: Record<string, any> = {};
+      let bodyRequestContext: Record<string, any> | undefined;
+      let paramsRequestContext: Record<string, any> | undefined;
 
       // Parse request context from request body (POST/PUT)
       if (req.method === 'POST' || req.method === 'PUT') {

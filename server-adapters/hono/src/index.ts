@@ -56,8 +56,8 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
     return async (c, next) => {
       // Parse request context from request body and add to context
 
-      let bodyRequestContext: Record<string, any> = {};
-      let paramsRequestContext: Record<string, any> = {};
+      let bodyRequestContext: Record<string, any> | undefined;
+      let paramsRequestContext: Record<string, any> | undefined;
 
       // Parse request context from request body (POST/PUT)
       if (c.req.method === 'POST' || c.req.method === 'PUT') {
