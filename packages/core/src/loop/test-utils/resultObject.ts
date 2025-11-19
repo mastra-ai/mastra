@@ -747,7 +747,6 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "parts": [
                     {
                       "mediaType": "text/plain",
-                      "providerMetadata": undefined,
                       "type": "file",
                       "url": "data:text/plain;base64,Hello World",
                     },
@@ -757,7 +756,6 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     },
                     {
                       "mediaType": "image/jpeg",
-                      "providerMetadata": undefined,
                       "type": "file",
                       "url": "data:image/jpeg;base64,QkFVRw==",
                     },

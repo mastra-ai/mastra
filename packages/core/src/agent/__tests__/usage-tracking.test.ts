@@ -1,9 +1,153 @@
+import { openai } from '@ai-sdk/openai-v5';
+import { stepCountIs, streamText } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, it, expect } from 'vitest';
+import z from 'zod';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { Agent } from '../agent';
 
 describe('Agent usage tracking', () => {
+  describe('Usage tracking aisdk vs mastra', () => {
+    const system = 'You are a helpful assistant';
+    const prompt = 'Hello';
+
+    it('Should be equal for usage and totalUsage for the same setup - no tools', async () => {
+      const streamTextResult = streamText({
+        prompt,
+        model: openai('gpt-4o-mini'),
+        system,
+      });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        model: openai('gpt-4o-mini'),
+        instructions: system,
+      });
+
+      const mastraStream = await agent.stream(prompt);
+
+      await streamTextResult.consumeStream();
+      await mastraStream.consumeStream();
+
+      const streamTextUsage = await streamTextResult.usage;
+      const mastraUsage = await mastraStream.usage;
+
+      const streamTextTotalUsage = await streamTextResult.totalUsage;
+      const mastraTotalUsage = await mastraStream.totalUsage;
+
+      // Helper to check if numbers are within range (100% tolerance - LLM responses vary)
+      const withinRange = (a: number, b: number, tolerance = 1.0) => {
+        const diff = Math.abs(a - b);
+        const avg = (a + b) / 2;
+        return diff / avg <= tolerance;
+      };
+
+      // Check that usage (last step) numbers are within range
+      expect(withinRange(streamTextUsage.inputTokens, mastraUsage.inputTokens)).toBe(true);
+      expect(withinRange(streamTextUsage.outputTokens, mastraUsage.outputTokens)).toBe(true);
+      expect(withinRange(streamTextUsage.totalTokens, mastraUsage.totalTokens)).toBe(true);
+
+      // Check that totalUsage (cumulative) numbers are within range
+      expect(withinRange(streamTextTotalUsage.inputTokens, mastraTotalUsage.inputTokens)).toBe(true);
+      expect(withinRange(streamTextTotalUsage.outputTokens, mastraTotalUsage.outputTokens)).toBe(true);
+      expect(withinRange(streamTextTotalUsage.totalTokens, mastraTotalUsage.totalTokens)).toBe(true);
+    });
+
+    it('Should be equal for usage and totalUsage for the same setup - with tools', async () => {
+      const prompt = 'Call the test tool with the value "test"';
+
+      const tool = {
+        description: 'Test tool',
+        inputSchema: z.object({ value: z.string() }),
+        execute: async ({ value }: { value: string }) => {
+          return {
+            value,
+          };
+        },
+      };
+
+      const streamTextResult = streamText({
+        prompt,
+        model: openai('gpt-4o-mini'),
+        system,
+        stopWhen: stepCountIs(5),
+        tools: {
+          tool,
+        },
+      });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        model: openai('gpt-4o-mini'),
+        instructions: system,
+        tools: {
+          tool,
+        },
+      });
+
+      const mastraStream = await agent.stream(prompt);
+
+      await streamTextResult.consumeStream();
+      await mastraStream.consumeStream();
+
+      const streamTextUsage = await streamTextResult.usage;
+      const mastraUsage = await mastraStream.usage;
+
+      const streamTextTotalUsage = await streamTextResult.totalUsage;
+      const mastraTotalUsage = await mastraStream.totalUsage;
+
+      // Helper to check if numbers are within range (100% tolerance - LLM responses vary)
+      // This means the values can differ up to 2x (e.g., 10 vs 20 is acceptable)
+      const withinRange = (a: number, b: number, tolerance = 1.0) => {
+        const diff = Math.abs(a - b);
+        const avg = (a + b) / 2;
+        return diff / avg <= tolerance;
+      };
+
+      if (!streamTextUsage.inputTokens || !mastraUsage.inputTokens) {
+        throw new Error('streamTextUsage.inputTokens or mastraUsage.inputTokens is undefined');
+      }
+
+      // Check that usage (last step) numbers are within range
+      expect(withinRange(streamTextUsage?.inputTokens ?? 0, mastraUsage?.inputTokens ?? 0)).toBe(true);
+      expect(withinRange(streamTextUsage?.outputTokens ?? 0, mastraUsage?.outputTokens ?? 0)).toBe(true);
+      expect(withinRange(streamTextUsage?.totalTokens ?? 0, mastraUsage?.totalTokens ?? 0)).toBe(true);
+
+      if (!streamTextTotalUsage.inputTokens || !mastraTotalUsage.inputTokens) {
+        throw new Error('streamTextTotalUsage.inputTokens or mastraTotalUsage.inputTokens is undefined');
+      }
+
+      // Check that totalUsage (cumulative) numbers are within range
+      expect(withinRange(streamTextTotalUsage?.inputTokens ?? 0, mastraTotalUsage?.inputTokens ?? 0)).toBe(true);
+      expect(withinRange(streamTextTotalUsage?.outputTokens ?? 0, mastraTotalUsage?.outputTokens ?? 0)).toBe(true);
+      expect(withinRange(streamTextTotalUsage?.totalTokens ?? 0, mastraTotalUsage?.totalTokens ?? 0)).toBe(true);
+
+      // Check that both requests are using item refs in request.body.input
+      const streamTextRequest = await streamTextResult.request;
+      const mastraRequest = await mastraStream.request;
+
+      // Verify both are using item_reference type in the input array
+      expect(streamTextRequest.body).toBeDefined();
+      expect(mastraRequest.body).toBeDefined();
+
+      const streamTextBody =
+        typeof streamTextRequest.body === 'string' ? JSON.parse(streamTextRequest.body) : streamTextRequest.body;
+      const mastraBody = typeof mastraRequest.body === 'string' ? JSON.parse(mastraRequest.body) : mastraRequest.body;
+
+      // Check that both have input arrays with item_reference type
+      expect(streamTextBody?.input).toBeDefined();
+      expect(mastraBody?.input).toBeDefined();
+      expect(Array.isArray(streamTextBody?.input)).toBe(true);
+      expect(Array.isArray(mastraBody?.input)).toBe(true);
+
+      // Verify at least one item_reference exists in each
+      expect(streamTextBody.input.some((m: any) => m.type === 'item_reference')).toBe(true);
+      expect(mastraBody.input.some((m: any) => m.type === 'item_reference')).toBe(true);
+    });
+  });
+
   describe('Agent usage tracking (VNext paths)', () => {
     describe('generate', () => {
       it('should expose usage with inputTokens and outputTokens (AI SDK v5 format)', async () => {
