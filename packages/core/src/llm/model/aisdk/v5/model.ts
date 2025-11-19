@@ -120,13 +120,26 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
               });
             } else if (message.type === 'source') {
               const source = message;
-              controller.enqueue({
-                type: 'source',
-                id: source.id,
-                sourceType: source.sourceType,
-                title: source.title,
-                providerMetadata: source.providerMetadata,
-              });
+              if (source.sourceType === 'url') {
+                controller.enqueue({
+                  type: 'source',
+                  id: source.id,
+                  sourceType: 'url',
+                  url: source.url,
+                  title: source.title,
+                  providerMetadata: source.providerMetadata,
+                });
+              } else {
+                controller.enqueue({
+                  type: 'source',
+                  id: source.id,
+                  sourceType: 'document',
+                  mediaType: source.mediaType,
+                  filename: source.filename,
+                  title: source.title,
+                  providerMetadata: source.providerMetadata,
+                });
+              }
             }
           }
 
