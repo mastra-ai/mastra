@@ -61,11 +61,16 @@ function stripLocalePattern(source) {
 
 // Convert path pattern to regex (handles :param, :param*, :param+, :param?)
 function patternToRegex(pattern) {
-  // First, escape special regex characters in the original pattern
+  // First, escape standard special regex characters in the original pattern
   // This escapes literals like dots in '/api.v1/:id' before processing :id
-  // We need to escape: . + ^ $ { } | [ ] \ ( )
-  // But NOT: : which we use to identify parameters
-  let regexStr = pattern.replace(/[.+^${}()|\[\]\\]/g, '\\$&');
+  // We need to escape: . ^ $ { } | [ ] \ ( )
+  // But NOT: : * ? + which we use for parameter operators
+  let regexStr = pattern.replace(/[.^${}()|\[\]\\]/g, '\\$&');
+
+  // Then escape *, ?, + only when they are literal (not part of :param operators)
+  // Use negative lookbehind to ensure they're not preceded by a word char
+  // This way ':param*' keeps the operator while literal '*' gets escaped
+  regexStr = regexStr.replace(/(?<!\w)([?*+])/g, '\\$1');
 
   // Then convert path-to-regexp patterns to regex patterns
   // These replacements work on the escaped string, converting :param patterns
