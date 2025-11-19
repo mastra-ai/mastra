@@ -12,6 +12,7 @@ declare global {
     interface Locals {
       mastra: Mastra;
       requestContext: RequestContext;
+      abortSignal: AbortSignal;
       tools: Record<string, Tool>;
       taskStore: InMemoryTaskStore;
       customRouteAuthConfig?: Map<string, boolean>;
@@ -105,7 +106,11 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
       res.locals.playground = this.playground === true;
       res.locals.isDev = this.isDev === true;
       res.locals.customRouteAuthConfig = this.customRouteAuthConfig;
-
+      const controller = new AbortController();
+      req.on('close', () => {
+        controller.abort();
+      });
+      res.locals.abortSignal = controller.signal;
       next();
     };
   }
@@ -244,6 +249,7 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
           mastra: this.mastra,
           tools: res.locals.tools,
           taskStore: res.locals.taskStore,
+          abortSignal: res.locals.abortSignal,
         };
 
         try {

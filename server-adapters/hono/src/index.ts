@@ -13,6 +13,7 @@ export type HonoVariables = {
   mastra: Mastra;
   requestContext: RequestContext;
   tools: Record<string, Tool>;
+  abortSignal: AbortSignal;
   taskStore: InMemoryTaskStore;
   customRouteAuthConfig?: Map<string, boolean>;
   playground?: boolean;
@@ -111,6 +112,7 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
       c.set('playground', this.playground === true);
       c.set('isDev', this.isDev === true);
       c.set('customRouteAuthConfig', this.customRouteAuthConfig);
+      c.set('abortSignal', c.req.raw.signal);
 
       return next();
     };
@@ -252,6 +254,7 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
           mastra: this.mastra,
           tools: c.get('tools'),
           taskStore: c.get('taskStore'),
+          abortSignal: c.get('abortSignal'),
         };
 
         try {

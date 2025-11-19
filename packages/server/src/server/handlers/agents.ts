@@ -495,7 +495,7 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
   summary: 'Generate agent response',
   description: 'Executes an agent with the provided messages and returns the complete response',
   tags: ['Agents'],
-  handler: async ({ agentId, mastra, ...params }) => {
+  handler: async ({ agentId, mastra, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -509,7 +509,7 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
 
       const result = await agent.generate(messages, {
         ...rest,
-        abortSignal: undefined, // TODO: Get abortSignal from context if needed
+        abortSignal,
       });
 
       return result;
@@ -530,7 +530,7 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
   summary: '[DEPRECATED] Generate with legacy format',
   description: 'Legacy endpoint for generating agent responses. Use /api/agents/:agentId/generate instead.',
   tags: ['Agents', 'Legacy'],
-  handler: async ({ mastra, agentId, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -550,7 +550,7 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
 
       const result = await agent.generateLegacy(messages, {
         ...rest,
-        abortSignal: undefined, // TODO: Get abortSignal from context if needed
+        abortSignal,
         resourceId: finalResourceId ?? '',
         threadId: threadId ?? '',
       });
@@ -572,7 +572,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
   summary: '[DEPRECATED] Stream with legacy format',
   description: 'Legacy endpoint for streaming agent responses. Use /api/agents/:agentId/stream instead.',
   tags: ['Agents', 'Legacy'],
-  handler: async ({ mastra, agentId, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -592,7 +592,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
 
       const streamResult = await agent.streamLegacy(messages, {
         ...rest,
-        abortSignal: undefined, // TODO: Get abortSignal from context if needed
+        abortSignal,
         resourceId: finalResourceId ?? '',
         threadId: threadId ?? '',
       });
@@ -681,7 +681,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   summary: 'Stream agent response',
   description: 'Executes an agent with the provided messages and streams the response in real-time',
   tags: ['Agents'],
-  handler: async ({ mastra, agentId, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -694,7 +694,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
 
       const streamResult = await agent.stream(messages, {
         ...rest,
-        abortSignal: undefined, // TODO: Get abortSignal from context if needed
+        abortSignal,
       });
 
       return streamResult.fullStream;
@@ -728,7 +728,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
   summary: 'Approve tool call',
   description: 'Approves a pending tool call and continues agent execution',
   tags: ['Agents', 'Tools'],
-  handler: async ({ mastra, agentId, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -746,7 +746,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
 
       const streamResult = await agent.approveToolCall({
         ...params,
-        abortSignal: undefined, // TODO: Get abortSignal from context if needed
+        abortSignal,
       });
 
       return streamResult.fullStream;
@@ -767,7 +767,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
   summary: 'Decline tool call',
   description: 'Declines a pending tool call and continues agent execution without executing the tool',
   tags: ['Agents', 'Tools'],
-  handler: async ({ mastra, agentId, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -785,7 +785,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
 
       const streamResult = await agent.declineToolCall({
         ...params,
-        abortSignal: undefined, // TODO: Get abortSignal from context if needed
+        abortSignal,
       });
 
       return streamResult.fullStream;
