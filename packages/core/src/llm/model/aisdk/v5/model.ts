@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
 import type { MastraLanguageModelV2 } from '../../shared.types';
 
@@ -72,7 +73,7 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
               controller.enqueue(toolCall);
             } else if (message.type === 'text') {
               const text = message;
-              const id = 'msg_dummy_id';
+              const id = `msg_${randomUUID()}`;
               controller.enqueue({
                 type: 'text-start',
                 id,
@@ -86,6 +87,42 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
               controller.enqueue({
                 type: 'text-end',
                 id,
+              });
+            } else if (message.type === 'reasoning') {
+              const id = `reasoning_${randomUUID()}`;
+
+              const reasoning = message;
+              controller.enqueue({
+                type: 'reasoning-start',
+                id,
+                providerMetadata: reasoning.providerMetadata,
+              });
+              controller.enqueue({
+                type: 'reasoning-delta',
+                id,
+                delta: reasoning.text,
+                providerMetadata: reasoning.providerMetadata,
+              });
+              controller.enqueue({
+                type: 'reasoning-end',
+                id,
+                providerMetadata: reasoning.providerMetadata,
+              });
+            } else if (message.type === 'file') {
+              const file = message;
+              controller.enqueue({
+                type: 'file',
+                mediaType: file.mediaType,
+                data: file.data,
+              });
+            } else if (message.type === 'source') {
+              const source = message;
+              controller.enqueue({
+                type: 'source',
+                id: source.id,
+                sourceType: source.sourceType,
+                title: source.title,
+                providerMetadata: source.providerMetadata,
               });
             }
           }
