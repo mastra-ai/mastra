@@ -1,1 +1,0 @@
-export { studio } from './studio';
