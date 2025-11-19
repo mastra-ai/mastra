@@ -13,7 +13,6 @@ const { embeddings } = await embedMany({
 });
 
 const pinecone = new PineconeVector({
-  id: 'test-pinecone-vector',
   apiKey: process.env.PINECONE_API_KEY!,
 });
 

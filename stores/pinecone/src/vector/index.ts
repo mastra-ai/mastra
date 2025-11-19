@@ -58,13 +58,11 @@ export class PineconeVector extends MastraVector {
    * @param region - The region for Pinecone.
    */
   constructor({
-    id,
     apiKey,
     environment,
     cloud,
     region,
   }: {
-    id: string;
     apiKey: string;
     environment?: string;
     region?: string;
