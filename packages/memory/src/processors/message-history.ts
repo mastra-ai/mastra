@@ -37,7 +37,7 @@ export class MessageHistory implements Processor {
 
   async processInput(args: {
     messages: MastraDBMessage[];
-    messageList?: MessageList;
+    messageList: MessageList;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
     runtimeContext?: RequestContext;
@@ -49,7 +49,7 @@ export class MessageHistory implements Processor {
     const threadId = memoryContext?.thread?.id;
 
     if (!threadId) {
-      return messageList || messages;
+      return messageList;
     }
 
     // 1. Fetch historical messages from storage (as DB format)
@@ -77,23 +77,16 @@ export class MessageHistory implements Processor {
     // Reverse to chronological order (oldest first) since we fetched DESC
     const chronologicalMessages = uniqueHistoricalMessages.reverse();
 
-    // If we have a MessageList, add historical messages to it with source: 'memory'
-    if (messageList) {
-      if (chronologicalMessages.length === 0) {
-        return messageList;
-      }
-
-      // Add historical messages with source: 'memory'
-      for (const msg of chronologicalMessages) {
-        messageList.add(msg, 'memory');
-      }
-
+    if (chronologicalMessages.length === 0) {
       return messageList;
     }
 
-    // Fallback to array return for backward compatibility
-    const mergedMessages = [...chronologicalMessages, ...messages];
-    return mergedMessages;
+    // Add historical messages with source: 'memory'
+    for (const msg of chronologicalMessages) {
+      messageList.add(msg, 'memory');
+    }
+
+    return messageList;
   }
 
   async processOutputResult(args: {

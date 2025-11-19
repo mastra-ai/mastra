@@ -77,11 +77,11 @@ export class WorkingMemory implements InputProcessor {
 
   async processInput(args: {
     messages: MastraDBMessage[];
-    messageList?: MessageList;
+    messageList: MessageList;
     abort: (reason?: string) => never;
     runtimeContext?: RequestContext;
   }): Promise<MessageList | MastraDBMessage[]> {
-    const { messages, messageList, runtimeContext } = args;
+    const { messageList, runtimeContext } = args;
 
     // Get threadId and resourceId from runtime context
     const memoryContext = parseMemoryRuntimeContext(runtimeContext);
@@ -90,7 +90,7 @@ export class WorkingMemory implements InputProcessor {
 
     // Skip if no thread or resource context
     if (!threadId && !resourceId) {
-      return messageList || messages;
+      return messageList;
     }
 
     try {
@@ -135,7 +135,7 @@ export class WorkingMemory implements InputProcessor {
 
       if (isRoutingAgent) {
         // For routing agents, return the messageList/messages unchanged
-        return messageList || messages;
+        return messageList;
       }
 
       // Format working memory instruction
@@ -143,32 +143,15 @@ export class WorkingMemory implements InputProcessor {
         ? this.getWorkingMemoryToolInstructionVNext({ template, data: workingMemoryData })
         : this.getWorkingMemoryToolInstruction({ template, data: workingMemoryData });
 
-      // Create system message with working memory instruction
-      const workingMemoryMessage: MastraDBMessage = {
-        id: `working-memory-${Date.now()}`,
-        role: 'system',
-        content: {
-          format: 2,
-          content: instruction,
-          parts: [],
-        },
-        createdAt: new Date(),
-      };
-
       // If we have a MessageList, add working memory to it with source: 'context'
-      if (messageList) {
-        if (instruction) {
-          messageList.addSystem(instruction, 'context');
-        }
-        return messageList;
+      if (instruction) {
+        messageList.addSystem(instruction, 'context');
       }
-
-      // Fallback to array return for backward compatibility
-      return [workingMemoryMessage, ...messages];
+      return messageList;
     } catch (error) {
       // On error, return original messages
       this.logger?.error('WorkingMemory processor error:', { error });
-      return messageList || messages;
+      return messageList;
     }
   }
 

@@ -160,7 +160,7 @@ export class SemanticRecall implements Processor {
     const memoryContext = parseMemoryRuntimeContext(runtimeContext);
     if (!memoryContext) {
       // No memory context available, return messages unchanged
-      return messages;
+      return messageList;
     }
 
     const { thread, resourceId } = memoryContext;
@@ -168,14 +168,14 @@ export class SemanticRecall implements Processor {
 
     if (!threadId) {
       // No thread ID available, return messages unchanged
-      return messages;
+      return messageList;
     }
 
     // Extract user query from the last user message
     const userQuery = this.extractUserQuery(messages);
     if (!userQuery) {
       // No user query to search with, return messages unchanged
-      return messages;
+      return messageList;
     }
 
     try {
@@ -188,7 +188,7 @@ export class SemanticRecall implements Processor {
 
       if (similarMessages.length === 0) {
         // No similar messages found, return original messages
-        return messages;
+        return messageList;
       }
 
       // Filter out messages that are already in the input

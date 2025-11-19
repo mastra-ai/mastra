@@ -22,7 +22,7 @@ export interface Processor {
    */
   processInput?(args: {
     messages: MastraDBMessage[];
-    messageList?: MessageList;
+    messageList: MessageList;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
     runtimeContext?: RequestContext;
@@ -64,7 +64,7 @@ export interface Processor {
    */
   processOutputResult?(args: {
     messages: MastraDBMessage[];
-    messageList?: MessageList;
+    messageList: MessageList;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
     runtimeContext?: RequestContext;
