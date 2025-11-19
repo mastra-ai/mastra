@@ -1687,7 +1687,7 @@ export class MessageList {
     if (experimentalAttachments.length) content.experimental_attachments = experimentalAttachments;
 
     // Preserve message-level providerOptions (e.g., for cache breakpoints)
-    if ('providerOptions' in coreMessage && coreMessage.providerOptions) {
+    if (coreMessage.providerOptions) {
       content.providerMetadata = coreMessage.providerOptions;
     }
 
