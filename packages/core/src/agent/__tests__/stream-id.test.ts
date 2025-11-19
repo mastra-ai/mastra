@@ -63,9 +63,6 @@ describe('Stream ID Consistency', () => {
     });
 
     let streamResponseId: string | undefined;
-    for await (const _chunk of streamResult.fullStream) {
-      console.log('DEBUG chunk', _chunk);
-    }
     await streamResult.consumeStream();
 
     const finishedResult = streamResult;
@@ -73,7 +70,7 @@ describe('Stream ID Consistency', () => {
 
     streamResponseId = response?.messages?.[0]?.id;
 
-    console.log('DEBUG streamResponseId', streamResponseId);
+    // console.log('DEBUG streamResponseId', streamResponseId);
     expect(streamResponseId).toBeDefined();
 
     const result = await memory.recall({ threadId });

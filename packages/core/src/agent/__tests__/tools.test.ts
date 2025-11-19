@@ -458,7 +458,7 @@ function toolsTest(version: 'v1' | 'v2') {
               },
               {
                 type: 'finish',
-                finishReason: 'stop',
+                finishReason: 'tool-calls',
                 usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
               },
             ]),

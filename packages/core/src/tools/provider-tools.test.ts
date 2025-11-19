@@ -201,8 +201,6 @@ describe('provider-defined tools', () => {
     expect(result).toBeDefined();
     expect(result.text).toBeDefined();
 
-    console.log(result.sources);
-
     // These are the web search sources that were used to generate the response
     expect(result.sources.length).toBeGreaterThan(0);
 
