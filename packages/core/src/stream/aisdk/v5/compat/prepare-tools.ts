@@ -62,7 +62,7 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
                 inputSchema: asSchema(sdkTool.inputSchema).jsonSchema,
                 providerOptions: sdkTool.providerOptions,
               };
-            case 'provider-defined':
+            case 'provider-defined': {
               // For provider-defined tools, extract the name from the ID to match doStream behavior
               // ID format is typically "provider.toolName" (e.g. "openai.web_search")
               // doStream returns just "toolName" part, so we use that as name for consistency
@@ -83,6 +83,7 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
                 id: providerId,
                 args: (sdkTool as any).args,
               };
+            }
             default: {
               const exhaustiveCheck: never = toolType;
               throw new Error(`Unsupported tool type: ${exhaustiveCheck}`);
