@@ -403,8 +403,8 @@ export class ProcessorRunner {
         // Processor returned an array - stop recording before clear/add (that's just internal plumbing)
         mutations = messageList.stopRecording();
 
-        // Clear and re-add since processor worked with array
-        messageList.clear.input.db();
+        // Clear and re-add since processor worked with array. array response is entire list
+        messageList.clear.all.db();
 
         // Separate system messages from other messages since they need different handling
         const systemMessages = result.filter(m => m.role === 'system');

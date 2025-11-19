@@ -184,7 +184,7 @@ export class MessageList {
 
     if (!messages) return this;
     const messageArray = Array.isArray(messages) ? messages : [messages];
-    
+
     // Record event if recording is enabled
     if (this.isRecording) {
       this.recordedEvents.push({
@@ -193,7 +193,7 @@ export class MessageList {
         count: messageArray.length,
       });
     }
-    
+
     for (const message of messageArray) {
       this.addOne(
         typeof message === `string`
@@ -292,6 +292,22 @@ export class MessageList {
 
   public get clear() {
     return {
+      all: {
+        db: (): MastraDBMessage[] => {
+          const allMessages = [...this.messages];
+          this.messages = [];
+          this.newUserMessages.clear();
+          this.newResponseMessages.clear();
+          this.userContextMessages.clear();
+          if (this.isRecording && allMessages.length > 0) {
+            this.recordedEvents.push({
+              type: 'clear',
+              count: allMessages.length,
+            });
+          }
+          return allMessages;
+        },
+      },
       input: {
         db: (): MastraDBMessage[] => {
           const userMessages = Array.from(this.newUserMessages);
