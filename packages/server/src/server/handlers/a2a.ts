@@ -501,7 +501,7 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
       requestId: String(requestId),
       mastra,
       agentId: agentId as string,
-      requestContext: requestContext ?? new RequestContext(),
+      requestContext,
       method,
       params,
       taskStore: taskStore!,

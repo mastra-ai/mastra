@@ -24,7 +24,7 @@ import { WORKFLOWS_ROUTES } from './workflows';
  */
 export type RuntimeContext = {
   mastra: Mastra;
-  requestContext?: RequestContext;
+  requestContext: RequestContext;
   tools?: Record<string, Tool>;
   taskStore?: InMemoryTaskStore;
   abortSignal: AbortSignal;

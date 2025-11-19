@@ -130,7 +130,7 @@ export const LIST_SCORERS_ROUTE = createRoute({
   handler: async ({ mastra, requestContext }) => {
     const scorers = await listScorersFromSystem({
       mastra,
-      requestContext: requestContext ?? new RequestContext(),
+      requestContext,
     });
     return scorers;
   },
@@ -148,7 +148,7 @@ export const GET_SCORER_ROUTE = createRoute({
   handler: async ({ mastra, scorerId, requestContext }) => {
     const scorers = await listScorersFromSystem({
       mastra,
-      requestContext: requestContext ?? new RequestContext(),
+      requestContext,
     });
 
     const scorer = scorers[scorerId];

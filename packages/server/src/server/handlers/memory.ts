@@ -116,7 +116,7 @@ async function getMemoryFromContext({
 
   if (agent) {
     return await agent?.getMemory({
-      requestContext: requestContext ?? new RequestContext(),
+      requestContext,
     });
   }
 }

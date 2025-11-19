@@ -437,7 +437,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
       const serializedAgentsMap = await Promise.all(
         Object.entries(agents).map(async ([id, agent]) => {
-          return formatAgentList({ id, mastra, agent, requestContext: requestContext ?? new RequestContext() });
+          return formatAgentList({ id, mastra, agent, requestContext });
         }),
       );
 
@@ -472,7 +472,7 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
       const result = await formatAgent({
         mastra,
         agent,
-        requestContext: requestContext ?? new RequestContext(),
+        requestContext,
         isPlayground,
       });
       return result;
