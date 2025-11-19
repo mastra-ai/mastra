@@ -80,9 +80,28 @@ export interface DeleteIndexParams {
   indexName: string;
 }
 
-export interface UpdateVectorParams {
+export interface UpdateVectorParams<Filter = VectorFilter> {
   indexName: string;
-  id: string;
+  /**
+   * Update a single vector by ID.
+   * Mutually exclusive with `filter`.
+   */
+  id?: string;
+  /**
+   * Update multiple vectors matching a filter.
+   * Mutually exclusive with `id`.
+   *
+   * @example
+   * ```ts
+   * // Archive all vectors for a user
+   * await vectorStore.updateVector({
+   *   indexName: 'docs',
+   *   filter: { userId: 'user_42' },
+   *   update: { metadata: { status: 'archived' } }
+   * });
+   * ```
+   */
+  filter?: Filter;
   update: { vector?: number[]; metadata?: Record<string, any> };
 }
 
@@ -91,20 +110,40 @@ export interface DeleteVectorParams {
   id: string;
 }
 
-export interface DeleteVectorsByFilterParams<Filter = VectorFilter> {
+export interface DeleteVectorsParams<Filter = VectorFilter> {
   indexName: string;
   /**
-   * Filter to match vectors for deletion.
+   * Delete multiple vectors by their IDs.
+   * Mutually exclusive with `filter`.
+   *
+   * @example
+   * ```ts
+   * await vectorStore.deleteVectors({
+   *   indexName: 'docs',
+   *   ids: ['vec_1', 'vec_2', 'vec_3']
+   * });
+   * ```
+   */
+  ids?: string[];
+  /**
+   * Delete vectors matching a metadata filter.
+   * Mutually exclusive with `ids`.
    * Uses the same filter syntax as query operations.
    *
    * @example
    * ```ts
    * // Delete all chunks from a document
-   * { source_id: 'document.pdf' }
+   * await vectorStore.deleteVectors({
+   *   indexName: 'docs',
+   *   filter: { source_id: 'document.pdf' }
+   * });
    *
    * // Delete with multiple conditions
-   * { $and: [{ tenant_id: 'acme' }, { bucket: 'temp' }] }
+   * await vectorStore.deleteVectors({
+   *   indexName: 'docs',
+   *   filter: { $and: [{ tenant_id: 'acme' }, { bucket: 'temp' }] }
+   * });
    * ```
    */
-  filter: Filter;
+  filter?: Filter;
 }

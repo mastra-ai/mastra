@@ -10,7 +10,7 @@ import type {
   DescribeIndexParams,
   DeleteIndexParams,
   DeleteVectorParams,
-  DeleteVectorsByFilterParams,
+  DeleteVectorsParams,
   UpdateVectorParams,
 } from '@mastra/core/vector';
 import { Mutex } from 'async-mutex';
@@ -1077,21 +1077,43 @@ export class PgVector extends MastraVector<PGVectorFilter> {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+  async updateVector({ indexName, id, filter, update }: UpdateVectorParams<PGVectorFilter>): Promise<void> {
     let client;
     try {
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');
       }
 
-      client = await this.pool.connect();
-      let updateParts = [];
-      let values = [id];
-      let valueIndex = 2;
+      // Validate that exactly one of id or filter is provided
+      if (!id && !filter) {
+        throw new MastraError({
+          id: 'MASTRA_STORAGE_PG_VECTOR_UPDATE_MISSING_PARAMS',
+          text: 'Either id or filter must be provided',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.USER,
+          details: { indexName },
+        });
+      }
 
-      // Get the properly qualified vector type
+      if (id && filter) {
+        throw new MastraError({
+          id: 'MASTRA_STORAGE_PG_VECTOR_UPDATE_CONFLICTING_PARAMS',
+          text: 'Cannot provide both id and filter - they are mutually exclusive',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.USER,
+          details: { indexName },
+        });
+      }
+
+      client = await this.pool.connect();
+      const { tableName } = this.getTableName(indexName);
       const vectorType = this.getVectorTypeName();
 
+      let updateParts = [];
+      let values: any[] = [];
+      let valueIndex = 1;
+
+      // Build SET clause
       if (update.vector) {
         updateParts.push(`embedding = $${valueIndex}::${vectorType}`);
         values.push(`[${update.vector.join(',')}]`);
@@ -1101,24 +1123,75 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       if (update.metadata) {
         updateParts.push(`metadata = $${valueIndex}::jsonb`);
         values.push(JSON.stringify(update.metadata));
+        valueIndex++;
       }
 
       if (updateParts.length === 0) {
         return;
       }
 
-      const { tableName } = this.getTableName(indexName);
+      let whereClause: string;
+      let whereValues: any[];
 
-      // query looks like this:
-      // UPDATE table SET embedding = $2::vector, metadata = $3::jsonb WHERE id = $1
+      if (id) {
+        // Update by ID
+        whereClause = `vector_id = $${valueIndex}`;
+        whereValues = [id];
+      } else {
+        // Update by filter
+        if (!filter || Object.keys(filter).length === 0) {
+          throw new MastraError({
+            id: 'MASTRA_STORAGE_PG_VECTOR_UPDATE_EMPTY_FILTER',
+            text: 'Cannot update with empty filter',
+            domain: ErrorDomain.MASTRA_VECTOR,
+            category: ErrorCategory.USER,
+            details: { indexName },
+          });
+        }
+
+        const translatedFilter = this.transformFilter(filter);
+        const { sql: filterQuery, values: filterValues } = buildDeleteFilterQuery(translatedFilter);
+
+        // Extract WHERE clause (remove "WHERE" prefix if present)
+        whereClause = filterQuery.trim().replace(/^WHERE\s+/i, '');
+
+        if (!whereClause) {
+          throw new MastraError({
+            id: 'MASTRA_STORAGE_PG_VECTOR_UPDATE_INVALID_FILTER',
+            text: 'Filter produced empty WHERE clause',
+            domain: ErrorDomain.MASTRA_VECTOR,
+            category: ErrorCategory.USER,
+            details: { indexName, filter: JSON.stringify(filter) },
+          });
+        }
+
+        // Adjust parameter indices for filter values
+        whereClause = whereClause.replace(/\$(\d+)/g, (match, num) => {
+          const newIndex = parseInt(num) + valueIndex - 1;
+          return `$${newIndex}`;
+        });
+        whereValues = filterValues;
+      }
+
       const query = `
         UPDATE ${tableName}
         SET ${updateParts.join(', ')}
-        WHERE vector_id = $1
+        WHERE ${whereClause}
       `;
 
-      await client.query(query, values);
+      const result = await client.query(query, [...values, ...whereValues]);
+
+      this.logger?.info(`Updated ${result.rowCount || 0} vectors in ${indexName}`, {
+        indexName,
+        id: id ? id : undefined,
+        filter: filter ? filter : undefined,
+        updatedCount: result.rowCount || 0,
+      });
     } catch (error: any) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+
       const mastraError = new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_VECTOR_UPDATE_VECTOR_FAILED',
@@ -1126,7 +1199,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             indexName,
-            id,
+            ...(id && { id }),
+            ...(filter && { filter: JSON.stringify(filter) }),
           },
         },
         error,
@@ -1182,52 +1256,92 @@ export class PgVector extends MastraVector<PGVectorFilter> {
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteVectorsByFilter({ indexName, filter }: DeleteVectorsByFilterParams<PGVectorFilter>): Promise<void> {
+  async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams<PGVectorFilter>): Promise<void> {
     let client;
     try {
       client = await this.pool.connect();
       const { tableName } = this.getTableName(indexName);
 
-      // Safety check: Don't allow empty filters to prevent accidental deletion of all vectors
-      if (!filter || Object.keys(filter).length === 0) {
+      // Validate that exactly one of filter or ids is provided
+      if (!filter && !ids) {
         throw new MastraError({
-          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_EMPTY_FILTER',
-          text: 'Cannot delete with empty filter. Use deleteIndex to delete all vectors.',
+          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_MISSING_PARAMS',
+          text: 'Either filter or ids must be provided',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
           details: { indexName },
         });
       }
 
-      // Translate filter using existing infrastructure
-      const translatedFilter = this.transformFilter(filter);
-      const { sql: filterQuery, values: filterValues } = buildDeleteFilterQuery(translatedFilter);
-
-      // Extract WHERE clause (remove "WHERE" prefix if present)
-      const whereClause = filterQuery.trim().replace(/^WHERE\s+/i, '');
-
-      if (!whereClause) {
+      if (filter && ids) {
         throw new MastraError({
-          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_INVALID_FILTER',
-          text: 'Filter produced empty WHERE clause',
+          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_CONFLICTING_PARAMS',
+          text: 'Cannot provide both filter and ids - they are mutually exclusive',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
-          details: { indexName, filter: JSON.stringify(filter) },
+          details: { indexName },
         });
       }
 
-      // Build delete query
-      const query = `
-        DELETE FROM ${tableName}
-        WHERE ${whereClause}
-      `;
+      let query: string;
+      let values: any[];
 
-      // Execute with the filter parameters
-      const result = await client.query(query, filterValues);
+      if (ids) {
+        // Delete by IDs
+        if (ids.length === 0) {
+          throw new MastraError({
+            id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_EMPTY_IDS',
+            text: 'Cannot delete with empty ids array',
+            domain: ErrorDomain.MASTRA_VECTOR,
+            category: ErrorCategory.USER,
+            details: { indexName },
+          });
+        }
 
-      this.logger?.info(`Deleted ${result.rowCount || 0} vectors from ${indexName} matching filter`, {
+        const placeholders = ids.map((_: string, i: number) => `$${i + 1}`).join(', ');
+        query = `DELETE FROM ${tableName} WHERE vector_id IN (${placeholders})`;
+        values = ids;
+      } else {
+        // Delete by filter
+        // Safety check: Don't allow empty filters to prevent accidental deletion of all vectors
+        if (!filter || Object.keys(filter).length === 0) {
+          throw new MastraError({
+            id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_EMPTY_FILTER',
+            text: 'Cannot delete with empty filter. Use deleteIndex to delete all vectors.',
+            domain: ErrorDomain.MASTRA_VECTOR,
+            category: ErrorCategory.USER,
+            details: { indexName },
+          });
+        }
+
+        // Translate filter using existing infrastructure
+        const translatedFilter = this.transformFilter(filter);
+        const { sql: filterQuery, values: filterValues } = buildDeleteFilterQuery(translatedFilter);
+
+        // Extract WHERE clause (remove "WHERE" prefix if present)
+        const whereClause = filterQuery.trim().replace(/^WHERE\s+/i, '');
+
+        if (!whereClause) {
+          throw new MastraError({
+            id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_INVALID_FILTER',
+            text: 'Filter produced empty WHERE clause',
+            domain: ErrorDomain.MASTRA_VECTOR,
+            category: ErrorCategory.USER,
+            details: { indexName, filter: JSON.stringify(filter) },
+          });
+        }
+
+        query = `DELETE FROM ${tableName} WHERE ${whereClause}`;
+        values = filterValues;
+      }
+
+      // Execute the delete query
+      const result = await client.query(query, values);
+
+      this.logger?.info(`Deleted ${result.rowCount || 0} vectors from ${indexName}`, {
         indexName,
-        filter,
+        filter: filter ? filter : undefined,
+        ids: ids ? ids : undefined,
         deletedCount: result.rowCount || 0,
       });
     } catch (error: any) {
@@ -1239,10 +1353,14 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Wrap other errors
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_BY_FILTER_FAILED',
+          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_VECTORS_FAILED',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, filter: JSON.stringify(filter) },
+          details: {
+            indexName,
+            ...(filter && { filter: JSON.stringify(filter) }),
+            ...(ids && { idsCount: ids.length }),
+          },
         },
         error,
       );

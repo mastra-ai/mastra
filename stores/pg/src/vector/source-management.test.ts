@@ -5,7 +5,7 @@ import { PgVector } from '.';
 /**
  * Comprehensive test suite for source-based vector management.
  * Tests cover:
- * - Basic deleteVectorsByFilter() functionality
+ * - Basic deleteVectors() with filter functionality
  * - upsert() with deleteFilter parameter
  * - Real-world scenarios (RAG workflows)
  * - Performance with large datasets
@@ -48,7 +48,7 @@ describe('PgVector - Source Management', () => {
     }
   });
 
-  describe('deleteVectorsByFilter()', () => {
+  describe('deleteVectors()', () => {
     describe('Basic Functionality', () => {
       it('should delete vectors matching a simple source_id filter', async () => {
         // Insert vectors with different source_ids
@@ -72,7 +72,7 @@ describe('PgVector - Source Management', () => {
         expect(stats1.count).toBe(3);
 
         // Delete vectors from doc1.pdf
-        await vectorDB.deleteVectorsByFilter({
+        await vectorDB.deleteVectors({
           indexName: testIndexName,
           filter: { source_id: 'doc1.pdf' },
         });
@@ -101,7 +101,7 @@ describe('PgVector - Source Management', () => {
         });
 
         // Try to delete with non-matching filter
-        await vectorDB.deleteVectorsByFilter({
+        await vectorDB.deleteVectors({
           indexName: testIndexName,
           filter: { source_id: 'nonexistent.pdf' },
         });
@@ -114,7 +114,7 @@ describe('PgVector - Source Management', () => {
       it('should throw error on empty filter', async () => {
         // Empty filter should throw to prevent accidental deletion of all vectors
         await expect(
-          vectorDB.deleteVectorsByFilter({
+          vectorDB.deleteVectors({
             indexName: testIndexName,
             filter: {},
           }),
@@ -143,7 +143,7 @@ describe('PgVector - Source Management', () => {
         });
 
         // Delete only doc1.pdf from public bucket
-        await vectorDB.deleteVectorsByFilter({
+        await vectorDB.deleteVectors({
           indexName: testIndexName,
           filter: {
             $and: [{ source_id: 'doc1.pdf' }, { bucket: 'public' }],
@@ -177,7 +177,7 @@ describe('PgVector - Source Management', () => {
         });
 
         // Delete doc1 OR doc2
-        await vectorDB.deleteVectorsByFilter({
+        await vectorDB.deleteVectors({
           indexName: testIndexName,
           filter: {
             $or: [{ source_id: 'doc1.pdf' }, { source_id: 'doc2.pdf' }],
@@ -215,7 +215,7 @@ describe('PgVector - Source Management', () => {
         });
 
         // Delete multiple sources at once
-        await vectorDB.deleteVectorsByFilter({
+        await vectorDB.deleteVectors({
           indexName: testIndexName,
           filter: {
             source_id: { $in: ['doc1.pdf', 'doc3.pdf', 'doc4.pdf'] },
@@ -248,7 +248,7 @@ describe('PgVector - Source Management', () => {
         });
 
         // Delete old documents (older than yesterday)
-        await vectorDB.deleteVectorsByFilter({
+        await vectorDB.deleteVectors({
           indexName: testIndexName,
           filter: {
             indexed_at: { $lt: yesterday },
@@ -282,7 +282,7 @@ describe('PgVector - Source Management', () => {
         });
 
         // Delete only acme's report
-        await vectorDB.deleteVectorsByFilter({
+        await vectorDB.deleteVectors({
           indexName: testIndexName,
           filter: {
             $and: [{ tenant_id: 'acme' }, { source_id: 'report.pdf' }],
@@ -320,7 +320,7 @@ describe('PgVector - Source Management', () => {
         });
 
         // Delete all of acme's documents
-        await vectorDB.deleteVectorsByFilter({
+        await vectorDB.deleteVectors({
           indexName: testIndexName,
           filter: { tenant_id: 'acme' },
         });
@@ -334,7 +334,7 @@ describe('PgVector - Source Management', () => {
     describe('Error Handling', () => {
       it('should throw error for invalid index name', async () => {
         await expect(
-          vectorDB.deleteVectorsByFilter({
+          vectorDB.deleteVectors({
             indexName: 'nonexistent_index',
             filter: { source_id: 'doc.pdf' },
           }),
@@ -344,7 +344,7 @@ describe('PgVector - Source Management', () => {
       it('should handle filters that produce invalid SQL gracefully', async () => {
         // This should be caught and thrown as a MastraError
         await expect(
-          vectorDB.deleteVectorsByFilter({
+          vectorDB.deleteVectors({
             indexName: testIndexName,
             filter: null as any,
           }),
@@ -594,7 +594,7 @@ describe('PgVector - Source Management', () => {
       expect(stats2.count).toBe(2);
 
       // Step 3: Document deleted entirely
-      await vectorDB.deleteVectorsByFilter({
+      await vectorDB.deleteVectors({
         indexName: testIndexName,
         filter: { source_id: 'ai-guide.pdf' },
       });
@@ -683,7 +683,7 @@ describe('PgVector - Source Management', () => {
 
       // Delete temp documents older than 3 days
       const threeDaysAgo = new Date(now.getTime() - 3 * 86400000);
-      await vectorDB.deleteVectorsByFilter({
+      await vectorDB.deleteVectors({
         indexName: testIndexName,
         filter: {
           $and: [{ bucket: 'temp' }, { indexed_at: { $lt: threeDaysAgo.toISOString() } }],
@@ -728,7 +728,7 @@ describe('PgVector - Source Management', () => {
 
       // Delete half by filter
       const deleteStart = Date.now();
-      await vectorDB.deleteVectorsByFilter({
+      await vectorDB.deleteVectors({
         indexName: testIndexName,
         filter: { source_id: 'doc1.pdf' },
       });
@@ -905,7 +905,7 @@ describe('PgVector - Source Management', () => {
 
       // Concurrent delete and insert operations
       promises.push(
-        vectorDB.deleteVectorsByFilter({
+        vectorDB.deleteVectors({
           indexName: testIndexName,
           filter: { type: 'A' },
         }),
@@ -956,7 +956,7 @@ describe('PgVector - Source Management', () => {
       });
 
       // Try to delete with non-matching filter (should not error, just delete nothing)
-      await vectorDB.deleteVectorsByFilter({
+      await vectorDB.deleteVectors({
         indexName: testIndexName,
         filter: { source_id: 'nonexistent.pdf' },
       });
@@ -987,7 +987,7 @@ describe('PgVector - Source Management', () => {
       });
 
       // Complex nested filter: (tenant=acme AND env=prod) OR (tenant=globex AND version=2)
-      await vectorDB.deleteVectorsByFilter({
+      await vectorDB.deleteVectors({
         indexName: testIndexName,
         filter: {
           $or: [
@@ -1024,7 +1024,7 @@ describe('PgVector - Source Management', () => {
       });
 
       // Try to filter on non-existent field (should not match, not error)
-      await vectorDB.deleteVectorsByFilter({
+      await vectorDB.deleteVectors({
         indexName: testIndexName,
         filter: { nonexistent_field: 'value' },
       });
@@ -1058,7 +1058,7 @@ describe('PgVector - Source Management', () => {
       });
 
       // Delete where optional_field exists
-      await vectorDB.deleteVectorsByFilter({
+      await vectorDB.deleteVectors({
         indexName: testIndexName,
         filter: { optional_field: { $exists: true } },
       });
@@ -1124,7 +1124,7 @@ describe('PgVector - Source Management', () => {
       });
 
       // Complex filter with multiple conditions
-      await vectorDB.deleteVectorsByFilter({
+      await vectorDB.deleteVectors({
         indexName: testIndexName,
         filter: {
           $and: [

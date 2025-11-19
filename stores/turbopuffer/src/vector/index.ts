@@ -9,7 +9,7 @@ import type {
   QueryVectorParams,
   UpdateVectorParams,
   UpsertVectorParams,
-  DeleteVectorsByFilterParams,
+  DeleteVectorsParams,
 } from '@mastra/core/vector';
 import { MastraVector } from '@mastra/core/vector';
 import { Turbopuffer } from '@turbopuffer/turbopuffer';
@@ -418,13 +418,13 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     }
   }
 
-  async deleteVectorsByFilter({ indexName, filter }: DeleteVectorsByFilterParams): Promise<void> {
+  async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams): Promise<void> {
     throw new MastraError({
-      id: 'STORAGE_TURBOBUFFER_VECTOR_DELETE_BY_FILTER_NOT_SUPPORTED',
-      text: 'deleteVectorsByFilter is not yet implemented for Turbopuffer vector store',
+      id: 'STORAGE_TURBOBUFFER_VECTOR_DELETE_VECTORS_NOT_SUPPORTED',
+      text: 'deleteVectors is not yet implemented for Turbopuffer vector store',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
-      details: { indexName, filter: JSON.stringify(filter) },
+      details: { indexName, filter: filter ? JSON.stringify(filter) : undefined, ids: ids ? ids.length : undefined },
     });
   }
 }

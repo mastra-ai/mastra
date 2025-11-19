@@ -10,7 +10,7 @@ import type {
   DeleteIndexParams,
   DeleteVectorParams,
   UpdateVectorParams,
-  DeleteVectorsByFilterParams,
+  DeleteVectorsParams,
 } from '@mastra/core/vector';
 import type { Bucket, Cluster, Collection, Scope } from 'couchbase';
 import { MutateInSpec, connect, SearchRequest, VectorQuery, VectorSearch } from 'couchbase';
@@ -484,13 +484,13 @@ export class CouchbaseVector extends MastraVector {
     }
   }
 
-  async deleteVectorsByFilter({ indexName, filter }: DeleteVectorsByFilterParams): Promise<void> {
+  async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams): Promise<void> {
     throw new MastraError({
-      id: 'COUCHBASE_VECTOR_DELETE_BY_FILTER_NOT_SUPPORTED',
-      text: 'deleteVectorsByFilter is not yet implemented for Couchbase vector store',
+      id: 'COUCHBASE_VECTOR_DELETE_VECTORS_NOT_SUPPORTED',
+      text: 'deleteVectors is not yet implemented for Couchbase vector store',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
-      details: { indexName, filter: JSON.stringify(filter) },
+      details: { indexName, filter: filter ? JSON.stringify(filter) : undefined, ids: ids ? ids.length : undefined },
     });
   }
 

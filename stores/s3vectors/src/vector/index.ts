@@ -18,7 +18,7 @@ import type {
   IndexStats,
   CreateIndexParams,
   UpsertVectorParams,
-  DeleteVectorsByFilterParams,
+  DeleteVectorsParams,
   QueryVectorParams,
   DescribeIndexParams,
   DeleteIndexParams,
@@ -482,13 +482,13 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
     }
   }
 
-  async deleteVectorsByFilter({ indexName, filter }: DeleteVectorsByFilterParams): Promise<void> {
+  async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams): Promise<void> {
     throw new MastraError({
-      id: 'STORAGE_S3VECTORS_VECTOR_DELETE_BY_FILTER_NOT_SUPPORTED',
-      text: 'deleteVectorsByFilter is not yet implemented for S3Vectors vector store',
+      id: 'STORAGE_S3VECTORS_VECTOR_DELETE_VECTORS_NOT_SUPPORTED',
+      text: 'deleteVectors is not yet implemented for S3Vectors vector store',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
-      details: { indexName, filter: JSON.stringify(filter) },
+      details: { indexName, filter: filter ? JSON.stringify(filter) : undefined, ids: ids ? ids.length : undefined },
     });
   }
 

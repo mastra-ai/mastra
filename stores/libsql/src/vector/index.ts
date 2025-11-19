@@ -14,7 +14,7 @@ import type {
   DeleteIndexParams,
   DeleteVectorParams,
   UpdateVectorParams,
-  DeleteVectorsByFilterParams,
+  DeleteVectorsParams,
 } from '@mastra/core/vector';
 import type { LibSQLVectorFilter } from './filter';
 import { LibSQLFilterTranslator } from './filter';
@@ -492,13 +492,13 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     });
   }
 
-  async deleteVectorsByFilter({ indexName, filter }: DeleteVectorsByFilterParams<LibSQLVectorFilter>): Promise<void> {
+  async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams<LibSQLVectorFilter>): Promise<void> {
     throw new MastraError({
-      id: 'LIBSQL_VECTOR_DELETE_BY_FILTER_NOT_SUPPORTED',
-      text: 'deleteVectorsByFilter is not yet implemented for LibSQL vector store',
+      id: 'LIBSQL_VECTOR_DELETE_VECTORS_NOT_SUPPORTED',
+      text: 'deleteVectors is not yet implemented for LibSQL vector store',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
-      details: { indexName, filter: JSON.stringify(filter) },
+      details: { indexName, filter: filter ? JSON.stringify(filter) : undefined, ids: ids ? ids.length : undefined },
     });
   }
 

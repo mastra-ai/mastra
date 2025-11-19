@@ -11,7 +11,7 @@ import type {
   QueryResult,
   UpdateVectorParams,
   DeleteVectorParams,
-  DeleteVectorsByFilterParams,
+  DeleteVectorsParams,
   DescribeIndexParams,
   DeleteIndexParams,
 } from './types';
@@ -49,30 +49,36 @@ export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
 
   abstract deleteIndex(params: DeleteIndexParams): Promise<void>;
 
-  abstract updateVector(params: UpdateVectorParams): Promise<void>;
+  abstract updateVector(params: UpdateVectorParams<Filter>): Promise<void>;
 
   abstract deleteVector(params: DeleteVectorParams): Promise<void>;
 
   /**
-   * Delete vectors matching a metadata filter.
+   * Delete multiple vectors by IDs or metadata filter.
    *
    * This enables bulk deletion and source-based vector management.
    * Implementations should throw MastraError with appropriate error code
-   * if filter deletion is not supported.
+   * if the operation is not supported.
    *
-   * @param params - Parameters including indexName and filter
-   * @throws {MastraError} If filter deletion is not supported or filter is invalid
+   * @param params - Parameters including indexName and either ids or filter (mutually exclusive)
+   * @throws {MastraError} If operation is not supported or parameters are invalid
    *
    * @example
    * ```ts
    * // Delete all chunks from a document
-   * await vectorStore.deleteVectorsByFilter({
+   * await vectorStore.deleteVectors({
    *   indexName: 'docs',
    *   filter: { source_id: 'manual.pdf' }
    * });
    *
+   * // Delete multiple vectors by ID
+   * await vectorStore.deleteVectors({
+   *   indexName: 'docs',
+   *   ids: ['vec_1', 'vec_2', 'vec_3']
+   * });
+   *
    * // Delete old temporary documents
-   * await vectorStore.deleteVectorsByFilter({
+   * await vectorStore.deleteVectors({
    *   indexName: 'docs',
    *   filter: {
    *     $and: [
@@ -83,7 +89,7 @@ export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
    * });
    * ```
    */
-  abstract deleteVectorsByFilter(params: DeleteVectorsByFilterParams<Filter>): Promise<void>;
+  abstract deleteVectors(params: DeleteVectorsParams<Filter>): Promise<void>;
 
   protected async validateExistingIndex(indexName: string, dimension: number, metric: string) {
     let info: IndexStats;

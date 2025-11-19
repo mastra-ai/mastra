@@ -10,7 +10,7 @@ import type {
   DeleteIndexParams,
   DeleteVectorParams,
   UpdateVectorParams,
-  DeleteVectorsByFilterParams,
+  DeleteVectorsParams,
 } from '@mastra/core/vector';
 import { MongoClient } from 'mongodb';
 import type { MongoClientOptions, Document, Db, Collection } from 'mongodb';
@@ -552,13 +552,13 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     }
   }
 
-  async deleteVectorsByFilter({ indexName, filter }: DeleteVectorsByFilterParams<MongoDBVectorFilter>): Promise<void> {
+  async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams<MongoDBVectorFilter>): Promise<void> {
     throw new MastraError({
-      id: 'STORAGE_MONGODB_VECTOR_DELETE_BY_FILTER_NOT_SUPPORTED',
-      text: 'deleteVectorsByFilter is not yet implemented for MongoDB vector store',
+      id: 'STORAGE_MONGODB_VECTOR_DELETE_VECTORS_NOT_SUPPORTED',
+      text: 'deleteVectors is not yet implemented for MongoDB vector store',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
-      details: { indexName, filter: JSON.stringify(filter) },
+      details: { indexName, filter: filter ? JSON.stringify(filter) : undefined, ids: ids ? ids.length : undefined },
     });
   }
 
