@@ -1,5 +1,5 @@
 import type { ZodSchema } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import type { ServerRoute } from './routes';
 
 interface RouteOpenAPIConfig {
@@ -125,7 +125,7 @@ function convertZodToJsonSchema(spec: OpenAPIRoute): any {
 
   // Convert path parameters
   if (spec.requestParams?.path) {
-    const pathSchema = zodToJsonSchema(spec.requestParams.path, { target: 'openApi3', $refStrategy: 'none' }) as any;
+    const pathSchema = zodToJsonSchema(spec.requestParams.path, 'openApi3', 'none') as any;
     const properties = pathSchema.properties || {};
 
     Object.entries(properties).forEach(([name, schema]) => {
@@ -141,7 +141,7 @@ function convertZodToJsonSchema(spec: OpenAPIRoute): any {
 
   // Convert query parameters
   if (spec.requestParams?.query) {
-    const querySchema = zodToJsonSchema(spec.requestParams.query, { target: 'openApi3', $refStrategy: 'none' }) as any;
+    const querySchema = zodToJsonSchema(spec.requestParams.query, 'openApi3', 'none') as any;
     const properties = querySchema.properties || {};
     const required = querySchema.required || [];
 
@@ -166,10 +166,7 @@ function convertZodToJsonSchema(spec: OpenAPIRoute): any {
       required: true,
       content: {
         'application/json': {
-          schema: zodToJsonSchema(spec.requestBody.content['application/json'].schema, {
-            target: 'openApi3',
-            $refStrategy: 'none',
-          }),
+          schema: zodToJsonSchema(spec.requestBody.content['application/json'].schema, 'openApi3', 'none'),
         },
       },
     };
@@ -184,10 +181,7 @@ function convertZodToJsonSchema(spec: OpenAPIRoute): any {
     if (response.content?.['application/json']?.schema) {
       converted.responses[statusCode].content = {
         'application/json': {
-          schema: zodToJsonSchema(response.content['application/json'].schema, {
-            target: 'openApi3',
-            $refStrategy: 'none',
-          }),
+          schema: zodToJsonSchema(response.content['application/json'].schema, 'openApi3', 'none'),
         },
       };
     }
