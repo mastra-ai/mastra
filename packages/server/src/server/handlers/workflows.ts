@@ -897,6 +897,52 @@ export const TIME_TRAVEL_WORKFLOW_ROUTE = createRoute({
   },
 });
 
+export const TIME_TRAVEL_STREAM_WORKFLOW_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/time-travel-stream',
+  responseType: 'stream',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: timeTravelBodySchema,
+  summary: 'Time travel workflow stream',
+  description: 'Time travels an active workflow execution and streams the results in real-time',
+  tags: ['Workflows'],
+  handler: async ({ mastra, workflowId, runId, ...params }) => {
+    try {
+      if (!workflowId) {
+        throw new HTTPException(400, { message: 'Workflow ID is required' });
+      }
+
+      if (!runId) {
+        throw new HTTPException(400, { message: 'runId required to time travel workflow stream' });
+      }
+
+      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+
+      if (!workflow) {
+        throw new HTTPException(404, { message: 'Workflow not found' });
+      }
+      const serverCache = mastra.getServerCache();
+
+      const run = await workflow.createRun({ runId });
+      const result = run.timeTravelStream(params);
+      return result.fullStream.pipeThrough(
+        new TransformStream<ChunkType, ChunkType>({
+          transform(chunk, controller) {
+            if (serverCache) {
+              const cacheKey = runId;
+              serverCache.listPush(cacheKey, chunk).catch(() => {});
+            }
+            controller.enqueue(chunk);
+          },
+        }),
+      );
+    } catch (error) {
+      return handleError(error, 'Error time traveling workflow stream');
+    }
+  },
+});
+
 export const CANCEL_WORKFLOW_RUN_ROUTE = createRoute({
   method: 'POST',
   path: '/api/workflows/:workflowId/runs/:runId/cancel',
