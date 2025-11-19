@@ -129,6 +129,40 @@ describe('GeminiLiveVoice', () => {
     });
   });
 
+  describe('Vertex AI configuration', () => {
+    it('should fall back to default location when not provided', () => {
+      const vertexVoice = new GeminiLiveVoice({
+        vertexAI: true,
+        project: 'test-project',
+        model: 'gemini-2.0-flash-live-001',
+      });
+
+      expect((vertexVoice as any).getVertexLocation()).toBe('us-central1');
+    });
+
+    it('should send fully-qualified Vertex AI model paths when needed', async () => {
+      const vertexVoice = new GeminiLiveVoice({
+        vertexAI: true,
+        project: 'test-project',
+        model: 'gemini-2.0-flash-live-001',
+      });
+
+      vi.spyOn((vertexVoice as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (vertexVoice as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await vertexVoice.connect();
+
+      const wsSent = ((vertexVoice as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.model).toBe(
+        'projects/test-project/locations/us-central1/publishers/google/models/gemini-2.0-flash-live-001',
+      );
+
+      await vertexVoice.disconnect();
+    });
+  });
+
   describe('Connection Management', () => {
     it('should establish WebSocket connection', async () => {
       // Mock connection open and session creation to prevent timeouts

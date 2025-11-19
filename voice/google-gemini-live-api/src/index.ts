@@ -427,8 +427,9 @@ export class GeminiLiveVoice extends MastraVoice<
       let headers: WebSocket.ClientOptions = {};
 
       if (this.options.vertexAI) {
+        const location = this.getVertexLocation();
         // Vertex AI endpoint - using correct LlmBidiService endpoint
-        wsUrl = `wss://${this.options.location}-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent`;
+        wsUrl = `wss://${location}-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent`;
         // Initialize auth and get token
         await this.authManager.initialize();
         const accessToken = await this.authManager.getAccessToken();
@@ -1694,6 +1695,40 @@ export class GeminiLiveVoice extends MastraVoice<
   }
 
   /**
+   * Get Vertex AI location with fallback to default region
+   * @private
+   */
+  private getVertexLocation(): string {
+    return this.options.location?.trim() || 'us-central1';
+  }
+
+  /**
+   * Resolve the proper model identifier for each API mode
+   * @private
+   */
+  private resolveModelIdentifier(): string {
+    const model = this.options.model ?? DEFAULT_MODEL;
+
+    if (!this.options.vertexAI) {
+      return `models/${model}`;
+    }
+
+    if (model.startsWith('projects/')) {
+      return model;
+    }
+
+    if (!this.options.project) {
+      throw this.createAndEmitError(
+        GeminiLiveErrorCode.PROJECT_ID_MISSING,
+        'Google Cloud project ID is required when using Vertex AI.',
+      );
+    }
+
+    const location = this.getVertexLocation();
+    return `projects/${this.options.project}/locations/${location}/publishers/google/models/${model}`;
+  }
+
+  /**
    * Send initial configuration to Gemini Live API
    * @private
    */
@@ -1738,7 +1773,7 @@ export class GeminiLiveVoice extends MastraVoice<
     // Build the Live API setup message
     const setupMessage: { setup: LiveGenerateContentSetup } = {
       setup: {
-        model: this.options.vertexAI ? this.options.model : `models/${this.options.model}`,
+        model: this.resolveModelIdentifier(),
       },
     };
 
