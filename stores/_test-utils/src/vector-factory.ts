@@ -1,6 +1,7 @@
 import { describe, beforeAll, afterAll } from 'vitest';
 import type { MastraVector } from '@mastra/core/vector';
 import { createMetadataFilteringTest } from './domains/vector/metadata-filtering';
+import { createAdvancedOperationsTest } from './domains/vector/advanced-operations';
 
 export interface VectorTestConfig {
   vector: MastraVector<any>;
@@ -32,5 +33,6 @@ export function createVectorTestSuite(config: VectorTestConfig) {
     });
 
     createMetadataFilteringTest(config);
+    createAdvancedOperationsTest(config);
   });
 }
