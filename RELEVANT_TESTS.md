@@ -12,6 +12,8 @@
 
 ## 🔥 FAILING TESTS - Ranked Easiest to Hardest
 
+**CRITICAL FINDING:** Tests #7, #8, and #9 all **PASS on `main`** but **FAIL on our branch**. These are regressions we introduced, not pre-existing issues!
+
 ### Easiest (Quick Wins) - ✅ ALL FIXED!
 
 1. **`token-accuracy.test.ts`** ⭐ EASIEST ✅ FIXED
@@ -47,29 +49,29 @@
 
 ### Hard
 
-7. **`streaming-memory.test.ts`** (integration-tests-v5) ⭐⭐⭐⭐⭐ MODERATE-HARD ⚠️ FLAKY
+7. **`streaming-memory.test.ts`** (integration-tests-v5) ⭐⭐⭐⭐⭐ MODERATE-HARD ❌ REGRESSION
    * **Status:** 1 failed, 3 passed
-   * **Issue:** "should stream useChat with client side tool calling" - flaky clipboard test (expects "test 2!" but clipboard is empty)
-   * **Why Hard:** Known flaky test - clipboard state not persisting between calls
-   * **NOTE: blocked! agent isn't sure what to do** - Test also fails on `main` branch (pre-existing issue)
+   * **Issue:** "should stream useChat with client side tool calling" - clipboard test (expects "test 2!" but clipboard is empty)
+   * **Why Hard:** Clipboard state not persisting between calls - this is a regression (test PASSES on `main`)
+   * **Root Cause:** Unknown - need to investigate what changed in our branch that broke clipboard state persistence
 
-8. **`working-memory.test.ts`** (integration-tests-v5) ⭐⭐⭐⭐⭐ MODERATE-HARD ⚠️ 1 FAILURE
+8. **`working-memory.test.ts`** (integration-tests-v5) ⭐⭐⭐⭐⭐ MODERATE-HARD ❌ REGRESSION
    * **Status:** 1 failed, 31 passed, 15 skipped (59 total)
    * **Issue:** "should call memory tool first, then execute user-defined tool" - routing order wrong (expects getWeather, gets updateWorkingMemory)
-   * **Why Hard:** Complex agent network test with tool execution ordering
-   * **NOTE: blocked! agent isn't sure what to do** - Test also fails on `main` branch (pre-existing issue)
+   * **Why Hard:** Complex agent network test with tool execution ordering - this is a regression (test PASSES on `main`)
+   * **Root Cause:** Unknown - need to investigate what changed in tool routing/execution order
 
-9. **`agent-memory.test.ts`** (integration-tests-v5) ⭐⭐⭐⭐⭐⭐ HARD ⚠️ 1 FAILURE
+9. **`agent-memory.test.ts`** (integration-tests-v5) ⭐⭐⭐⭐⭐⭐ HARD ❌ REGRESSION
    * **Status:** 1 failed, 6 passed (15 total)
    * **Issue:** "should not save messages provided in the context option" - expected 0 context messages saved, got 1
-   * **Why Hard:** Context messages are being incorrectly saved to storage
-   * **NOTE: blocked! agent isn't sure what to do** - Test also fails on `main` branch (pre-existing issue)
+   * **Why Hard:** Context messages are being incorrectly saved to storage - this is a regression (test PASSES on `main`)
+   * **Root Cause:** Unknown - need to investigate why context messages are now being saved
 
-10. **`agent-memory.test.ts`** (integration-tests v4) ⭐⭐⭐⭐⭐⭐ HARD ⚠️ 1 FAILURE
+10. **`agent-memory.test.ts`** (integration-tests v4) ⭐⭐⭐⭐⭐⭐ HARD ❌ REGRESSION
     * **Status:** 1 failed, 6 passed (14 total)
     * **Issue:** Same as v5 - "should not save messages provided in the context option" - expected 0 context messages saved, got 1
-    * **Why Hard:** Same root cause as v5 - context messages being incorrectly saved
-    * **NOTE: blocked! agent isn't sure what to do** - Test also fails on `main` branch (pre-existing issue)
+    * **Why Hard:** Same root cause as v5 - context messages being incorrectly saved - this is a regression (test PASSES on `main`)
+    * **Root Cause:** Same as v5 - need to investigate why context messages are now being saved
 
 ### Hardest
 
