@@ -427,8 +427,8 @@ export class GeminiLiveVoice extends MastraVoice<
       let headers: WebSocket.ClientOptions = {};
 
       if (this.options.vertexAI) {
-        // Vertex AI endpoint
-        wsUrl = `wss://${this.options.location}-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.PredictionService.ServerStreamingPredict`;
+        // Vertex AI endpoint - using correct LlmBidiService endpoint
+        wsUrl = `wss://${this.options.location}-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent`;
         // Initialize auth and get token
         await this.authManager.initialize();
         const accessToken = await this.authManager.getAccessToken();
@@ -1738,7 +1738,7 @@ export class GeminiLiveVoice extends MastraVoice<
     // Build the Live API setup message
     const setupMessage: { setup: LiveGenerateContentSetup } = {
       setup: {
-        model: `models/${this.options.model}`,
+        model: this.options.vertexAI ? this.options.model : `models/${this.options.model}`,
       },
     };
 
