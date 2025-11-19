@@ -19,7 +19,7 @@ import { authenticationMiddleware, authorizationMiddleware } from './handlers/au
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
-import { MCP_ROUTES } from './handlers/mcp';
+import { MCP_ROUTES, getMcpServerMessageHandler, getMcpServerSseHandler } from './handlers/mcp';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
@@ -202,6 +202,11 @@ export async function createHonoServer(
   for (const route of MCP_ROUTES) {
     await honoServerAdapter.registerRoute(app as any, route, { prefix: '' });
   }
+
+  // Register MCP standalone handlers (these use raw Hono Context, not createRoute pattern)
+  app.all('/api/mcp/:serverId/mcp', getMcpServerMessageHandler);
+  app.get('/api/mcp/:serverId/sse', getMcpServerSseHandler);
+  app.post('/api/mcp/:serverId/messages', getMcpServerSseHandler);
 
   if (options?.isDev || server?.build?.swaggerUI) {
     app.get(

@@ -9,6 +9,16 @@ export const mcpServerDetailPathParams = z.object({
   id: z.string().describe('MCP server ID'),
 });
 
+export const mcpServerToolPathParams = z.object({
+  serverId: z.string().describe('MCP server ID'),
+  toolId: z.string().describe('Tool ID'),
+});
+
+export const executeToolBodySchema = z.object({
+  data: z.unknown().optional(),
+  requestContext: z.unknown().optional(),
+});
+
 // Query parameters
 export const listMcpServersQuerySchema = z.object({
   limit: z.coerce.number().optional(),

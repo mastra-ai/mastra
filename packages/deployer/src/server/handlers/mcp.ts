@@ -6,7 +6,10 @@ import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import {
+  mcpServerIdPathParams,
   mcpServerDetailPathParams,
+  mcpServerToolPathParams,
+  executeToolBodySchema,
   listMcpServersQuerySchema,
   listMcpServersResponseSchema,
   serverDetailSchema,
@@ -64,6 +67,39 @@ export const getMcpServerMessageHandler = async (c: Context) => {
       c.get('logger')?.error('Error after headers sent:', error);
       return await toFetchResponse(res);
     }
+  }
+};
+
+/**
+ * Handler for SSE related routes for an MCP server.
+ * This function will be called for both establishing the SSE connection (GET)
+ * and for posting messages to it (POST).
+ */
+export const getMcpServerSseHandler = async (c: Context) => {
+  const mastra = getMastra(c);
+  const serverId = c.req.param('serverId');
+  const server = mastra.getMCPServerById(serverId);
+
+  if (!server) {
+    return c.json({ error: `MCP server '${serverId}' not found` }, 404);
+  }
+
+  const requestUrl = new URL(c.req.url);
+
+  // Define the paths that MCPServer's startSSE method will compare against.
+  const sseConnectionPath = `/api/mcp/${serverId}/sse`;
+  const sseMessagePath = `/api/mcp/${serverId}/messages`;
+
+  try {
+    return await server.startHonoSSE({
+      url: requestUrl,
+      ssePath: sseConnectionPath,
+      messagePath: sseMessagePath,
+      context: c,
+    });
+  } catch (error: any) {
+    c.get('logger')?.error({ err: error, serverId, path: requestUrl.pathname }, 'Error in MCP SSE route handler');
+    return c.json({ error: 'Error handling MCP SSE request' }, 500);
   }
 };
 
@@ -221,10 +257,106 @@ export const GET_MCP_SERVER_DETAIL_ROUTE = createRoute({
   },
 });
 
+export const LIST_MCP_SERVER_TOOLS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/mcp/:serverId/tools',
+  responseType: 'json',
+  pathParamSchema: mcpServerIdPathParams,
+  summary: 'List MCP server tools',
+  description: 'Returns a list of tools available on the specified MCP server',
+  tags: ['MCP'],
+  handler: async ({ mastra, serverId }: RuntimeContext & { serverId: string }) => {
+    if (!mastra || typeof mastra.getMCPServerById !== 'function') {
+      throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
+    }
+
+    const server = mastra.getMCPServerById(serverId);
+
+    if (!server) {
+      throw new HTTPException(404, { message: `MCP server with ID '${serverId}' not found` });
+    }
+
+    if (typeof server.getToolListInfo !== 'function') {
+      throw new HTTPException(501, { message: `Server '${serverId}' cannot list tools in this way.` });
+    }
+
+    return server.getToolListInfo();
+  },
+});
+
+export const GET_MCP_SERVER_TOOL_DETAIL_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/mcp/:serverId/tools/:toolId',
+  responseType: 'json',
+  pathParamSchema: mcpServerToolPathParams,
+  summary: 'Get MCP server tool details',
+  description: 'Returns detailed information about a specific tool on the MCP server',
+  tags: ['MCP'],
+  handler: async ({ mastra, serverId, toolId }: RuntimeContext & { serverId: string; toolId: string }) => {
+    if (!mastra || typeof mastra.getMCPServerById !== 'function') {
+      throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
+    }
+
+    const server = mastra.getMCPServerById(serverId);
+
+    if (!server) {
+      throw new HTTPException(404, { message: `MCP server with ID '${serverId}' not found` });
+    }
+
+    if (typeof server.getToolInfo !== 'function') {
+      throw new HTTPException(501, { message: `Server '${serverId}' cannot provide tool details in this way.` });
+    }
+
+    const toolInfo = server.getToolInfo(toolId);
+    if (!toolInfo) {
+      throw new HTTPException(404, { message: `Tool with ID '${toolId}' not found on MCP server '${serverId}'` });
+    }
+
+    return toolInfo;
+  },
+});
+
+export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/mcp/:serverId/tools/:toolId/execute',
+  responseType: 'json',
+  pathParamSchema: mcpServerToolPathParams,
+  bodySchema: executeToolBodySchema,
+  summary: 'Execute MCP server tool',
+  description: 'Executes a tool on the specified MCP server with the provided arguments',
+  tags: ['MCP'],
+  handler: async ({
+    mastra,
+    serverId,
+    toolId,
+    data,
+    requestContext,
+  }: RuntimeContext & { serverId: string; toolId: string; data?: unknown; requestContext?: unknown }) => {
+    if (!mastra || typeof mastra.getMCPServerById !== 'function') {
+      throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
+    }
+
+    const server = mastra.getMCPServerById(serverId);
+
+    if (!server) {
+      throw new HTTPException(404, { message: `MCP server with ID '${serverId}' not found` });
+    }
+
+    if (typeof server.executeTool !== 'function') {
+      throw new HTTPException(501, { message: `Server '${serverId}' cannot execute tools in this way.` });
+    }
+
+    const result = await server.executeTool(toolId, data, requestContext);
+    return { result };
+  },
+});
+
 export const MCP_ROUTES: ServerRoute<any, any, any>[] = [
   LIST_MCP_SERVERS_ROUTE,
   GET_MCP_SERVER_DETAIL_ROUTE,
-  // Note: getMcpServerMessageHandler is not included here because it requires
-  // direct access to raw Node.js req/res and doesn't fit the standard route pattern.
-  // It should be registered directly with the router using its standalone handler function.
+  LIST_MCP_SERVER_TOOLS_ROUTE,
+  GET_MCP_SERVER_TOOL_DETAIL_ROUTE,
+  EXECUTE_MCP_SERVER_TOOL_ROUTE,
+  // Note: getMcpServerMessageHandler and getMcpServerSseHandler are not included here
+  // because they require direct access to raw Hono context.
 ];
