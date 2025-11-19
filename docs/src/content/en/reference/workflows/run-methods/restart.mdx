@@ -1,0 +1,98 @@
+---
+title: "Reference: Run.restart() | Workflows"
+description: Documentation for the `Run.restart()` method in workflows, which restarts an active workflow run that lost connection to the server.
+---
+
+# Run.restart()
+
+The `.restart()` method restarts an active workflow run that lost connection to the server, allowing you to continue execution from the moment it lost connection (the last active step).
+
+## Usage example
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+
+const result = await run.start({ inputData: { value: "initial data" } });
+
+//.. server connection lost,
+
+const restartedResult = await run.restart();
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request Context data to use when resuming",
+      isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      isOptional: true,
+      description:
+        "Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "currentSpan",
+              type: "Span",
+              isOptional: true,
+              description:
+                "Current span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "Options for Tracing configuration.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description:
+                "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+      description:
+        "A promise that resolves to the workflow execution result containing step outputs and status",
+    },
+    {
+      name: "traceId",
+      type: "string",
+      isOptional: true,
+      description:
+        "The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
+    },
+  ]}
+/>
+
+## Related
+
+- [Workflows overview](/docs/v1/workflows/overview#running-workflows)
+- [Workflow.createRun()](../workflow-methods/create-run)
+- [Restart workflows](/docs/v1/workflows/restart-workflows)
