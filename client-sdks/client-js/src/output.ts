@@ -1,5 +1,5 @@
 import type { LLMStepResult } from '@mastra/core/agent';
-import type { ChunkType, OutputSchema } from '@mastra/core/stream';
+import type { ChunkType, OutputSchema, NetworkChunkType } from '@mastra/core/stream';
 
 // Helper type for inferring schema output
 type InferSchemaOutput<T> = T extends OutputSchema ? any : undefined;
@@ -102,6 +102,62 @@ export function createChunkStreamFromResponse<OUTPUT extends OutputSchema = unde
 
               try {
                 const chunk = JSON.parse(data) as ChunkType<OUTPUT>;
+                controller.enqueue(chunk);
+              } catch (error) {
+                console.error('❌ JSON parse error:', error, 'Data:', data);
+                continue;
+              }
+            }
+          }
+        }
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+  });
+}
+
+/**
+ * Convert a Response with SSE body into a typed NetworkChunkType stream
+ */
+export function createNetworkChunkStreamFromResponse(response: Response): ReadableStream<NetworkChunkType> {
+  if (!response.body) {
+    throw new Error('Response body is null');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  return new ReadableStream<NetworkChunkType>({
+    async start(controller) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+
+          if (done) {
+            controller.close();
+            break;
+          }
+
+          // Decode the chunk and add to buffer
+          buffer += decoder.decode(value, { stream: true });
+
+          // Process complete SSE messages
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6); // Remove 'data: '
+
+              if (data === '[DONE]') {
+                controller.close();
+                return;
+              }
+
+              try {
+                const chunk = JSON.parse(data) as NetworkChunkType;
                 controller.enqueue(chunk);
               } catch (error) {
                 console.error('❌ JSON parse error:', error, 'Data:', data);
@@ -506,6 +562,248 @@ export class MastraClientModelOutput<OUTPUT extends OutputSchema = undefined> {
    * @deprecated Use fullStream or await properties like text, toolCalls, etc. instead
    */
   async processDataStream(options: { onChunk: (chunk: ChunkType<OUTPUT>) => Promise<void> }): Promise<void> {
+    for await (const chunk of this.fullStream) {
+      await options.onChunk(chunk);
+    }
+  }
+}
+
+/**
+ * Usage count type for network streaming
+ */
+type NetworkUsageCount = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cachedInputTokens: number;
+  reasoningTokens: number;
+};
+
+/**
+ * MastraClientNetworkOutput - Client-side wrapper for network streaming
+ * Similar to MastraAgentNetworkStream on the server
+ */
+export class MastraClientNetworkOutput {
+  #baseStream: ReadableStream<NetworkChunkType>;
+  #bufferedChunks: NetworkChunkType[] = [];
+  #streamFinished = false;
+  #error: Error | undefined;
+  #consumptionStarted = false;
+
+  // Accumulated usage count
+  #usageCount: NetworkUsageCount = {
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    cachedInputTokens: 0,
+    reasoningTokens: 0,
+  };
+
+  // Result data
+  #result: any = undefined;
+  #status: string | undefined = undefined;
+
+  // Delayed promises for properties
+  #delayedPromises = {
+    usage: new DelayedPromise<NetworkUsageCount>(),
+    result: new DelayedPromise<any>(),
+    status: new DelayedPromise<string>(),
+  };
+
+  constructor({ stream }: { stream: ReadableStream<NetworkChunkType> }) {
+    const self = this;
+
+    this.#baseStream = stream.pipeThrough(
+      new TransformStream<NetworkChunkType, NetworkChunkType>({
+        async transform(chunk, controller) {
+          self.#bufferedChunks.push(chunk);
+
+          try {
+            await self.#processChunk(chunk);
+          } catch (error) {
+            self.#error = error instanceof Error ? error : new Error(String(error));
+            self.#delayedPromises.status.reject(self.#error);
+          }
+
+          controller.enqueue(chunk);
+        },
+        flush() {
+          self.#streamFinished = true;
+          self.#resolveAllPromises();
+        },
+      }),
+    );
+  }
+
+  /**
+   * Process individual chunks and update internal state
+   */
+  async #processChunk(chunk: NetworkChunkType): Promise<void> {
+    const payload = chunk.payload as any;
+
+    // Track usage from various end events
+    if (
+      chunk.type === 'routing-agent-end' ||
+      chunk.type === 'agent-execution-end' ||
+      chunk.type === 'workflow-execution-end'
+    ) {
+      if (payload?.usage) {
+        this.#updateUsageCount(payload.usage);
+      }
+    }
+
+    // Handle final network finish event
+    if (chunk.type === 'network-execution-event-finish') {
+      this.#result = payload;
+      this.#status = payload?.completionReason ?? 'complete';
+
+      // Update usage if provided in finish payload
+      if (payload?.usage) {
+        this.#usageCount = payload.usage;
+      }
+
+      this.#delayedPromises.result.resolve(this.#result);
+      this.#delayedPromises.status.resolve(this.#status!);
+    }
+  }
+
+  /**
+   * Update accumulated usage count
+   */
+  #updateUsageCount(usage: {
+    inputTokens?: string | number;
+    outputTokens?: string | number;
+    totalTokens?: string | number;
+    reasoningTokens?: string | number;
+    cachedInputTokens?: string | number;
+  }): void {
+    this.#usageCount.inputTokens += parseInt(usage?.inputTokens?.toString() ?? '0', 10);
+    this.#usageCount.outputTokens += parseInt(usage?.outputTokens?.toString() ?? '0', 10);
+    this.#usageCount.totalTokens += parseInt(usage?.totalTokens?.toString() ?? '0', 10);
+    this.#usageCount.reasoningTokens += parseInt(usage?.reasoningTokens?.toString() ?? '0', 10);
+    this.#usageCount.cachedInputTokens += parseInt(usage?.cachedInputTokens?.toString() ?? '0', 10);
+  }
+
+  /**
+   * Resolve all delayed promises with current values
+   */
+  #resolveAllPromises(): void {
+    try {
+      this.#delayedPromises.usage.resolve(this.#usageCount);
+    } catch (error) {
+      console.error('Error resolving usage promise:', error);
+    }
+
+    // Result and status are resolved when network-execution-event-finish is received
+    // If they haven't been resolved yet, resolve with undefined/default
+    if (this.#result === undefined) {
+      try {
+        this.#delayedPromises.result.resolve(undefined);
+      } catch (error) {
+        console.error('Error resolving result promise:', error);
+      }
+    }
+
+    if (this.#status === undefined) {
+      try {
+        this.#delayedPromises.status.resolve('unknown');
+      } catch (error) {
+        console.error('Error resolving status promise:', error);
+      }
+    }
+  }
+
+  /**
+   * Async iterable that yields all chunks
+   */
+  get fullStream(): AsyncIterable<NetworkChunkType> {
+    const self = this;
+    return {
+      async *[Symbol.asyncIterator]() {
+        // Mark consumption as started
+        if (!self.#consumptionStarted) {
+          self.#consumptionStarted = true;
+        }
+
+        // First yield any buffered chunks
+        for (const chunk of self.#bufferedChunks) {
+          yield chunk;
+        }
+
+        // If stream already finished, we're done
+        if (self.#streamFinished) {
+          return;
+        }
+
+        // Continue reading from base stream
+        const reader = self.#baseStream.getReader();
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            yield value;
+          }
+        } finally {
+          reader.releaseLock();
+        }
+      },
+    };
+  }
+
+  /**
+   * Promise that resolves to the accumulated usage count
+   */
+  get usage(): Promise<NetworkUsageCount> {
+    this.#ensureConsumption();
+    return this.#delayedPromises.usage.promise;
+  }
+
+  /**
+   * Promise that resolves to the network execution result
+   */
+  get result(): Promise<any> {
+    this.#ensureConsumption();
+    return this.#delayedPromises.result.promise;
+  }
+
+  /**
+   * Promise that resolves to the network execution status
+   */
+  get status(): Promise<string> {
+    this.#ensureConsumption();
+    return this.#delayedPromises.status.promise;
+  }
+
+  /**
+   * Returns the error if one occurred during streaming
+   */
+  get error(): Error | undefined {
+    return this.#error;
+  }
+
+  /**
+   * Ensure stream consumption is triggered
+   */
+  #ensureConsumption(): void {
+    if (!this.#consumptionStarted) {
+      this.#consumptionStarted = true;
+      // Consume the stream in the background
+      void consumeStream({
+        stream: this.#baseStream,
+        onError: error => {
+          this.#error = error instanceof Error ? error : new Error(String(error));
+          this.#delayedPromises.status.reject(this.#error);
+          this.#delayedPromises.result.reject(this.#error);
+          this.#delayedPromises.usage.reject(this.#error);
+        },
+      });
+    }
+  }
+
+  /**
+   * @deprecated Use fullStream or await properties like status, result, usage instead
+   */
+  async processDataStream(options: { onChunk: (chunk: NetworkChunkType) => Promise<void> }): Promise<void> {
     for await (const chunk of this.fullStream) {
       await options.onChunk(chunk);
     }

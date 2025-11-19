@@ -1074,4 +1074,278 @@ describe('Agent vNext', () => {
     expect(errorChunk.payload.error.isRetryable).toEqual(testAPICallError.isRetryable);
     expect(errorChunk.payload.error.url).toEqual(testAPICallError.url);
   });
+
+  // Tests for network API (MastraClientNetworkOutput)
+  describe('MastraClientNetworkOutput API', () => {
+    it('fullStream: should iterate over network chunks using async iterator', async () => {
+      const networkChunks = [
+        { type: 'routing-agent-start', payload: { agentId: 'router', task: 'route request' } },
+        { type: 'agent-execution-start', payload: { agentId: 'agent-1', task: 'execute task' } },
+        { type: 'agent-execution-end', payload: { agentId: 'agent-1', usage: { totalTokens: 10 } } },
+        {
+          type: 'network-execution-event-finish',
+          payload: {
+            task: 'Main task',
+            result: 'Task completed',
+            completionReason: 'success',
+            primitiveId: 'net-1',
+            primitiveType: 'agent',
+            prompt: 'test',
+            iteration: 1,
+            usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+          },
+        },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(networkChunks));
+
+      const stream = await agent.network({ messages: 'Test network' });
+
+      // Test async iterator pattern
+      const receivedChunks: any[] = [];
+      for await (const chunk of stream.fullStream) {
+        receivedChunks.push(chunk);
+      }
+
+      // Verify all chunks were received
+      expect(receivedChunks).toHaveLength(4);
+      expect(receivedChunks[0].type).toBe('routing-agent-start');
+      expect(receivedChunks[1].type).toBe('agent-execution-start');
+      expect(receivedChunks[2].type).toBe('agent-execution-end');
+      expect(receivedChunks[3].type).toBe('network-execution-event-finish');
+    });
+
+    it('usage: should accumulate usage from multiple agents', async () => {
+      const networkChunks = [
+        { type: 'routing-agent-start', payload: { agentId: 'router' } },
+        {
+          type: 'routing-agent-end',
+          payload: { agentId: 'router', usage: { totalTokens: 5, inputTokens: 2, outputTokens: 3 } },
+        },
+        { type: 'agent-execution-start', payload: { agentId: 'agent-1' } },
+        {
+          type: 'agent-execution-end',
+          payload: { agentId: 'agent-1', usage: { totalTokens: 10, inputTokens: 4, outputTokens: 6 } },
+        },
+        { type: 'agent-execution-start', payload: { agentId: 'agent-2' } },
+        {
+          type: 'agent-execution-end',
+          payload: { agentId: 'agent-2', usage: { totalTokens: 8, inputTokens: 3, outputTokens: 5 } },
+        },
+        {
+          type: 'network-execution-event-finish',
+          payload: {
+            task: 'Complete',
+            result: 'done',
+            completionReason: 'success',
+            primitiveId: 'net-1',
+            primitiveType: 'agent',
+            prompt: 'test',
+            iteration: 1,
+            usage: { inputTokens: 9, outputTokens: 14, totalTokens: 23 },
+          },
+        },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(networkChunks));
+
+      const stream = await agent.network({ messages: 'Multi-agent test' });
+
+      // Test awaiting usage property
+      const usage = await stream.usage;
+
+      // Should use the usage from the finish event (which is the accumulated total from the server)
+      // When finish event provides usage, it replaces the accumulated count
+      expect(usage.inputTokens).toBe(9);
+      expect(usage.outputTokens).toBe(14);
+      expect(usage.totalTokens).toBe(23);
+    });
+
+    it('result: should resolve to network execution result', async () => {
+      const networkChunks = [
+        { type: 'agent-execution-start', payload: { agentId: 'agent-1' } },
+        { type: 'agent-execution-end', payload: { agentId: 'agent-1' } },
+        {
+          type: 'network-execution-event-finish',
+          payload: {
+            task: 'Analyze data',
+            result: 'Analysis complete: positive sentiment',
+            completionReason: 'success',
+            primitiveId: 'net-1',
+            primitiveType: 'agent',
+            prompt: 'Analyze this',
+            iteration: 1,
+            isComplete: true,
+          },
+        },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(networkChunks));
+
+      const stream = await agent.network({ messages: 'Analyze' });
+
+      // Test awaiting result property
+      const result = await stream.result;
+
+      expect(result).toEqual({
+        task: 'Analyze data',
+        result: 'Analysis complete: positive sentiment',
+        completionReason: 'success',
+        primitiveId: 'net-1',
+        primitiveType: 'agent',
+        prompt: 'Analyze this',
+        iteration: 1,
+        isComplete: true,
+      });
+    });
+
+    it('status: should resolve to completion reason', async () => {
+      const networkChunks = [
+        { type: 'agent-execution-start', payload: { agentId: 'agent-1' } },
+        { type: 'agent-execution-end', payload: { agentId: 'agent-1' } },
+        {
+          type: 'network-execution-event-finish',
+          payload: {
+            task: 'Task',
+            result: 'done',
+            completionReason: 'max-iterations',
+            primitiveId: 'net-1',
+            primitiveType: 'agent',
+            prompt: 'test',
+            iteration: 5,
+          },
+        },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(networkChunks));
+
+      const stream = await agent.network({ messages: 'Test' });
+
+      // Test awaiting status property
+      const status = await stream.status;
+
+      expect(status).toBe('max-iterations');
+    });
+
+    it('should support both fullStream iteration and property awaiting simultaneously', async () => {
+      const networkChunks = [
+        { type: 'agent-execution-start', payload: { agentId: 'agent-1' } },
+        { type: 'agent-execution-end', payload: { agentId: 'agent-1', usage: { totalTokens: 15 } } },
+        {
+          type: 'network-execution-event-finish',
+          payload: {
+            task: 'Task',
+            result: 'Complete',
+            completionReason: 'success',
+            primitiveId: 'net-1',
+            primitiveType: 'agent',
+            prompt: 'test',
+            iteration: 1,
+            usage: { inputTokens: 7, outputTokens: 8, totalTokens: 15 },
+          },
+        },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(networkChunks));
+
+      const stream = await agent.network({ messages: 'Test' });
+
+      // Start consuming fullStream
+      const chunks: any[] = [];
+      const streamPromise = (async () => {
+        for await (const chunk of stream.fullStream) {
+          chunks.push(chunk);
+        }
+      })();
+
+      // Await properties simultaneously
+      const [usage, result, status] = await Promise.all([stream.usage, stream.result, stream.status]);
+
+      // Wait for stream to complete
+      await streamPromise;
+
+      // Verify both patterns worked
+      expect(chunks).toHaveLength(3);
+      expect(usage.totalTokens).toBe(15);
+      expect(result.result).toBe('Complete');
+      expect(status).toBe('success');
+    });
+
+    it('fullStream: should work with workflow execution', async () => {
+      const networkChunks = [
+        { type: 'workflow-execution-start', payload: { workflowId: 'wf-1' } },
+        { type: 'workflow-execution-end', payload: { workflowId: 'wf-1', usage: { totalTokens: 25 } } },
+        {
+          type: 'network-execution-event-finish',
+          payload: {
+            task: 'Workflow task',
+            result: 'Workflow completed',
+            completionReason: 'success',
+            primitiveId: 'wf-1',
+            primitiveType: 'workflow',
+            prompt: 'run workflow',
+            iteration: 1,
+            usage: { inputTokens: 12, outputTokens: 13, totalTokens: 25 },
+          },
+        },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(networkChunks));
+
+      const stream = await agent.network({ messages: 'Run workflow' });
+
+      // Consume stream with fullStream
+      const chunks: any[] = [];
+      for await (const chunk of stream.fullStream) {
+        chunks.push(chunk);
+      }
+
+      // Verify chunks
+      expect(chunks).toHaveLength(3);
+      expect(chunks[0].type).toBe('workflow-execution-start');
+      expect(chunks[1].type).toBe('workflow-execution-end');
+      expect(chunks[2].type).toBe('network-execution-event-finish');
+      expect(chunks[2].payload.primitiveType).toBe('workflow');
+    });
+  });
+
+  // Regression test for deprecated processDataStream on network
+  describe('Backward Compatibility: network processDataStream (deprecated)', () => {
+    it('processDataStream: should still work for backward compatibility', async () => {
+      const networkChunks = [
+        { type: 'agent-execution-start', payload: { agentId: 'agent-1' } },
+        { type: 'agent-execution-end', payload: { agentId: 'agent-1' } },
+        {
+          type: 'network-execution-event-finish',
+          payload: {
+            task: 'Legacy task',
+            result: 'Legacy support',
+            completionReason: 'success',
+            primitiveId: 'net-1',
+            primitiveType: 'agent',
+            prompt: 'test',
+            iteration: 1,
+          },
+        },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(networkChunks));
+
+      const stream = await agent.network({ messages: 'Test legacy' });
+
+      // Test deprecated processDataStream method
+      const receivedChunks: any[] = [];
+      await stream.processDataStream({
+        onChunk: async chunk => {
+          receivedChunks.push(chunk);
+        },
+      });
+
+      // Verify it still works as expected
+      expect(receivedChunks).toHaveLength(3);
+      expect(receivedChunks[0].type).toBe('agent-execution-start');
+      expect(receivedChunks[1].type).toBe('agent-execution-end');
+      expect(receivedChunks[2].type).toBe('network-execution-event-finish');
+    });
+  });
 });
