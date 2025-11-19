@@ -129,7 +129,21 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         },
       };
 
-    case 'tool-call':
+    case 'tool-call': {
+      let toolCallInput: Record<string, any> | undefined = undefined;
+
+      if (value.input) {
+        try {
+          toolCallInput = JSON.parse(value.input);
+        } catch (error) {
+          console.error('Error converting tool call input to JSON', {
+            error,
+            input: value.input,
+          });
+          toolCallInput = {};
+        }
+      }
+
       return {
         type: 'tool-call',
         runId: ctx.runId,
@@ -137,11 +151,12 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         payload: {
           toolCallId: value.toolCallId,
           toolName: value.toolName,
-          args: value.input ? JSON.parse(value.input) : undefined,
+          args: toolCallInput,
           providerExecuted: value.providerExecuted,
           providerMetadata: value.providerMetadata,
         },
       };
+    }
 
     case 'tool-result':
       return {
