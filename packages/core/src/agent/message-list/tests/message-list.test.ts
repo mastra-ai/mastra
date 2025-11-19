@@ -3656,7 +3656,6 @@ describe('MessageList', () => {
 
         const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
         const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'user');
-        console.log('retrievedMessage', retrievedMessage);
         expect(retrievedMessage).toBeDefined();
         expect(Array.isArray(retrievedMessage?.content)).toBe(true);
         expect(retrievedMessage?.providerOptions).toEqual({
