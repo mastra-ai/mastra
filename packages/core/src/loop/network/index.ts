@@ -316,9 +316,14 @@ export async function createNetworkLoop({
             thread: initData?.threadId ?? runId,
             resource: initData?.threadResourceId ?? networkName,
             readOnly: true,
+            options: {
+              workingMemory: {
+                enabled: false,
+              },
+            },
           },
           ...routingAgentOptions,
-        };
+        } satisfies AgentExecutionOptions<any>;
 
         // Try streaming with structured output
         let completionStream = await routingAgent.stream(completionPrompt, streamOptions);

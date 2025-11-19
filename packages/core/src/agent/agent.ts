@@ -2351,11 +2351,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     }
     const requestContext = options.requestContext || new RequestContext();
 
-    // Add _agentNetworkAppend flag to requestContext for processors to check
-    if ('_agentNetworkAppend' in this && (this as any)._agentNetworkAppend) {
-      requestContext.set('MastraMemory._agentNetworkAppend', true);
-    }
-
     const threadFromArgs = resolveThreadIdFromArgs({
       threadId: options.threadId || snapshotMemoryInfo?.threadId,
       memory: options.memory,

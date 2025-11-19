@@ -129,15 +129,6 @@ export class WorkingMemory implements InputProcessor {
         };
       }
 
-      // Check if this is a routing agent (agent network append mode)
-      // Routing agents should not receive working memory instructions to avoid redundant tool calls
-      const isRoutingAgent = runtimeContext?.get('MastraMemory._agentNetworkAppend') === true;
-
-      if (isRoutingAgent) {
-        // For routing agents, return the messageList/messages unchanged
-        return messageList;
-      }
-
       // Format working memory instruction
       const instruction = this.options.useVNext
         ? this.getWorkingMemoryToolInstructionVNext({ template, data: workingMemoryData })
