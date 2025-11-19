@@ -1,6 +1,5 @@
 import { execSync } from 'child_process';
 import fs from 'fs';
-import { match } from 'path-to-regexp';
 
 const matcherCache = new Map();
 const BASE_REF = process.env.BASE_REF || 'origin/main';
@@ -60,6 +59,29 @@ function stripLocalePattern(source) {
   return source.replace(/^\/:[^/]+\([^)]+\)\?/, '');
 }
 
+// Convert path pattern to regex (handles :param, :param*, :param+, :param?)
+function patternToRegex(pattern) {
+  // First, escape special regex characters in the original pattern
+  // This escapes literals like dots in '/api.v1/:id' before processing :id
+  // We need to escape: . + ^ $ { } | [ ] \ ( )
+  // But NOT: : which we use to identify parameters
+  let regexStr = pattern.replace(/[.+^${}()|\[\]\\]/g, '\\$&');
+
+  // Then convert path-to-regexp patterns to regex patterns
+  // These replacements work on the escaped string, converting :param patterns
+  regexStr = regexStr
+    // Replace :param* with catch-all (.*)
+    .replace(/:(\w+)\*/g, '(?<$1>.*)')
+    // Replace :param+ with one or more segments ([^/]+(?:/[^/]+)*)
+    .replace(/:(\w+)\+/g, '(?<$1>[^/]+(?:/[^/]+)*)')
+    // Replace :param? with optional segment ([^/]*)
+    .replace(/:(\w+)\?/g, '(?<$1>[^/]*)')
+    // Replace :param with single segment ([^/]+)
+    .replace(/:(\w+)/g, '(?<$1>[^/]+)');
+
+  return new RegExp(`^${regexStr}$`);
+}
+
 // Check if a URL has a redirect
 function hasRedirect(urlPath, redirects) {
   return redirects.some(({ source }) => {
@@ -71,13 +93,13 @@ function hasRedirect(urlPath, redirects) {
       return true;
     }
 
-    // Use path-to-regexp to handle patterns like :param, :param*, :param+, :param?, etc.
+    // Pattern match using regex
     try {
       if (!matcherCache.has(cleanSource)) {
-        matcherCache.set(cleanSource, match(cleanSource, { decode: decodeURIComponent }));
+        matcherCache.set(cleanSource, patternToRegex(cleanSource));
       }
-      const tester = matcherCache.get(cleanSource);
-      return Boolean(tester(urlPath));
+      const regex = matcherCache.get(cleanSource);
+      return regex.test(urlPath);
     } catch {
       return false;
     }
