@@ -691,7 +691,7 @@ describe('Agent memory test gemini', () => {
     name: 'gemini-agent',
     instructions:
       'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name.',
-    model: google.chat('gemini-2.5-flash-preview-05-20'),
+    model: google.chat('gemini-2.5-flash-preview-09-2025'),
     memory,
     tools: { get_weather: weatherToolCity },
   });

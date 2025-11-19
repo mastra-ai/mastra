@@ -4,7 +4,6 @@ import type {
   SharedV2ProviderMetadata,
   LanguageModelV2CallWarning,
   LanguageModelV2ResponseMetadata,
-  LanguageModelV2,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider-v5';
 import type { FinishReason, LanguageModelRequestMetadata, LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
@@ -12,6 +11,7 @@ import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
+import type { MastraLanguageModelV2 } from '../llm/model/shared.types';
 import type { TracingContext } from '../observability';
 import type { OutputProcessor } from '../processors';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
@@ -625,11 +625,11 @@ export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: To
 export type ReasoningChunk = BaseChunkType & { type: 'reasoning'; payload: ReasoningDeltaPayload };
 
 export type ExecuteStreamModelManager<T> = (
-  callback: (model: LanguageModelV2, isLastModel: boolean) => Promise<T>,
+  callback: (model: MastraLanguageModelV2, isLastModel: boolean) => Promise<T>,
 ) => Promise<T>;
 
 export type ModelManagerModelConfig = {
-  model: LanguageModelV2;
+  model: MastraLanguageModelV2;
   maxRetries: number;
   id: string;
 };
