@@ -151,10 +151,12 @@ export class ProcessorRunner {
             text: `Processor ${processor.id} returned a MessageList instance other than the one that was passed in as an argument. New external message list instances are not supported. Use the messageList argument instead.`,
           });
         }
-        processableMessages = result.get.all.db();
-      } else if (Array.isArray(result)) {
+        if (mutations.length > 0) {
+          processableMessages = result.get.all.db();
+        }
+      } else {
         messageList.clear.response.db();
-        processableMessages = result;
+        processableMessages = result || [];
       }
 
       processorSpan?.end({
@@ -393,12 +395,13 @@ export class ProcessorRunner {
             text: `Processor ${processor.id} returned a MessageList instance other than the one that was passed in as an argument. New external message list instances are not supported. Use the messageList argument instead.`,
           });
         }
-        // Processor returned a MessageList - it has been modified in place
-        // Update processableMessages to reflect ALL current messages for next processor
-        processableMessages = messageList.get.all.db();
-
         // Stop recording and capture mutations
         mutations = messageList.stopRecording();
+        if (mutations.length > 0) {
+          // Processor returned a MessageList - it has been modified in place
+          // Update processableMessages to reflect ALL current messages for next processor
+          processableMessages = messageList.get.all.db();
+        }
       } else {
         // Processor returned an array - stop recording before clear/add (that's just internal plumbing)
         mutations = messageList.stopRecording();
@@ -424,7 +427,7 @@ export class ProcessorRunner {
           messageList.add(nonSystemMessages, 'input');
         }
 
-        processableMessages = result;
+        processableMessages = result || [];
       }
 
       processorSpan?.end({
