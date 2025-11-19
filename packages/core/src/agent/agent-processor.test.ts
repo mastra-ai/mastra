@@ -115,8 +115,8 @@ describe('Input and Output Processors', () => {
       const result = await agentWithProcessor.generate('Hello world');
 
       // The processor should have added a message
-      expect((result.response.messages[0].content[0] as any).text).toContain('processed:');
-      expect((result.response.messages[0].content[0] as any).text).toContain('Processor was here!');
+      expect((result.response.messages![0].content[0] as any).text).toContain('processed:');
+      expect((result.response.messages![0].content[0] as any).text).toContain('Processor was here!');
     }, 50000);
 
     it('should run multiple processors in order', async () => {
@@ -768,7 +768,7 @@ describe('Input and Output Processors', () => {
             content: [
               {
                 type: 'text',
-                text: 'Test response',
+                text: 'This is a test response',
               },
             ],
             finishReason: 'stop',
@@ -796,7 +796,7 @@ describe('Input and Output Processors', () => {
         });
 
         // Only the complete processor should have run
-        expect((result.response.messages[0].content[0] as any).text).toBe('[COMPLETE] This is a test response');
+        expect((result.response.messages![0].content[0] as any).text).toBe('[COMPLETE] This is a test response');
       }
 
       await testWithFormat('aisdk');

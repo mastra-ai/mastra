@@ -1,6 +1,6 @@
 import type { LanguageModelV2StreamPart, SharedV2ProviderMetadata } from '@ai-sdk/provider-v5';
 import type { generateText as generateText5 } from 'ai-v5';
-import { convertArrayToReadableStream, mockId, MockLanguageModelV2 } from 'ai-v5/test';
+import { convertArrayToReadableStream, mockId } from 'ai-v5/test';
 import { assertType, describe, expect, it } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
@@ -15,6 +15,7 @@ import {
   modelWithSources,
   testUsage,
 } from './utils';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 
 export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   const generateText = async (args: Omit<LoopOptions, 'runId' | 'methodType'>): ReturnType<typeof generateText5> => {
