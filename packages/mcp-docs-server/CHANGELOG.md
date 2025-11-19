@@ -1,5 +1,15 @@
 # @mastra/mcp-docs-server
 
+## 0.13.41-alpha.0
+
+### Patch Changes
+
+- Add migration tool to mcp docs server for stable branch that will let users know to upgrade mcp docs server @latest to @beta to get the proper migration tool. ([#10200](https://github.com/mastra-ai/mastra/pull/10200))
+
+- Updated dependencies [[`f21ed89`](https://github.com/mastra-ai/mastra/commit/f21ed89577cfa00d616f10eaf10d8feb096f283e), [`eebb7bb`](https://github.com/mastra-ai/mastra/commit/eebb7bb407c57342a3be3a2efbe68c696589feeb), [`c6e6d07`](https://github.com/mastra-ai/mastra/commit/c6e6d071ecf346a80dceab410af2c567c7e66a57), [`0e6df8f`](https://github.com/mastra-ai/mastra/commit/0e6df8f66340992cb1b319834657deb17368de52), [`6295fd7`](https://github.com/mastra-ai/mastra/commit/6295fd783d49075d5bf2c18ff9486e94d36aaa56), [`d813cf7`](https://github.com/mastra-ai/mastra/commit/d813cf7251695d85cc60469058384ffa74974484)]:
+  - @mastra/mcp@0.14.3-alpha.0
+  - @mastra/core@0.24.2-alpha.0
+
 ## 0.13.40
 
 ### Patch Changes

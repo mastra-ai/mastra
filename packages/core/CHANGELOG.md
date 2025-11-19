@@ -1,5 +1,20 @@
 # @mastra/core
 
+## 0.24.2-alpha.0
+
+### Patch Changes
+
+- Only handle download image asset transformation if needed ([#10245](https://github.com/mastra-ai/mastra/pull/10245))
+
+- Fix tool outputSchema validation to allow unsupported Zod types like ZodTuple. The outputSchema is only used for internal validation and never sent to the LLM, so model compatibility checks are not needed. ([#10123](https://github.com/mastra-ai/mastra/pull/10123))
+
+- Fix vector definition to fix pinecone ([#10179](https://github.com/mastra-ai/mastra/pull/10179))
+
+- Add type bailed to workflowRunStatus ([#10103](https://github.com/mastra-ai/mastra/pull/10103))
+
+- Add support for doGenerate in LanguageModelV2. This change fixes issues with OpenAI stream permissions. ([#10268](https://github.com/mastra-ai/mastra/pull/10268))
+  - Added new abstraction over LanguageModelV2
+
 ## 0.24.1
 
 ### Patch Changes

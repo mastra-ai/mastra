@@ -1,5 +1,16 @@
 # @mastra/voice-google-gemini-live
 
+## 0.11.0-alpha.0
+
+### Minor Changes
+
+- Backport gemini fix to 0.x ([#10234](https://github.com/mastra-ai/mastra/pull/10234))
+
+### Patch Changes
+
+- Updated dependencies [[`eebb7bb`](https://github.com/mastra-ai/mastra/commit/eebb7bb407c57342a3be3a2efbe68c696589feeb), [`c6e6d07`](https://github.com/mastra-ai/mastra/commit/c6e6d071ecf346a80dceab410af2c567c7e66a57), [`0e6df8f`](https://github.com/mastra-ai/mastra/commit/0e6df8f66340992cb1b319834657deb17368de52), [`6295fd7`](https://github.com/mastra-ai/mastra/commit/6295fd783d49075d5bf2c18ff9486e94d36aaa56), [`d813cf7`](https://github.com/mastra-ai/mastra/commit/d813cf7251695d85cc60469058384ffa74974484)]:
+  - @mastra/core@0.24.2-alpha.0
+
 ## 0.10.18
 
 ### Patch Changes

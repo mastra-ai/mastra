@@ -82,5 +82,19 @@
     "@mastra/voice-speechify": "0.11.12",
     "@mastra/inngest": "0.18.4"
   },
-  "changesets": []
+  "changesets": [
+    "bold-apples-think",
+    "busy-baths-buy",
+    "fast-ways-judge",
+    "fix-output-schema-zod-tuple",
+    "fluffy-plums-drive",
+    "forty-dodos-tan",
+    "hip-items-rhyme",
+    "jolly-crabs-shine",
+    "loose-beers-hunt",
+    "slimy-gifts-invent",
+    "smooth-moons-tease",
+    "warm-weeks-admire",
+    "witty-hornets-develop"
+  ]
 }
