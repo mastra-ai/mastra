@@ -738,7 +738,10 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           id: 'STORAGE_LANCE_VECTOR_UPDATE_VECTOR_FAILED_INVALID_ARGS',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
         },
         err,
       );
@@ -831,7 +834,12 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           id: 'STORAGE_LANCE_VECTOR_UPDATE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id, hasVector: !!update.vector, hasMetadata: !!update.metadata },
+          details: {
+            indexName,
+            ...(id && { id }),
+            hasVector: !!update.vector,
+            hasMetadata: !!update.metadata,
+          },
         },
         error,
       );
@@ -857,7 +865,10 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           id: 'STORAGE_LANCE_VECTOR_DELETE_VECTOR_FAILED_INVALID_ARGS',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
         },
         err,
       );
@@ -896,7 +907,10 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           id: 'STORAGE_LANCE_VECTOR_DELETE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
         },
         error,
       );
@@ -946,7 +960,11 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       text: 'deleteVectors is not yet implemented for Lance vector store',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
-      details: { indexName, filter: filter ? JSON.stringify(filter) : undefined, ids: ids ? ids.length : undefined },
+      details: {
+        indexName,
+        ...(filter && { filter: JSON.stringify(filter) }),
+        ...(ids && { idsCount: ids.length }),
+      },
     });
   }
 }

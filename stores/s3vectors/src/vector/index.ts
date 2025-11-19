@@ -445,7 +445,10 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
           id: 'STORAGE_S3VECTORS_VECTOR_UPDATE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
         },
         error,
       );
@@ -475,7 +478,10 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
           id: 'STORAGE_S3VECTORS_VECTOR_DELETE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
         },
         error,
       );
@@ -488,7 +494,11 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
       text: 'deleteVectors is not yet implemented for S3Vectors vector store',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
-      details: { indexName, filter: filter ? JSON.stringify(filter) : undefined, ids: ids ? ids.length : undefined },
+      details: {
+        indexName,
+        ...(filter && { filter: JSON.stringify(filter) }),
+        ...(ids && { idsCount: ids.length }),
+      },
     });
   }
 

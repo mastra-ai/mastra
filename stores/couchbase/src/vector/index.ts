@@ -437,7 +437,7 @@ export class CouchbaseVector extends MastraVector {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            id,
+            ...(id && { id }),
             hasVectorUpdate: !!update.vector,
             hasMetadataUpdate: !!update.metadata,
           },
@@ -476,7 +476,7 @@ export class CouchbaseVector extends MastraVector {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            id,
+            ...(id && { id }),
           },
         },
         error,
@@ -490,7 +490,11 @@ export class CouchbaseVector extends MastraVector {
       text: 'deleteVectors is not yet implemented for Couchbase vector store',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
-      details: { indexName, filter: filter ? JSON.stringify(filter) : undefined, ids: ids ? ids.length : undefined },
+      details: {
+        indexName,
+        ...(filter && { filter: JSON.stringify(filter) }),
+        ...(ids && { idsCount: ids.length }),
+      },
     });
   }
 

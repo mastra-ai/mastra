@@ -307,7 +307,7 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'No update data provided',
-        details: { indexName, id },
+        details: { indexName, ...(id && { id }) },
       });
     }
 
@@ -331,7 +331,10 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
           id: 'STORAGE_VECTORIZE_VECTOR_UPDATE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
         },
         error,
       );
@@ -357,7 +360,10 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
           id: 'STORAGE_VECTORIZE_VECTOR_DELETE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
         },
         error,
       );
@@ -370,7 +376,11 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
       text: 'deleteVectors is not yet implemented for Vectorize vector store',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
-      details: { indexName, filter: filter ? JSON.stringify(filter) : undefined, ids: ids ? ids.length : undefined },
+      details: {
+        indexName,
+        ...(filter && { filter: JSON.stringify(filter) }),
+        ...(ids && { idsCount: ids.length }),
+      },
     });
   }
 }

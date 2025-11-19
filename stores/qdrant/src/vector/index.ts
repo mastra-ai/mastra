@@ -263,7 +263,10 @@ export class QdrantVector extends MastraVector {
           id: 'STORAGE_QDRANT_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
         },
         validationError,
       );
@@ -311,7 +314,10 @@ export class QdrantVector extends MastraVector {
           id: 'STORAGE_QDRANT_VECTOR_UPDATE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
         },
         error,
       );
@@ -340,7 +346,10 @@ export class QdrantVector extends MastraVector {
           id: 'STORAGE_QDRANT_VECTOR_DELETE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
         },
         error,
       );
@@ -390,7 +399,11 @@ export class QdrantVector extends MastraVector {
       text: 'deleteVectors is not yet implemented for Qdrant vector store',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
-      details: { indexName, filter: filter ? JSON.stringify(filter) : undefined, ids: ids ? ids.length : undefined },
+      details: {
+        indexName,
+        ...(filter && { filter: JSON.stringify(filter) }),
+        ...(ids && { idsCount: ids.length }),
+      },
     });
   }
 }

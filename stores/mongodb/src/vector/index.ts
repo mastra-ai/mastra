@@ -517,7 +517,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             indexName,
-            id,
+            ...(id && { id }),
           },
         },
         error,
@@ -558,7 +558,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       text: 'deleteVectors is not yet implemented for MongoDB vector store',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
-      details: { indexName, filter: filter ? JSON.stringify(filter) : undefined, ids: ids ? ids.length : undefined },
+      details: {
+        indexName,
+        ...(filter && { filter: JSON.stringify(filter) }),
+        ...(ids && { idsCount: ids.length }),
+      },
     });
   }
 

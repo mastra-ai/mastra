@@ -424,7 +424,11 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
       text: 'deleteVectors is not yet implemented for Turbopuffer vector store',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
-      details: { indexName, filter: filter ? JSON.stringify(filter) : undefined, ids: ids ? ids.length : undefined },
+      details: {
+        indexName,
+        ...(filter && { filter: JSON.stringify(filter) }),
+        ...(ids && { idsCount: ids.length }),
+      },
     });
   }
 }

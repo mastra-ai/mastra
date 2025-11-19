@@ -365,7 +365,10 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
         text: 'No updates provided for vector',
         domain: ErrorDomain.MASTRA_VECTOR,
         category: ErrorCategory.USER,
-        details: { indexName, id },
+        details: {
+          indexName,
+          ...(id && { id }),
+        },
       });
     }
 
@@ -392,7 +395,10 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
           id: 'CHROMA_VECTOR_UPDATE_FAILED',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
         },
         error,
       );
@@ -410,7 +416,10 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
           id: 'CHROMA_VECTOR_DELETE_FAILED',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
         },
         error,
       );
@@ -423,7 +432,11 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
       text: 'deleteVectors is not yet implemented for Chroma vector store',
       domain: ErrorDomain.MASTRA_VECTOR,
       category: ErrorCategory.SYSTEM,
-      details: { indexName, filter: filter ? JSON.stringify(filter) : undefined, ids: ids ? ids.length : undefined },
+      details: {
+        indexName,
+        ...(filter && { filter: JSON.stringify(filter) }),
+        ...(ids && { idsCount: ids.length }),
+      },
     });
   }
 }

@@ -549,7 +549,10 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
           id: 'LIBSQL_VECTOR_DELETE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName: args.indexName, id: args.id },
+          details: {
+            indexName: args.indexName,
+            ...(args.id && { id: args.id }),
+          },
         },
         error,
       );

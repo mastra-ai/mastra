@@ -227,7 +227,10 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
         id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_FAILED',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.THIRD_PARTY,
-        details: { namespace, id },
+        details: {
+          namespace,
+          ...(id && { id }),
+        },
         text: 'No update data provided',
       });
     }
@@ -239,7 +242,10 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
         id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_FAILED',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.THIRD_PARTY,
-        details: { namespace, id },
+        details: {
+          namespace,
+          ...(id && { id }),
+        },
         text: 'Both vector and metadata must be provided for an update',
       });
     }
@@ -258,7 +264,10 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
           id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { namespace, id },
+          details: {
+            namespace,
+            ...(id && { id }),
+          },
         },
         error,
       );
@@ -283,7 +292,10 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
           id: 'STORAGE_UPSTASH_VECTOR_DELETE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { namespace, id },
+          details: {
+            namespace,
+            ...(id && { id }),
+          },
         },
         error,
       );
@@ -297,7 +309,11 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
       text: 'deleteVectors is not yet implemented for Upstash vector store',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
-      details: { indexName, filter: filter ? JSON.stringify(filter) : undefined, ids: ids ? ids.length : undefined },
+      details: {
+        indexName,
+        ...(filter && { filter: JSON.stringify(filter) }),
+        ...(ids && { idsCount: ids.length }),
+      },
     });
   }
 }
