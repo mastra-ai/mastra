@@ -128,13 +128,13 @@ export class AgentBuilder extends BaseResource {
       searchParams.set('runId', runId);
     }
 
-    const actionRequestContext = parseClientRequestContext(params.requestContext);
+    const requestContext = parseClientRequestContext(params.requestContext);
     const { requestContext: _, ...actionParams } = params;
 
     const url = `/api/agent-builder/${this.actionId}/start-async${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
     const result = await this.request(url, {
       method: 'POST',
-      body: { ...actionParams, requestContext: actionRequestContext },
+      body: { ...actionParams, requestContext },
     });
 
     return this.transformWorkflowResult(result);
@@ -148,13 +148,13 @@ export class AgentBuilder extends BaseResource {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', runId);
 
-    const actionRequestContext = parseClientRequestContext(params.requestContext);
+    const requestContext = parseClientRequestContext(params.requestContext);
     const { requestContext: _, ...actionParams } = params;
 
     const url = `/api/agent-builder/${this.actionId}/start?${searchParams.toString()}`;
     return this.request(url, {
       method: 'POST',
-      body: { ...actionParams, requestContext: actionRequestContext },
+      body: { ...actionParams, requestContext },
     });
   }
 
@@ -173,13 +173,13 @@ export class AgentBuilder extends BaseResource {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', runId);
 
-    const actionRequestContext = parseClientRequestContext(params.requestContext);
+    const requestContext = parseClientRequestContext(params.requestContext);
     const { requestContext: _, ...resumeParams } = params;
 
     const url = `/api/agent-builder/${this.actionId}/resume?${searchParams.toString()}`;
     return this.request(url, {
       method: 'POST',
-      body: { ...resumeParams, requestContext: actionRequestContext },
+      body: { ...resumeParams, requestContext },
     });
   }
 
@@ -198,13 +198,13 @@ export class AgentBuilder extends BaseResource {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', runId);
 
-    const actionRequestContext = parseClientRequestContext(params.requestContext);
+    const requestContext = parseClientRequestContext(params.requestContext);
     const { requestContext: _, ...resumeParams } = params;
 
     const url = `/api/agent-builder/${this.actionId}/resume-async?${searchParams.toString()}`;
     const result = await this.request(url, {
       method: 'POST',
-      body: { ...resumeParams, requestContext: actionRequestContext },
+      body: { ...resumeParams, requestContext },
     });
 
     return this.transformWorkflowResult(result);
@@ -293,13 +293,13 @@ export class AgentBuilder extends BaseResource {
       searchParams.set('runId', runId);
     }
 
-    const actionRequestContext = parseClientRequestContext(params.requestContext);
+    const requestContext = parseClientRequestContext(params.requestContext);
     const { requestContext: _, ...actionParams } = params;
 
     const url = `/api/agent-builder/${this.actionId}/stream${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
     const response: Response = await this.request(url, {
       method: 'POST',
-      body: { ...actionParams, requestContext: actionRequestContext },
+      body: { ...actionParams, requestContext },
       stream: true,
     });
 
@@ -324,13 +324,13 @@ export class AgentBuilder extends BaseResource {
       searchParams.set('runId', runId);
     }
 
-    const actionRequestContext = parseClientRequestContext(params.requestContext);
+    const requestContext = parseClientRequestContext(params.requestContext);
     const { requestContext: _, ...actionParams } = params;
 
     const url = `/api/agent-builder/${this.actionId}/streamVNext${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
     const response: Response = await this.request(url, {
       method: 'POST',
-      body: { ...actionParams, requestContext: actionRequestContext },
+      body: { ...actionParams, requestContext },
       stream: true,
     });
 
@@ -437,13 +437,13 @@ export class AgentBuilder extends BaseResource {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', params.runId);
 
-    const actionRequestContext = parseClientRequestContext(params.requestContext);
+    const requestContext = parseClientRequestContext(params.requestContext);
     const { runId: _, requestContext: __, ...resumeParams } = params;
 
     const url = `/api/agent-builder/${this.actionId}/resume-stream?${searchParams.toString()}`;
     const response: Response = await this.request(url, {
       method: 'POST',
-      body: { ...resumeParams, requestContext: actionRequestContext },
+      body: { ...resumeParams, requestContext },
       stream: true,
     });
 
