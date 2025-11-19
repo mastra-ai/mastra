@@ -226,29 +226,39 @@ describe('AzureGateway', () => {
       expect(tokenCalls.length).toBe(2);
     });
 
-    it('should throw MastraError when Management API credentials are missing', async () => {
+    it('should return graceful fallback when Management API credentials are missing', async () => {
       delete process.env.AZURE_TENANT_ID;
 
-      await expect(gateway.fetchProviders()).rejects.toMatchObject({
-        id: 'AZURE_MANAGEMENT_CREDENTIALS_MISSING',
-        message: expect.stringContaining('AZURE_TENANT_ID'),
+      const result = await gateway.fetchProviders();
+
+      expect(result).toMatchObject({
+        azure: {
+          apiKeyEnvVar: 'AZURE_API_KEY',
+          models: [], // Empty - users specify deployments manually
+          gateway: 'azure',
+        },
       });
     });
 
-    it('should throw MastraError on Azure AD authentication failure', async () => {
+    it('should return graceful fallback on Azure AD authentication failure', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 401,
         text: async () => 'Unauthorized',
       });
 
-      await expect(gateway.fetchProviders()).rejects.toMatchObject({
-        id: 'AZURE_AD_TOKEN_ERROR',
-        message: expect.stringContaining('401'),
+      const result = await gateway.fetchProviders();
+
+      expect(result).toMatchObject({
+        azure: {
+          apiKeyEnvVar: 'AZURE_API_KEY',
+          models: [], // Empty - users specify deployments manually
+          gateway: 'azure',
+        },
       });
     });
 
-    it('should throw MastraError on Management API fetch failure', async () => {
+    it('should return graceful fallback on Management API fetch failure', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => mockTokenResponse,
@@ -260,9 +270,14 @@ describe('AzureGateway', () => {
         text: async () => 'Forbidden',
       });
 
-      await expect(gateway.fetchProviders()).rejects.toMatchObject({
-        id: 'AZURE_DEPLOYMENTS_FETCH_ERROR',
-        message: expect.stringContaining('403'),
+      const result = await gateway.fetchProviders();
+
+      expect(result).toMatchObject({
+        azure: {
+          apiKeyEnvVar: 'AZURE_API_KEY',
+          models: [], // Empty - users specify deployments manually
+          gateway: 'azure',
+        },
       });
     });
   });

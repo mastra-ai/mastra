@@ -34,6 +34,7 @@ interface CachedToken {
 }
 
 export class AzureGateway extends MastraModelGateway {
+  readonly id = 'azure';
   readonly name = 'azure';
   readonly prefix = 'azure';
   private tokenCache = new InMemoryServerCache();

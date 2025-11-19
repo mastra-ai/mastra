@@ -378,10 +378,11 @@ export class GatewayRegistry {
       // Import gateway classes and generation functions
       const { ModelsDevGateway } = await import('./gateways/models-dev.js');
       const { NetlifyGateway } = await import('./gateways/netlify.js');
+      const { AzureGateway } = await import('./gateways/azure.js');
       const { fetchProvidersFromGateways, writeRegistryFiles } = await import('./registry-generator.js');
 
       // Initialize default gateways
-      const defaultGateways = [new ModelsDevGateway({}), new NetlifyGateway()];
+      const defaultGateways = [new ModelsDevGateway({}), new NetlifyGateway(), new AzureGateway()];
 
       // Combine default and custom gateways
       const gateways = [...defaultGateways, ...this.customGateways];
