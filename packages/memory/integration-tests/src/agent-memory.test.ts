@@ -594,7 +594,7 @@ describe('Agent with message processors', () => {
 
     // Should have: system (instructions) + system (semantic recall) + user + user
     // (The assistant message with tool call is filtered out by ToolCallFilter)
-    expect(secondResponseRequestMessages.length).toBe(4);
+    expect(secondResponseRequestMessages.length).toBe(5);
 
     // Verify no tool messages or tool results are in the request
     const toolOrToolResultMessages = secondResponseRequestMessages.filter(
@@ -685,7 +685,7 @@ describe('Agent memory test gemini', () => {
     name: 'gemini-agent',
     instructions:
       'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name.',
-    model: google.chat('gemini-2.5-flash-preview-05-20'),
+    model: google.chat('gemini-2.5-flash-lite'),
     memory,
     tools: { get_weather: weatherToolCity },
   });

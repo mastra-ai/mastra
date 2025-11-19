@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { google } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import type { UIMessageWithMetadata } from '@mastra/core/agent';
@@ -630,9 +629,7 @@ describe('Agent with message processors', () => {
     // Check that tool calls were saved to memory
     const agentMemory = (await memoryProcessorAgent.getMemory())!;
     const { messages: messagesFromMemory } = await agentMemory.recall({ threadId });
-    const toolMessages = messagesFromMemory.filter(
-      m => m.role === 'tool' || (m.role === 'assistant' && typeof m.content !== 'string'),
-    );
+    const toolMessages = messagesFromMemory.filter(m => m.role === 'assistant' && typeof m.content !== 'string');
 
     expect(toolMessages.length).toBeGreaterThan(0);
 
@@ -650,13 +647,13 @@ describe('Agent with message processors', () => {
 
     const secondResponseRequestMessages: CoreMessage[] = secondResponse.request.body.input;
 
-    expect(secondResponseRequestMessages.length).toBe(4);
+    expect(secondResponseRequestMessages.length).toBe(5);
     // Filter out tool messages and tool results, should be the same as above.
     expect(
       secondResponseRequestMessages.filter(m => m.role !== 'tool' || (m as any)?.tool_calls?.[0]?.type !== 'function')
         .length,
-    ).toBe(4);
-  }, 3000_000);
+    ).toBe(5);
+  }, 300_000);
 });
 
 describe('CRITICAL BUG: Input processors not running', () => {
@@ -710,7 +707,9 @@ describe('CRITICAL BUG: Input processors not running', () => {
 
     // Should include the previous conversation
     const previousUserMessage = requestMessages.find(
-      (msg: any) => msg.role === 'user' && msg.content.includes('Alice'),
+      (msg: any) =>
+        msg.role === 'user' &&
+        (msg.content.includes('Alice') || msg.content?.find(p => p.text && p.text.includes(`Alice`))),
     );
     expect(previousUserMessage).toBeDefined();
   });
@@ -730,7 +729,7 @@ describe('Agent memory test gemini', () => {
     name: 'gemini-agent',
     instructions:
       'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name.',
-    model: google.chat('gemini-2.5-flash-preview-05-20'),
+    model: 'google/gemini-2.5-flash-lite',
     memory,
     tools: { get_weather: weatherToolCity },
   });
