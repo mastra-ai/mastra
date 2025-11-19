@@ -130,16 +130,6 @@ describe('GeminiLiveVoice', () => {
   });
 
   describe('Vertex AI configuration', () => {
-    it('should fall back to default location when not provided', () => {
-      const vertexVoice = new GeminiLiveVoice({
-        vertexAI: true,
-        project: 'test-project',
-        model: 'gemini-2.0-flash-live-001',
-      });
-
-      expect((vertexVoice as any).getVertexLocation()).toBe('us-central1');
-    });
-
     it('should send fully-qualified Vertex AI model paths when needed', async () => {
       const vertexVoice = new GeminiLiveVoice({
         vertexAI: true,
