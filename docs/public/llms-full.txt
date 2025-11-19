@@ -953,10 +953,11 @@ const resumedStream = await myAgent.resumeStream(
 
 - [Using Tools](./using-tools)
 - [Agent Overview](./overview)
-- [Tools Overview](../tools-mcp/overview)
+- [Tools Overview](../mcp/overview)
 - [Agent Memory](./agent-memory)
 - [Request Context](/docs/v1/server-db/request-context)
 - [Calling Agents](/examples/v1/agents/calling-agents)
+
 
 ---
 title: "Agent Networks | Agents"
@@ -1595,15 +1596,13 @@ const response = await testAgent.generate([
 console.log(response.text);
 ```
 
-For a detailed guide to creating and configuring tools, see the [Tools Overview](../tools-mcp/overview) page.
-
 ### Using `maxSteps`
 
 The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 1, but can be increased:
 
 ```typescript showLineNumbers copy
 const response = await testAgent.generate("Help me organize my day", {
-  maxSteps: 5,
+  maxSteps: 10,
 });
 
 console.log(response.text);
@@ -1636,7 +1635,7 @@ export const testAgent = new Agent({
 });
 ```
 
-> See [Using Tools](./using-tools) for more information.
+> See [Using Tools](/docs/v1/agents/using-tools) for more information.
 
 ## Using `RequestContext`
 
@@ -1669,10 +1668,9 @@ Use [Studio](/docs/v1/getting-started/studio) to test agents with different mess
 
 ## Related
 
-- [Using Tools](./using-tools)
-- [Agent Memory](./agent-memory)
-- [Request Context](/examples/v1/agents/request-context)
-- [Calling Agents](/examples/v1/agents/calling-agents)
+- [Using Tools](/docs/v1/agents/using-tools)
+- [Agent Memory](/docs/v1/agents/agent-memory)
+- [Request Context](/docs/v1/server-db/request-context)
 
 
 ---
@@ -1683,13 +1681,15 @@ description: Learn how to create tools and add them to agents to extend capabili
 # Using Tools
 [EN] Source: https://mastra.ai/en/docs/agents/using-tools
 
-Agents use tools to call APIs, query databases, or run custom functions from your codebase. [Tools](../tools-mcp/overview) give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](../tools-mcp/mcp-overview) to expand an agent’s capabilities.
+Agents use tools to call APIs, query databases, or run custom functions from your codebase. Tools give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](/docs/v1/mcp/overview) to expand an agent's capabilities.
 
 ## When to use tools
 
 Use tools when an agent needs additional context or information from remote resources, or when it needs to run code that performs a specific operation. This includes tasks a model can't reliably handle on its own, such as fetching live data or returning consistent, well defined outputs.
 
 ## Creating a tool
+
+When creating tools, keep descriptions simple and focused on what the tool does, emphasizing its primary use case. Descriptive schema names can also help guide the agent on how to use the tool.
 
 This example shows how to create a tool that fetches weather data from an API. When the agent calls the tool, it provides the required input as defined by the tool's `inputSchema`. The tool accesses this data through its `inputData` parameter, which in this example includes the `location` used in the weather API query.
 
@@ -1719,7 +1719,9 @@ export const weatherTool = createTool({
 
 ## Adding tools to an agent
 
-To make a tool available to an agent, add it to the `tools` option and reference it by name in the agent’s instructions.
+To make a tool available to an agent, add it to `tools`. Mentioning available tools and their general purpose in the agent's system prompt helps the agent decide when to call a tool and when not to.
+
+An agent can use multiple tools to handle more complex tasks by delegating specific parts to individual tools. The agent decides which tools to use based on the user's message, the agent's instructions, and the tool descriptions and schemas.
 
 ```typescript {9,11} title="src/mastra/agents/weather-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -1751,9 +1753,7 @@ const result = await agent.generate("What's the weather in London?");
 
 ## Using multiple tools
 
-An agent can use multiple tools to handle more complex tasks by delegating specific parts to individual tools. The agent decides which tools to use based on the user’s message, the agent’s instructions, and the tool descriptions and schemas.
-
-When multiple tools are available, the agent may choose to use one, several, or none, depending on what’s needed to answer the query.
+When multiple tools are available, the agent may choose to use one, several, or none, depending on what's needed to answer the query.
 
 ```typescript {6} title="src/mastra/agents/weather-agent.ts" showLineNumbers copy
 import { weatherTool } from "../tools/weather-tool";
@@ -1769,10 +1769,9 @@ export const weatherAgent = new Agent({
 
 ## Related
 
-- [Tools Overview](../tools-mcp/overview)
-- [Agent Memory](./agent-memory)
+- [MCP Overview](/docs/v1/mcp/overview)
+- [Agent Memory](/docs/v1/agents/agent-memory)
 - [Request Context](/docs/v1/server-db/request-context)
-- [Calling Agents](/examples/v1/agents/calling-agents)
 
 
 ---
@@ -3128,7 +3127,7 @@ The Discord server has over 1000 members and serves as the main discussion forum
 
 ## Discord MCP Bot
 
-In addition to community members, we have an (experimental!) Discord bot that can also help answer questions. It uses [Model Context Protocol (MCP)](/docs/v1/tools-mcp/mcp-overview). You can ask it a question with `/ask` (either in public channels or DMs) and clear history (in DMs only) with `/cleardm`.
+In addition to community members, we have an (experimental!) Discord bot that can also help answer questions. It uses [Model Context Protocol (MCP)](/docs/v1/mcp/overview). You can ask it a question with `/ask` (either in public channels or DMs) and clear history (in DMs only) with `/cleardm`.
 
 
 ---
@@ -5055,6 +5054,61 @@ export default defineConfig({
 
 
 ---
+title: "Built-in Scorers | Evals"
+description: "Overview of Mastra's ready-to-use scorers for evaluating AI outputs across quality, safety, and performance dimensions."
+---
+
+# Built-in Scorers
+[EN] Source: https://mastra.ai/en/docs/evals/built-in-scorers
+
+Mastra provides a comprehensive set of built-in scorers for evaluating AI outputs. These scorers are optimized for common evaluation scenarios and are ready to use in your agents and workflows.
+
+To create your own scorers, see the [Custom Scorers](/docs/v1/evals/custom-scorers) guide.
+
+## Available scorers
+
+### Accuracy and reliability
+
+These scorers evaluate how correct, truthful, and complete your agent's answers are:
+
+- [`answer-relevancy`](/reference/v1/evals/answer-relevancy): Evaluates how well responses address the input query (`0-1`, higher is better)
+- [`answer-similarity`](/reference/v1/evals/answer-similarity): Compares agent outputs against ground-truth answers for CI/CD testing using semantic analysis (`0-1`, higher is better)
+- [`faithfulness`](/reference/v1/evals/faithfulness): Measures how accurately responses represent provided context (`0-1`, higher is better)
+- [`hallucination`](/reference/v1/evals/hallucination): Detects factual contradictions and unsupported claims (`0-1`, lower is better)
+- [`completeness`](/reference/v1/evals/completeness): Checks if responses include all necessary information (`0-1`, higher is better)
+- [`content-similarity`](/reference/v1/evals/content-similarity): Measures textual similarity using character-level matching (`0-1`, higher is better)
+- [`textual-difference`](/reference/v1/evals/textual-difference): Measures textual differences between strings (`0-1`, higher means more similar)
+- [`tool-call-accuracy`](/reference/v1/evals/tool-call-accuracy): Evaluates whether the LLM selects the correct tool from available options (`0-1`, higher is better)
+- [`prompt-alignment`](/reference/v1/evals/prompt-alignment): Measures how well agent responses align with user prompt intent, requirements, completeness, and format (`0-1`, higher is better)
+
+### Context quality
+
+These scorers evaluate the quality and relevance of context used in generating responses:
+
+- [`context-precision`](/reference/v1/evals/context-precision): Evaluates context relevance and ranking using Mean Average Precision, rewarding early placement of relevant context (`0-1`, higher is better)
+- [`context-relevance`](/reference/v1/evals/context-relevance): Measures context utility with nuanced relevance levels, usage tracking, and missing context detection (`0-1`, higher is better)
+
+> tip Context Scorer Selection
+>
+>- Use **Context Precision** when context ordering matters and you need standard IR metrics (ideal for RAG ranking evaluation)
+>- Use **Context Relevance** when you need detailed relevance assessment and want to track context usage and identify gaps
+>
+>Both context scorers support:
+>
+>- **Static context**: Pre-defined context arrays
+>- **Dynamic context extraction**: Extract context from runs using custom functions (ideal for RAG systems, vector databases, etc.)
+
+### Output quality
+
+These scorers evaluate adherence to format, style, and safety requirements:
+
+- [`tone-consistency`](/reference/v1/evals/tone-consistency): Measures consistency in formality, complexity, and style (`0-1`, higher is better)
+- [`toxicity`](/reference/v1/evals/toxicity): Detects harmful or inappropriate content (`0-1`, lower is better)
+- [`bias`](/reference/v1/evals/bias): Detects potential biases in the output (`0-1`, lower is better)
+- [`keyword-coverage`](/reference/v1/evals/keyword-coverage): Assesses technical terminology usage (`0-1`, higher is better)
+
+
+---
 title: "Custom Scorers | Evals"
 ---
 
@@ -5541,59 +5595,6 @@ console.log("Reason:", result.reason);
 
 
 ---
-title: "Built-in Scorers | Evals"
-description: "Overview of Mastra's ready-to-use scorers for evaluating AI outputs across quality, safety, and performance dimensions."
----
-
-# Built-in Scorers
-[EN] Source: https://mastra.ai/en/docs/evals/off-the-shelf-scorers
-
-Mastra provides a comprehensive set of built-in scorers for evaluating AI outputs. These scorers are optimized for common evaluation scenarios and are ready to use in your agents and workflows.
-
-## Available Scorers
-
-### Accuracy and Reliability
-
-These scorers evaluate how correct, truthful, and complete your agent's answers are:
-
-- [`answer-relevancy`](/reference/v1/evals/answer-relevancy): Evaluates how well responses address the input query (`0-1`, higher is better)
-- [`answer-similarity`](/reference/v1/evals/answer-similarity): Compares agent outputs against ground truth answers for CI/CD testing using semantic analysis (`0-1`, higher is better)
-- [`faithfulness`](/reference/v1/evals/faithfulness): Measures how accurately responses represent provided context (`0-1`, higher is better)
-- [`hallucination`](/reference/v1/evals/hallucination): Detects factual contradictions and unsupported claims (`0-1`, lower is better)
-- [`completeness`](/reference/v1/evals/completeness): Checks if responses include all necessary information (`0-1`, higher is better)
-- [`content-similarity`](/reference/v1/evals/content-similarity): Measures textual similarity using character-level matching (`0-1`, higher is better)
-- [`textual-difference`](/reference/v1/evals/textual-difference): Measures textual differences between strings (`0-1`, higher means more similar)
-- [`tool-call-accuracy`](/reference/v1/evals/tool-call-accuracy): Evaluates whether the LLM selects the correct tool from available options (`0-1`, higher is better)
-- [`prompt-alignment`](/reference/v1/evals/prompt-alignment): Measures how well agent responses align with user prompt intent, requirements, completeness, and format (`0-1`, higher is better)
-
-### Context Quality
-
-These scorers evaluate the quality and relevance of context used in generating responses:
-
-- [`context-precision`](/reference/v1/evals/context-precision): Evaluates context relevance and ranking using Mean Average Precision, rewarding early placement of relevant context (`0-1`, higher is better)
-- [`context-relevance`](/reference/v1/evals/context-relevance): Measures context utility with nuanced relevance levels, usage tracking, and missing context detection (`0-1`, higher is better)
-
-> tip Context Scorer Selection
-
-- Use **Context Precision** when context ordering matters and you need standard IR metrics (ideal for RAG ranking evaluation)
-- Use **Context Relevance** when you need detailed relevance assessment and want to track context usage and identify gaps
-
-Both context scorers support:
-
-- **Static context**: Pre-defined context arrays
-- **Dynamic context extraction**: Extract context from runs using custom functions (ideal for RAG systems, vector databases, etc.)
-
-### Output Quality
-
-These scorers evaluate adherence to format, style, and safety requirements:
-
-- [`tone-consistency`](/reference/v1/evals/tone-consistency): Measures consistency in formality, complexity, and style (`0-1`, higher is better)
-- [`toxicity`](/reference/v1/evals/toxicity): Detects harmful or inappropriate content (`0-1`, lower is better)
-- [`bias`](/reference/v1/evals/bias): Detects potential biases in the output (`0-1`, lower is better)
-- [`keyword-coverage`](/reference/v1/evals/keyword-coverage): Assesses technical terminology usage (`0-1`, higher is better)
-
-
----
 title: "Scorers overview | Evals"
 description: Overview of scorers in Mastra, detailing their capabilities for evaluating AI outputs and measuring performance.
 ---
@@ -5629,7 +5630,7 @@ npm install @mastra/evals@beta
 
 ### Adding scorers to agents
 
-You can add built-in scorers to your agents to automatically evaluate their outputs. See the [full list of built-in scorers](/docs/v1/evals/off-the-shelf-scorers) for all available options.
+You can add built-in scorers to your agents to automatically evaluate their outputs. See the [full list of built-in scorers](/docs/v1/evals/built-in-scorers) for all available options.
 
 ```typescript title="src/mastra/agents/evaluated-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
@@ -5731,7 +5732,7 @@ For more details, see [Studio](/docs/v1/getting-started/studio) docs.
 ## Next steps
 
 - Learn how to create your own scorers in the [Creating Custom Scorers](/docs/v1/evals/custom-scorers) guide
-- Explore built-in scorers in the [Off-the-shelf Scorers](/docs/v1/evals/off-the-shelf-scorers) section
+- Explore built-in scorers in the [Built-in Scorers](/docs/v1/evals/built-in-scorers) section
 - Test scorers with [Studio](/docs/v1/getting-started/studio)
 
 
@@ -5847,22 +5848,28 @@ describe('Weather Agent Tests', () => {
 ## Next Steps
 
 - Learn about [creating custom scorers](/docs/v1/evals/custom-scorers)
-- Explore [off-the-shelf scorers](/docs/v1/evals/off-the-shelf-scorers)
+- Explore [built-in scorers](/docs/v1/evals/built-in-scorers)
 - Read the [runEvals API reference](/reference/v1/evals/run-evals)
 
 
 ---
-title: "Using Vercel AI SDK | Frameworks"
-description: "Learn how Mastra leverages the Vercel AI SDK library and how you can leverage it further with Mastra"
+title: "Using AI SDK | Frameworks"
+description: "Learn how Mastra leverages the AI SDK library and how you can leverage it further with Mastra"
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-# Using Vercel AI SDK
+# Using AI SDK
 [EN] Source: https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk
 
-Mastra integrates with [Vercel's AI SDK](https://sdk.vercel.ai) to support model routing, React Hooks, and data streaming methods.
+[AI SDK](https://sdk.vercel.ai) is a free open-source library that gives you the tools you need to build AI-powered products. Mastra has great integration with AI SDK, including model routing, streaming support, custom React hooks, custom tool/UI, and more.
+
+:::tip
+
+Visit Mastra's [**"UI Dojo"**](https://ui-dojo.mastra.ai/) to see real-world examples of AI SDK integrated with Mastra.
+
+:::
 
 ## Model Routing
 
@@ -6547,22 +6554,27 @@ These type helpers provide full TypeScript support when using Mastra tools with 
 
 
 ---
-title: "Using with Assistant UI | Frameworks"
+title: "Using Assistant UI | Frameworks"
 description: "Learn how to integrate Assistant UI with Mastra"
 ---
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Using with Assistant UI
+# Using Assistant UI
 [EN] Source: https://mastra.ai/en/docs/frameworks/agentic-uis/assistant-ui
 
-[Assistant UI](https://assistant-ui.com) is the TypeScript/React library for AI Chat.
-Built on shadcn/ui and Tailwind CSS, it enables developers to create beautiful, enterprise-grade chat experiences in minutes.
+[Assistant UI](https://assistant-ui.com) is the TypeScript/React library for AI Chat. Built on shadcn/ui and Tailwind CSS, it enables developers to create beautiful, enterprise-grade chat experiences in minutes.
 
 :::info
 
 For a full-stack integration approach where Mastra runs directly in your Next.js API routes, see the [Full-Stack Integration Guide](https://www.assistant-ui.com/docs/runtimes/mastra/full-stack-integration) on Assistant UI's documentation site.
+
+:::
+
+:::tip
+
+Visit Mastra's [**"UI Dojo"**](https://ui-dojo.mastra.ai/) to see real-world examples of Assistant UI integrated with Mastra.
 
 :::
 
@@ -6582,7 +6594,7 @@ project-root
 │   ├── src
 │   │   └── mastra
 │   └── package.json
-└── nextjs-frontend
+└── my-app
     └── package.json
 ```
 
@@ -6592,8 +6604,13 @@ Bootstrap your Mastra server:
 npx create-mastra@beta
 ```
 
-This command will launch an interactive wizard to help you scaffold a new Mastra project, including prompting you for a project name and setting up basic configurations.
-Follow the prompts to create your server project.
+This command will launch an interactive wizard to help you scaffold a new Mastra project, including prompting you for a project name and setting up basic configurations. Follow the prompts to create your server project.
+
+Navigate to your newly created Mastra server directory:
+
+```bash copy
+cd mastra-server # Replace with the actual directory name you provided
+```
 
 You now have a basic Mastra server project ready. You should have the following files and folders:
 
@@ -6602,6 +6619,8 @@ src
 └── mastra
     ├── agents
     │   └── weather-agent.ts
+    ├── scorers
+    │   └── weather-scorer.ts
     ├── tools
     │   └── weather-tool.ts
     ├── workflows
@@ -6619,17 +6638,54 @@ Ensure that you have set the appropriate environment variables for your LLM prov
 
 <StepItem>
 
+Create a chat route for the Assistant UI frontend by using the `chatRoute()` helper from `@mastra/ai-sdk`. Add it to your Mastra project:
+
+```bash copy
+npm install @mastra/ai-sdk@beta
+```
+
+In your `src/mastra/index.ts` file, register the chat route:
+
+```typescript copy title="src/mastra/index.ts" {2,7-13}
+import { Mastra } from '@mastra/core/mastra';
+import { chatRoute } from '@mastra/ai-sdk';
+// Rest of the imports...
+
+export const mastra = new Mastra({
+  // Rest of the configuration...
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: '/chat/:agentId'
+      })
+    ]
+  }
+});
+```
+
+This will make all agents available in AI SDK-compatible formats, including the `weatherAgent` at the endpoint `/chat/weatherAgent`.
+
+</StepItem>
+
+<StepItem>
+
 Run the Mastra server using the following command:
 
 ```bash copy
 npm run dev
 ```
 
-By default, the Mastra server will run on `http://localhost:4111`. Your `weatherAgent` should now be accessible via a POST request endpoint, typically `http://localhost:4111/api/agents/weatherAgent/stream`. Keep this server running for the next steps where we'll set up the Assistant UI frontend to connect to it.
+By default, the Mastra server will run on `http://localhost:4111`. Keep this server running for the next steps where we'll set up the Assistant UI frontend to connect to it.
 
 </StepItem>
 
 <StepItem>
+
+Go up one directory to your project root.
+
+```bash copy
+cd ..
+```
 
 Create a new `assistant-ui` project with the following command.
 
@@ -6649,19 +6705,22 @@ For detailed setup instructions, including adding API keys, basic configuration,
 
 The default Assistant UI setup configures the chat runtime to use a local API route (`/api/chat`) within the Next.js project. Since our Mastra agent is running on a separate server, we need to update the frontend to point to that server's endpoint.
 
-Find the `useChatRuntime` hook in the `assistant-ui` project, typically at `app/assistant.tsx` and change the `api` property to the full URL of your Mastra agent's stream endpoint:
+Open the file in your assistant-ui frontend project that contains the `useChatRuntime` hook (usually `app/assistant.tsx` or `src/app/assistant.tsx`). Find the `useChatRuntime` hook and change the `api` property to the full URL of your Mastra agent's stream endpoint:
 
-```typescript showLineNumbers copy title="app/assistant.tsx" {6}
-import {
-  useChatRuntime,
-  AssistantChatTransport,
-} from "@assistant-ui/react-ai-sdk";
+```tsx {8} title="app/assistant.tsx"
+"use client";
 
-const runtime = useChatRuntime({
-  transport: new AssistantChatTransport({
-    api: "MASTRA_ENDPOINT",
-  }),
-});
+// Rest of the imports...
+
+export const Assistant = () => {
+  const runtime = useChatRuntime({
+    transport: new AssistantChatTransport({
+      api: "http://localhost:4111/chat/weatherAgent",
+    }),
+  });
+
+  // Rest of the component...
+};
 ```
 
 Now, the Assistant UI frontend will send chat requests directly to your running Mastra server.
@@ -6686,8 +6745,8 @@ Congratulations! You have successfully integrated Mastra with Assistant UI using
 
 
 ---
-title: "Integrate Cedar-OS with Mastra | Frameworks"
-description: "Build AI-native frontends for your Mastra agents with Cedar-OS"
+title: "Using Cedar-OS | Frameworks"
+description: "Learn how to integrate Cedar-OS with Mastra"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -6695,30 +6754,18 @@ import TabItem from "@theme/TabItem";
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Integrate Cedar-OS with Mastra
+# Using Cedar-OS
 [EN] Source: https://mastra.ai/en/docs/frameworks/agentic-uis/cedar-os
 
-Cedar-OS is an open-source agentic UI framework designed specifically for building the most ambitious AI-native applications. Cedar was built with Mastra in mind.
+[Cedar-OS](https://docs.cedarcopilot.com/introduction/overview) is an open-source agentic UI framework designed specifically for building the most ambitious AI-native applications. Cedar was built with Mastra in mind.
 
-## Should you use Cedar?
+:::info
 
-There are a few pillars Cedar cares about strongly that you can read more about [here](https://docs.cedarcopilot.com/introduction/philosophy):
+Also see the [Extending Mastra](https://docs.cedarcopilot.com/agent-backend-connection/mastra) and [Custom Backend Implementation](https://docs.cedarcopilot.com/agent-backend-connection/custom) guides on Cedar's documentation site for more advanced integration patterns.
 
-#### 1. Developer experience
+:::
 
-- **Every single component is downloaded shadcn-style** – You own all the code and can style it however you want
-- **Works out of the box** – Just drop in the chat component, and it'll work
-- **Fully extensible** - Built on a [Zustand store architecture](https://docs.cedarcopilot.com/introduction/architecture) that you can customize completely. Every single internal function can be overridden in one line.
-
-#### 2. Enabling truly AI-native applications
-
-For the first time in history, products can come to life. Cedar is aimed at helping you build something with life.
-
-- **[Spells](https://docs.cedarcopilot.com/spells/spells#what-are-spells)** - Users can trigger AI from keyboard shortcuts, mouse events, text selection, and other components
-- **[State Diff Management](https://docs.cedarcopilot.com/state-diff/using-state-diff)** - Give users control over accepting/rejecting agent outputs
-- **[Voice Integration](https://docs.cedarcopilot.com/voice/voice-integration)** - Let users control your app with their voice
-
-## Quick Start
+## Integration Guide
 
 <Steps>
 
@@ -6801,19 +6848,10 @@ Your backend and frontend are now linked! You're ready to start building AI-nati
 
 </Steps>
 
-## More information
-
-- Check out the [detailed Mastra integration guide](https://docs.cedarcopilot.com/agent-backend-connection/mastra#extending-mastra) for more configuration options (or for manual installation instructions if something goes wrong)
-- Explore Mastra-specific optimizations and features Cedar has built
-  - **Seamless event streaming** - Automatic rendering of [Mastra streamed events](https://docs.cedarcopilot.com/chat/custom-message-rendering#mastra-event-renderer)
-  - **Voice endpoint support** - Built-in [voice backend integration](https://docs.cedarcopilot.com/voice/agentic-backend#endpoint-configuration)
-  - **End-to-End type safety** - [Types](https://docs.cedarcopilot.com/type-safety/typing-agent-requests) for communicating between your app and Mastra backend
-- [Join the Discord!](https://discord.gg/4AWawRjNdZ) The Cedar team is excited to have you :)
-
 
 ---
-title: "Integrate CopilotKit with Mastra | Frameworks"
-description: "Learn how Mastra leverages the CopilotKit's AGUI library and how you can leverage it to build user experiences"
+title: "Using CopilotKit | Frameworks"
+description: "Learn how to integrate CopilotKit with Mastra"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -6821,126 +6859,100 @@ import TabItem from "@theme/TabItem";
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Integrate CopilotKit with Mastra
+# Using CopilotKit
 [EN] Source: https://mastra.ai/en/docs/frameworks/agentic-uis/copilotkit
 
-CopilotKit provides React components to quickly integrate customizable AI copilots into your application. Combined with Mastra, you can build sophisticated AI apps featuring bidirectional state synchronization and interactive UIs.
+[CopilotKit](https://www.copilotkit.ai/) provides React components to quickly integrate customizable AI copilots into your application. Combined with Mastra, you can build sophisticated AI apps featuring bidirectional state synchronization and interactive UIs.
 
 Visit the [CopilotKit documentation](https://docs.copilotkit.ai/) to learn more about CopilotKit concepts, components, and advanced usage patterns.
 
-This guide shows two distinct integration approaches:
+:::info
 
-1. Integrate CopilotKit in your Mastra server with a separate React frontend.
-2. Integrate CopilotKit in your Next.js app
+For a full-stack integration approach where Mastra runs directly in your Next.js API routes, see the [CopilotKit Quickstart](https://docs.copilotkit.ai/mastra/quickstart) guide.
 
-<Tabs>
-<TabItem value="mastra-server" label="Mastra Server">
+:::
 
-  <Steps>
+:::tip
 
-  <StepItem>
+Visit Mastra's [**"UI Dojo"**](https://ui-dojo.mastra.ai/) to see real-world examples of CopilotKit integrated with Mastra.
 
-In your React frontend, install the required CopilotKit packages:
+:::
 
-<Tabs>
-<TabItem value="npm" label="npm">
+## Integration Guide
 
-```bash copy
-npm install @copilotkit/react-core @copilotkit/react-ui
+Run Mastra as a standalone server and connect your Next.js frontend (with CopilotKit) to its API endpoints.
+
+<Steps>
+
+<StepItem>
+
+Set up your directory structure. A possible directory structure could look like this:
+
+```shell
+project-root
+├── mastra-server
+│   ├── src
+│   │   └── mastra
+│   └── package.json
+└── my-copilot-app
+    └── package.json
 ```
 
-</TabItem>
-<TabItem value="yarn" label="yarn">
+Bootstrap your Mastra server:
 
 ```bash copy
-yarn add @copilotkit/react-core @copilotkit/react-ui
+npx create-mastra@latest
 ```
 
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
+This command will launch an interactive wizard to help you scaffold a new Mastra project, including prompting you for a project name and setting up basic configurations. Follow the prompts to create your server project.
+
+Navigate to your newly created Mastra server directory:
 
 ```bash copy
-pnpm add @copilotkit/react-core @copilotkit/react-ui
+cd mastra-server # Replace with the actual directory name you provided
 ```
 
-</TabItem>
-</Tabs>
+You now have a basic Mastra server project ready. You should have the following files and folders:
+
+```shell
+src
+└── mastra
+    ├── agents
+    │   └── weather-agent.ts
+    ├── scorers
+    │   └── weather-scorer.ts
+    ├── tools
+    │   └── weather-tool.ts
+    ├── workflows
+    │   └── weather-workflow.ts
+    └── index.ts
+```
+
+:::note
+
+Ensure that you have set the appropriate environment variables for your LLM provider in the `.env` file.
+
+:::
 
 </StepItem>
 
 <StepItem>
 
-Create a CopilotKit component in your React frontend:
-
-```tsx title="components/copilotkit-component.tsx" copy
-import { CopilotChat } from "@copilotkit/react-ui";
-import { CopilotKit } from "@copilotkit/react-core";
-import "@copilotkit/react-ui/styles.css";
-
-export function CopilotKitComponent({ runtimeUrl }: { runtimeUrl: string }) {
-  return (
-    <CopilotKit runtimeUrl={runtimeUrl} agent="weatherAgent">
-      <CopilotChat
-        labels={{
-          title: "Your Assistant",
-          initial: "Hi! 👋 How can I assist you today?",
-        }}
-      />
-    </CopilotKit>
-  );
-}
-```
-
-</StepItem>
-
-<StepItem>
-
-If you have not yet set up your Mastra server, follow the [getting started guide](/docs/v1/getting-started/installation) to set up a new Mastra project.
-
-In your Mastra server, install additional packages for CopilotKit integration:
-
-<Tabs>
-<TabItem value="npm" label="npm">
+Create a chat route for the CopilotKit frontend by using the `registerCopilotKit()` helper from `@ag-ui/mastra`. Add it to your Mastra project (and its peer dependencies):
 
 ```bash copy
-npm install @copilotkit/runtime @ag-ui/mastra@beta
+npm install --legacy-peer-deps @ag-ui/mastra @copilotkit/runtime @ag-ui/core @ag-ui/client @ag-ui/encoder @ag-ui/langgraph @ag-ui/proto
 ```
 
-</TabItem>
-<TabItem value="yarn" label="yarn">
+In your `src/mastra/index.ts` file, register the chat route:
 
-```bash copy
-yarn add @copilotkit/runtime @ag-ui/mastra@beta
-```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash copy
-pnpm add @copilotkit/runtime @ag-ui/mastra@beta
-```
-
-</TabItem>
-</Tabs>
-
-</StepItem>
-
-<StepItem>
-
-Configure your Mastra instance to include CopilotKit's runtime endpoint:
-
-```typescript title="src/mastra/index.ts" copy {2,5-8,12-28}
-import { Mastra } from "@mastra/core";
-import { registerCopilotKit } from "@ag-ui/mastra/copilotkit";
-import { weatherAgent } from "./agents/weather-agent";
-
-type WeatherRequestContext = {
-  "user-id": string;
-  "temperature-scale": "celsius" | "fahrenheit";
-};
+```typescript copy title="src/mastra/index.ts" {2,7-19}
+import { Mastra } from '@mastra/core/mastra';
+import { registerCopilotKit } from '@ag-ui/mastra/copilotkit';
+// Rest of the imports...
 
 export const mastra = new Mastra({
-  agents: { weatherAgent },
+  // Rest of the configuration...
   server: {
     cors: {
       origin: "*",
@@ -6948,99 +6960,78 @@ export const mastra = new Mastra({
       allowHeaders: ["*"],
     },
     apiRoutes: [
-      registerCopilotKit<WeatherRequestContext>({
-        path: "/copilotkit",
-        resourceId: "weatherAgent",
-        setContext: (c, requestContext) => {
-          requestContext.set(
-            "user-id",
-            c.req.header("X-User-ID") || "anonymous",
-          );
-          requestContext.set("temperature-scale", "celsius");
-        },
-      }),
-    ],
-  },
+      registerCopilotKit({
+        path: '/chat',
+        resourceId: 'weatherAgent'
+      })
+    ]
+  }
 });
 ```
 
-</StepItem>
-
-<StepItem>
-
-Use the component in your React app with your Mastra server URL:
-
-```tsx title="App.tsx" copy {5}
-import { CopilotKitComponent } from "./components/copilotkit-component";
-
-function App() {
-  return <CopilotKitComponent runtimeUrl="http://localhost:4111/copilotkit" />;
-}
-
-export default App;
-```
-
-Now start both the Mastra server and your frontend.
-
-</StepItem>
-
-  </Steps>
- </TabItem>
-
-  <TabItem value="nextjs" label="Next.js">
-
-  <Steps>
-
-<StepItem>
-
-In your Next.js app, install the required packages:
-
-<Tabs>
-<TabItem value="npm" label="npm">
-
-```bash copy
-npm install @copilotkit/react-core @copilotkit/react-ui @copilotkit/runtime @ag-ui/mastra@beta
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash copy
-yarn add @copilotkit/react-core @copilotkit/react-ui @copilotkit/runtime @ag-ui/mastra@beta
-```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash copy
-pnpm add @copilotkit/react-core @copilotkit/react-ui @copilotkit/runtime @ag-ui/mastra@beta
-```
-
-</TabItem>
-</Tabs>
+This will make the `weatherAgent` available at `/chat` in a CopilotKit-compatible format. You have to add the CORS configuration to allow the CopilotKit frontend to access the Mastra server. For production deployments, make sure to restrict the CORS origins to only your frontend domain.
 
 </StepItem>
 
 <StepItem>
 
-Create a CopilotKit component:
+Run the Mastra server using the following command:
 
-```tsx title="components/copilotkit-component.tsx" copy
-'use client';
+```bash copy
+npm run dev
+```
+
+By default, the Mastra server will run on `http://localhost:4111`. Keep this server running for the next steps where we'll set up the CopilotKit frontend to connect to it.
+
+</StepItem>
+
+<StepItem>
+
+Go up one directory to your project root.
+
+```bash copy
+cd ..
+```
+
+Create a new Next.js project with the name `my-copilot-app`:
+
+```bash copy
+npx create-next-app@latest my-copilot-app
+```
+
+Navigate to your newly created Next.js project directory:
+
+```bash copy
+cd my-copilot-app
+```
+
+</StepItem>
+
+<StepItem>
+
+Install the CopilotKit UI packages which you'll use to display a chat interface:
+
+```bash copy
+npm install @copilotkit/react-ui @copilotkit/react-core
+```
+
+Open the home route of the Next.js app (usually `app/page.tsx` or `src/app/page.tsx`) and replace the existing contents with the following code to set up a basic CopilotKit chat interface:
+
+```typescript copy title="app/page.tsx"
 import { CopilotChat } from "@copilotkit/react-ui";
 import { CopilotKit } from "@copilotkit/react-core";
 import "@copilotkit/react-ui/styles.css";
 
-export function CopilotKitComponent({ runtimeUrl }: { runtimeUrl: string}) {
+export default function Home() {
   return (
     <CopilotKit
-      runtimeUrl={runtimeUrl}
+      runtimeUrl="http://localhost:4111/chat"
       agent="weatherAgent"
     >
       <CopilotChat
         labels={{
-          title: "Your Assistant",
-          initial: "Hi! 👋 How can I assist you today?",
+          title: "Weather Agent",
+          initial: "Hi! 👋 Ask me about the weather, forecasts, and climate.",
         }}
       />
     </CopilotKit>
@@ -7052,162 +7043,33 @@ export function CopilotKitComponent({ runtimeUrl }: { runtimeUrl: string}) {
 
 <StepItem>
 
-There are two approaches for the API route determined by how you're integrating Mastra in your Next.js application.
-
-1. For a full-stack Next.js app with an instance of Mastra integrated into the app.
-2. For a Next.js app with a separate Mastra server and the Mastra Client SDK.
-
-<Tabs>
-  <TabItem value="mastra-instance" label="With a Mastra instance">
-
-Create an API route that connects to local Mastra agents.
-
-```typescript title="app/api/copilotkit/route.ts" copy {1-7,11-26}
-import { mastra } from "../../mastra";
-import {
-  CopilotRuntime,
-  ExperimentalEmptyAdapter,
-  copilotRuntimeNextJSAppRouterEndpoint,
-} from "@copilotkit/runtime";
-import { MastraAgent } from "@ag-ui/mastra";
-import { NextRequest } from "next/server";
-
-export const POST = async (req: NextRequest) => {
-  const mastraAgents = MastraAgent.getLocalAgents({
-    mastra,
-    agentId: "weatherAgent",
-  });
-
-  const runtime = new CopilotRuntime({
-    agents: mastraAgents,
-  });
-
-  const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
-    runtime,
-    serviceAdapter: new ExperimentalEmptyAdapter(),
-    endpoint: "/api/copilotkit",
-  });
-
-  return handleRequest(req);
-};
-```
-
-  </TabItem>
-  <TabItem value="mastra-client" label="With the Mastra Client SDK">
-
-Install the Mastra Client SDK.
-
-<Tabs>
-<TabItem value="npm" label="npm">
+You're ready to connect the pieces! Make sure both the Mastra server and the CopilotKit frontend are running. Start the Next.js development server:
 
 ```bash copy
-npm install @mastra/client-js@beta
+npm run dev
 ```
 
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash copy
-yarn add @mastra/client-js@beta
-```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash copy
-pnpm add @mastra/client-js@beta
-```
-
-</TabItem>
-</Tabs>
-
-Create an API route that connects to remote Mastra agents:
-
-```typescript title="app/api/copilotkit/route.ts" copy {1-7,12-26}
-import { MastraClient } from "@mastra/client-js";
-import {
-  CopilotRuntime,
-  ExperimentalEmptyAdapter,
-  copilotRuntimeNextJSAppRouterEndpoint,
-} from "@copilotkit/runtime";
-import { MastraAgent } from "@ag-ui/mastra";
-import { NextRequest } from "next/server";
-
-export const POST = async (req: NextRequest) => {
-  const baseUrl = process.env.MASTRA_BASE_URL || "http://localhost:4111";
-  const mastraClient = new MastraClient({ baseUrl });
-
-  const mastraAgents = await MastraAgent.getRemoteAgents({ mastraClient });
-
-  const runtime = new CopilotRuntime({
-    agents: mastraAgents,
-  });
-
-  const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
-    runtime,
-    serviceAdapter: new ExperimentalEmptyAdapter(),
-    endpoint: "/api/copilotkit",
-  });
-
-  return handleRequest(req);
-};
-```
-
-  </TabItem>
-</Tabs>
+You should now be able to chat with your agent in the browser.
 
 </StepItem>
 
-<StepItem>
+</Steps>
 
-Use the component with the local API endpoint:
-
-```tsx title="App.tsx" copy {5}
-import { CopilotKitComponent } from "./components/copilotkit-component";
-
-function App() {
-  return <CopilotKitComponent runtimeUrl="/api/copilotkit" />;
-}
-
-export default App;
-```
-
-</StepItem>
-
-  </Steps>
-  </TabItem>
-</Tabs>
-
-Start building the future!
-
-<br />
-
-<img
-  className="rounded-lg"
-  src="/img/copilotkit/cpkoutput.jpg"
-  alt="CopilotKit output"
-  style={{ maxWidth: "700px", width: "100%" }}
-/>
-
-## Next Steps
-
-- [CopilotKit Documentation](https://docs.copilotkit.ai) - Complete CopilotKit reference
-- [React Hooks with CopilotKit](https://docs.copilotkit.ai/reference/hooks/useCoAgent) - Advanced React integration patterns
-- [Next.js Integration with Mastra](/docs/v1/frameworks/web-frameworks/next-js) - Full-stack Next.js setup guide
+Congratulations! You have successfully integrated Mastra with CopilotKit using a separate server approach. Your CopilotKit frontend now communicates with a standalone Mastra agent server.
 
 
 ---
-title: "Use OpenRouter with Mastra | Frameworks"
+title: "Using OpenRouter | Frameworks"
 description: "Learn how to integrate OpenRouter with Mastra"
 ---
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Use OpenRouter with Mastra
+# Using OpenRouter
 [EN] Source: https://mastra.ai/en/docs/frameworks/agentic-uis/openrouter
 
-Integrate OpenRouter with Mastra to leverage the numerous models available on OpenRouter.
+Integrate [OpenRouter](https://openrouter.ai/) with Mastra to leverage the numerous models available on OpenRouter.
 
 <Steps>
 
@@ -9726,7 +9588,7 @@ If there are no specific instructions for your tool below, you may be able to ad
     "mastra": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@mastra/mcp-docs-server"]
+      "args": ["-y", "@mastra/mcp-docs-server@beta"]
     }
   }
 }
@@ -9737,7 +9599,7 @@ If there are no specific instructions for your tool below, you may be able to ad
 Install using the terminal command:
 
 ```bash copy
-claude mcp add mastra -- npx -y @mastra/mcp-docs-server
+claude mcp add mastra -- npx -y @mastra/mcp-docs-server@beta
 ```
 
 [More info on using MCP servers with Claude Code](https://docs.claude.com/en/docs/claude-code/mcp)
@@ -9747,7 +9609,7 @@ claude mcp add mastra -- npx -y @mastra/mcp-docs-server
 1. Register it from the terminal:
 
    ```bash copy
-   codex mcp add mastra-docs -- npx -y @mastra/mcp-docs-server
+   codex mcp add mastra-docs -- npx -y @mastra/mcp-docs-server@beta
    ```
 
 2. Run `codex mcp list` to confirm the server shows as `enabled`.
@@ -9781,7 +9643,7 @@ If you followed the automatic installation, you'll see a popup when you open cur
        "mastra": {
          "type": "stdio",
          "command": "npx",
-         "args": ["-y", "@mastra/mcp-docs-server"]
+         "args": ["-y", "@mastra/mcp-docs-server@beta"]
        }
      }
    }
@@ -9830,7 +9692,7 @@ After starting the MCP server, click the tools button in the Copilot pane to see
      "mcpServers": {
        "mastra": {
          "command": "npx",
-         "args": ["-y", "@mastra/mcp-docs-server"]
+         "args": ["-y", "@mastra/mcp-docs-server@beta"]
        }
      }
    }
@@ -10230,7 +10092,7 @@ Explore real-world examples in our [community showcase](/showcase).
 
 Follow the [Installation guide](/docs/v1/getting-started/installation) for step-by-step setup with the CLI or a manual install.
 
-If you're new to AI agents, check out our [templates](/docs/v1/getting-started/templates), [course](https://mastra.ai/book), and [YouTube videos](https://youtube.com/@mastra-ai) to start building with Mastra today.
+If you're new to AI agents, check out our [templates](/docs/v1/getting-started/templates), [course](https://mastra.ai/course), and [YouTube videos](https://youtube.com/@mastra-ai). You can also join our [Discord](https://discord.gg/BTYqqHKUrf) community to get help and share your projects.
 
 We can't wait to see what you build ✌️
 
@@ -10247,12 +10109,12 @@ Mastra's logging system captures function execution, input data, and output resp
 
 When deploying to Mastra Cloud, logs are shown on the [Logs](/docs/v1/deployment/mastra-cloud/observability) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
 
-## PinoLogger
+## Configuring logs with PinoLogger
 
 When [initializing a new Mastra project](/docs/v1/getting-started/installation) using the CLI, `PinoLogger` is included by default.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core/mastra";
 import { PinoLogger } from "@mastra/loggers";
 
 export const mastra = new Mastra({
@@ -10266,7 +10128,7 @@ export const mastra = new Mastra({
 
 > See the [PinoLogger](/reference/v1/logging/pino-logger) API reference for all available configuration options.
 
-## Logging from workflows and tools
+## Customizing logs
 
 Mastra provides access to a logger instance via the `mastra.getLogger()` method, available inside both workflow steps and tools. The logger supports standard severity levels: `debug`, `info`, `warn`, and `error`.
 
@@ -10317,7 +10179,7 @@ export const testTool = createTool({
 });
 ```
 
-## Logging with additional data
+### Logging with additional data
 
 Logger methods accept an optional second argument for additional data. This can be any value, such as an object, string, or number.
 
@@ -10346,6 +10208,511 @@ export const testWorkflow = createWorkflow({...})
   .then(step1)
   .commit();
 ```
+
+
+---
+title: "MCP Overview | MCP"
+description: Learn about the Model Context Protocol (MCP), how to use third-party tools via MCPClient, connect to registries, and share your own tools using MCPServer.
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# MCP Overview
+[EN] Source: https://mastra.ai/en/docs/mcp/overview
+
+Mastra supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction), an open standard for connecting AI agents to external tools and resources. It serves as a universal plugin system, enabling agents to call tools regardless of language or hosting environment.
+
+Mastra can also be used to author MCP servers, exposing agents, tools, and other structured resources via the MCP interface. These can then be accessed by any system or agent that supports the protocol.
+
+Mastra currently supports two MCP classes:
+
+1. **`MCPClient`**: Connects to one or many MCP servers to access their tools, resources, prompts, and handle elicitation requests.
+2. **`MCPServer`**: Exposes Mastra tools, agents, workflows, prompts, and resources to MCP-compatible clients.
+
+## Getting started
+
+To use MCP, install the required dependency:
+
+```bash
+npm install @mastra/mcp@beta
+```
+
+## Configuring `MCPClient`
+
+The `MCPClient` connects Mastra primitives to external MCP servers, which can be local packages (invoked using `npx`) or remote HTTP(S) endpoints. Each server must be configured with either a `command` or a `url`, depending on how it's hosted.
+
+```typescript title="src/mastra/mcp/test-mcp-client.ts" showLineNumbers copy
+import { MCPClient } from "@mastra/mcp";
+
+export const testMcpClient = new MCPClient({
+  id: "test-mcp-client",
+  servers: {
+    wikipedia: {
+      command: "npx",
+      args: ["-y", "wikipedia-mcp"],
+    },
+    weather: {
+      url: new URL(
+        `https://server.smithery.ai/@smithery-ai/national-weather-service/mcp?api_key=${process.env.SMITHERY_API_KEY}`,
+      ),
+    },
+  },
+});
+```
+
+> See [MCPClient](/reference/v1/tools/mcp-client) for a full list of configuration options.
+
+## Using `MCPClient` with an agent
+
+To use tools from an MCP server in an agent, import your `MCPClient` and call `.getTools()` in the `tools` parameter. This loads from the defined MCP servers, making them available to the agent.
+
+```typescript {4,16} title="src/mastra/agents/test-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+import { testMcpClient } from "../mcp/test-mcp-client";
+
+export const testAgent = new Agent({
+  name: "Test Agent",
+  description: "You are a helpful AI assistant",
+  instructions: `
+      You are a helpful assistant that has access to the following MCP Servers.
+      - Wikipedia MCP Server
+      - US National Weather Service
+
+      Answer questions using the information you find using the MCP Servers.`,
+  model: openai("gpt-4o-mini"),
+  tools: await testMcpClient.getTools(),
+});
+```
+
+> See the [Agent Class](/reference/v1/agents/agent) for a full list of configuration options.
+
+## Configuring `MCPServer`
+
+To expose agents, tools, and workflows from your Mastra application to external systems over HTTP(S) use the `MCPServer` class. This makes them accessible to any system or agent that supports the protocol.
+
+```typescript title="src/mastra/mcp/test-mcp-server.ts" showLineNumbers copy
+import { MCPServer } from "@mastra/mcp";
+
+import { testAgent } from "../agents/test-agent";
+import { testWorkflow } from "../workflows/test-workflow";
+import { testTool } from "../tools/test-tool";
+
+export const testMcpServer = new MCPServer({
+  id: "test-mcp-server",
+  name: "Test Server",
+  version: "1.0.0",
+  agents: { testAgent },
+  tools: { testTool },
+  workflows: { testWorkflow },
+});
+```
+
+> See [MCPServer](/reference/v1/tools/mcp-server) for a full list of configuration options.
+
+## Registering an `MCPServer`
+
+To make an MCP server available to other systems or agents that support the protocol, register it in the main `Mastra` instance using `mcpServers`.
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+
+import { testMcpServer } from "./mcp/test-mcp-server";
+
+export const mastra = new Mastra({
+  // ...
+  mcpServers: { testMcpServer },
+});
+```
+
+## Static and dynamic tools
+
+`MCPClient` offers two approaches to retrieving tools from connected servers, suitable for different application architectures:
+
+| Feature           | Static Configuration (`await mcp.getTools()`) | Dynamic Configuration (`await mcp.getToolsets()`)    |
+| :---------------- | :-------------------------------------------- | :--------------------------------------------------- |
+| **Use Case**      | Single-user, static config (e.g., CLI tool)   | Multi-user, dynamic config (e.g., SaaS app)          |
+| **Configuration** | Fixed at agent initialization                 | Per-request, dynamic                                 |
+| **Credentials**   | Shared across all uses                        | Can vary per user/request                            |
+| **Agent Setup**   | Tools added in `Agent` constructor            | Tools passed in `.generate()` or `.stream()` options |
+
+### Static tools
+
+Use the `.getTools()` method to fetch tools from all configured MCP servers. This is suitable when configuration (such as API keys) is static and consistent across users or requests. Call it once and pass the result to the `tools` property when defining your agent.
+
+> See [getTools()](/reference/v1/tools/mcp-client#gettools) for more information.
+
+```typescript {8} title="src/mastra/agents/test-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+import { testMcpClient } from "../mcp/test-mcp-client";
+
+export const testAgent = new Agent({
+  // ...
+  tools: await testMcpClient.getTools(),
+});
+```
+
+### Dynamic tools
+
+Use the `.getToolsets()` method when tool configuration may vary by request or user, such as in a multi-tenant system where each user provides their own API key. This method returns toolsets that can be passed to the `toolsets` option in the agent's `.generate()` or `.stream()` calls.
+
+```typescript {5-16,21} showLineNumbers copy
+import { MCPClient } from "@mastra/mcp";
+import { mastra } from "./mastra";
+
+async function handleRequest(userPrompt: string, userApiKey: string) {
+  const userMcp = new MCPClient({
+    servers: {
+      weather: {
+        url: new URL("http://localhost:8080/mcp"),
+        requestInit: {
+          headers: {
+            Authorization: `Bearer ${userApiKey}`,
+          },
+        },
+      },
+    },
+  });
+
+  const agent = mastra.getAgent("testAgent");
+
+  const response = await agent.generate(userPrompt, {
+    toolsets: await userMcp.getToolsets(),
+  });
+
+  await userMcp.disconnect();
+
+  return Response.json({
+    data: response.text,
+  });
+}
+```
+
+> See [getToolsets()](/reference/v1/tools/mcp-client#gettoolsets) for more information.
+
+## Connecting to an MCP registry
+
+MCP servers can be discovered through registries. Here's how to connect to some popular ones using `MCPClient`:
+
+<Tabs>
+  <TabItem value="klavis" label="Klavis AI">
+    [Klavis AI](https://klavis.ai) provides hosted, enterprise-authenticated, high-quality MCP servers.
+
+    ```typescript
+    import { MCPClient } from "@mastra/mcp";
+
+    const mcp = new MCPClient({
+      servers: {
+        salesforce: {
+          url: new URL("https://salesforce-mcp-server.klavis.ai/mcp/?instance_id={private-instance-id}"),
+        },
+        hubspot: {
+          url: new URL("https://hubspot-mcp-server.klavis.ai/mcp/?instance_id={private-instance-id}"),
+        },
+      },
+    });
+    ```
+
+    Klavis AI offers enterprise-grade authentication and security for production deployments.
+
+    For more details on how to integrate Mastra with Klavis, check out their [documentation](https://docs.klavis.ai/documentation/ai-platform-integration/mastra).
+
+  </TabItem>
+  <TabItem value="mcp-run" label="mcp.run">
+    [mcp.run](https://www.mcp.run/) provides pre-authenticated, managed MCP servers. Tools are grouped into Profiles, each with a unique, signed URL.
+
+    ```typescript
+    import { MCPClient } from "@mastra/mcp";
+
+    const mcp = new MCPClient({
+      servers: {
+        marketing: { // Example profile name
+          url: new URL(process.env.MCP_RUN_SSE_URL!), // Get URL from mcp.run profile
+        },
+      },
+    });
+    ```
+
+    > **Important:** Treat the mcp.run SSE URL like a password. Store it securely, for example, in an environment variable.
+    > ```bash title=".env"
+    > MCP_RUN_SSE_URL=https://www.mcp.run/api/mcp/sse?nonce=...
+    > ```
+
+  </TabItem>
+  <TabItem value="composio" label="Composio.dev">
+    [Composio.dev](https://composio.dev) offers a registry of [SSE-based MCP servers](https://mcp.composio.dev). You can use the SSE URL generated for tools like Cursor directly.
+
+    ```typescript
+    import { MCPClient } from "@mastra/mcp";
+
+    const mcp = new MCPClient({
+      servers: {
+        googleSheets: {
+          url: new URL("https://mcp.composio.dev/googlesheets/[private-url-path]"),
+        },
+        gmail: {
+          url: new URL("https://mcp.composio.dev/gmail/[private-url-path]"),
+        },
+      },
+    });
+    ```
+
+    Authentication with services like Google Sheets often happens interactively through the agent conversation.
+
+    *Note: Composio URLs are typically tied to a single user account, making them best suited for personal automation rather than multi-tenant applications.*
+
+  </TabItem>
+  <TabItem value="smithery" label="Smithery.ai">
+    [Smithery.ai](https://smithery.ai) provides a registry accessible via their CLI.
+
+    ```typescript
+    // Unix/Mac
+    import { MCPClient } from "@mastra/mcp";
+
+    const mcp = new MCPClient({
+      servers: {
+        sequentialThinking: {
+          command: "npx",
+          args: [
+            "-y",
+            "@smithery/cli@latest",
+            "run",
+            "@smithery-ai/server-sequential-thinking",
+            "--config",
+            "{}",
+          ],
+        },
+      },
+    });
+    ```
+
+    ```typescript
+    // Windows
+    import { MCPClient } from "@mastra/mcp";
+
+    const mcp = new MCPClient({
+      servers: {
+        sequentialThinking: {
+          command: "npx",
+          args: [
+            "-y",
+            "@smithery/cli@latest",
+            "run",
+            "@smithery-ai/server-sequential-thinking",
+            "--config",
+            "{}",
+          ],
+        },
+      },
+    });
+    ```
+
+  </TabItem>
+  <TabItem value="ampersand" label="Ampersand">
+
+[Ampersand](https://withampersand.com?utm_source=mastra-docs) offers an [MCP Server](https://docs.withampersand.com/mcp) that allows you to connect your agent to 150+ integrations with SaaS products like Salesforce, Hubspot, and Zendesk.
+
+```typescript
+// MCPClient with Ampersand MCP Server using SSE
+export const mcp = new MCPClient({
+  servers: {
+    "@amp-labs/mcp-server": {
+      url: `https://mcp.withampersand.com/v1/sse?${new URLSearchParams({
+        apiKey: process.env.AMPERSAND_API_KEY,
+        project: process.env.AMPERSAND_PROJECT_ID,
+        integrationName: process.env.AMPERSAND_INTEGRATION_NAME,
+        groupRef: process.env.AMPERSAND_GROUP_REF,
+      })}`,
+    },
+  },
+});
+```
+
+```typescript
+// If you prefer to run the MCP server locally:
+import { MCPClient } from "@mastra/mcp";
+
+// MCPClient with Ampersand MCP Server using stdio transport
+export const mcp = new MCPClient({
+  servers: {
+    "@amp-labs/mcp-server": {
+      command: "npx",
+      args: [
+        "-y",
+        "@amp-labs/mcp-server@latest",
+        "--transport",
+        "stdio",
+        "--project",
+        process.env.AMPERSAND_PROJECT_ID,
+        "--integrationName",
+        process.env.AMPERSAND_INTEGRATION_NAME,
+        "--groupRef",
+        process.env.AMPERSAND_GROUP_REF, // optional
+      ],
+      env: {
+        AMPERSAND_API_KEY: process.env.AMPERSAND_API_KEY,
+      },
+    },
+  },
+});
+```
+
+As an alternative to MCP, Ampersand's AI SDK also has an adapter for Mastra, so you can [directly import Ampersand tools](https://docs.withampersand.com/ai-sdk#use-with-mastra) for your agent to access.
+
+  </TabItem>
+</Tabs>
+
+## Related
+
+- [Using Tools](/docs/v1/agents/using-tools)
+- [MCPClient](/reference/v1/tools/mcp-client)
+- [MCPServer](/reference/v1/tools/mcp-server)
+
+
+---
+title: "Publishing an MCP Server | MCP"
+description: Guide to setting up and building a Mastra MCP server using the stdio transport, and publishing it to NPM.
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Publishing an MCP Server
+[EN] Source: https://mastra.ai/en/docs/mcp/publishing-mcp-server
+
+This example guides you through setting up a basic Mastra MCPServer using the stdio transport, building it, and preparing it for publishing to NPM.
+
+## Install dependencies
+
+Install the necessary packages:
+
+```bash
+pnpm add @mastra/mcp @mastra/core tsup
+```
+
+## Setting up an MCP Server
+
+<Steps>
+
+<StepItem>
+
+Create a file for your stdio server, for example, `/src/mastra/stdio.ts`.
+
+</StepItem>
+
+<StepItem>
+
+Add the following code to the file. Remember to import your actual Mastra tools and name the server appropriately.
+
+```typescript title="src/mastra/stdio.ts" copy
+#!/usr/bin/env node
+import { MCPServer } from "@mastra/mcp";
+import { weatherTool } from "./tools";
+
+const server = new MCPServer({
+  name: "my-mcp-server",
+  version: "1.0.0",
+  tools: { weatherTool },
+});
+
+server.startStdio().catch((error) => {
+  console.error("Error running MCP server:", error);
+  process.exit(1);
+});
+```
+
+</StepItem>
+
+<StepItem>
+
+Update your `package.json` to include the `bin` entry pointing to your built server file and a script to build the server with both ESM and CJS outputs.
+
+```json title="package.json" copy
+{
+  "bin": "dist/stdio.mjs",
+  "scripts": {
+    "build:mcp": "tsup src/mastra/stdio.ts --format esm,cjs --no-splitting --dts && echo '#!/usr/bin/env node' | cat - dist/stdio.mjs > temp && mv temp dist/stdio.mjs && chmod +x dist/stdio.mjs"
+  }
+}
+```
+
+The build command generates both ESM (`.mjs`) and CJS (`.cjs`) outputs for maximum compatibility. The shebang (`#!/usr/bin/env node`) is prepended to the ESM artifact to make it directly executable, and the `bin` entry points to this file.
+
+</StepItem>
+
+<StepItem>
+
+Run the build command:
+
+```bash
+pnpm run build:mcp
+```
+
+This will compile your server code into both ESM and CJS formats and make the ESM output file executable. On Unix-like systems, the `chmod +x` step makes the file directly executable. Windows users may need to use WSL or handle execution through Node.js directly.
+
+</StepItem>
+
+</Steps>
+
+## Publishing to NPM
+
+To make your MCP server available for others (or yourself) to use via `npx` or as a dependency, you can publish it to NPM.
+
+<Steps>
+
+<StepItem>
+
+Ensure you have an NPM account and are logged in (`npm login`).
+
+</StepItem>
+
+<StepItem>
+
+Make sure your package name in `package.json` is unique and available.
+
+</StepItem>
+
+<StepItem>
+
+Run the publish command from your project root after building:
+
+```bash
+npm publish --access public
+```
+
+For more details on publishing packages, refer to the [NPM documentation](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages).
+
+</StepItem>
+
+</Steps>
+
+## Using a published MCP Server
+
+Once published, your MCP server can be used by an `MCPClient` by specifying the command to run your package. You can also use any other MCP client like Claude desktop, Cursor, or Windsurf.
+
+```typescript
+import { MCPClient } from "@mastra/mcp";
+
+const mcp = new MCPClient({
+  servers: {
+    // Give this MCP server instance a name
+    yourServerName: {
+      command: "npx",
+      args: ["-y", "@your-org-name/your-package-name@latest"], // Replace with your package name
+    },
+  },
+});
+
+// You can then get tools or toolsets from this configuration to use in your agent
+const tools = await mcp.getTools();
+const toolsets = await mcp.getToolsets();
+```
+
+Note: If you published without an organization scope, the `args` might just be `["-y", "your-package-name@latest"]`.
 
 
 ---
@@ -12012,7 +12379,7 @@ We also support various external tracing providers like Langfuse, Braintrust, an
 
 - **[Set up Tracing](/docs/v1/observability/tracing/overview)**: Configure tracing for your application
 - **[Configure Logging](/docs/v1/logging)**: Add structured logging
-- **[View Examples](/examples/v1/observability/basic-tracing)**: See observability in action
+- **[View Examples](/examples/v1/observability/basic-ai-tracing)**: See observability in action
 - **[API Reference](/reference/v1/observability/tracing/instances)**: Detailed configuration options
 
 
@@ -13782,7 +14149,7 @@ Mastra automatically creates spans for:
 
 ### Examples
 
-- [Basic Tracing Example](/examples/v1/observability/basic-tracing) - Working implementation
+- [Basic Tracing Example](/examples/v1/observability/basic-ai-tracing) - Working implementation
 
 ### Reference Documentation
 
@@ -14102,7 +14469,7 @@ This ensures that processing errors don't prevent traces from being exported or 
 ## Related
 
 - [SensitiveDataFilter API](/reference/v1/observability/tracing/processors/sensitive-data-filter)
-- [Basic Tracing Example](/examples/v1/observability/basic-tracing)
+- [Basic Tracing Example](/examples/v1/observability/basic-ai-tracing)
 
 
 ---
@@ -16030,6 +16397,35 @@ registerApiRoute("/my-custom-route", {
 
 ## Common examples
 
+### Using `RequestContext`
+
+You can populate `RequestContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { RequestContext } from "@mastra/core/request-context";
+import { testWeatherAgent } from "./agents/test-weather-agent";
+
+export const mastra = new Mastra({
+  agents: { testWeatherAgent },
+  server: {
+    middleware: [
+      async (context, next) => {
+        const country = context.req.header("CF-IPCountry");
+        const requestContext = context.get("requestContext");
+
+        requestContext.set(
+          "temperature-unit",
+          country === "US" ? "fahrenheit" : "celsius",
+        );
+
+        await next();
+      },
+    ],
+  },
+});
+```
+
 ### Authentication
 
 ```typescript copy
@@ -16109,38 +16505,9 @@ be inspected by middleware to tailor behavior:
 - `x-mastra-client-type`: identifies the client SDK, e.g. `js` or `python`
 - `x-studio`: request triggered from Studio
 
-### Setting `requestContext`
-
-You can populate `requestContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
-
-```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
-import { RequestContext } from "@mastra/core/request-context";
-import { testWeatherAgent } from "./agents/test-weather-agent";
-
-export const mastra = new Mastra({
-  agents: { testWeatherAgent },
-  server: {
-    middleware: [
-      async (context, next) => {
-        const country = context.req.header("CF-IPCountry");
-        const requestContext = context.get("requestContext");
-
-        requestContext.set(
-          "temperature-unit",
-          country === "US" ? "fahrenheit" : "celsius",
-        );
-
-        await next();
-      },
-    ],
-  },
-});
-```
-
 # Related
 
-- [Request Context](./request-context)
+- [Request Context](/docs/v1/server-db/request-context)
 
 
 ---
@@ -16336,8 +16703,8 @@ export const weatherTool = createTool({
 - [Request Context Example](/examples/v1/agents/request-context)
 - [Agent Request Context](/docs/v1/agents/overview#using-requestcontext)
 - [Workflow Request Context](../workflows/overview#using-requestcontext)
-- [Tool Request Context](../tools-mcp/overview#using-requestcontext)
-- [Server Middleware Request Context](/docs/v1/server-db/middleware)
+- [Tool Request Context](../mcp/overview#using-requestcontext)
+- [Server Middleware](/docs/v1/server-db/middleware)
 
 
 ---
@@ -19580,7 +19947,7 @@ export const testWorkflow = createWorkflow({
 ## Related
 
 - [Using Agents](/docs/v1/agents/overview)
-- [Using Tools](/docs/v1/tools-mcp/overview)
+- [MCP Overview](/docs/v1/mcp/overview)
 
 
 ---
@@ -21993,114 +22360,6 @@ Plus, it's where we plan all our adventures!
 
 
 ---
-title: "Example: Deploying an MCPServer | Agents"
-description: Example of setting up, building, and deploying a Mastra MCPServer using the stdio transport and publishing it to NPM.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
-# Example: Deploying an MCPServer
-[EN] Source: https://mastra.ai/en/examples/agents/deploying-mcp-server
-
-This example guides you through setting up a basic Mastra MCPServer using the stdio transport, building it, and preparing it for deployment, such as publishing to NPM.
-
-## Install Dependencies
-
-Install the necessary packages:
-
-```bash
-pnpm add @mastra/mcp@beta @mastra/core@beta tsup
-```
-
-## Set up MCP Server
-
-1.  Create a file for your stdio server, for example, `/src/mastra/stdio.ts`.
-
-2.  Add the following code to the file. Remember to import your actual Mastra tools and name the server appropriately.
-
-    ```typescript title="src/mastra/stdio.ts" copy
-    #!/usr/bin/env node
-    import { MCPServer } from "@mastra/mcp";
-    import { weatherTool } from "./tools";
-
-    const server = new MCPServer({
-      id: "my-mcp-server",
-      name: "My MCP Server",
-      version: "1.0.0",
-      tools: { weatherTool },
-    });
-
-    server.startStdio().catch((error) => {
-      console.error("Error running MCP server:", error);
-      process.exit(1);
-    });
-    ```
-
-3.  Update your `package.json` to include the `bin` entry pointing to your built server file and a script to build the server.
-
-```json title="package.json" copy
-{
-  "bin": "dist/stdio.js",
-  "scripts": {
-    "build:mcp": "tsup src/mastra/stdio.ts --format esm --no-splitting --dts && chmod +x dist/stdio.js"
-  }
-}
-```
-
-4.  Run the build command:
-
-    ```bash
-    pnpm run build:mcp
-    ```
-
-    This will compile your server code and make the output file executable.
-
-## Deploying to NPM
-
-To make your MCP server available for others (or yourself) to use via `npx` or as a dependency, you can publish it to NPM.
-
-1.  Ensure you have an NPM account and are logged in (`npm login`).
-2.  Make sure your package name in `package.json` is unique and available.
-3.  Run the publish command from your project root after building:
-
-    ```bash
-    npm publish --access public
-    ```
-
-    For more details on publishing packages, refer to the [NPM documentation](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages).
-
-## Use the Deployed MCP Server
-
-Once published, your MCP server can be used by an `MCPClient` by specifying the command to run your package. You can also use any other MCP client like Claude desktop, Cursor, or Windsurf.
-
-```typescript
-import { MCPClient } from "@mastra/mcp";
-
-const mcp = new MCPClient({
-  servers: {
-    // Give this MCP server instance a name
-    yourServerName: {
-      command: "npx",
-      args: ["-y", "@your-org-name/your-package-name@latest"], // Replace with your package name
-    },
-  },
-});
-
-// You can then get tools or toolsets from this configuration to use in your agent
-const tools = await mcp.listTools();
-const toolsets = await mcp.listToolsets();
-```
-
-Note: If you published without an organization scope, the `args` might just be `["-y", "your-package-name@latest"]`.
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-
-
----
 title: "Example: Image Analysis | Agents"
 description: Example of using a Mastra AI Agent to analyze images from Unsplash to identify objects, determine species, and describe locations.
 ---
@@ -23636,7 +23895,6 @@ The Examples section is a short list of example projects demonstrating basic AI 
     "Processors",
     "Memory",
     "RAG",
-    "Evals",
     "Voice",
     "Observability",
   ]}
@@ -23649,10 +23907,10 @@ The Examples section is a short list of example projects demonstrating basic AI 
         title: "Image Analysis Agent",
         href: "/examples/v1/agents/image-analysis",
       },
-      { title: "Request Context", href: "/examples/v1/agents/request-context" },
+      { title: "Runtime Context", href: "/examples/v1/agents/request-context" },
       {
         title: "Deploying an MCP Server",
-        href: "/examples/v1/agents/deploying-mcp-server",
+        href: "/docs/v1/mcp/publishing-mcp-server",
       },
       {
         title: "AI SDK v5 Integration",
@@ -23748,9 +24006,6 @@ The Examples section is a short list of example projects demonstrating basic AI 
       },
       { title: "Graph RAG", href: "/examples/v1/rag/usage/graph-rag" },
     ],
-    "Evals": [
-      { title: "Running in CI", href: "/examples/v1/evals/running-in-ci" },
-    ],
     Voice: [
       { title: "Text to Speech", href: "/examples/v1/voice/text-to-speech" },
       { title: "Speech to Text", href: "/examples/v1/voice/speech-to-text" },
@@ -23759,8 +24014,8 @@ The Examples section is a short list of example projects demonstrating basic AI 
     ],
     Observability: [
       {
-        title: "Basic Tracing",
-        href: "/examples/v1/observability/basic-tracing",
+        title: "Basic AI Tracing",
+        href: "/examples/v1/observability/basic-ai-tracing",
       },
     ],
   }}
@@ -23815,7 +24070,6 @@ import { LibSQLStore } from "@mastra/libsql";
 import { z } from "zod";
 
 export const workingMemorySchemaAgent = new Agent({
-  id: "working-memory-schema-agent",
   name: "working-memory-schema-agent",
   instructions: `
     You are a todo list AI agent.
@@ -23828,7 +24082,6 @@ export const workingMemorySchemaAgent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
-      id: 'mastra-storage',
       url: "file:working-memory-schema.db",
     }),
     options: {
@@ -23847,7 +24100,7 @@ export const workingMemorySchemaAgent = new Agent({
         }),
       },
       threads: {
-        generateTitle: true, // Explicitly enable automatic title generation
+        generateTitle: true,
       },
     },
   }),
@@ -24013,8 +24266,7 @@ import { openai } from "@ai-sdk/openai";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const workingMemoryTemplateAgent = new Agent({
-  id: "working-memory-template-agent",
-  name: "Working Memory Template Agent",
+  name: "working-memory-template-agent",
   instructions: `
     You are a todo list AI agent.
     Always show the current list when starting a conversation.
@@ -24026,7 +24278,6 @@ export const workingMemoryTemplateAgent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
-      id: 'mastra-storage',
       url: "file:working-memory-template.db",
     }),
     options: {
@@ -24045,7 +24296,7 @@ export const workingMemoryTemplateAgent = new Agent({
           - None yet`,
       },
       threads: {
-        generateTitle: true, // Explicitly enable automatic title generation
+        generateTitle: true,
       },
     },
   }),
@@ -24160,7 +24411,7 @@ description: Get started with Tracing in your Mastra application
 ---
 
 # Basic Tracing Example
-[EN] Source: https://mastra.ai/en/examples/observability/basic-tracing
+[EN] Source: https://mastra.ai/en/examples/observability/basic-ai-tracing
 
 This example demonstrates how to set up basic Tracing in a Mastra application with automatic instrumentation for agents and workflows.
 
@@ -34293,6 +34544,44 @@ npx @mastra/codemod@beta v1/runtime-context .
 
 :::
 
+This applies to all tool executions, whether called directly or through agents and workflows. The type narrowing ensures you handle validation errors appropriately and prevents runtime errors when accessing output properties.
+
+### Tool output validation with `outputSchema`
+
+Tools with an `outputSchema` now validate their return values at runtime. Previously, `outputSchema` was only used for type inference - the output was never validated.
+
+If your tool returns data that doesn't match its `outputSchema`, it will now return a `ValidationError` instead of the invalid data.
+
+To fix validation errors, ensure the tool's output matches the schema definition:
+
+```diff
+  const getUserTool = createTool({
+    id: "get-user",
+    outputSchema: z.object({
+      id: z.string(),
+      name: z.string(),
+      email: z.string().email(),
+    }),
+    execute: async (inputData) => {
+-     return { id: "123", name: "John" }; // Missing email
++     return { id: "123", name: "John", email: "john@example.com" };
+    },
+  });
+```
+
+When validation fails, the tool returns a `ValidationError`:
+
+```diff
++ // Before v1 - invalid output would silently pass through
+  await getUserTool.execute({});
+- // { id: "123", name: "John" } - missing email
++ // {
++ //   error: true,
++ //   message: "Tool output validation failed for get-user. The tool returned invalid output:\n- email: Required\n\nReturned output: {...}",
++ //   validationErrors: { ... }
++ // }
+```
+
 ### `tool.execute` return type includes `ValidationError`
 
 The return type of `tool.execute` now includes `ValidationError` to handle validation failures. You must narrow the result type before accessing output schema properties to satisfy TypeScript's type checking.
@@ -34300,19 +34589,20 @@ The return type of `tool.execute` now includes `ValidationError` to handle valid
 When calling `tool.execute`, check if the result contains an error before accessing output properties:
 
 ```typescript
-const result = await tool.execute(inputData, context);
+const result = await getUserTool.execute({});
 
-if ('error' in result) {
-  // Handle validation error
-  console.error('Tool execution failed:', result.error);
+// Type-safe check for validation errors
+if ('error' in result && result.error) {
+  console.error('Validation failed:', result.message);
+  console.error('Details:', result.validationErrors);
   return;
 }
 
-// Now TypeScript knows result is the success type
-console.log(result.yourOutputSchemaProperty);
+// TypeScript knows result is valid here
+console.log(result.id, result.name, result.email);
 ```
 
-This applies to all tool executions, whether called directly or through agents and workflows. The type narrowing ensures you handle validation errors appropriately and prevents runtime errors when accessing output properties.
+Alternatively, update the `outputSchema` to match your actual output, or remove `outputSchema` entirely if you don't need validation.
 
 
 ---
@@ -34816,6 +35106,18 @@ npx @mastra/codemod@beta v1/workflow-list-runs .
 ```
 
 :::
+
+### Inputs are validated by default
+
+Previously, inputs weren't validated by default. The [`validateInputs`](/reference/v1/workflows/workflow#workflowoptions) flag determines whether to validate the workflow inputs or not. This boolean has been flipped to `true`. If you want the old behavior or have workflows whose schemas don't need to be validated, set `validateInputs: false`.
+
+```diff
+createWorkflow({
++  options: {
++    validateInputs: false
++  }
+})
+```
 
 ## Removed
 
@@ -35746,7 +36048,7 @@ Gateway providers aggregate multiple model providers and add features like cachi
 <CardGrid>
     <CardGridItem
       title="Netlify"
-      description="37 models"
+      description="39 models"
       href="/models/v1/gateways/netlify"
       logo={<NetlifyLogo />}
     />    <CardGridItem
@@ -35777,7 +36079,7 @@ import { NetlifyLogo } from '@site/src/components/logos/NetlifyLogo';
 # <NetlifyLogo className="inline w-8 h-8 mr-2 align-middle" />Netlify
 [EN] Source: https://mastra.ai/en/models/gateways/netlify
 
-Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability. Access 37 models through Mastra's model router.
+Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability. Access 39 models through Mastra's model router.
 
 Learn more in the [Netlify documentation](https://docs.netlify.com/build/ai-gateway/overview/).
 
@@ -35833,6 +36135,7 @@ ANTHROPIC_API_KEY=ant-...
 | `gemini/gemini-2.5-flash-lite-preview-09-2025` |
 | `gemini/gemini-2.5-flash-preview-09-2025` |
 | `gemini/gemini-2.5-pro` |
+| `gemini/gemini-3-pro-preview` |
 | `gemini/gemini-flash-latest` |
 | `gemini/gemini-flash-lite-latest` |
 | `openai/codex-mini-latest` |
@@ -35850,6 +36153,7 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/gpt-5-pro` |
 | `openai/gpt-5.1` |
 | `openai/gpt-5.1-2025-11-13` |
+| `openai/gpt-5.1-codex` |
 | `openai/o3` |
 | `openai/o3-mini` |
 | `openai/o4-mini` |
@@ -36179,7 +36483,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 51+ AI providers and 932+ models through Mastra's model router."
+description: "Access 51+ AI providers and 935+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -36192,7 +36496,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 932 models from 51 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 935 models from 51 providers through a single API.
 
 ## Features
 
@@ -39789,8 +40093,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 8192,
-    "inputCost": 0.57,
-    "outputCost": 1.68
+    "inputCost": 0.28,
+    "outputCost": 0.42
   },
   {
     "model": "deepseek/deepseek-reasoner",
@@ -39801,8 +40105,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 128000,
     "maxOutput": 128000,
-    "inputCost": 0.57,
-    "outputCost": 1.68
+    "inputCost": 0.28,
+    "outputCost": 0.42
   }
 ]}
 />
@@ -41099,7 +41403,7 @@ npm install @ai-sdk/google-vertex
 
 ---
 title: "Google | Models | Mastra"
-description: "Use Google models with Mastra. 24 models available."
+description: "Use Google models with Mastra. 25 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -41110,7 +41414,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/google.svg" alt="Google logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Google
 [EN] Source: https://mastra.ai/en/models/providers/google
 
-Access 24 Google models through Mastra's model router. Authentication is handled automatically using the `GOOGLE_GENERATIVE_AI_API_KEY` environment variable.
+Access 25 Google models through Mastra's model router. Authentication is handled automatically using the `GOOGLE_GENERATIVE_AI_API_KEY` environment variable.
 
 Learn more in the [Google documentation](https://ai.google.dev/gemini-api/docs/pricing).
 
@@ -41369,6 +41673,18 @@ for await (const chunk of stream) {
     "maxOutput": 16000,
     "inputCost": 1,
     "outputCost": 20
+  },
+  {
+    "model": "google/gemini-3-pro-preview",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 64000,
+    "inputCost": 2,
+    "outputCost": 12
   },
   {
     "model": "google/gemini-embedding-001",
@@ -42570,7 +42886,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/anthropic.svg"
     />    <CardGridItem
       title="Google"
-      description="24 models"
+      description="25 models"
       href="/models/v1/providers/google"
       logo="https://models.dev/logos/google.svg"
     />    <CardGridItem
@@ -43488,7 +43804,7 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    url: "https://api.minimaxi.com/anthropic/v1",
+    url: "https://api.minimax.io/anthropic/v1",
     id: "minimax/MiniMax-M2",
     apiKey: process.env.MINIMAX_API_KEY,
     headers: {
@@ -51877,6 +52193,78 @@ await agent.getModel({
 
 
 ---
+title: "Reference: Agent.getTools() | Agents"
+description: "Documentation for the `Agent.getTools()` method in Mastra agents, which retrieves the tools that the agent can use."
+---
+
+# Agent.getTools()
+[EN] Source: https://mastra.ai/en/reference/agents/getTools
+
+The `.getTools()` method retrieves the tools configured for an agent, resolving them if they're a function. These tools extend the agent's capabilities, allowing it to perform specific actions or access external systems.
+
+## Usage example
+
+```typescript copy
+await agent.getTools();
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ requestContext?: RequestContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "Optional configuration object containing runtime context.",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "tools",
+      type: "TTools | Promise<TTools>",
+      description:
+        "The tools configured for the agent, either as a direct object or a promise that resolves to the tools.",
+    },
+  ]}
+/>
+
+## Extended usage example
+
+```typescript copy
+await agent.getTools({
+  requestContext: new RequestContext(),
+});
+```
+
+### Options parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      defaultValue: "new RequestContext()",
+      description:
+        "Runtime context for dependency injection and contextual information.",
+    },
+  ]}
+/>
+
+## Related
+
+- [Using tools with agents](/docs/v1/agents/using-tools)
+- [MCP Overview](/docs/v1/mcp/overview)
+
+
+---
 title: "Reference: Agent.getVoice() | Agents"
 description: "Documentation for the `Agent.getVoice()` method in Mastra agents, which retrieves the voice provider for speech capabilities."
 ---
@@ -52162,7 +52550,7 @@ await agent.listTools({
 ## Related
 
 - [Using tools with agents](/docs/v1/agents/using-tools)
-- [Creating tools](/docs/v1/tools-mcp/overview)
+- [Creating tools](/docs/v1/mcp/overview)
 
 
 ---
@@ -54862,7 +55250,7 @@ const serverById = mastra.getMCPServerById('my-mcp-server');
 
 ## See Also
 
-- [MCP overview](/docs/v1/tools-mcp/mcp-overview)
+- [MCP overview](/docs/v1/mcp/overview)
 - [MCP server reference](/reference/v1/tools/mcp-server)
 
 
@@ -54946,7 +55334,7 @@ const serverByKey = mastra.getMCPServer('customKey');
 
 ## See Also
 
-- [MCP overview](/docs/v1/tools-mcp/mcp-overview)
+- [MCP overview](/docs/v1/mcp/overview)
 - [MCP server reference](/reference/v1/tools/mcp-server)
 
 
@@ -55623,7 +56011,7 @@ This method does not accept any parameters.
 
 ## See Also
 
-- [MCP overview](/docs/v1/tools-mcp/mcp-overview)
+- [MCP overview](/docs/v1/mcp/overview)
 - [MCP server reference](/reference/v1/tools/mcp-server)
 
 
@@ -64427,7 +64815,7 @@ Shuts down all observability instances and clears the registry.
 
 ### Examples
 
-- [Basic Tracing](/examples/v1/observability/basic-tracing) - Getting started
+- [Basic Tracing](/examples/v1/observability/basic-ai-tracing) - Getting started
 
 ### Exporters
 
@@ -66078,7 +66466,7 @@ class CustomObservabilityInstance extends BaseObservabilityInstance {
 
 ### Examples
 
-- [Basic Tracing](/examples/v1/observability/basic-tracing) - Getting started example
+- [Basic Tracing](/examples/v1/observability/basic-ai-tracing) - Getting started example
 
 ### Exporters
 
@@ -66800,7 +67188,7 @@ enum InternalSpans {
 
 ### Examples
 
-- [Basic Tracing](/examples/v1/observability/basic-tracing) - Implementation example
+- [Basic Tracing](/examples/v1/observability/basic-ai-tracing) - Implementation example
 
 
 ---
@@ -67381,7 +67769,7 @@ A span that performs no operations. All methods are no-ops:
 
 ### Examples
 
-- [Basic Tracing](/examples/v1/observability/basic-tracing) - Working with spans
+- [Basic Tracing](/examples/v1/observability/basic-ai-tracing) - Working with spans
 
 
 ---
@@ -76636,10 +77024,9 @@ The `createTool()` function returns a `Tool` object.
 
 ## Related
 
-- [Tools Overview](/docs/v1/tools-mcp/overview)
+- [MCP Overview](/docs/v1/mcp/overview)
 - [Using Tools with Agents](/docs/v1/agents/using-tools)
-- [Tool Request Context](/docs/v1/tools-mcp/overview#using-requestcontext)
-- [Advanced Tool Usage](/docs/v1/tools-mcp/advanced-usage)
+- [Request Context](/docs/v1/server-db/request-context#accessing-values-with-tools)
 
 
 ---
@@ -77043,7 +77430,7 @@ const response = await agent.generate(
 For more information on request context, please see:
 
 - [Agent Request Context](/docs/v1/server-db/request-context)
-- [Tool Request Context](/docs/v1/tools-mcp/overview#using-requestcontext)
+- [Request Context](/docs/v1/server-db/request-context#accessing-values-with-tools)
 
 ## Related
 
@@ -78362,11 +78749,11 @@ const server = new MCPServer({
 
 serve(async (req) => {
   const url = new URL(req.url);
-  
+
   if (url.pathname === "/mcp") {
     // Convert Deno Request to Node.js-compatible format
     const { req: nodeReq, res: nodeRes } = toReqRes(req);
-    
+
     await server.startHTTP({
       url,
       httpPath: "/mcp",
@@ -78376,10 +78763,10 @@ serve(async (req) => {
         serverless: true, // ← Enable stateless mode for serverless
       },
     });
-    
+
     return toFetchResponse(nodeRes);
   }
-  
+
   return new Response("Not found", { status: 404 });
 });
 ```
@@ -78860,7 +79247,7 @@ await serverWithPrompts.prompts.notifyListChanged();
 
 ## Examples
 
-For practical examples of setting up and deploying an MCPServer, see the [Deploying an MCPServer Example](/examples/v1/agents/deploying-mcp-server).
+For practical examples of setting up and deploying an MCPServer, see the [Publishing an MCP Server guide](/docs/v1/mcp/publishing-mcp-server).
 
 The example at the beginning of this page also demonstrates how to instantiate `MCPServer` with both tools and agents.
 
@@ -79689,7 +80076,7 @@ const response = await agent.generate(
 For more information on request context, please see:
 
 - [Agent Request Context](/docs/v1/server-db/request-context)
-- [Tool Request Context](/docs/v1/tools-mcp/overview#using-requestcontext)
+- [Request Context](/docs/v1/server-db/request-context#accessing-values-with-tools)
 
 ## Usage Without a Mastra Server
 
@@ -82773,6 +83160,11 @@ It provides real-time vector search, with features like hybrid search, metadata 
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this vector store instance",
+    },
+    {
       name: "apiKey",
       type: "string",
       description: "Pinecone API key",
@@ -82780,7 +83172,22 @@ It provides real-time vector search, with features like hybrid search, metadata 
     {
       name: "environment",
       type: "string",
-      description: 'Pinecone environment (e.g., "us-west1-gcp")',
+      isOptional: true,
+      description: "Pinecone environment controller host URL",
+    },
+    {
+      name: "cloud",
+      type: "'aws' | 'gcp' | 'azure'",
+      isOptional: true,
+      defaultValue: "aws",
+      description: "Cloud provider for Pinecone serverless",
+    },
+    {
+      name: "region",
+      type: "string",
+      isOptional: true,
+      defaultValue: "us-east-1",
+      description: "Region for Pinecone serverless",
     },
   ]}
 />
@@ -91270,7 +91677,7 @@ export const workflow = createWorkflow({
       description:
         "Optional flag to determine whether to validate the workflow inputs. This also applies default values from zodSchemas on the workflow/step input/resume data. If input/resume data validation fails on start/resume, the workflow will not start/resume, it throws an error instead. If input data validation fails on a step execution, the step fails, causing the workflow to fail and the error is returned.",
       isOptional: true,
-      defaultValue: "false",
+      defaultValue: "true",
     },
     {
       name: "shouldPersistSnapshot",

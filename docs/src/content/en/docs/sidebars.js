@@ -23,8 +23,8 @@ const sidebars = {
       items: [
         {
           type: "doc",
-          id: "getting-started/installation",
-          label: "Installation",
+          id: "getting-started/quickstart",
+          label: "Quickstart",
         },
         {
           type: "doc",
@@ -586,7 +586,7 @@ const sidebars = {
             {
               type: "doc",
               id: "frameworks/agentic-uis/ai-sdk",
-              label: "With Vercel AI SDK",
+              label: "With AI SDK",
             },
             {
               type: "doc",

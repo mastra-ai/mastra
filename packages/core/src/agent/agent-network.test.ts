@@ -107,6 +107,7 @@ describe('Agent - network', () => {
     outputSchema: z.object({
       text: z.string(),
     }),
+    options: { validateInputs: false },
   })
     .then(agentStep1)
     .then(agentStep2)

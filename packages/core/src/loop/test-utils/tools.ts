@@ -1,18 +1,12 @@
 import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { dynamicTool, jsonSchema, stepCountIs } from 'ai-v5';
-import {
-  convertArrayToReadableStream,
-  convertReadableStreamToArray,
-  MockLanguageModelV2,
-  mockValues,
-  mockId,
-} from 'ai-v5/test';
+import { convertArrayToReadableStream, convertReadableStreamToArray, mockValues, mockId } from 'ai-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import z from 'zod';
-import { MessageList } from '../../agent/message-list';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { loop } from '../loop';
 import { createMessageListWithUserMessage, createTestModels, defaultSettings, testUsage } from './utils';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 
 export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe.skip('provider-executed tools', () => {
@@ -21,6 +15,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
 
       beforeEach(async () => {
         result = await loopFn({
+          methodType: 'stream',
           runId,
           messageList: createMessageListWithUserMessage(),
           models: createTestModels({
@@ -313,6 +308,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
 
       beforeEach(async () => {
         result = await loopFn({
+          methodType: 'stream',
           runId,
           messageList: createMessageListWithUserMessage(),
           models: createTestModels({
@@ -535,6 +531,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       const recordedCalls: unknown[] = [];
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         agentId: 'agent-id',
         models: createTestModels({
@@ -813,6 +810,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
     it('should send tool calls', async () => {
       const messageList = createMessageListWithUserMessage();
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         agentId: 'agent-id',
         models: [
@@ -898,6 +896,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
 
     beforeEach(async () => {
       result = await loopFn({
+        methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
         models: createTestModels({
@@ -1164,6 +1163,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
     it('should handle Claude Code SDK-style provider-executed tools', async () => {
       // This test simulates the exact scenario from issue #7558
       const result = loopFn({
+        methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
         models: createTestModels({
