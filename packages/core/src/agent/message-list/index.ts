@@ -2802,7 +2802,7 @@ export class MessageList {
       },
     };
     // Add message-level providerOptions if present (AIV5 ModelMessage uses providerOptions)
-    if ('providerOptions' in modelMsg && modelMsg.providerOptions) {
+    if (modelMsg.providerOptions) {
       message.content.providerMetadata = modelMsg.providerOptions;
     }
 
