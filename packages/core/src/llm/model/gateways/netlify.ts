@@ -35,7 +35,8 @@ interface TokenData {
 }
 
 export class NetlifyGateway extends MastraModelGateway {
-  readonly name = 'netlify';
+  readonly id = 'netlify';
+  readonly name = 'Netlify AI Gateway';
   readonly prefix = 'netlify'; // All providers will be prefixed with "netlify/"
   private tokenCache = new InMemoryServerCache();
 

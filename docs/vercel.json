@@ -64,6 +64,11 @@
       "source": "/docs/server-db/production-server",
       "destination": "/docs/server-db/mastra-server",
       "permanent": true
+    },
+    {
+      "source": "/docs/v1/getting-started/installation",
+      "destination": "/guides/v1/quickstarts/standalone-server",
+      "permanent": true
     }
   ]
 }
