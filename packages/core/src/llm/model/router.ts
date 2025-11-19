@@ -3,10 +3,10 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { parseModelRouterId } from './gateway-resolver.js';
+import { AzureGateway } from './gateways/azure.js';
 import type { MastraModelGateway } from './gateways/base.js';
 import { findGatewayForModel } from './gateways/index.js';
 
-import { AzureGateway } from './gateways/azure.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
 import type { ModelRouterModelId } from './provider-registry.js';

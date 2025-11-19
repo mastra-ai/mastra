@@ -1,7 +1,7 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
-import type { MastraModelGateway } from '../src/llm/model/gateways/index.js';
 import { AzureGateway } from '../src/llm/model/gateways/azure.js';
+import type { MastraModelGateway } from '../src/llm/model/gateways/index.js';
 import { ModelsDevGateway } from '../src/llm/model/gateways/models-dev.js';
 import { NetlifyGateway } from '../src/llm/model/gateways/netlify.js';
 import { fetchProvidersFromGateways, writeRegistryFiles } from '../src/llm/model/registry-generator.js';

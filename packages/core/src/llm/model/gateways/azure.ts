@@ -39,29 +39,22 @@ export class AzureGateway extends MastraModelGateway {
   readonly prefix = 'azure';
   private tokenCache = new InMemoryServerCache();
 
-  /**
-   * Fetch Azure OpenAI deployments from Management API
-   */
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
     try {
-      // Step 1: Get Management API credentials
       const credentials = this.getManagementCredentials();
 
-      // Step 2: Get Azure AD access token (cached)
       const token = await this.getAzureADToken({
         tenantId: credentials.tenantId,
         clientId: credentials.clientId,
         clientSecret: credentials.clientSecret,
       });
 
-      // Step 3: Fetch deployments from Management API
       const deployments = await this.fetchDeployments(token, {
         subscriptionId: credentials.subscriptionId,
         resourceGroup: credentials.resourceGroup,
         resourceName: credentials.resourceName,
       });
 
-      // Step 4: Transform to ProviderConfig format
       return {
         azure: {
           apiKeyEnvVar: 'AZURE_API_KEY',
@@ -73,7 +66,6 @@ export class AzureGateway extends MastraModelGateway {
         },
       };
     } catch (error) {
-      // Log warning explaining fallback
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.warn(
         `[AzureGateway] Skipping deployment discovery: ${errorMsg}`,
@@ -86,7 +78,7 @@ export class AzureGateway extends MastraModelGateway {
           apiKeyEnvVar: 'AZURE_API_KEY',
           apiKeyHeader: 'api-key',
           name: 'Azure OpenAI',
-          models: [], // Empty - users specify deployments manually
+          models: [],
           docUrl: 'https://learn.microsoft.com/en-us/azure/ai-services/openai/',
           gateway: 'azure',
         },
@@ -94,9 +86,6 @@ export class AzureGateway extends MastraModelGateway {
     }
   }
 
-  /**
-   * Get Management API credentials from environment
-   */
   private getManagementCredentials() {
     const tenantId = process.env['AZURE_TENANT_ID'];
     const clientId = process.env['AZURE_CLIENT_ID'];
@@ -105,7 +94,6 @@ export class AzureGateway extends MastraModelGateway {
     const resourceGroup = process.env['AZURE_RESOURCE_GROUP'];
     const resourceName = process.env['AZURE_RESOURCE_NAME'];
 
-    // Check for Management API credentials
     const missing = [];
     if (!tenantId) missing.push('AZURE_TENANT_ID');
     if (!clientId) missing.push('AZURE_CLIENT_ID');
@@ -123,7 +111,6 @@ export class AzureGateway extends MastraModelGateway {
       });
     }
 
-    // After the check above, TypeScript knows all values are defined
     return {
       tenantId: tenantId!,
       clientId: clientId!,
@@ -134,9 +121,6 @@ export class AzureGateway extends MastraModelGateway {
     };
   }
 
-  /**
-   * Get Azure AD access token for Management API (with caching)
-   */
   private async getAzureADToken(credentials: {
     tenantId: string;
     clientId: string;
@@ -144,17 +128,13 @@ export class AzureGateway extends MastraModelGateway {
   }): Promise<string> {
     const { tenantId, clientId, clientSecret } = credentials;
 
-    // Create cache key from credentials
     const cacheKey = `azure-mgmt-token:${tenantId}:${clientId}`;
 
-    // Check cache first
     const cached = (await this.tokenCache.get(cacheKey)) as CachedToken | undefined;
     if (cached && cached.expiresAt > Date.now() / 1000 + 60) {
-      // Return cached token if it won't expire in the next minute
       return cached.token;
     }
 
-    // Fetch new token
     const tokenEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
 
     const body = new URLSearchParams({
@@ -184,10 +164,8 @@ export class AzureGateway extends MastraModelGateway {
 
     const tokenResponse = (await response.json()) as AzureTokenResponse;
 
-    // Calculate expiry timestamp
     const expiresAt = Math.floor(Date.now() / 1000) + tokenResponse.expires_in;
 
-    // Cache the token
     await this.tokenCache.set(cacheKey, {
       token: tokenResponse.access_token,
       expiresAt,
@@ -196,9 +174,6 @@ export class AzureGateway extends MastraModelGateway {
     return tokenResponse.access_token;
   }
 
-  /**
-   * Fetch deployments from Azure Management API
-   */
   private async fetchDeployments(
     token: string,
     credentials: {
@@ -209,49 +184,50 @@ export class AzureGateway extends MastraModelGateway {
   ): Promise<AzureDeployment[]> {
     const { subscriptionId, resourceGroup, resourceName } = credentials;
 
-    const url = `https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${resourceGroup}/providers/Microsoft.CognitiveServices/accounts/${resourceName}/deployments?api-version=2024-10-01`;
+    let url: string | undefined =
+      `https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${resourceGroup}/providers/Microsoft.CognitiveServices/accounts/${resourceName}/deployments?api-version=2024-10-01`;
 
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    const allDeployments: AzureDeployment[] = [];
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new MastraError({
-        id: 'AZURE_DEPLOYMENTS_FETCH_ERROR',
-        domain: 'LLM',
-        category: 'UNKNOWN',
-        text: `Failed to fetch Azure deployments: ${response.status} ${error}`,
+    // Follow pagination links until no more pages
+    while (url) {
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
       });
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new MastraError({
+          id: 'AZURE_DEPLOYMENTS_FETCH_ERROR',
+          domain: 'LLM',
+          category: 'UNKNOWN',
+          text: `Failed to fetch Azure deployments: ${response.status} ${error}`,
+        });
+      }
+
+      const data = (await response.json()) as AzureDeploymentsResponse;
+
+      // Accumulate deployments from this page
+      allDeployments.push(...data.value);
+
+      // Move to next page if available
+      url = data.nextLink;
     }
 
-    const data = (await response.json()) as AzureDeploymentsResponse;
-
-    // Filter to only include successfully provisioned deployments
-    const successfulDeployments = data.value.filter(d => d.properties.provisioningState === 'Succeeded');
-
-    // TODO: Handle pagination if nextLink is present
-    // This is unlikely for most users (<100 deployments)
-    if (data.nextLink) {
-      console.warn('[AzureGateway] Pagination detected but not implemented. Only first page of deployments returned.');
-    }
+    // Filter after collecting all pages
+    const successfulDeployments = allDeployments.filter(d => d.properties.provisioningState === 'Succeeded');
 
     return successfulDeployments;
   }
 
-  /**
-   * Azure SDK constructs URLs internally, so buildUrl is not needed
-   */
+  // Azure SDK constructs URLs internally
   buildUrl(_routerId: string, _envVars?: typeof process.env): undefined {
     return undefined;
   }
 
-  /**
-   * Get API key for Azure OpenAI service (not Management API)
-   */
   async getApiKey(_modelId: string): Promise<string> {
     const apiKey = process.env['AZURE_API_KEY'];
 
@@ -267,9 +243,6 @@ export class AzureGateway extends MastraModelGateway {
     return apiKey;
   }
 
-  /**
-   * Resolve language model using Azure SDK
-   */
   async resolveLanguageModel({
     modelId,
     apiKey,
@@ -290,9 +263,6 @@ export class AzureGateway extends MastraModelGateway {
       });
     }
 
-    // Create Azure provider with resource name
-    // modelId is the deployment name (e.g., "my-gpt4-deployment")
-    // useDeploymentBasedUrls: true is required for Azure deployment URLs
     return createAzure({
       resourceName,
       apiKey,

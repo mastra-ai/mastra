@@ -18,7 +18,7 @@ export function parseModelRouterId(routerId: string, gatewayPrefix?: string): { 
       throw new Error(`Expected format azure/deployment-name, but got ${routerId}`);
     }
     return {
-      providerId: 'azure', // Always "azure"
+      providerId: 'azure',
       modelId: idParts.slice(1).join('/'), // Deployment name
     };
   }

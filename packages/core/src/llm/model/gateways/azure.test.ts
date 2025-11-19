@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { AzureGateway } from './azure';
-import { MastraError } from '../../../error/index.js';
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch as any;
@@ -96,7 +95,7 @@ describe('AzureGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      // Verify token endpoint was called with correct URL and headers
+      // Verify token endpoint was called
       expect(mockFetch).toHaveBeenCalledWith(
         'https://login.microsoftonline.com/tenant-123/oauth2/v2.0/token',
         expect.objectContaining({
@@ -183,10 +182,10 @@ describe('AzureGateway', () => {
     });
 
     it('should refetch token when cached token is about to expire', async () => {
-      // First call - fetch token that expires soon (expires in 50 seconds)
+      // First call - fetch token that expires in less than 60 seconds
       const expiringTokenResponse = {
         token_type: 'Bearer',
-        expires_in: 50, // Less than 60-second safety buffer
+        expires_in: 50,
         access_token: 'expiring-token',
       };
 
@@ -202,7 +201,7 @@ describe('AzureGateway', () => {
 
       await gateway.fetchProviders();
 
-      // Second call - should fetch NEW token because cached one expires in <60s
+      // Second call - should fetch new token because cached one expires in <60s
       const freshTokenResponse = {
         token_type: 'Bearer',
         expires_in: 3600,
@@ -226,6 +225,98 @@ describe('AzureGateway', () => {
       expect(tokenCalls.length).toBe(2);
     });
 
+    it('should handle paginated deployment responses', async () => {
+      const firstPageResponse = {
+        value: [
+          {
+            name: 'deployment-1',
+            properties: {
+              model: {
+                name: 'gpt-4',
+                version: '0613',
+                format: 'OpenAI',
+              },
+              provisioningState: 'Succeeded',
+            },
+          },
+          {
+            name: 'deployment-2',
+            properties: {
+              model: {
+                name: 'gpt-35-turbo',
+                version: '0613',
+                format: 'OpenAI',
+              },
+              provisioningState: 'Succeeded',
+            },
+          },
+        ],
+        nextLink:
+          'https://management.azure.com/subscriptions/sub-abc/resourceGroups/my-rg/providers/Microsoft.CognitiveServices/accounts/my-openai/deployments?api-version=2024-10-01&$skiptoken=abc123',
+      };
+
+      const secondPageResponse = {
+        value: [
+          {
+            name: 'deployment-3',
+            properties: {
+              model: {
+                name: 'gpt-4o',
+                version: '2024-05-13',
+                format: 'OpenAI',
+              },
+              provisioningState: 'Succeeded',
+            },
+          },
+          {
+            name: 'deployment-4',
+            properties: {
+              model: {
+                name: 'text-embedding-ada-002',
+                version: '1',
+                format: 'OpenAI',
+              },
+              provisioningState: 'Creating', // Should be filtered out
+            },
+          },
+        ],
+        // No nextLink - end of pagination
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockTokenResponse,
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => firstPageResponse,
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => secondPageResponse,
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      const tokenCalls = mockFetch.mock.calls.filter(call => call[0].includes('login.microsoftonline.com'));
+      expect(tokenCalls.length).toBe(1);
+
+      const deploymentCalls = mockFetch.mock.calls.filter(
+        call => call[0].includes('management.azure.com') && call[0].includes('/deployments'),
+      );
+      expect(deploymentCalls.length).toBe(2);
+
+      expect(deploymentCalls[1][0]).toBe(firstPageResponse.nextLink);
+
+      expect(providers['azure'].models).toHaveLength(3);
+      expect(providers['azure'].models).toContain('deployment-1');
+      expect(providers['azure'].models).toContain('deployment-2');
+      expect(providers['azure'].models).toContain('deployment-3');
+      expect(providers['azure'].models).not.toContain('deployment-4');
+    });
+
     it('should return graceful fallback when Management API credentials are missing', async () => {
       delete process.env.AZURE_TENANT_ID;
 
@@ -234,7 +325,7 @@ describe('AzureGateway', () => {
       expect(result).toMatchObject({
         azure: {
           apiKeyEnvVar: 'AZURE_API_KEY',
-          models: [], // Empty - users specify deployments manually
+          models: [],
           gateway: 'azure',
         },
       });
@@ -252,7 +343,7 @@ describe('AzureGateway', () => {
       expect(result).toMatchObject({
         azure: {
           apiKeyEnvVar: 'AZURE_API_KEY',
-          models: [], // Empty - users specify deployments manually
+          models: [],
           gateway: 'azure',
         },
       });
@@ -275,7 +366,7 @@ describe('AzureGateway', () => {
       expect(result).toMatchObject({
         azure: {
           apiKeyEnvVar: 'AZURE_API_KEY',
-          models: [], // Empty - users specify deployments manually
+          models: [],
           gateway: 'azure',
         },
       });
