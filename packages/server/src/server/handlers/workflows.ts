@@ -215,6 +215,45 @@ export async function startAsyncWorkflowHandler({
   }
 }
 
+export async function executeWorkflowHandler({
+  mastra,
+  requestContext,
+  workflowId,
+  runId,
+  inputData,
+  tracingOptions,
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
+  inputData?: unknown;
+  requestContext?: RequestContext;
+  tracingOptions?: TracingOptions;
+}) {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+
+    if (!workflow) {
+      throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    const _run = await workflow.createRunAsync({ runId });
+    const result = await _run.start({
+      inputData,
+      requestContext,
+      tracingOptions,
+    });
+
+    return {
+      ...result,
+      runId: _run.runId,
+    };
+  } catch (error) {
+    return handleError(error, 'Error executing workflow');
+  }
+}
+
 export async function startWorkflowRunHandler({
   mastra,
   requestContext,

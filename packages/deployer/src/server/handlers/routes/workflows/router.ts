@@ -5,6 +5,7 @@ import type { BodyLimitOptions } from '../../../types';
 import {
   cancelWorkflowRunHandler,
   createWorkflowRunHandler,
+  executeWorkflowHandler,
   getWorkflowByIdHandler,
   getWorkflowRunByIdHandler,
   getWorkflowRunExecutionResultHandler,
@@ -659,6 +660,68 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     startAsyncWorkflowHandler,
+  );
+
+  router.post(
+    '/:workflowId/execute',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Execute a workflow and return result',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+          description: 'Optional custom run ID',
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                inputData: { type: 'object' },
+                requestContext: {
+                  type: 'object',
+                  description: 'Request Context for the workflow execution',
+                },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the workflow execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
+              },
+              required: ['inputData'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'workflow execution result',
+        },
+        404: {
+          description: 'workflow not found',
+        },
+      },
+    }),
+    executeWorkflowHandler,
   );
 
   router.post(
