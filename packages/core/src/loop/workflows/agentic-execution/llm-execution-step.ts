@@ -1,9 +1,10 @@
 import type { ReadableStream } from 'stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
-import type { LanguageModelV2, LanguageModelV2Usage } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import type { ToolSet } from 'ai-v5';
 import { MessageList } from '../../../agent/message-list';
 import { getErrorFromUnknown } from '../../../error/utils.js';
+import type { MastraLanguageModelV2 } from '../../../llm/model/shared.types';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { MastraModelOutput } from '../../../stream/base/output';
@@ -22,7 +23,7 @@ import { llmIterationOutputSchema } from '../schema';
 import { isControllerOpen } from '../stream';
 
 type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
-  model: LanguageModelV2;
+  model: MastraLanguageModelV2;
   tools?: ToolSet;
   messageId: string;
   includeRawChunks?: boolean;
@@ -452,6 +453,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   downloadRetries,
   downloadConcurrency,
   processorStates,
+  methodType,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'llm-execution',
@@ -543,6 +545,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
               includeRawChunks,
               structuredOutput,
               headers,
+              methodType,
               onResult: ({
                 warnings: warningsFromStream,
                 request: requestFromStream,

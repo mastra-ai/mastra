@@ -8,6 +8,8 @@ description: "Documentation for the AzureVoice class, providing text-to-speech a
 The AzureVoice class in Mastra provides text-to-speech and speech-to-text capabilities using Microsoft Azure Cognitive Services.
 
 ## Usage Example
+This requires Azure Speech Services credentials that can be provided through environment variables or directly in the configuration:
+
 
 ```typescript
 import { AzureVoice } from "@mastra/voice-azure";
@@ -15,29 +17,25 @@ import { AzureVoice } from "@mastra/voice-azure";
 // Initialize with configuration
 const voice = new AzureVoice({
   speechModel: {
-    name: "neural",
-    apiKey: "your-azure-speech-api-key",
-    region: "eastus",
+    apiKey: "your-azure-speech-api-key", // Or use AZURE_API_KEY env var
+    region: "eastus", // Or use AZURE_REGION env var
+    voiceName: "en-US-AriaNeural", // Optional: specific voice for TTS
   },
   listeningModel: {
-    name: "whisper",
-    apiKey: "your-azure-speech-api-key",
-    region: "eastus",
+    apiKey: "your-azure-speech-api-key", // Or use AZURE_API_KEY env var
+    region: "eastus", // Or use AZURE_REGION env var
+    language: "en-US", // Optional: recognition language for STT
   },
-  speaker: "en-US-JennyNeural", // Default voice
+  speaker: "en-US-JennyNeural", // Optional: default voice
 });
 
 // Convert text to speech
 const audioStream = await voice.speak("Hello, how can I help you?", {
-  speaker: "en-US-GuyNeural", // Override default voice
-  style: "cheerful", // Voice style
+  speaker: "en-US-GuyNeural", // Optional: override default voice
 });
 
 // Convert speech to text
-const text = await voice.listen(audioStream, {
-  filetype: "wav",
-  language: "en-US",
-});
+const text = await voice.listen(audioStream);
 ```
 
 ## Configuration
@@ -69,26 +67,36 @@ const text = await voice.listen(audioStream, {
 
 ### AzureSpeechConfig
 
+Configuration object for speech synthesis (`speechModel`) and recognition (`listeningModel`).
+
 <PropertiesTable
   content={[
-    {
-      name: "name",
-      type: "'neural' | 'standard' | 'whisper'",
-      description: "Model type to use. 'neural' for TTS, 'whisper' for STT.",
-      isOptional: true,
-    },
     {
       name: "apiKey",
       type: "string",
       description:
-        "Azure Speech Services API key. Falls back to AZURE_SPEECH_KEY environment variable.",
+        "Azure Speech Services API key (NOT Azure OpenAI key). Falls back to AZURE_API_KEY environment variable.",
       isOptional: true,
     },
     {
       name: "region",
       type: "string",
       description:
-        "Azure region (e.g., 'eastus', 'westeurope'). Falls back to AZURE_SPEECH_REGION environment variable.",
+        "Azure region (e.g., 'eastus', 'westeurope'). Falls back to AZURE_REGION environment variable.",
+      isOptional: true,
+    },
+    {
+      name: "voiceName",
+      type: "string",
+      description:
+        "Voice ID for speech synthesis (e.g., 'en-US-AriaNeural', 'en-US-JennyNeural'). Only used in speechModel. See voice list below.",
+      isOptional: true,
+    },
+    {
+      name: "language",
+      type: "string",
+      description:
+        "Recognition language code (e.g., 'en-US', 'fr-FR'). Only used in listeningModel.",
       isOptional: true,
     },
   ]}
@@ -111,32 +119,14 @@ Converts text to speech using Azure's neural text-to-speech service.
     {
       name: "options.speaker",
       type: "string",
-      description: "Voice ID to use for speech synthesis.",
+      description: "Voice ID to use for speech synthesis (e.g., 'en-US-JennyNeural'). Overrides the default voice.",
       isOptional: true,
       defaultValue: "Constructor's speaker value",
-    },
-    {
-      name: "options.style",
-      type: "string",
-      description: "Speaking style (e.g., 'cheerful', 'sad', 'angry').",
-      isOptional: true,
-    },
-    {
-      name: "options.rate",
-      type: "string",
-      description: "Speaking rate (e.g., 'slow', 'medium', 'fast').",
-      isOptional: true,
-    },
-    {
-      name: "options.pitch",
-      type: "string",
-      description: "Voice pitch (e.g., 'low', 'medium', 'high').",
-      isOptional: true,
     },
   ]}
 />
 
-Returns: `Promise<NodeJS.ReadableStream>`
+Returns: `Promise<NodeJS.ReadableStream>` - Audio stream in WAV format
 
 ### listen()
 
@@ -147,31 +137,19 @@ Transcribes audio using Azure's speech-to-text service.
     {
       name: "audioStream",
       type: "NodeJS.ReadableStream",
-      description: "Audio stream to transcribe.",
+      description: "Audio stream to transcribe. Must be in WAV format.",
       isOptional: false,
-    },
-    {
-      name: "options.filetype",
-      type: "string",
-      description: "Audio format of the input stream.",
-      isOptional: true,
-      defaultValue: "'wav'",
-    },
-    {
-      name: "options.language",
-      type: "string",
-      description: "Language code for transcription.",
-      isOptional: true,
-      defaultValue: "'en-US'",
     },
   ]}
 />
 
-Returns: `Promise<string>`
+Returns: `Promise<string>` - The recognized text from the audio
+
+**Note:** Language and recognition settings are configured in the `listeningModel` configuration during initialization, not passed as options to this method.
 
 ### getSpeakers()
 
-Returns an array of available voice options, where each node contains:
+Returns an array of available voice options (200+ voices), where each node contains:
 
 <PropertiesTable
   content={[
@@ -179,40 +157,77 @@ Returns an array of available voice options, where each node contains:
       name: "voiceId",
       type: "string",
       description:
-        "Unique identifier for the voice (e.g., 'en-US-JennyNeural')",
+        "Unique identifier for the voice (e.g., 'en-US-JennyNeural', 'fr-FR-DeniseNeural')",
       isOptional: false,
     },
     {
-      name: "name",
+      name: "language",
       type: "string",
-      description: "Human-readable name of the voice",
+      description: "Language code extracted from voice ID (e.g., 'en', 'fr')",
       isOptional: false,
     },
     {
-      name: "locale",
+      name: "region",
       type: "string",
-      description: "Language locale of the voice (e.g., 'en-US')",
+      description: "Region code extracted from voice ID (e.g., 'US', 'GB', 'FR')",
       isOptional: false,
-    },
-    {
-      name: "gender",
-      type: "string",
-      description: "Gender of the voice ('Male' or 'Female')",
-      isOptional: false,
-    },
-    {
-      name: "styles",
-      type: "string[]",
-      description: "Available speaking styles for the voice",
-      isOptional: true,
     },
   ]}
 />
 
-## Notes
+Returns: `Promise<Array<{ voiceId: string; language: string; region: string; }>>`
 
-- API keys can be provided via constructor options or environment variables (AZURE_SPEECH_KEY and AZURE_SPEECH_REGION)
-- Azure offers a wide range of neural voices across many languages
-- Some voices support speaking styles like cheerful, sad, angry, etc.
-- Speech recognition supports multiple audio formats and languages
-- Azure's speech services provide high-quality neural voices with natural-sounding speech
+## Important Notes
+
+### Azure Speech Services vs Azure OpenAI
+
+**⚠️ Critical:** This package uses **Azure Speech Services**, which is different from **Azure OpenAI Services**.
+
+- **DO NOT** use your `AZURE_OPENAI_API_KEY` for this package
+- **DO** use an Azure Speech Services subscription key (obtain from Azure Portal under "Speech Services")
+- These are separate Azure resources with different API keys and endpoints
+
+### Environment Variables
+
+API keys and regions can be provided via constructor options or environment variables:
+
+- `AZURE_API_KEY` - Your Azure Speech Services subscription key
+- `AZURE_REGION` - Your Azure region (e.g., 'eastus', 'westeurope')
+
+### Voice Capabilities
+
+- Azure offers 200+ neural voices across 50+ languages
+- Each voice ID follows the format: `{language}-{region}-{name}Neural` (e.g., 'en-US-JennyNeural')
+- Some voices include multilingual support or HD quality variants
+- Audio output is in WAV format
+- Audio input for recognition must be in WAV format
+
+## Available Voices
+
+Azure provides 200+ neural voices across many languages. Some popular English voices include:
+
+- **US English:**
+  - `en-US-AriaNeural` (Female, default)
+  - `en-US-JennyNeural` (Female)
+  - `en-US-GuyNeural` (Male)
+  - `en-US-DavisNeural` (Male)
+  - `en-US-AvaNeural` (Female)
+  - `en-US-AndrewNeural` (Male)
+
+- **British English:**
+  - `en-GB-SoniaNeural` (Female)
+  - `en-GB-RyanNeural` (Male)
+  - `en-GB-LibbyNeural` (Female)
+
+- **Australian English:**
+  - `en-AU-NatashaNeural` (Female)
+  - `en-AU-WilliamNeural` (Male)
+
+To get a complete list of all 200+ voices:
+
+```typescript
+const voices = await voice.getSpeakers();
+console.log(voices); // Array of { voiceId, language, region }
+```
+
+For more information, see the [Azure Neural TTS documentation](https://learn.microsoft.com/en-us/azure/cognitive-services/speech-service/language-support?tabs=tts).

@@ -12,7 +12,7 @@ import { TabSwitcher } from "./tab-switcher";
 
 function NavbarContentDesktop() {
   return (
-    <div className="flex px-4 border-b-[0.5px] h-[var(--ifm-navbar-height)] border-(--border-subtle) mx-auto w-full items-center justify-between @container">
+    <div className="flex px-4 border-b-[0.5px] h-(--ifm-navbar-height) border-(--border-subtle) mx-auto w-full items-center justify-between @container">
       <div className="flex gap-2 items-center">
         <Link href="/docs/v1">
           <Logo />
@@ -28,14 +28,6 @@ function NavbarContentDesktop() {
       <div className="flex gap-2 items-center">
         <div className="flex items-center">
           <GithubStarCount />
-          <VersionControl
-            size="sm"
-            className="px-[13px] bg-white dark:bg-(--mastra-primary) border-transparent rounded-full transition-colors cursor-pointer"
-          />
-        </div>
-
-        <div className="hidden lg:block">
-          <ThemeSwitcher />
         </div>
 
         <div className="hidden @[798px]:block">

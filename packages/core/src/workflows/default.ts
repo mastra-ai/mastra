@@ -679,7 +679,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const { inputData, validationError } = await validateStepInput({
       prevOutput,
       step,
-      validateInputs: this.options?.validateInputs ?? false,
+      validateInputs: this.options?.validateInputs ?? true,
     });
 
     const { resumeData: timeTravelResumeData, validationError: timeTravelResumeValidationError } =

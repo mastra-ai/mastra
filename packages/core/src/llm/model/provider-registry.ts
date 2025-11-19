@@ -7,7 +7,7 @@ import fs from 'fs';
 import { createRequire } from 'module';
 import os from 'os';
 import path from 'path';
-import type { ProviderConfig } from './gateways/base.js';
+import type { ProviderConfig, MastraModelGateway } from './gateways/base.js';
 import staticRegistry from './provider-registry.json';
 import type { Provider, ModelForProvider, ModelRouterModelId, ProviderModels } from './provider-types.generated.js';
 
@@ -320,6 +320,7 @@ export class GatewayRegistry {
   private refreshInterval: NodeJS.Timeout | null = null;
   private isRefreshing = false;
   private useDynamicLoading: boolean;
+  private customGateways: MastraModelGateway[] = [];
 
   private constructor(options: GatewayRegistryOptions = {}) {
     const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
@@ -334,6 +335,21 @@ export class GatewayRegistry {
       GatewayRegistry.instance = new GatewayRegistry(options);
     }
     return GatewayRegistry.instance;
+  }
+
+  /**
+   * Register custom gateways for type generation
+   * @param gateways - Array of custom gateway instances
+   */
+  registerCustomGateways(gateways: MastraModelGateway[]): void {
+    this.customGateways = gateways;
+  }
+
+  /**
+   * Get all registered custom gateways
+   */
+  getCustomGateways(): MastraModelGateway[] {
+    return this.customGateways;
   }
 
   /**
@@ -364,8 +380,11 @@ export class GatewayRegistry {
       const { NetlifyGateway } = await import('./gateways/netlify.js');
       const { fetchProvidersFromGateways, writeRegistryFiles } = await import('./registry-generator.js');
 
-      // Initialize gateways
-      const gateways = [new ModelsDevGateway({}), new NetlifyGateway()];
+      // Initialize default gateways
+      const defaultGateways = [new ModelsDevGateway({}), new NetlifyGateway()];
+
+      // Combine default and custom gateways
+      const gateways = [...defaultGateways, ...this.customGateways];
 
       // Fetch provider data
       const { providers, models } = await fetchProvidersFromGateways(gateways);
