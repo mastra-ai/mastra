@@ -369,3 +369,5 @@ export type AgentExecuteOnFinishOptions = {
   saveQueueManager: SaveQueueManager;
   overrideScorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
 };
+
+export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';

@@ -15,7 +15,12 @@ function getStaticProvidersByGateway(name: string) {
   return Object.fromEntries(Object.entries(PROVIDER_REGISTRY).filter(([_provider, config]) => config.gateway === name));
 }
 
-export const gateways = [new NetlifyGateway(), new ModelsDevGateway(getStaticProvidersByGateway(`models.dev`))];
+export const defaultGateways = [new NetlifyGateway(), new ModelsDevGateway(getStaticProvidersByGateway(`models.dev`))];
+
+/**
+ * @deprecated Use defaultGateways instead. This export will be removed in a future version.
+ */
+export const gateways = defaultGateways;
 
 export class ModelRouterLanguageModel implements LanguageModelV2 {
   readonly specificationVersion = 'v2' as const;
@@ -30,7 +35,7 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
   private config: OpenAICompatibleConfig & { routerId: string };
   private gateway: MastraModelGateway;
 
-  constructor(config: ModelRouterModelId | OpenAICompatibleConfig) {
+  constructor(config: ModelRouterModelId | OpenAICompatibleConfig, customGateways?: MastraModelGateway[]) {
     // Normalize config to always have an 'id' field for routing
     let normalizedConfig: {
       id: `${string}/${string}`;
@@ -71,7 +76,7 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
     };
 
     // Resolve gateway once using the normalized ID
-    this.gateway = findGatewayForModel(normalizedConfig.id, gateways);
+    this.gateway = findGatewayForModel(normalizedConfig.id, [...(customGateways || []), ...defaultGateways]);
     // Extract provider from id if present
     const parsed = parseModelRouterId(normalizedConfig.id, this.gateway.prefix);
 
@@ -135,7 +140,7 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
     apiKey: string;
   }): Promise<LanguageModelV2> {
     const key = createHash('sha256')
-      .update(this.gateway.name + modelId + providerId + apiKey + (this.config.url || ''))
+      .update(this.gateway.id + modelId + providerId + apiKey + (this.config.url || ''))
       .digest('hex');
     if (ModelRouterLanguageModel.modelInstances.has(key)) return ModelRouterLanguageModel.modelInstances.get(key)!;
 
