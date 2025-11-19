@@ -51,28 +51,32 @@
    * **Status:** 1 failed, 3 passed
    * **Issue:** "should stream useChat with client side tool calling" - flaky clipboard test (expects "test 2!" but clipboard is empty)
    * **Why Hard:** Known flaky test - clipboard state not persisting between calls
+   * **NOTE: blocked! agent isn't sure what to do** - Test also fails on `main` branch (pre-existing issue)
 
 8. **`working-memory.test.ts`** (integration-tests-v5) ⭐⭐⭐⭐⭐ MODERATE-HARD ⚠️ 1 FAILURE
    * **Status:** 1 failed, 31 passed, 15 skipped (59 total)
-   * **Issue:** "should call memory tool first, then execute user-defined tool" - Error: Invalid task input
+   * **Issue:** "should call memory tool first, then execute user-defined tool" - routing order wrong (expects getWeather, gets updateWorkingMemory)
    * **Why Hard:** Complex agent network test with tool execution ordering
+   * **NOTE: blocked! agent isn't sure what to do** - Test also fails on `main` branch (pre-existing issue)
 
 9. **`agent-memory.test.ts`** (integration-tests-v5) ⭐⭐⭐⭐⭐⭐ HARD ⚠️ 1 FAILURE
    * **Status:** 1 failed, 6 passed (15 total)
    * **Issue:** "should not save messages provided in the context option" - expected 0 context messages saved, got 1
    * **Why Hard:** Context messages are being incorrectly saved to storage
+   * **NOTE: blocked! agent isn't sure what to do** - Test also fails on `main` branch (pre-existing issue)
 
 10. **`agent-memory.test.ts`** (integration-tests v4) ⭐⭐⭐⭐⭐⭐ HARD ⚠️ 1 FAILURE
     * **Status:** 1 failed, 6 passed (14 total)
     * **Issue:** Same as v5 - "should not save messages provided in the context option" - expected 0 context messages saved, got 1
     * **Why Hard:** Same root cause as v5 - context messages being incorrectly saved
+    * **NOTE: blocked! agent isn't sure what to do** - Test also fails on `main` branch (pre-existing issue)
 
 ### Hardest
 
-11. **`working-memory-processor.test.ts`** ⭐⭐⭐⭐⭐⭐⭐ HARDEST ❌ BROKEN
-    * **Status:** 1 failed (3 total) - fails immediately
-    * **Issue:** "WorkingMemory is not a constructor" - test is trying to instantiate `WorkingMemory` with `new` but it's now exported as a factory function
-    * **Why Hardest:** Test needs to be refactored to use the new factory function API instead of constructor
+11. **`working-memory-processor.test.ts`** ⭐⭐⭐⭐⭐⭐⭐ HARDEST ✅ FIXED
+    * **Status:** 3 passed (was 1 failed, 3 total)
+    * **Issue:** "WorkingMemory is not a constructor" - incorrect import path and type mismatches
+    * **Fix:** Updated import from `@mastra/core/processors` to `@mastra/memory`, fixed Storage type to MemoryStorage, added `format: 2` to message content, removed invalid `source` property, fixed abort function type
 
 ---
 
