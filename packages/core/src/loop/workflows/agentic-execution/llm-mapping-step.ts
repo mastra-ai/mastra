@@ -103,7 +103,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
 
         const toolResultMessage: MastraDBMessage = {
           id: toolResultMessageId || '',
-          role: 'assistant',
+          role: 'assistant' as const,
           content: {
             format: 2,
             parts: inputData.map(toolCall => {
