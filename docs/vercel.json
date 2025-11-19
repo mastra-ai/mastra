@@ -1,11 +1,6 @@
 {
   "redirects": [
     {
-      "source": "/docs/v1/getting-started/installation",
-      "destination": "/guides/v1/quickstarts/standalone-server",
-      "permanent": true
-    },
-    {
       "source": "/examples/v1/memory/memory-with-mongodb",
       "destination": "/docs/v1/memory/storage/memory-with-mongodb",
       "permanent": true
@@ -68,6 +63,11 @@
     {
       "source": "/docs/server-db/production-server",
       "destination": "/docs/server-db/mastra-server",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/getting-started/installation",
+      "destination": "/guides/v1/quickstarts/standalone-server",
       "permanent": true
     }
   ]
