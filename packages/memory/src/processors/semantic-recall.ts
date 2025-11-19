@@ -468,7 +468,7 @@ export class SemanticRecall implements Processor {
     tracingContext?: TracingContext;
     runtimeContext?: RequestContext;
   }): Promise<MessageList | MastraDBMessage[]> {
-    const { messages, runtimeContext } = args;
+    const { messages, messageList, runtimeContext } = args;
 
     if (!this.vector || !this.embedder || !this.storage) {
       return messages;
@@ -500,6 +500,16 @@ export class SemanticRecall implements Processor {
         // Skip system messages - they're instructions, not user content
         if (message.role === 'system') {
           continue;
+        }
+
+        // Only embed new user messages and new response messages
+        // Skip context messages and memory messages
+        if (messageList) {
+          const isNewUserMessage = (messageList as any).newUserMessages?.has(message);
+          const isNewResponseMessage = (messageList as any).newResponseMessages?.has(message);
+          if (!isNewUserMessage && !isNewResponseMessage) {
+            continue;
+          }
         }
 
         // Extract text content from the message

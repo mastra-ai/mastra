@@ -87,7 +87,7 @@ export class ProcessorRunner {
     tracingContext?: TracingContext,
     runtimeContext?: RequestContext,
   ): Promise<MessageList> {
-    const responseMessages = messageList.clear.response.db();
+    const responseMessages = messageList.get.response.db();
 
     let processableMessages: MastraDBMessage[] = [...responseMessages];
 

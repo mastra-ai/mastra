@@ -4,6 +4,7 @@ import type { MastraDBMessage } from '@mastra/core/memory';
 import type { InputProcessor } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
+import type { MessageList } from '@mastra/core/agent/message-list';
 
 export interface WorkingMemoryTemplate {
   format: 'markdown' | 'json';
@@ -76,10 +77,11 @@ export class WorkingMemory implements InputProcessor {
 
   async processInput(args: {
     messages: MastraDBMessage[];
+    messageList?: MessageList;
     abort: (reason?: string) => never;
     runtimeContext?: RequestContext;
-  }): Promise<MastraDBMessage[]> {
-    const { messages, runtimeContext } = args;
+  }): Promise<MessageList | MastraDBMessage[]> {
+    const { messages, messageList, runtimeContext } = args;
 
     // Get threadId and resourceId from runtime context
     const memoryContext = parseMemoryRuntimeContext(runtimeContext);
@@ -88,7 +90,7 @@ export class WorkingMemory implements InputProcessor {
 
     // Skip if no thread or resource context
     if (!threadId && !resourceId) {
-      return messages;
+      return messageList || messages;
     }
 
     try {
@@ -144,12 +146,20 @@ export class WorkingMemory implements InputProcessor {
         createdAt: new Date(),
       };
 
-      // Prepend working memory to messages
+      // If we have a MessageList, add working memory to it with source: 'context'
+      if (messageList) {
+        if (instruction) {
+          messageList.addSystem(instruction, 'context');
+        }
+        return messageList;
+      }
+
+      // Fallback to array return for backward compatibility
       return [workingMemoryMessage, ...messages];
     } catch (error) {
       // On error, return original messages
       this.logger?.error('WorkingMemory processor error:', { error });
-      return messages;
+      return messageList || messages;
     }
   }
 

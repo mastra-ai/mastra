@@ -1,4 +1,4 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
+import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import { parseMemoryRuntimeContext } from '@mastra/core/memory';
 import type { TracingContext } from '@mastra/core/observability';
 import type { Processor } from '@mastra/core/processors';
@@ -37,18 +37,19 @@ export class MessageHistory implements Processor {
 
   async processInput(args: {
     messages: MastraDBMessage[];
+    messageList?: MessageList;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
     runtimeContext?: RequestContext;
-  }): Promise<MastraDBMessage[]> {
-    const { messages } = args;
+  }): Promise<MessageList | MastraDBMessage[]> {
+    const { messages, messageList } = args;
 
     // Get memory context from RequestContext
     const memoryContext = parseMemoryRuntimeContext(args.runtimeContext);
     const threadId = memoryContext?.thread?.id;
 
     if (!threadId) {
-      return messages;
+      return messageList || messages;
     }
 
     // 1. Fetch historical messages from storage (as DB format)
@@ -71,17 +72,33 @@ export class MessageHistory implements Processor {
     // Reverse to chronological order (oldest first) since we fetched DESC
     const chronologicalMessages = uniqueHistoricalMessages.reverse();
 
+    // If we have a MessageList, add historical messages to it with source: 'memory'
+    if (messageList) {
+      if (chronologicalMessages.length === 0) {
+        return messageList;
+      }
+
+      // Add historical messages with source: 'memory'
+      for (const msg of chronologicalMessages) {
+        messageList.add(msg, 'memory');
+      }
+
+      return messageList;
+    }
+
+    // Fallback to array return for backward compatibility
     const mergedMessages = [...chronologicalMessages, ...messages];
     return mergedMessages;
   }
 
   async processOutputResult(args: {
     messages: MastraDBMessage[];
+    messageList?: MessageList;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
     runtimeContext?: RequestContext;
   }): Promise<MastraDBMessage[]> {
-    const { messages } = args;
+    const { messages, messageList } = args;
 
     // Get memory context from RequestContext
     const memoryContext = parseMemoryRuntimeContext(args.runtimeContext);
@@ -91,8 +108,19 @@ export class MessageHistory implements Processor {
       return messages;
     }
 
-    // 1. Filter out ONLY system messages - keep everything else
-    const messagesToSave = messages.filter(m => m.role !== 'system');
+    // 1. Only save new user messages and new response messages
+    // Filter out system messages, context messages, and memory messages
+    const messagesToSave = messages.filter(m => {
+      if (m.role === 'system') return false;
+      // If messageList is available, only save messages that are in newUserMessages or newResponseMessages
+      if (messageList) {
+        const isNewUserMessage = (messageList as any).newUserMessages?.has(m);
+        const isNewResponseMessage = (messageList as any).newResponseMessages?.has(m);
+        return isNewUserMessage || isNewResponseMessage;
+      }
+      // Fallback: if no messageList, save all non-system messages (backward compatibility)
+      return true;
+    });
 
     if (messagesToSave.length === 0) {
       return messages;
