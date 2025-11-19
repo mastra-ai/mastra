@@ -67,10 +67,14 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
               // ID format is typically "provider.toolName" (e.g. "openai.web_search")
               // doStream returns just "toolName" part, so we use that as name for consistency
               const providerId = (sdkTool as any).id;
-              const providerToolName =
-                providerId && providerId.includes('.')
-                  ? providerId.split('.').slice(1).join('.') // Take everything after first dot
-                  : name; // Fallback to our key if no dot in ID
+
+              let providerToolName = name;
+
+              if (providerId && providerId.includes('.')) {
+                providerToolName = providerId.split('.').slice(1).join('.');
+              } else if (providerId) {
+                providerToolName = providerId;
+              }
 
               return {
                 type: 'provider-defined' as const,
