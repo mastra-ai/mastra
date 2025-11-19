@@ -569,19 +569,7 @@ export class MastraClientModelOutput<OUTPUT extends OutputSchema = undefined> {
 }
 
 /**
- * Usage count type for network streaming
- */
-type NetworkUsageCount = {
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  cachedInputTokens: number;
-  reasoningTokens: number;
-};
-
-/**
  * MastraClientNetworkOutput - Client-side wrapper for network streaming
- * Similar to MastraAgentNetworkStream on the server
  */
 export class MastraClientNetworkOutput {
   #baseStream: ReadableStream<NetworkChunkType>;
@@ -590,22 +578,14 @@ export class MastraClientNetworkOutput {
   #error: Error | undefined;
   #consumptionStarted = false;
 
-  // Accumulated usage count
-  #usageCount: NetworkUsageCount = {
-    inputTokens: 0,
-    outputTokens: 0,
-    totalTokens: 0,
-    cachedInputTokens: 0,
-    reasoningTokens: 0,
-  };
-
-  // Result data
-  #result: any = undefined;
-  #status: string | undefined = undefined;
+  // Buffered data from finish event
+  #bufferedUsage: any = undefined;
+  #bufferedResult: any = undefined;
+  #bufferedStatus: string | undefined = undefined;
 
   // Delayed promises for properties
   #delayedPromises = {
-    usage: new DelayedPromise<NetworkUsageCount>(),
+    usage: new DelayedPromise<any>(),
     result: new DelayedPromise<any>(),
     status: new DelayedPromise<string>(),
   };
@@ -636,52 +616,24 @@ export class MastraClientNetworkOutput {
   }
 
   /**
-   * Process individual chunks and update internal state
+   * Process individual chunks and extract values from finish event
    */
   async #processChunk(chunk: NetworkChunkType): Promise<void> {
-    const payload = chunk.payload as any;
-
-    // Track usage from various end events
-    if (
-      chunk.type === 'routing-agent-end' ||
-      chunk.type === 'agent-execution-end' ||
-      chunk.type === 'workflow-execution-end'
-    ) {
-      if (payload?.usage) {
-        this.#updateUsageCount(payload.usage);
-      }
-    }
-
-    // Handle final network finish event
+    // Extract all values from the final network finish event
     if (chunk.type === 'network-execution-event-finish') {
-      this.#result = payload;
-      this.#status = payload?.completionReason ?? 'complete';
+      const payload = chunk.payload as any;
 
-      // Update usage if provided in finish payload
-      if (payload?.usage) {
-        this.#usageCount = payload.usage;
+      this.#bufferedResult = payload;
+      this.#bufferedStatus = payload?.completionReason ?? 'complete';
+      this.#bufferedUsage = payload?.usage;
+
+      this.#delayedPromises.result.resolve(this.#bufferedResult);
+      this.#delayedPromises.status.resolve(this.#bufferedStatus!);
+
+      if (this.#bufferedUsage) {
+        this.#delayedPromises.usage.resolve(this.#bufferedUsage);
       }
-
-      this.#delayedPromises.result.resolve(this.#result);
-      this.#delayedPromises.status.resolve(this.#status!);
     }
-  }
-
-  /**
-   * Update accumulated usage count
-   */
-  #updateUsageCount(usage: {
-    inputTokens?: string | number;
-    outputTokens?: string | number;
-    totalTokens?: string | number;
-    reasoningTokens?: string | number;
-    cachedInputTokens?: string | number;
-  }): void {
-    this.#usageCount.inputTokens += parseInt(usage?.inputTokens?.toString() ?? '0', 10);
-    this.#usageCount.outputTokens += parseInt(usage?.outputTokens?.toString() ?? '0', 10);
-    this.#usageCount.totalTokens += parseInt(usage?.totalTokens?.toString() ?? '0', 10);
-    this.#usageCount.reasoningTokens += parseInt(usage?.reasoningTokens?.toString() ?? '0', 10);
-    this.#usageCount.cachedInputTokens += parseInt(usage?.cachedInputTokens?.toString() ?? '0', 10);
   }
 
   /**
@@ -689,14 +641,18 @@ export class MastraClientNetworkOutput {
    */
   #resolveAllPromises(): void {
     try {
-      this.#delayedPromises.usage.resolve(this.#usageCount);
+      if (this.#bufferedUsage) {
+        this.#delayedPromises.usage.resolve(this.#bufferedUsage);
+      } else {
+        this.#delayedPromises.usage.resolve(undefined);
+      }
     } catch (error) {
       console.error('Error resolving usage promise:', error);
     }
 
     // Result and status are resolved when network-execution-event-finish is received
     // If they haven't been resolved yet, resolve with undefined/default
-    if (this.#result === undefined) {
+    if (this.#bufferedResult === undefined) {
       try {
         this.#delayedPromises.result.resolve(undefined);
       } catch (error) {
@@ -704,7 +660,7 @@ export class MastraClientNetworkOutput {
       }
     }
 
-    if (this.#status === undefined) {
+    if (this.#bufferedStatus === undefined) {
       try {
         this.#delayedPromises.status.resolve('unknown');
       } catch (error) {
@@ -751,9 +707,9 @@ export class MastraClientNetworkOutput {
   }
 
   /**
-   * Promise that resolves to the accumulated usage count
+   * Promise that resolves to the usage count from the server's finish event
    */
-  get usage(): Promise<NetworkUsageCount> {
+  get usage(): Promise<any> {
     this.#ensureConsumption();
     return this.#delayedPromises.usage.promise;
   }
