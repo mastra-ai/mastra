@@ -71,7 +71,7 @@ async function initializePackageJson(pm: PackageManager): Promise<void> {
   packageJson.type = 'module';
   packageJson.engines = {
     ...packageJson.engines,
-    node: '>=20.9.0',
+    node: '>=22.13.0',
   };
 
   await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
