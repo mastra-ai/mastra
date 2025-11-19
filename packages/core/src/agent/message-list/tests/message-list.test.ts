@@ -3493,7 +3493,6 @@ describe('MessageList', () => {
 
   describe('providerOptions preservation', () => {
     describe('AIV5 ModelMessage - System messages', () => {
-      // TODO: when converting to model message, we first convert to UI message and those do not preserve providerOptions. We should find a way to preserve them through that conversion if they were provided.
       it('should preserve providerOptions on system message with string content', async () => {
         // This test verifies the fix for issue #8810
         // System messages are stored separately and converted via aiV4CoreMessagesToAIV5ModelMessages
@@ -3522,7 +3521,6 @@ describe('MessageList', () => {
     });
 
     describe('AIV5 ModelMessage - User messages', () => {
-      // TODO: when converting to model message, we first convert to UI message and those do not preserve providerOptions. We should find a way to preserve them through that conversion if they were provided.
       it('should preserve providerOptions on user message with string content', async () => {
         const messageList = new MessageList();
 
@@ -3541,12 +3539,7 @@ describe('MessageList', () => {
 
         expect(retrievedMessage).toBeDefined();
         expect(Array.isArray(retrievedMessage?.content)).toBe(true);
-
-        // AI SDK's convertToModelMessages always creates array content for user/assistant messages,
-        // converting providerMetadata on UI parts to providerOptions on ModelMessage parts
-        const firstPart = (retrievedMessage?.content as any[])?.[0];
-        expect(firstPart?.type).toBe('text');
-        expect(firstPart?.providerOptions).toEqual({
+        expect(retrievedMessage?.providerOptions).toEqual({
           anthropic: { cacheControl: { type: 'ephemeral' } },
         });
       });
@@ -3623,7 +3616,6 @@ describe('MessageList', () => {
     });
 
     describe('AIV5 ModelMessage - Assistant messages', () => {
-      // TODO: when converting to model message, we first convert to UI message and those do not preserve message-level providerOptions. We should find a way to preserve them through that conversion if they were provided.
       it('should preserve providerOptions on assistant message with string content', async () => {
         const messageList = new MessageList();
 
@@ -3642,19 +3634,13 @@ describe('MessageList', () => {
 
         expect(retrievedMessage).toBeDefined();
         expect(Array.isArray(retrievedMessage?.content)).toBe(true);
-
-        // AI SDK's convertToModelMessages always creates array content for user/assistant messages,
-        // converting providerMetadata on UI parts to providerOptions on ModelMessage parts
-        const firstPart = (retrievedMessage?.content as any[])?.[0];
-        expect(firstPart?.type).toBe('text');
-        expect(firstPart?.providerOptions).toEqual({
+        expect(retrievedMessage?.providerOptions).toEqual({
           anthropic: { cacheControl: { type: 'ephemeral' } },
         });
       });
     });
 
     describe('AIV4 CoreMessage', () => {
-      // TODO: when converting to core message with .llmPrompt(), we first convert to UI message and those do not preserve message-level providerOptions. We should find a way to preserve them through that conversion if they were provided.
       it('should preserve providerOptions on CoreMessage with string content', async () => {
         const messageList = new MessageList();
 
@@ -3670,15 +3656,10 @@ describe('MessageList', () => {
 
         const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
         const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'user');
-
+        console.log('retrievedMessage', retrievedMessage);
         expect(retrievedMessage).toBeDefined();
         expect(Array.isArray(retrievedMessage?.content)).toBe(true);
-
-        // AI SDK's convertToModelMessages always creates array content for user/assistant messages,
-        // converting providerMetadata on UI parts to providerOptions on ModelMessage parts
-        const firstPart = (retrievedMessage?.content as any[])?.[0];
-        expect(firstPart?.type).toBe('text');
-        expect(firstPart?.providerOptions).toEqual({
+        expect(retrievedMessage?.providerOptions).toEqual({
           anthropic: { cacheControl: { type: 'ephemeral' } },
         });
       });
@@ -3723,47 +3704,48 @@ describe('MessageList', () => {
     });
 
     describe('Mixed conversation scenarios', () => {
-      // TODO: when converting to model message with llmPrompt(), we first convert to UI message and those do not preserve message-level providerOptions. We should find a way to preserve them through that conversion if they were provided.
       it('should preserve providerOptions across system, user, and assistant messages', async () => {
         const messageList = new MessageList();
 
-        // System message with cache
-        messageList.addSystem({
+        const systemMessage: AIV5Type.ModelMessage = {
           role: 'system' as const,
           content: 'System instructions',
           providerOptions: {
             anthropic: { cacheControl: { type: 'ephemeral' as const } },
           },
-        });
+        };
+        // System message with cache
+        messageList.addSystem(systemMessage);
 
-        // User message with cache on content part
-        messageList.add(
-          {
-            role: 'user' as const,
-            content: [
+        const userMessage: MastraDBMessage = {
+          id: 'user-1',
+          role: 'user' as const,
+          content: {
+            format: 2,
+            parts: [
               {
                 type: 'text' as const,
                 text: 'User context',
-                providerOptions: {
+                providerMetadata: {
                   anthropic: { cacheControl: { type: 'ephemeral' as const } },
                 },
               },
             ],
           },
-          'input',
-        );
+          createdAt: new Date(),
+        };
+        // User message with cache on content part
+        messageList.add(userMessage, 'input');
 
-        // Assistant message with cache
-        messageList.add(
-          {
-            role: 'assistant' as const,
-            content: 'Assistant response',
-            providerOptions: {
-              anthropic: { cacheControl: { type: 'ephemeral' as const } },
-            },
+        const assistantResponseMessage: AIV5Type.ModelMessage = {
+          role: 'assistant' as const,
+          content: 'Assistant response',
+          providerOptions: {
+            anthropic: { cacheControl: { type: 'ephemeral' as const } },
           },
-          'memory',
-        );
+        };
+        // Assistant message with cache
+        messageList.add(assistantResponseMessage, 'memory');
 
         const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
 
@@ -3779,10 +3761,10 @@ describe('MessageList', () => {
           anthropic: { cacheControl: { type: 'ephemeral' } },
         });
 
-        // Assistant message should have providerOptions on content part (converted from string)
+        // Assistant message should have providerOptions on message
         const assistantMsg = llmPrompt.find((msg: any) => msg.role === 'assistant');
         expect(Array.isArray(assistantMsg?.content)).toBe(true);
-        expect((assistantMsg?.content as any[])?.[0]?.providerOptions).toEqual({
+        expect(assistantMsg?.providerOptions).toEqual({
           anthropic: { cacheControl: { type: 'ephemeral' } },
         });
       });
