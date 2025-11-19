@@ -244,6 +244,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -2248,6 +2249,7 @@ describe('MastraInngestWorkflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2, step3],
+        options: { validateInputs: false },
       });
       workflow
         .then(step1)
@@ -2832,6 +2834,7 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({
           finalValue: z.number(),
         }),
+        options: { validateInputs: false },
       });
       let totalCount = 0;
       counterWorkflow
@@ -2938,6 +2941,7 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({
           finalValue: z.number(),
         }),
+        options: { validateInputs: false },
       });
       let totalCount = 0;
       counterWorkflow
@@ -3034,6 +3038,7 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({
           finalValue: z.number(),
         }),
+        options: { validateInputs: false },
       });
 
       counterWorkflow.foreach(mapStep).then(finalStep).commit();
@@ -3157,6 +3162,7 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({
           finalValue: z.number(),
         }),
+        options: { validateInputs: false },
         steps: [startStep, finalIf],
       });
 
@@ -3166,6 +3172,7 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({
           finalValue: z.number(),
         }),
+        options: { validateInputs: false },
         steps: [otherStep, finalElse],
       })
         .then(otherStep)
@@ -3307,6 +3314,7 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({
           finalValue: z.number(),
         }),
+        options: { validateInputs: false },
         steps: [startStep, finalIf],
       });
 
@@ -3316,6 +3324,7 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({
           finalValue: z.number(),
         }),
+        options: { validateInputs: false },
         steps: [otherStep, finalElse],
       })
         .then(otherStep)
@@ -3713,8 +3722,8 @@ describe('MastraInngestWorkflow', () => {
       });
 
       // @ts-ignore
-      const toolAction = vi.fn<any>().mockImplementation(async ({ context }) => {
-        return { name: context.name };
+      const toolAction = vi.fn<any>().mockImplementation(async ({ name }) => {
+        return { name };
       });
 
       const randomTool = createTool({
@@ -4417,6 +4426,7 @@ describe('MastraInngestWorkflow', () => {
           'branch-step-1': z.object({ result: z.number() }),
           'branch-step-2': z.object({ result: z.number() }),
         }),
+        options: { validateInputs: false },
       })
         .branch([
           [async () => true, branchStep1], // First branch will execute and suspend
@@ -5021,6 +5031,7 @@ describe('MastraInngestWorkflow', () => {
           final: z.number(),
         }),
         steps: [step1, step2, step3],
+        options: { validateInputs: false },
       });
 
       workflow.then(step1).then(step2).then(step3).commit();
@@ -5962,7 +5973,7 @@ describe('MastraInngestWorkflow', () => {
     });
 
     //parallel steps tests seem to be failing in inngest
-    it.skip('should timeTravel workflow execution for workflow with parallel steps', async ctx => {
+    it('should timeTravel workflow execution for workflow with parallel steps', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -6705,12 +6716,14 @@ describe('MastraInngestWorkflow', () => {
           startValue: z.number(),
         }),
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       });
 
       const wfA = createWorkflow({
         id: 'nested-workflow-a',
         inputSchema: counterWorkflow.inputSchema,
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       })
         .then(startStep)
         .then(otherStep)
@@ -6720,6 +6733,7 @@ describe('MastraInngestWorkflow', () => {
         id: 'nested-workflow-b',
         inputSchema: counterWorkflow.inputSchema,
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       })
         .then(startStep)
         .then(finalStep)
@@ -6848,12 +6862,14 @@ describe('MastraInngestWorkflow', () => {
           startValue: z.number(),
         }),
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       });
 
       const wfA = createWorkflow({
         id: 'nested-workflow-a',
         inputSchema: counterWorkflow.inputSchema,
         outputSchema: finalStep.outputSchema,
+        options: { validateInputs: false },
       })
         .then(startStep)
         .then(otherStep)
@@ -6863,6 +6879,7 @@ describe('MastraInngestWorkflow', () => {
         id: 'nested-workflow-b',
         inputSchema: counterWorkflow.inputSchema,
         outputSchema: z.object({ other: otherStep.outputSchema, final: finalStep.outputSchema }),
+        options: { validateInputs: false },
       })
         .then(startStep)
         .branch([
@@ -7005,12 +7022,14 @@ describe('MastraInngestWorkflow', () => {
             startValue: z.number(),
           }),
           outputSchema: z.object({ success: z.boolean() }),
+          options: { validateInputs: false },
         });
 
         const wfA = createWorkflow({
           id: 'nested-workflow-a',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
           .then(otherStep)
@@ -7020,6 +7039,7 @@ describe('MastraInngestWorkflow', () => {
           id: 'nested-workflow-b',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
           .then(finalStep)
@@ -7166,12 +7186,14 @@ describe('MastraInngestWorkflow', () => {
             startValue: z.number(),
           }),
           outputSchema: z.object({ success: z.boolean() }),
+          options: { validateInputs: false },
         });
 
         const wfA = createWorkflow({
           id: 'nested-workflow-a',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
           .then(otherStep)
@@ -7181,6 +7203,7 @@ describe('MastraInngestWorkflow', () => {
           id: 'nested-workflow-b',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
           .then(finalStep)
@@ -7328,12 +7351,14 @@ describe('MastraInngestWorkflow', () => {
             startValue: z.number(),
           }),
           outputSchema: z.object({ success: z.boolean() }),
+          options: { validateInputs: false },
         });
 
         const wfA = createWorkflow({
           id: 'nested-workflow-a',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
           .then(otherStep)
@@ -7343,6 +7368,7 @@ describe('MastraInngestWorkflow', () => {
           id: 'nested-workflow-b',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
           .branch([
@@ -7536,12 +7562,14 @@ describe('MastraInngestWorkflow', () => {
           outputSchema: z.object({
             finalValue: z.number(),
           }),
+          options: { validateInputs: false },
         });
 
         const wfA = createWorkflow({
           id: 'nested-workflow-a',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
           .then(otherStep)
@@ -7689,6 +7717,7 @@ describe('MastraInngestWorkflow', () => {
           outputSchema: z.object({
             finalValue: z.number(),
           }),
+          options: { validateInputs: false },
         })
           .then(startStep)
           .then(otherStep)
@@ -7703,6 +7732,7 @@ describe('MastraInngestWorkflow', () => {
           outputSchema: z.object({
             finalValue: z.number(),
           }),
+          options: { validateInputs: false },
         });
 
         counterWorkflow
@@ -7852,6 +7882,7 @@ describe('MastraInngestWorkflow', () => {
         id: 'nested-workflow-a',
         inputSchema: counterInputSchema,
         outputSchema: finalStep.outputSchema,
+        options: { validateInputs: false },
       })
         .then(startStep)
         .then(otherStep)
@@ -7862,6 +7893,7 @@ describe('MastraInngestWorkflow', () => {
         id: 'nested-workflow-b',
         inputSchema: counterInputSchema,
         outputSchema: finalStep.outputSchema,
+        options: { validateInputs: false },
       })
         .then(passthroughStep)
         .then(wfA)
@@ -7871,6 +7903,7 @@ describe('MastraInngestWorkflow', () => {
         id: 'nested-workflow-c',
         inputSchema: counterInputSchema,
         outputSchema: finalStep.outputSchema,
+        options: { validateInputs: false },
       })
         .then(passthroughStep)
         .then(wfB)
@@ -7881,6 +7914,7 @@ describe('MastraInngestWorkflow', () => {
         inputSchema: counterInputSchema,
         outputSchema: counterOutputSchema,
         steps: [wfC, passthroughStep],
+        options: { validateInputs: false },
       });
 
       counterWorkflow
@@ -8029,12 +8063,14 @@ describe('MastraInngestWorkflow', () => {
           startValue: z.number(),
         }),
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       });
 
       const wfA = createWorkflow({
         id: 'nested-workflow-a',
         inputSchema: counterWorkflow.inputSchema,
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       })
         .then(startStep)
         .then(cloneStep(otherStep, { id: 'other-clone' }))
@@ -8044,6 +8080,7 @@ describe('MastraInngestWorkflow', () => {
         id: 'nested-workflow-b',
         inputSchema: counterWorkflow.inputSchema,
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       })
         .then(startStep)
         .then(cloneStep(finalStep, { id: 'final-clone' }))
@@ -8440,6 +8477,7 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({
           hasEngine: z.boolean(),
         }),
+        options: { validateInputs: false },
       });
       workflow.then(step).commit();
 
@@ -8511,6 +8549,7 @@ describe('MastraInngestWorkflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
+        options: { validateInputs: false },
       });
       workflow.then(step1).then(step2).commit();
 
@@ -8684,6 +8723,7 @@ describe('MastraInngestWorkflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
+        options: { validateInputs: false },
       });
       workflow.then(step1).sleep(1000).then(step2).commit();
 
@@ -9136,6 +9176,7 @@ describe('MastraInngestWorkflow', () => {
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({}),
         steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
+        options: { validateInputs: false },
       });
 
       promptEvalWorkflow
@@ -9693,6 +9734,7 @@ describe('MastraInngestWorkflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
+        options: { validateInputs: false },
       });
       workflow.then(step1).then(step2).commit();
 
@@ -9879,6 +9921,7 @@ describe('MastraInngestWorkflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
+        options: { validateInputs: false },
       });
       workflow.then(step1).then(step2).commit();
 
@@ -10078,6 +10121,7 @@ describe('MastraInngestWorkflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
+        options: { validateInputs: false },
       });
       workflow.then(step1).sleep(1000).then(step2).commit();
 
@@ -10317,6 +10361,7 @@ describe('MastraInngestWorkflow', () => {
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({}),
         steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
+        options: { validateInputs: false },
       });
 
       promptEvalWorkflow
@@ -10362,7 +10407,7 @@ describe('MastraInngestWorkflow', () => {
       for await (const _data of streamOutput.fullStream) {
       }
       const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
-      const resumeStreamOutput = run.resumeStreamVNext({ resumeData: resumeData as any, step: promptAgent });
+      const resumeStreamOutput = run.resumeStreamVNext({ resumeData, step: promptAgent });
 
       for await (const _data of resumeStreamOutput.fullStream) {
       }

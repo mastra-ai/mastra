@@ -18,6 +18,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
   describe('result.warnings', () => {
     it('should resolve with warnings', async () => {
       const result = loopFn({
+        methodType: 'stream',
         runId,
         models: createTestModels({
           warnings: [{ type: 'other', message: 'test-warning' }],
@@ -35,6 +36,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
   describe('result.usage', () => {
     it('should resolve with token usage', async () => {
       const result = loopFn({
+        methodType: 'stream',
         runId,
         models: createTestModels({
           stream: convertArrayToReadableStream([
@@ -69,6 +71,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const messageList = createMessageListWithUserMessage();
 
       const result = loopFn({
+        methodType: 'stream',
         runId,
         models: createTestModels({
           stream: convertArrayToReadableStream([
@@ -97,6 +100,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const messageList = createMessageListWithUserMessage();
 
       const result = loopFn({
+        methodType: 'stream',
         runId,
         models: createTestModels({
           stream: convertArrayToReadableStream([
@@ -130,6 +134,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const messageList = createMessageListWithUserMessage();
 
       const result = loopFn({
+        methodType: 'stream',
         runId,
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         messageList,
@@ -207,6 +212,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const messageList = createMessageListWithUserMessage();
 
       const result = loopFn({
+        methodType: 'stream',
         runId,
         models: createTestModels({
           stream: convertArrayToReadableStream([
@@ -244,6 +250,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const messageList = createMessageListWithUserMessage();
 
       const result = loopFn({
+        methodType: 'stream',
         runId,
         models: createTestModels({
           stream: convertArrayToReadableStream([
@@ -317,6 +324,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
   describe('result.text', () => {
     it('should resolve with full text', async () => {
       const result = loopFn({
+        methodType: 'stream',
         runId,
         models: createTestModels(),
         messageList: createMessageListWithUserMessage(),
@@ -333,6 +341,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
   describe('result.reasoningText', () => {
     it('should contain reasoning text from model response', async () => {
       const result = loopFn({
+        methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
@@ -349,6 +358,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
   describe('result.reasoning', () => {
     it('should contain reasoning from model response', async () => {
       const result = loopFn({
+        methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
@@ -364,6 +374,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
   describe('result.sources', () => {
     it('should contain sources', async () => {
       const result = loopFn({
+        methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
@@ -379,6 +390,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
   describe('result.files', () => {
     it('should contain files', async () => {
       const result = loopFn({
+        methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
@@ -394,6 +406,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
   describe('result.steps', () => {
     it.todo('should add the reasoning from the model response to the step result', async () => {
       const result = loopFn({
+        methodType: 'stream',
         runId,
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         messageList: createMessageListWithUserMessage(),
@@ -541,6 +554,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
     it.todo('should add the sources from the model response to the step result', async () => {
       const result = loopFn({
+        methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
@@ -621,6 +635,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
     it('should add the files from the model response to the step result', async () => {
       const result = loopFn({
+        methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
@@ -773,6 +788,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
   describe('result.toolCalls', () => {
     it('should resolve with tool calls', async () => {
       const result = loopFn({
+        methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
         models: createTestModels({
@@ -820,6 +836,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
   describe('result.toolResults', () => {
     it('should resolve with tool results', async () => {
       const result = loopFn({
+        methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
         models: createTestModels({
