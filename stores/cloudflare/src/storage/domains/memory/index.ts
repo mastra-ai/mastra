@@ -26,6 +26,18 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     return typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
   }
 
+  /**
+   * Summarizes message content without exposing raw data (for logging).
+   * Returns type, length, and keys only to prevent PII leakage.
+   */
+  private summarizeMessageContent(content: unknown): { type: string; length?: number; keys?: string[] } {
+    if (!content) return { type: 'undefined' };
+    if (typeof content === 'string') return { type: 'string', length: content.length };
+    if (Array.isArray(content)) return { type: 'array', length: content.length };
+    if (typeof content === 'object') return { type: 'object', keys: Object.keys(content) };
+    return { type: typeof content };
+  }
+
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     const thread = await this.operations.load<StorageThreadType>({ tableName: TABLE_THREADS, keys: { id: threadId } });
     if (!thread) return null;
@@ -233,7 +245,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       return this.operations.getKey(TABLE_MESSAGES, { threadId, id: messageId });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Error getting message key for thread ${threadId} and message ${messageId}:`, { message });
+      this.logger?.error(`Error getting message key for thread ${threadId} and message ${messageId}:`, { message });
       throw error;
     }
   }
@@ -243,7 +255,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       return this.operations.getKey(TABLE_MESSAGES, { threadId, id: 'messages' });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Error getting thread messages key for thread ${threadId}:`, { message });
+      this.logger?.error(`Error getting thread messages key for thread ${threadId}:`, { message });
       throw error;
     }
   }
@@ -365,7 +377,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        this.logger.error(`Error updating sorted order for key ${orderKey}:`, { message });
+        this.logger?.error(`Error updating sorted order for key ${orderKey}:`, { message });
         throw error; // Let caller handle the error
       } finally {
         // Clean up the queue if this was the last operation
@@ -389,7 +401,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       const arr = JSON.parse(typeof raw === 'string' ? raw : JSON.stringify(raw));
       return Array.isArray(arr) ? arr : [];
     } catch (e) {
-      this.logger.error(`Error parsing order data for key ${orderKey}:`, { e });
+      this.logger?.error(`Error parsing order data for key ${orderKey}:`, { e });
       return [];
     }
   }
@@ -471,10 +483,12 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       for (const message of validatedMessages) {
         // Check if this message already exists in a different thread
         const existingMessage = await this.findMessageInAnyThread(message.id);
-        console.info(`Checking message ${message.id}: existing=${existingMessage?.threadId}, new=${message.threadId}`);
+        this.logger?.debug(
+          `Checking message ${message.id}: existing=${existingMessage?.threadId}, new=${message.threadId}`,
+        );
         if (existingMessage && existingMessage.threadId && existingMessage.threadId !== message.threadId) {
           // Message exists in a different thread, migrate it
-          console.info(`Migrating message ${message.id} from ${existingMessage.threadId} to ${message.threadId}`);
+          this.logger?.debug(`Migrating message ${message.id} from ${existingMessage.threadId} to ${message.threadId}`);
           messageMigrationTasks.push(this.migrateMessage(message.id, existingMessage.threadId, message.threadId!));
         }
       }
@@ -513,10 +527,8 @@ export class MemoryStorageCloudflare extends MemoryStorage {
                   ...cleanMessage,
                   createdAt: serializeDate(cleanMessage.createdAt),
                 };
-                console.info(`Saving message ${message.id} with content:`, {
-                  content: serializedMessage.content,
-                  contentType: typeof serializedMessage.content,
-                  isArray: Array.isArray(serializedMessage.content),
+                this.logger?.debug(`Saving message ${message.id}`, {
+                  contentSummary: this.summarizeMessageContent(serializedMessage.content),
                 });
                 await this.operations.putKV({ tableName: TABLE_MESSAGES, key, value: serializedMessage });
               }),
@@ -642,7 +654,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       const latestIds = await this.getLastN(threadMessagesKey, limit);
       latestIds.forEach(id => messageIds.add(id));
     } catch {
-      console.info(`No message order found for thread ${threadId}, skipping latest messages`);
+      this.logger?.debug(`No message order found for thread ${threadId}, skipping latest messages`);
     }
   }
 
@@ -688,15 +700,13 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           const data = await this.operations.getKV(TABLE_MESSAGES, key);
           if (!data) return null;
           const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-          console.info(`Retrieved message ${id} from thread ${threadId} with content:`, {
-            content: parsed.content,
-            contentType: typeof parsed.content,
-            isArray: Array.isArray(parsed.content),
+          this.logger?.debug(`Retrieved message ${id} from thread ${threadId}`, {
+            contentSummary: this.summarizeMessageContent(parsed.content),
           });
           return parsed;
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          this.logger.error(`Error retrieving message ${id}:`, { message });
+          this.logger?.error(`Error retrieving message ${id}:`, { message });
           return null;
         }
       }),

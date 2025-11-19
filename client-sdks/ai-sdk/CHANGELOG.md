@@ -1,5 +1,30 @@
 # @mastra/ai-sdk
 
+## 0.2.7
+
+### Patch Changes
+
+- Fix bad dane change in 0.x workflowRoute ([#10090](https://github.com/mastra-ai/mastra/pull/10090))
+
+- Improve ai-sdk transformers, handle custom data from agent sub workflow, sug agent tools ([#10026](https://github.com/mastra-ai/mastra/pull/10026))
+
+- Extend the workflow route to accept optional runId and resourceId ([#10041](https://github.com/mastra-ai/mastra/pull/10041))
+  parameters, allowing clients to specify custom identifiers when
+  creating workflow runs. These parameters are now properly validated
+  in the OpenAPI schema and passed through to the createRun method.
+
+  Also updates the OpenAPI schema to include previously undocumented
+  resumeData and step fields.
+
+- Updated dependencies [[`0a0aa87`](https://github.com/mastra-ai/mastra/commit/0a0aa87910dd9234ae11e8146fbf54d71f0b1516), [`56bbbd0`](https://github.com/mastra-ai/mastra/commit/56bbbd0eb4510455ff03d6bf2827fdbd307938be), [`d576fd8`](https://github.com/mastra-ai/mastra/commit/d576fd8f2a3c61bcf2f7d5d2bdfb496d442c46c2), [`5e48406`](https://github.com/mastra-ai/mastra/commit/5e48406766fa94e2b7c56b70fb7d6068cf7f3989), [`7fcce62`](https://github.com/mastra-ai/mastra/commit/7fcce62880c3525fbf752d59c0ac2c478cffe024), [`16a324f`](https://github.com/mastra-ai/mastra/commit/16a324f8c30a07d0d899bc2e4e7998c6b40a4cb6), [`26aee16`](https://github.com/mastra-ai/mastra/commit/26aee160149e7acb84a533bf45631aaed6dd7077), [`b063a81`](https://github.com/mastra-ai/mastra/commit/b063a8144176915a766ea15888e1e8a06a020776), [`5ff9462`](https://github.com/mastra-ai/mastra/commit/5ff9462691c80a6841b014bcc68f6a85c3fd3fbf)]:
+  - @mastra/core@0.24.1
+
+## 0.2.7-alpha.1
+
+### Patch Changes
+
+- Fix bad dane change in 0.x workflowRoute ([#10090](https://github.com/mastra-ai/mastra/pull/10090))
+
 ## 0.2.7-alpha.0
 
 ### Patch Changes
