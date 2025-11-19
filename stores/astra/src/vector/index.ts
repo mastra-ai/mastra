@@ -261,6 +261,16 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+    if (!id) {
+      throw new MastraError({
+        id: 'ASTRA_VECTOR_UPDATE_NO_ID',
+        text: 'id is required for Astra updateVector',
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     if (!update.vector && !update.metadata) {
       throw new MastraError({
         id: 'ASTRA_VECTOR_UPDATE_NO_PAYLOAD',
@@ -269,7 +279,7 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
         category: ErrorCategory.USER,
         details: {
           indexName,
-          ...(id && { id }),
+          id,
         },
       });
     }

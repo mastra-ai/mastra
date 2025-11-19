@@ -222,6 +222,16 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ indexName: namespace, id, update }: UpstashUpdateVectorParams): Promise<void> {
+    if (!id) {
+      throw new MastraError({
+        id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'id is required for Upstash updateVector',
+        details: { namespace },
+      });
+    }
+
     if (!update.vector && !update.metadata && !update.sparseVector) {
       throw new MastraError({
         id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_FAILED',
@@ -229,7 +239,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
         category: ErrorCategory.THIRD_PARTY,
         details: {
           namespace,
-          ...(id && { id }),
+          id,
         },
         text: 'No update data provided',
       });
@@ -244,7 +254,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
         category: ErrorCategory.THIRD_PARTY,
         details: {
           namespace,
-          ...(id && { id }),
+          id,
         },
         text: 'Both vector and metadata must be provided for an update',
       });

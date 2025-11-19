@@ -322,6 +322,16 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+    if (!id) {
+      throw new MastraError({
+        id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'id is required for OpenSearch updateVector',
+        details: { indexName },
+      });
+    }
+
     let existingDoc;
     try {
       if (!update.vector && !update.metadata) {

@@ -351,6 +351,16 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+    if (!id) {
+      throw new MastraError({
+        id: 'STORAGE_TURBOBUFFER_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'id is required for Turbopuffer updateVector',
+        details: { indexName },
+      });
+    }
+
     let namespace;
     let createIndex;
     let distanceMetric;

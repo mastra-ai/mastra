@@ -480,6 +480,16 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+    if (!id) {
+      throw new MastraError({
+        id: 'STORAGE_MONGODB_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'id is required for MongoDB updateVector',
+        details: { indexName },
+      });
+    }
+
     try {
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');

@@ -405,6 +405,16 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
    * S3 Vectors `PutVectors` is replace-all; we `Get` the current item, merge, then `Put`.
    */
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+    if (!id) {
+      throw new MastraError({
+        id: 'STORAGE_S3VECTORS_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'id is required for S3Vectors updateVector',
+        details: { indexName },
+      });
+    }
+
     indexName = normalizeIndexName(indexName);
     try {
       if (!update.vector && !update.metadata) {

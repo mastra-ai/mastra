@@ -301,13 +301,23 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+    if (!id) {
+      throw new MastraError({
+        id: 'STORAGE_VECTORIZE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'id is required for Vectorize updateVector',
+        details: { indexName },
+      });
+    }
+
     if (!update.vector && !update.metadata) {
       throw new MastraError({
         id: 'STORAGE_VECTORIZE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'No update data provided',
-        details: { indexName, ...(id && { id }) },
+        details: { indexName, id },
       });
     }
 

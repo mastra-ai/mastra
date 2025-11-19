@@ -253,6 +253,16 @@ export class QdrantVector extends MastraVector {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+    if (!id) {
+      throw new MastraError({
+        id: 'STORAGE_QDRANT_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'id is required for Qdrant updateVector',
+        details: { indexName },
+      });
+    }
+
     try {
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');
@@ -265,7 +275,7 @@ export class QdrantVector extends MastraVector {
           category: ErrorCategory.USER,
           details: {
             indexName,
-            ...(id && { id }),
+            id,
           },
         },
         validationError,

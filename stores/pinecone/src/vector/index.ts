@@ -313,6 +313,16 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ indexName, id, update, namespace }: PineconeUpdateVectorParams): Promise<void> {
+    if (!id) {
+      throw new MastraError({
+        id: 'STORAGE_PINECONE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'id is required for Pinecone updateVector',
+        details: { indexName },
+      });
+    }
+
     if (!update.vector && !update.metadata) {
       throw new MastraError({
         id: 'STORAGE_PINECONE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
@@ -321,7 +331,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
         text: 'No updates provided',
         details: {
           indexName,
-          ...(id && { id }),
+          id,
         },
       });
     }

@@ -359,6 +359,16 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+    if (!id) {
+      throw new MastraError({
+        id: 'CHROMA_VECTOR_UPDATE_NO_ID',
+        text: 'id is required for Chroma updateVector',
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     if (!update.vector && !update.metadata) {
       throw new MastraError({
         id: 'CHROMA_VECTOR_UPDATE_NO_PAYLOAD',
@@ -367,7 +377,7 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
         category: ErrorCategory.USER,
         details: {
           indexName,
-          ...(id && { id }),
+          id,
         },
       });
     }

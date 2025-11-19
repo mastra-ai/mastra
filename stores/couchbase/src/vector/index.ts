@@ -406,6 +406,16 @@ export class CouchbaseVector extends MastraVector {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ id, update }: UpdateVectorParams): Promise<void> {
+    if (!id) {
+      throw new MastraError({
+        id: 'COUCHBASE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'id is required for Couchbase updateVector',
+        details: {},
+      });
+    }
+
     try {
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');
