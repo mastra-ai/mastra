@@ -1,5 +1,5 @@
 import z from 'zod';
-import { paginationInfoSchema, createPagePaginationSchema, coreMessageSchema, successResponseSchema } from './common';
+import { paginationInfoSchema, createPagePaginationSchema, successResponseSchema } from './common';
 
 // Path parameter schemas
 export const threadIdPathParams = z.object({
@@ -89,12 +89,13 @@ const threadSchema = z.object({
  * Message structure for storage
  * Extends coreMessageSchema with storage-specific fields
  */
-const messageSchema = coreMessageSchema.extend({
-  id: z.string(),
-  createdAt: z.coerce.date(),
-  threadId: z.string().optional(),
-  resourceId: z.string().optional(),
-});
+const messageSchema = z.any();
+// const messageSchema = coreMessageSchema.extend({
+//   id: z.string(),
+//   createdAt: z.coerce.date(),
+//   threadId: z.string().optional(),
+//   resourceId: z.string().optional(),
+// });
 
 // ============================================================================
 // Query Parameter Schemas
@@ -221,8 +222,8 @@ export const memoryStatusResponseSchema = z.object({
 export const memoryConfigResponseSchema = z.object({
   config: z.object({
     lastMessages: z.union([z.number(), z.literal(false)]).optional(),
-    semanticRecall: z.union([z.boolean(), z.object({}).passthrough()]).optional(),
-    workingMemory: z.object({}).passthrough().optional(),
+    semanticRecall: z.union([z.boolean(), z.any()]).optional(),
+    workingMemory: z.any().optional(),
   }),
 });
 

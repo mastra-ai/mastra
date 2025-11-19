@@ -236,7 +236,7 @@ export const STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   description: 'Executes an action and streams the results in real-time',
   tags: ['Agent Builder'],
   handler: async ctx => {
-    const { mastra, actionId, runId, requestContext: actionRequestContext } = ctx;
+    const { mastra, actionId, runId, requestContext } = ctx;
     const logger = mastra.getLogger();
     try {
       WorkflowRegistry.registerTemporaryWorkflows(agentBuilderWorkflows, mastra);
@@ -250,7 +250,7 @@ export const STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       return await workflows.STREAM_WORKFLOW_ROUTE.handler({
         ...ctx,
         workflowId: actionId,
-        requestContext: actionRequestContext,
+        requestContext,
       });
     } catch (error) {
       logger.error('Error streaming agent builder action', { error, actionId });
@@ -272,7 +272,7 @@ export const STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   description: 'Executes an action using the v2 streaming API and streams the results in real-time',
   tags: ['Agent Builder'],
   handler: async ctx => {
-    const { mastra, actionId, runId, requestContext: actionRequestContext } = ctx;
+    const { mastra, actionId, runId, requestContext } = ctx;
     const logger = mastra.getLogger();
     try {
       WorkflowRegistry.registerTemporaryWorkflows(agentBuilderWorkflows, mastra);
@@ -286,7 +286,7 @@ export const STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       return await workflows.STREAM_VNEXT_WORKFLOW_ROUTE.handler({
         ...ctx,
         workflowId: actionId,
-        requestContext: actionRequestContext,
+        requestContext,
       });
     } catch (error) {
       logger.error('Error streaming agent builder action (v2)', { error, actionId });
@@ -309,7 +309,7 @@ export const START_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   description: 'Starts an action execution asynchronously without streaming results',
   tags: ['Agent Builder'],
   handler: async ctx => {
-    const { mastra, actionId, runId, requestContext: actionRequestContext } = ctx;
+    const { mastra, actionId, runId, requestContext } = ctx;
     const logger = mastra.getLogger();
     try {
       WorkflowRegistry.registerTemporaryWorkflows(agentBuilderWorkflows, mastra);
@@ -323,7 +323,7 @@ export const START_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       return await workflows.START_ASYNC_WORKFLOW_ROUTE.handler({
         ...ctx,
         workflowId: actionId,
-        requestContext: actionRequestContext,
+        requestContext,
       });
     } catch (error) {
       logger.error('Error starting agent builder action asynchronously', { error, actionId });
@@ -346,7 +346,7 @@ export const START_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
   description: 'Starts execution of a specific action run by ID',
   tags: ['Agent Builder'],
   handler: async ctx => {
-    const { mastra, actionId, runId, requestContext: actionRequestContext } = ctx;
+    const { mastra, actionId, runId, requestContext } = ctx;
     const logger = mastra.getLogger();
     try {
       WorkflowRegistry.registerTemporaryWorkflows(agentBuilderWorkflows, mastra);
@@ -360,7 +360,7 @@ export const START_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
       return await workflows.START_WORKFLOW_RUN_ROUTE.handler({
         ...ctx,
         workflowId: actionId,
-        requestContext: actionRequestContext,
+        requestContext,
       });
     } catch (error) {
       logger.error('Error starting agent builder action run', { error, actionId });
@@ -452,7 +452,7 @@ export const RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   description: 'Resumes a suspended action execution asynchronously without streaming',
   tags: ['Agent Builder'],
   handler: async ctx => {
-    const { mastra, actionId, runId, step, requestContext: actionRequestContext } = ctx;
+    const { mastra, actionId, runId, step, requestContext } = ctx;
     const logger = mastra.getLogger();
     try {
       WorkflowRegistry.registerTemporaryWorkflows(agentBuilderWorkflows, mastra);
@@ -466,7 +466,7 @@ export const RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       return await workflows.RESUME_ASYNC_WORKFLOW_ROUTE.handler({
         ...ctx,
         workflowId: actionId,
-        requestContext: actionRequestContext,
+        requestContext,
       });
     } catch (error) {
       logger.error('Error resuming agent builder action asynchronously', { error, actionId });
@@ -489,7 +489,7 @@ export const RESUME_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   description: 'Resumes a suspended action execution from a specific step',
   tags: ['Agent Builder'],
   handler: async ctx => {
-    const { mastra, actionId, runId, step, requestContext: actionRequestContext } = ctx;
+    const { mastra, actionId, runId, step, requestContext } = ctx;
     const logger = mastra.getLogger();
     try {
       WorkflowRegistry.registerTemporaryWorkflows(agentBuilderWorkflows, mastra);
@@ -503,7 +503,7 @@ export const RESUME_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       return await workflows.RESUME_WORKFLOW_ROUTE.handler({
         ...ctx,
         workflowId: actionId,
-        requestContext: actionRequestContext,
+        requestContext,
       });
     } catch (error) {
       logger.error('Error resuming agent builder action', { error, actionId });
@@ -526,7 +526,7 @@ export const RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   description: 'Resumes a suspended action execution and continues streaming results',
   tags: ['Agent Builder'],
   handler: async ctx => {
-    const { mastra, actionId, runId, step, requestContext: actionRequestContext } = ctx;
+    const { mastra, actionId, runId, step, requestContext } = ctx;
     const logger = mastra.getLogger();
     try {
       WorkflowRegistry.registerTemporaryWorkflows(agentBuilderWorkflows, mastra);
@@ -540,7 +540,7 @@ export const RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       return await workflows.RESUME_STREAM_WORKFLOW_ROUTE.handler({
         ...ctx,
         workflowId: actionId,
-        requestContext: actionRequestContext,
+        requestContext,
       });
     } catch (error) {
       logger.error('Error resuming agent builder action stream', { error, actionId });
@@ -598,7 +598,7 @@ export const STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
     'Legacy endpoint for streaming agent-builder action execution. Use /api/agent-builder/:actionId/stream instead.',
   tags: ['Agent Builder', 'Legacy'],
   handler: async ctx => {
-    const { mastra, actionId, runId, requestContext: actionRequestContext } = ctx;
+    const { mastra, actionId, runId, requestContext } = ctx;
     const logger = mastra.getLogger();
     try {
       WorkflowRegistry.registerTemporaryWorkflows(agentBuilderWorkflows, mastra);
@@ -612,7 +612,7 @@ export const STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       return await workflows.STREAM_LEGACY_WORKFLOW_ROUTE.handler({
         ...ctx,
         workflowId: actionId,
-        requestContext: actionRequestContext,
+        requestContext,
       });
     } catch (error) {
       logger.error('Error streaming agent builder action (legacy)', { error, actionId });

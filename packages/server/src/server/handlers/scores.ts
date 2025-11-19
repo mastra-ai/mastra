@@ -130,7 +130,7 @@ export const LIST_SCORERS_ROUTE = createRoute({
   handler: async ({ mastra, requestContext }) => {
     const scorers = await listScorersFromSystem({
       mastra,
-      requestContext: requestContext ?? new RequestContext(),
+      requestContext,
     });
     return scorers;
   },
@@ -148,10 +148,10 @@ export const GET_SCORER_ROUTE = createRoute({
   handler: async ({ mastra, scorerId, requestContext }) => {
     const scorers = await listScorersFromSystem({
       mastra,
-      requestContext: requestContext ?? new RequestContext(),
+      requestContext,
     });
 
-    const scorer = scorers[scorerId as string];
+    const scorer = scorers[scorerId];
 
     if (!scorer) {
       return null;
@@ -173,13 +173,13 @@ export const LIST_SCORES_BY_RUN_ID_ROUTE = createRoute({
   tags: ['Scoring'],
   handler: async ({ mastra, runId, ...params }) => {
     try {
-      const { page, perPage } = params as { page?: number; perPage?: number | false };
+      const { page, perPage } = params;
       const pagination: StoragePagination = {
         page: page ?? 0,
         perPage: perPage ?? 10,
       };
       const scoreResults = (await mastra.getStorage()?.listScoresByRunId?.({
-        runId: runId as string,
+        runId,
         pagination,
       })) || { pagination: { total: 0, page: 0, perPage: 0, hasMore: false }, scores: [] };
       return {
@@ -204,15 +204,10 @@ export const LIST_SCORES_BY_SCORER_ID_ROUTE = createRoute({
   tags: ['Scoring'],
   handler: async ({ mastra, scorerId, ...params }) => {
     try {
-      const { page, perPage, entityId, entityType } = params as {
-        page?: number;
-        perPage?: number;
-        entityId?: string;
-        entityType?: string;
-      };
+      const { page, perPage, entityId, entityType } = params;
       const filters = Object.fromEntries(Object.entries({ entityId, entityType }).filter(([_, v]) => v !== undefined));
       const scoreResults = (await mastra.getStorage()?.listScoresByScorerId?.({
-        scorerId: scorerId as string,
+        scorerId,
         pagination: { page: page ?? 0, perPage: perPage ?? 10 },
         ...filters,
       })) || { pagination: { total: 0, page: 0, perPage: 0, hasMore: false }, scores: [] };
@@ -238,14 +233,14 @@ export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
   tags: ['Scoring'],
   handler: async ({ mastra, entityId, entityType, ...params }) => {
     try {
-      const { page, perPage } = params as { page?: number; perPage?: number | false };
-      let entityIdToUse = entityId as string;
+      const { page, perPage } = params;
+      let entityIdToUse = entityId;
 
       if (entityType === 'AGENT') {
-        const agent = mastra.getAgentById(entityId as string);
+        const agent = mastra.getAgentById(entityId);
         entityIdToUse = agent.id;
       } else if (entityType === 'WORKFLOW') {
-        const workflow = mastra.getWorkflowById(entityId as string);
+        const workflow = mastra.getWorkflowById(entityId);
         entityIdToUse = workflow.id;
       }
 
@@ -256,7 +251,7 @@ export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
 
       const scoreResults = (await mastra.getStorage()?.listScoresByEntityId?.({
         entityId: entityIdToUse,
-        entityType: entityType as string,
+        entityType,
         pagination,
       })) || { pagination: { total: 0, page: 0, perPage: 0, hasMore: false }, scores: [] };
 

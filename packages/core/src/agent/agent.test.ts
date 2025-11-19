@@ -10,7 +10,6 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { config } from 'dotenv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { noopLogger } from '../logger';
 import { Mastra } from '../mastra';
@@ -206,6 +205,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       obamaObjectModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: '{"winner":"Barack Obama"}' }],
+          warnings: [],
+        }),
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: '1' },
@@ -4758,6 +4764,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
 
         const errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw testAPICallError;
+          },
           doStream: async () => {
             throw testAPICallError;
           },
@@ -4810,6 +4819,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         (testError as any).requestId = testErrorRequestId;
 
         const errorModel = new MockLanguageModelV2({
+          doGenerate() {
+            throw testError;
+          },
           doStream: async () => {
             throw testError;
           },
@@ -4886,6 +4898,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         (testError as any).requestId = testErrorRequestId;
 
         const errorModel = new MockLanguageModelV2({
+          doGenerate() {
+            throw testError;
+          },
           doStream: async () => {
             throw testError;
           },
@@ -4952,6 +4967,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     describe('stream options', () => {
       it('should call options.onError when stream error occurs in stream', async () => {
         const errorModel = new MockLanguageModelV2({
+          doGenerate() {
+            throw new Error('Simulated stream error');
+          },
           doStream: async () => {
             throw new Error('Simulated stream error');
           },
@@ -5015,6 +5033,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let pullCalls = 0;
 
         const abortModel = new MockLanguageModelV2({
+          // @ts-expect-error - error
+          doGenerate: async () => {
+            await new Promise(resolve => setImmediate(resolve));
+            abortController.abort();
+          },
           doStream: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             warnings: [],
@@ -5196,6 +5219,31 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
       } else {
         mockModel = new MockLanguageModelV2({
+          doGenerate: async ({ prompt }: LanguageModelV2CallOptions) => {
+            const messages = Array.isArray(prompt) ? prompt : [];
+            const textContent = messages
+              .map(msg => {
+                if (typeof msg.content === 'string') {
+                  return msg.content;
+                } else if (Array.isArray(msg.content)) {
+                  return msg.content
+                    .filter(part => part.type === 'text')
+                    .map(part => (part as LanguageModelV2TextPart).text)
+                    .join(' ');
+                }
+                return '';
+              })
+              .filter(Boolean)
+              .join(' ');
+
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [{ type: 'text', text: `processed: ${textContent}` }],
+              warnings: [],
+            };
+          },
           doStream: async ({ prompt }) => {
             const messages = Array.isArray(prompt) ? prompt : [];
             const textContent = messages
@@ -5759,6 +5807,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
       } else {
         dummyModel = new MockLanguageModelV2({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+            content: [{ type: 'text', text: 'Response acknowledging metadata' }],
+            warnings: [],
+          }),
           doStream: async () => ({
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },

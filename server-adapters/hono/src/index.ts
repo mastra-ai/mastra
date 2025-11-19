@@ -1,5 +1,5 @@
 import type { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { Tool } from '@mastra/core/tools';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { MastraServerAdapter } from '@mastra/server/server-adapter';
@@ -13,6 +13,7 @@ export type HonoVariables = {
   mastra: Mastra;
   requestContext: RequestContext;
   tools: Record<string, Tool>;
+  abortSignal: AbortSignal;
   taskStore: InMemoryTaskStore;
   customRouteAuthConfig?: Map<string, boolean>;
   playground?: boolean;
@@ -54,7 +55,9 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
   createContextMiddleware(): MiddlewareHandler {
     return async (c, next) => {
       // Parse request context from request body and add to context
-      let requestContext = new RequestContext();
+
+      let bodyRequestContext: Record<string, any> | undefined;
+      let paramsRequestContext: Record<string, any> | undefined;
 
       // Parse request context from request body (POST/PUT)
       if (c.req.method === 'POST' || c.req.method === 'PUT') {
@@ -64,7 +67,7 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
             const clonedReq = c.req.raw.clone();
             const body = (await clonedReq.json()) as { requestContext?: Record<string, any> };
             if (body.requestContext) {
-              requestContext = new RequestContext(Object.entries(body.requestContext));
+              bodyRequestContext = body.requestContext;
             }
           } catch {
             // Body parsing failed, continue without body
@@ -77,31 +80,25 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
         try {
           const encodedRequestContext = c.req.query('requestContext');
           if (encodedRequestContext) {
-            let parsedRequestContext: Record<string, any> | undefined;
             // Try JSON first
             try {
-              parsedRequestContext = JSON.parse(encodedRequestContext);
+              paramsRequestContext = JSON.parse(encodedRequestContext);
             } catch {
               // Fallback to base64(JSON)
               try {
                 const json = Buffer.from(encodedRequestContext, 'base64').toString('utf-8');
-                parsedRequestContext = JSON.parse(json);
+                paramsRequestContext = JSON.parse(json);
               } catch {
                 // ignore if still invalid
               }
-            }
-
-            if (parsedRequestContext && typeof parsedRequestContext === 'object') {
-              requestContext = new RequestContext([
-                ...requestContext.entries(),
-                ...Object.entries(parsedRequestContext),
-              ]);
             }
           }
         } catch {
           // ignore query parsing errors
         }
       }
+
+      const requestContext = this.mergeRequestContext({ paramsRequestContext, bodyRequestContext });
 
       // Add relevant contexts to hono context
       c.set('requestContext', requestContext);
@@ -111,6 +108,7 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
       c.set('playground', this.playground === true);
       c.set('isDev', this.isDev === true);
       c.set('customRouteAuthConfig', this.customRouteAuthConfig);
+      c.set('abortSignal', c.req.raw.signal);
 
       return next();
     };
@@ -252,6 +250,7 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
           mastra: this.mastra,
           tools: c.get('tools'),
           taskStore: c.get('taskStore'),
+          abortSignal: c.get('abortSignal'),
         };
 
         try {

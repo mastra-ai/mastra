@@ -199,18 +199,13 @@ export const UPSERT_VECTORS_ROUTE = createRoute({
   tags: ['Vectors'],
   handler: async ({ mastra, vectorName, ...params }) => {
     try {
-      const { indexName, vectors, metadata, ids } = params as {
-        indexName: string;
-        vectors: number[][];
-        metadata?: Record<string, any>[];
-        ids?: string[];
-      };
+      const { indexName, vectors, metadata, ids } = params;
 
       if (!indexName || !vectors || !Array.isArray(vectors)) {
         throw new HTTPException(400, { message: 'Invalid request index. indexName and vectors array are required.' });
       }
 
-      const vector = getVector(mastra, vectorName as string);
+      const vector = getVector(mastra, vectorName);
       const result = await vector.upsert({ indexName, vectors, metadata, ids });
       return { ids: result };
     } catch (error) {
@@ -231,11 +226,7 @@ export const CREATE_INDEX_ROUTE = createRoute({
   tags: ['Vectors'],
   handler: async ({ mastra, vectorName, ...params }) => {
     try {
-      const { indexName, dimension, metric } = params as {
-        indexName: string;
-        dimension: number;
-        metric?: 'cosine' | 'euclidean' | 'dotproduct';
-      };
+      const { indexName, dimension, metric } = params;
 
       if (!indexName || typeof dimension !== 'number' || dimension <= 0) {
         throw new HTTPException(400, {
@@ -247,7 +238,7 @@ export const CREATE_INDEX_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Invalid metric. Must be one of: cosine, euclidean, dotproduct' });
       }
 
-      const vector = getVector(mastra, vectorName as string);
+      const vector = getVector(mastra, vectorName);
       await vector.createIndex({ indexName, dimension, metric });
       return { success: true };
     } catch (error) {
@@ -268,13 +259,7 @@ export const QUERY_VECTORS_ROUTE = createRoute({
   tags: ['Vectors'],
   handler: async ({ mastra, vectorName, ...params }) => {
     try {
-      const { indexName, queryVector, topK, filter, includeVector } = params as {
-        indexName: string;
-        queryVector: number[];
-        topK?: number;
-        filter?: Record<string, any>;
-        includeVector?: boolean;
-      };
+      const { indexName, queryVector, topK, filter, includeVector } = params;
 
       if (!indexName || !queryVector || !Array.isArray(queryVector)) {
         throw new HTTPException(400, {
@@ -282,7 +267,7 @@ export const QUERY_VECTORS_ROUTE = createRoute({
         });
       }
 
-      const vector = getVector(mastra, vectorName as string);
+      const vector = getVector(mastra, vectorName);
       const results: QueryResult[] = await vector.query({ indexName, queryVector, topK, filter, includeVector });
       return results;
     } catch (error) {
@@ -302,7 +287,7 @@ export const LIST_INDEXES_ROUTE = createRoute({
   tags: ['Vectors'],
   handler: async ({ mastra, vectorName }) => {
     try {
-      const vector = getVector(mastra, vectorName as string);
+      const vector = getVector(mastra, vectorName);
       const indexes = await vector.listIndexes();
       return indexes.filter(Boolean);
     } catch (error) {
@@ -326,8 +311,8 @@ export const DESCRIBE_INDEX_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Index name is required' });
       }
 
-      const vector = getVector(mastra, vectorName as string);
-      const stats: IndexStats = await vector.describeIndex({ indexName: indexName as string });
+      const vector = getVector(mastra, vectorName);
+      const stats: IndexStats = await vector.describeIndex({ indexName: indexName });
 
       return {
         dimension: stats.dimension,
@@ -355,8 +340,8 @@ export const DELETE_INDEX_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Index name is required' });
       }
 
-      const vector = getVector(mastra, vectorName as string);
-      await vector.deleteIndex({ indexName: indexName as string });
+      const vector = getVector(mastra, vectorName);
+      await vector.deleteIndex({ indexName: indexName });
       return { success: true };
     } catch (error) {
       return handleError(error, 'Error deleting index');

@@ -1,4 +1,3 @@
-import { RequestContext } from '@mastra/core/di';
 import { isVercelTool } from '@mastra/core/tools';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
@@ -36,7 +35,7 @@ export const LIST_TOOLS_ROUTE = createRoute({
 
       const serializedTools = Object.entries(allTools).reduce(
         (acc, [id, _tool]) => {
-          const tool = _tool as any;
+          const tool = _tool;
           acc[id] = {
             ...tool,
             inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
@@ -71,7 +70,7 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
       if (tools && Object.keys(tools).length > 0) {
         tool = Object.values(tools).find((t: any) => t.id === toolId);
       } else {
-        tool = mastra.getToolById(toolId as string);
+        tool = mastra.getToolById(toolId);
       }
 
       if (!tool) {
@@ -114,7 +113,7 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
       if (tools && Object.keys(tools).length > 0) {
         tool = Object.values(tools).find((t: any) => t.id === toolId);
       } else {
-        tool = mastra.getToolById(toolId as string);
+        tool = mastra.getToolById(toolId);
       }
 
       if (!tool) {
@@ -125,18 +124,9 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Tool is not executable' });
       }
 
-      const { data, requestContext: toolRequestContext } = bodyParams as {
-        data?: unknown;
-        requestContext?: Record<string, unknown>;
-      };
+      const { data } = bodyParams;
 
       validateBody({ data });
-
-      // Merge Context's requestContext with body's toolRequestContext
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(toolRequestContext ?? {})),
-      ]);
 
       if (isVercelTool(tool)) {
         const result = await (tool as any).execute(data);
@@ -145,7 +135,7 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
 
       const result = await tool.execute(data!, {
         mastra,
-        requestContext: finalRequestContext,
+        requestContext,
         // TODO: Pass proper tracing context when server API supports tracing
         tracingContext: { currentSpan: undefined },
         ...(runId

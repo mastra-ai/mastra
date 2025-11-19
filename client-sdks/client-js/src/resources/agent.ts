@@ -223,9 +223,8 @@ export class Agent extends BaseResource {
     Output extends JSONSchema7 | ZodType | undefined = undefined,
     StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
   >(params: GenerateLegacyParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
-    const { requestContext: _omitRequestContext, ...restParams } = params;
     const processedParams = {
-      ...restParams,
+      ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       requestContext: parseClientRequestContext(params.requestContext),
@@ -322,9 +321,8 @@ export class Agent extends BaseResource {
         ...options,
       } as StreamParams<OUTPUT>;
     }
-    const { requestContext: _omitRequestContext, ...restParams } = params;
     const processedParams = {
-      ...restParams,
+      ...params,
       requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
       structuredOutput: params.structuredOutput
@@ -716,9 +714,8 @@ export class Agent extends BaseResource {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
     }
   > {
-    const { requestContext: _omitRequestContext, ...restParams } = params;
     const processedParams = {
-      ...restParams,
+      ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       requestContext: parseClientRequestContext(params.requestContext),
@@ -1372,9 +1369,8 @@ export class Agent extends BaseResource {
         ...options,
       } as StreamParams<OUTPUT>;
     }
-    const { requestContext: _omitRequestContext, ...restParams } = params;
-    const processedParams = {
-      ...restParams,
+    const processedParams: StreamParams<OUTPUT> = {
+      ...params,
       requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
       structuredOutput: params.structuredOutput

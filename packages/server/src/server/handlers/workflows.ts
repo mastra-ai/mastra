@@ -1,6 +1,4 @@
 import { ReadableStream, TransformStream } from 'node:stream/web';
-import { RequestContext } from '@mastra/core/di';
-import type { TracingOptions } from '@mastra/core/observability';
 import type { WorkflowInfo, ChunkType, StreamEvent } from '@mastra/core/workflows';
 import { HTTPException } from '../http-exception';
 import { streamResponseSchema } from '../schemas/agents';
@@ -252,20 +250,8 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
   summary: 'Stream workflow execution',
   description: 'Executes a workflow and streams the results in real-time',
   tags: ['Workflows'],
-  handler: async ({ mastra, requestContext, workflowId, runId, ...params }) => {
+  handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
-      const {
-        inputData,
-        closeOnSuspend,
-        tracingOptions,
-        requestContext: workflowRequestContext,
-      } = params as {
-        inputData?: unknown;
-        closeOnSuspend?: boolean;
-        tracingOptions?: TracingOptions;
-        requestContext?: Record<string, unknown>;
-      };
-
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
@@ -279,22 +265,10 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
-
-      // Merge Context's requestContext with body's workflowRequestContext
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(workflowRequestContext ?? {})),
-      ]);
-
       const serverCache = mastra.getServerCache();
 
       const run = await workflow.createRun({ runId });
-      const result = run.stream({
-        inputData,
-        requestContext: finalRequestContext,
-        closeOnSuspend,
-        tracingOptions,
-      });
+      const result = run.stream(params);
       return result.fullStream.pipeThrough(
         new TransformStream<ChunkType, ChunkType>({
           transform(chunk, controller) {
@@ -336,20 +310,8 @@ export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
   summary: 'Resume workflow stream',
   description: 'Resumes a suspended workflow execution and continues streaming results',
   tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
+  handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
-      const {
-        step,
-        resumeData,
-        tracingOptions,
-        requestContext: workflowRequestContext,
-      } = params as {
-        step: string | string[];
-        resumeData?: unknown;
-        tracingOptions?: TracingOptions;
-        requestContext?: Record<string, unknown>;
-      };
-
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
@@ -370,34 +332,21 @@ export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      // Merge Context's requestContext with body's workflowRequestContext
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(workflowRequestContext ?? {})),
-      ]);
-
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
       const serverCache = mastra.getServerCache();
 
-      const stream = _run
-        .resumeStream({
-          step,
-          resumeData,
-          requestContext: finalRequestContext,
-          tracingOptions,
-        })
-        .fullStream.pipeThrough(
-          new TransformStream<ChunkType, ChunkType>({
-            transform(chunk, controller) {
-              if (serverCache) {
-                const cacheKey = runId;
-                serverCache.listPush(cacheKey, chunk).catch(() => {});
-              }
+      const stream = _run.resumeStream(params).fullStream.pipeThrough(
+        new TransformStream<ChunkType, ChunkType>({
+          transform(chunk, controller) {
+            if (serverCache) {
+              const cacheKey = runId;
+              serverCache.listPush(cacheKey, chunk).catch(() => {});
+            }
 
-              controller.enqueue(chunk);
-            },
-          }),
-        );
+            controller.enqueue(chunk);
+          },
+        }),
+      );
 
       return stream;
     } catch (error) {
@@ -455,18 +404,8 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
   summary: 'Start workflow asynchronously',
   description: 'Starts a workflow execution asynchronously without streaming results',
   tags: ['Workflows'],
-  handler: async ({ mastra, requestContext, workflowId, runId, ...params }) => {
+  handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
-      const {
-        inputData,
-        tracingOptions,
-        requestContext: workflowRequestContext,
-      } = params as {
-        inputData?: unknown;
-        tracingOptions?: TracingOptions;
-        requestContext?: Record<string, unknown>;
-      };
-
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
@@ -477,18 +416,8 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
 
-      // Merge Context's requestContext with body's workflowRequestContext
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(workflowRequestContext ?? {})),
-      ]);
-
       const _run = await workflow.createRun({ runId });
-      const result = await _run.start({
-        inputData,
-        requestContext: finalRequestContext,
-        tracingOptions,
-      });
+      const result = await _run.start(params);
       return result;
     } catch (error) {
       return handleError(error, 'Error starting async workflow');
@@ -507,18 +436,8 @@ export const START_WORKFLOW_RUN_ROUTE = createRoute({
   summary: 'Start specific workflow run',
   description: 'Starts execution of a specific workflow run by ID',
   tags: ['Workflows'],
-  handler: async ({ mastra, requestContext, workflowId, runId, ...params }) => {
+  handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
-      const {
-        inputData,
-        tracingOptions,
-        requestContext: workflowRequestContext,
-      } = params as {
-        inputData?: unknown;
-        tracingOptions?: TracingOptions;
-        requestContext?: Record<string, unknown>;
-      };
-
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
@@ -539,17 +458,9 @@ export const START_WORKFLOW_RUN_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      // Merge Context's requestContext with body's workflowRequestContext
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(workflowRequestContext ?? {})),
-      ]);
-
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
       void _run.start({
-        inputData,
-        requestContext: finalRequestContext,
-        tracingOptions,
+        ...params,
       });
 
       return { message: 'Workflow run started' };
@@ -673,20 +584,8 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
   summary: 'Resume workflow asynchronously',
   description: 'Resumes a suspended workflow execution asynchronously without streaming',
   tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
+  handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
-      const {
-        step,
-        resumeData,
-        tracingOptions,
-        requestContext: workflowRequestContext,
-      } = params as {
-        step: string | string[];
-        resumeData?: unknown;
-        tracingOptions?: TracingOptions;
-        requestContext?: Record<string, unknown>;
-      };
-
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
@@ -707,19 +606,8 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      // Merge Context's requestContext with body's workflowRequestContext
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(workflowRequestContext ?? {})),
-      ]);
-
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      const result = await _run.resume({
-        step,
-        resumeData,
-        requestContext: finalRequestContext,
-        tracingOptions,
-      });
+      const result = await _run.resume(params);
 
       return result;
     } catch (error) {
@@ -739,20 +627,8 @@ export const RESUME_WORKFLOW_ROUTE = createRoute({
   summary: 'Resume workflow',
   description: 'Resumes a suspended workflow execution from a specific step',
   tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
+  handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
-      const {
-        step,
-        resumeData,
-        tracingOptions,
-        requestContext: workflowRequestContext,
-      } = params as {
-        step: string | string[];
-        resumeData?: unknown;
-        tracingOptions?: TracingOptions;
-        requestContext?: Record<string, unknown>;
-      };
-
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
@@ -773,20 +649,9 @@ export const RESUME_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      // Merge Context's requestContext with body's workflowRequestContext
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(workflowRequestContext ?? {})),
-      ]);
-
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
-      void _run.resume({
-        step,
-        resumeData,
-        requestContext: finalRequestContext,
-        tracingOptions,
-      });
+      void _run.resume(params);
 
       return { message: 'Workflow run resumed' };
     } catch (error) {
@@ -1127,18 +992,8 @@ export const STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
   summary: '[DEPRECATED] Stream workflow with legacy format',
   description: 'Legacy endpoint for streaming workflow execution. Use /api/workflows/:workflowId/stream instead.',
   tags: ['Workflows', 'Legacy'],
-  handler: async ({ mastra, requestContext, workflowId, runId, ...params }) => {
+  handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
-      const {
-        inputData,
-        tracingOptions,
-        requestContext: workflowRequestContext,
-      } = params as {
-        inputData?: unknown;
-        tracingOptions?: TracingOptions;
-        requestContext?: Record<string, unknown>;
-      };
-
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
@@ -1153,25 +1008,17 @@ export const STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
 
-      // Merge Context's requestContext with body's workflowRequestContext
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(workflowRequestContext ?? {})),
-      ]);
-
       const serverCache = mastra.getServerCache();
 
       const run = await workflow.createRun({ runId });
       const result = run.streamLegacy({
-        inputData,
-        requestContext: finalRequestContext,
+        ...params,
         onChunk: async chunk => {
           if (serverCache) {
             const cacheKey = runId;
             await serverCache.listPush(cacheKey, chunk);
           }
         },
-        tracingOptions,
       });
 
       return result.stream;

@@ -69,8 +69,8 @@ export const serializedAgentDefinitionSchema = z.object({
 const systemMessageSchema = z.union([
   z.string(),
   z.array(z.string()),
-  z.object({}).passthrough(), // CoreSystemMessage or SystemModelMessage
-  z.array(z.object({}).passthrough()),
+  z.any(), // CoreSystemMessage or SystemModelMessage
+  z.array(z.any()),
 ]);
 
 /**
@@ -101,9 +101,9 @@ export const serializedAgentSchema = z.object({
   modelId: z.string().optional(),
   modelVersion: z.string().optional(),
   modelList: z.array(modelConfigSchema).optional(),
-  defaultOptions: z.record(z.string(), z.unknown()).optional(),
-  defaultGenerateOptionsLegacy: z.record(z.string(), z.unknown()).optional(),
-  defaultStreamOptionsLegacy: z.record(z.string(), z.unknown()).optional(),
+  defaultOptions: z.record(z.string(), z.any()).optional(),
+  defaultGenerateOptionsLegacy: z.record(z.string(), z.any()).optional(),
+  defaultStreamOptionsLegacy: z.record(z.string(), z.any()).optional(),
 });
 
 /**
@@ -152,7 +152,7 @@ export const listToolsResponseSchema = z.record(z.string(), serializedToolSchema
 const agentMemoryOptionSchema = z.object({
   thread: z.union([z.string(), z.object({ id: z.string() }).passthrough()]),
   resource: z.string(),
-  options: z.record(z.string(), z.unknown()).optional(),
+  options: z.record(z.string(), z.any()).optional(),
   readOnly: z.boolean().optional(),
 });
 
@@ -189,45 +189,45 @@ export const agentExecutionBodySchema = z
     // Memory & Persistence
     memory: agentMemoryOptionSchema.optional(),
     resourceId: z.string().optional(), // @deprecated
+    resourceid: z.string().optional(),
     threadId: z.string().optional(), // @deprecated
     runId: z.string().optional(),
     savePerStep: z.boolean().optional(),
 
     // Request Context (handler-specific field - merged with server's requestContext)
-    requestContext: z.record(z.string(), z.unknown()).optional(),
+    requestContext: z.record(z.string(), z.any()).optional(),
 
     // Execution Control
     maxSteps: z.number().optional(),
-    stopWhen: z.object({}).passthrough().optional(),
+    stopWhen: z.any().optional(),
 
     // Model Configuration
     providerOptions: z
       .object({
-        anthropic: z.record(z.string(), z.unknown()).optional(),
-        google: z.record(z.string(), z.unknown()).optional(),
-        openai: z.record(z.string(), z.unknown()).optional(),
-        xai: z.record(z.string(), z.unknown()).optional(),
+        anthropic: z.record(z.string(), z.any()).optional(),
+        google: z.record(z.string(), z.any()).optional(),
+        openai: z.record(z.string(), z.any()).optional(),
+        xai: z.record(z.string(), z.any()).optional(),
       })
-      .passthrough()
       .optional(),
-    modelSettings: z.object({}).passthrough().optional(),
+    modelSettings: z.any().optional(),
 
     // Tool Configuration
     activeTools: z.array(z.string()).optional(),
-    toolsets: z.record(z.string(), z.unknown()).optional(),
-    clientTools: z.record(z.string(), z.unknown()).optional(),
+    toolsets: z.record(z.string(), z.any()).optional(),
+    clientTools: z.record(z.string(), z.any()).optional(),
     toolChoice: toolChoiceSchema.optional(),
     requireToolApproval: z.boolean().optional(),
 
     // Evaluation
     scorers: z
       .union([
-        z.array(z.unknown()),
+        z.record(z.string(), z.any()),
         z.record(
           z.string(),
           z.object({
             scorer: z.string(),
-            sampling: z.object({}).passthrough().optional(),
+            sampling: z.any().optional(),
           }),
         ),
       ])
@@ -238,15 +238,15 @@ export const agentExecutionBodySchema = z
     tracingOptions: tracingOptionsSchema.optional(),
 
     // Structured Output
-    output: z.unknown().optional(), // Zod schema, JSON schema, or structured output object
+    output: z.any().optional(), // Zod schema, JSON schema, or structured output object
     structuredOutput: z
       .object({
-        schema: z.unknown(),
-        model: z.union([z.string(), z.object({}).passthrough()]).optional(),
+        schema: z.object({}).passthrough(),
+        model: z.union([z.string(), z.any()]).optional(),
         instructions: z.string().optional(),
         jsonPromptInjection: z.boolean().optional(),
         errorStrategy: z.enum(['strict', 'warn', 'fallback']).optional(),
-        fallbackValue: z.unknown().optional(),
+        fallbackValue: z.any().optional(),
       })
       .optional(),
   })
@@ -255,7 +255,7 @@ export const agentExecutionBodySchema = z
 /**
  * Body schema for tool execute endpoint
  * Simple schema - tool validates its own input data
- * Note: Using z.custom() instead of z.unknown()/z.any() because those are treated as optional by Zod
+ * Note: Using z.custom() instead of z.any()/z.any() because those are treated as optional by Zod
  */
 
 const executeToolDataBodySchema = z.object({
@@ -263,11 +263,11 @@ const executeToolDataBodySchema = z.object({
 });
 
 export const executeToolBodySchema = executeToolDataBodySchema.extend({
-  requestContext: z.record(z.string(), z.unknown()).optional(),
+  requestContext: z.record(z.string(), z.any()).optional(),
 });
 
 export const executeToolContextBodySchema = executeToolDataBodySchema.extend({
-  requestContext: z.record(z.string(), z.unknown()).optional(),
+  requestContext: z.record(z.string(), z.any()).optional(),
 });
 
 /**
@@ -292,7 +292,7 @@ export const voiceSpeakersResponseSchema = z.array(
  */
 const toolCallActionBodySchema = z.object({
   runId: z.string(),
-  requestContext: z.record(z.string(), z.unknown()).optional(),
+  requestContext: z.record(z.string(), z.any()).optional(),
   toolCallId: z.string(),
   format: z.string().optional(),
 });
@@ -368,8 +368,8 @@ export const generateSpeechBodySchema = z.object({
  * Body schema for transcribing speech
  */
 export const transcribeSpeechBodySchema = z.object({
-  audioData: z.unknown(), // Buffer
-  options: z.record(z.string(), z.unknown()).optional(),
+  audioData: z.any(), // Buffer
+  options: z.record(z.string(), z.any()).optional(),
 });
 
 /**
@@ -382,13 +382,13 @@ export const transcribeSpeechResponseSchema = z.object({
 /**
  * Response schema for get listener
  */
-export const getListenerResponseSchema = z.unknown(); // Listener info structure varies
+export const getListenerResponseSchema = z.any(); // Listener info structure varies
 
 /**
  * Response schema for agent generation endpoints
  * These return AI SDK types which have complex structures
  */
-export const generateResponseSchema = z.unknown(); // AI SDK GenerateResult type
-export const streamResponseSchema = z.unknown(); // AI SDK StreamResult type
-export const speakResponseSchema = z.unknown(); // Voice synthesis result
-export const executeToolResponseSchema = z.unknown(); // Tool execution result varies by tool
+export const generateResponseSchema = z.any(); // AI SDK GenerateResult type
+export const streamResponseSchema = z.any(); // AI SDK StreamResult type
+export const speakResponseSchema = z.any(); // Voice synthesis result
+export const executeToolResponseSchema = z.any(); // Tool execution result varies by tool

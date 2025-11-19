@@ -486,22 +486,13 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
   description: 'Executes an agent action via JSON-RPC 2.0 over A2A protocol',
   tags: ['Agent-to-Agent'],
   handler: async ({ mastra, agentId, requestContext, taskStore, ...bodyParams }) => {
-    const {
-      id: requestId,
-      method,
-      params,
-    } = bodyParams as {
-      jsonrpc: '2.0';
-      id: string | number;
-      method: 'message/send' | 'message/stream' | 'tasks/get' | 'tasks/cancel';
-      params: MessageSendParams | TaskQueryParams | TaskIdParams;
-    };
+    const { id: requestId, method, params } = bodyParams;
 
     return await getAgentExecutionHandler({
       requestId: String(requestId),
       mastra,
       agentId: agentId as string,
-      requestContext: requestContext ?? new RequestContext(),
+      requestContext,
       method,
       params,
       taskStore: taskStore!,

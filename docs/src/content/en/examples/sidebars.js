@@ -17,12 +17,6 @@ const sidebars = {
       label: "Agents",
       collapsed: true,
       items: [
-        { type: "doc", id: "agents/calling-agents", label: "Calling Agents" },
-        {
-          type: "doc",
-          id: "agents/system-prompt",
-          label: "Changing the System Prompt",
-        },
         {
           type: "doc",
           id: "agents/supervisor-agent",
@@ -30,11 +24,6 @@ const sidebars = {
         },
         { type: "doc", id: "agents/image-analysis", label: "Image Analysis" },
         { type: "doc", id: "agents/request-context", label: "Request Context" },
-        {
-          type: "doc",
-          id: "agents/ai-sdk-v5-integration",
-          label: "AI SDK v5 Integration",
-        },
         {
           type: "doc",
           id: "agents/whatsapp-chat-bot",

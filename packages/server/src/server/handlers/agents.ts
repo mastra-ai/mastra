@@ -6,7 +6,7 @@ import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
-import type { z } from 'zod';
+import { z } from 'zod';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -46,6 +46,13 @@ export interface SerializedTool {
   requireApproval?: boolean;
 }
 
+interface SerializedToolInput {
+  id?: string;
+  description?: string;
+  inputSchema?: { jsonSchema?: unknown } | unknown;
+  outputSchema?: { jsonSchema?: unknown } | unknown;
+}
+
 export interface SerializedWorkflow {
   name: string;
   steps?: Record<string, { id: string; description?: string }>;
@@ -82,57 +89,52 @@ export interface SerializedAgentWithId extends SerializedAgent {
   id: string;
 }
 
-export async function getSerializedAgentTools(tools: Record<string, unknown>): Promise<Record<string, SerializedTool>> {
+export async function getSerializedAgentTools(
+  tools: Record<string, SerializedToolInput>,
+): Promise<Record<string, SerializedTool>> {
   return Object.entries(tools || {}).reduce<Record<string, SerializedTool>>((acc, [key, tool]) => {
-    const _tool = tool as {
-      id?: string;
-      description?: string;
-      inputSchema?: { jsonSchema?: unknown } | unknown;
-      outputSchema?: { jsonSchema?: unknown } | unknown;
-    };
-
-    const toolId = _tool.id ?? `tool-${key}`;
+    const toolId = tool.id ?? `tool-${key}`;
 
     let inputSchemaForReturn: string | undefined = undefined;
     let outputSchemaForReturn: string | undefined = undefined;
 
     try {
-      if (_tool.inputSchema) {
-        if (_tool.inputSchema && typeof _tool.inputSchema === 'object' && 'jsonSchema' in _tool.inputSchema) {
-          inputSchemaForReturn = stringify(_tool.inputSchema.jsonSchema);
-        } else if (typeof _tool.inputSchema === 'function') {
-          const inputSchema = _tool.inputSchema();
+      if (tool.inputSchema) {
+        if (tool.inputSchema && typeof tool.inputSchema === 'object' && 'jsonSchema' in tool.inputSchema) {
+          inputSchemaForReturn = stringify(tool.inputSchema.jsonSchema);
+        } else if (typeof tool.inputSchema === 'function') {
+          const inputSchema = tool.inputSchema();
           if (inputSchema && inputSchema.jsonSchema) {
             inputSchemaForReturn = stringify(inputSchema.jsonSchema);
           }
-        } else if (_tool.inputSchema) {
-          inputSchemaForReturn = stringify(zodToJsonSchema(_tool.inputSchema as Parameters<typeof zodToJsonSchema>[0]));
+        } else if (tool.inputSchema) {
+          inputSchemaForReturn = stringify(zodToJsonSchema(tool.inputSchema as Parameters<typeof zodToJsonSchema>[0]));
         }
       }
 
-      if (_tool.outputSchema) {
-        if (_tool.outputSchema && typeof _tool.outputSchema === 'object' && 'jsonSchema' in _tool.outputSchema) {
-          outputSchemaForReturn = stringify(_tool.outputSchema.jsonSchema);
-        } else if (typeof _tool.outputSchema === 'function') {
-          const outputSchema = _tool.outputSchema();
+      if (tool.outputSchema) {
+        if (tool.outputSchema && typeof tool.outputSchema === 'object' && 'jsonSchema' in tool.outputSchema) {
+          outputSchemaForReturn = stringify(tool.outputSchema.jsonSchema);
+        } else if (typeof tool.outputSchema === 'function') {
+          const outputSchema = tool.outputSchema();
           if (outputSchema && outputSchema.jsonSchema) {
             outputSchemaForReturn = stringify(outputSchema.jsonSchema);
           }
-        } else if (_tool.outputSchema) {
+        } else if (tool.outputSchema) {
           outputSchemaForReturn = stringify(
-            zodToJsonSchema(_tool.outputSchema as Parameters<typeof zodToJsonSchema>[0]),
+            zodToJsonSchema(tool.outputSchema as Parameters<typeof zodToJsonSchema>[0]),
           );
         }
       }
     } catch (error) {
       console.error(`Error getting serialized tool`, {
-        toolId: _tool.id,
+        toolId: tool.id,
         error,
       });
     }
 
     acc[key] = {
-      ..._tool,
+      ...tool,
       id: toolId,
       inputSchema: inputSchemaForReturn,
       outputSchema: outputSchemaForReturn,
@@ -437,7 +439,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
       const serializedAgentsMap = await Promise.all(
         Object.entries(agents).map(async ([id, agent]) => {
-          return formatAgentList({ id, mastra, agent, requestContext: requestContext ?? new RequestContext() });
+          return formatAgentList({ id, mastra, agent, requestContext });
         }),
       );
 
@@ -472,7 +474,7 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
       const result = await formatAgent({
         mastra,
         agent,
-        requestContext: requestContext ?? new RequestContext(),
+        requestContext,
         isPlayground,
       });
       return result;
@@ -495,7 +497,7 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
   summary: 'Generate agent response',
   description: 'Executes an agent with the provided messages and returns the complete response',
   tags: ['Agents'],
-  handler: async ({ agentId, mastra, requestContext, ...params }) => {
+  handler: async ({ agentId, mastra, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -503,19 +505,13 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, requestContext: agentRequestContext, ...rest } = params as any;
-
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(agentRequestContext ?? {})),
-      ]);
+      const { messages, ...rest } = params;
 
       validateBody({ messages });
 
       const result = await agent.generate(messages, {
         ...rest,
-        requestContext: finalRequestContext,
-        abortSignal: undefined, // TODO: Get abortSignal from context if needed
+        abortSignal,
       });
 
       return result;
@@ -536,7 +532,7 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
   summary: '[DEPRECATED] Generate with legacy format',
   description: 'Legacy endpoint for generating agent responses. Use /api/agents/:agentId/generate instead.',
   tags: ['Agents', 'Legacy'],
-  handler: async ({ mastra, requestContext, agentId, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -544,22 +540,21 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, resourceId, resourceid, requestContext: agentRequestContext, ...rest } = params as any;
+      const { messages, resourceId, resourceid, threadId, ...rest } = params;
       // Use resourceId if provided, fall back to resourceid (deprecated)
       const finalResourceId = resourceId ?? resourceid;
 
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(agentRequestContext ?? {})),
-      ]);
-
       validateBody({ messages });
+
+      if ((threadId && !finalResourceId) || (!threadId && finalResourceId)) {
+        throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
+      }
 
       const result = await agent.generateLegacy(messages, {
         ...rest,
-        abortSignal: undefined, // TODO: Get abortSignal from context if needed
-        resourceId: finalResourceId,
-        requestContext: finalRequestContext,
+        abortSignal,
+        resourceId: finalResourceId ?? '',
+        threadId: threadId ?? '',
       });
 
       return result;
@@ -579,7 +574,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
   summary: '[DEPRECATED] Stream with legacy format',
   description: 'Legacy endpoint for streaming agent responses. Use /api/agents/:agentId/stream instead.',
   tags: ['Agents', 'Legacy'],
-  handler: async ({ mastra, requestContext, agentId, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -587,22 +582,21 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, resourceId, resourceid, requestContext: agentRequestContext, ...rest } = params as any;
+      const { messages, resourceId, resourceid, threadId, ...rest } = params;
       // Use resourceId if provided, fall back to resourceid (deprecated)
       const finalResourceId = resourceId ?? resourceid;
 
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(agentRequestContext ?? {})),
-      ]);
-
       validateBody({ messages });
+
+      if ((threadId && !finalResourceId) || (!threadId && finalResourceId)) {
+        throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
+      }
 
       const streamResult = await agent.streamLegacy(messages, {
         ...rest,
-        abortSignal: undefined, // TODO: Get abortSignal from context if needed
-        resourceId: finalResourceId,
-        requestContext: finalRequestContext,
+        abortSignal,
+        resourceId: finalResourceId ?? '',
+        threadId: threadId ?? '',
       });
 
       const streamResponse = rest.output
@@ -689,7 +683,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   summary: 'Stream agent response',
   description: 'Executes an agent with the provided messages and streams the response in real-time',
   tags: ['Agents'],
-  handler: async ({ mastra, requestContext, agentId, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -697,18 +691,12 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, requestContext: agentRequestContext, ...rest } = params as any;
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(agentRequestContext ?? {})),
-      ]);
-
+      const { messages, ...rest } = params;
       validateBody({ messages });
 
       const streamResult = await agent.stream(messages, {
         ...rest,
-        requestContext: finalRequestContext,
-        abortSignal: undefined, // TODO: Get abortSignal from context if needed
+        abortSignal,
       });
 
       return streamResult.fullStream;
@@ -742,7 +730,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
   summary: 'Approve tool call',
   description: 'Approves a pending tool call and continues agent execution',
   tags: ['Agents', 'Tools'],
-  handler: async ({ mastra, requestContext, agentId, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -758,18 +746,9 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { runId, requestContext: agentRequestContext, ...rest } = params as any;
-
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(agentRequestContext ?? {})),
-      ]);
-
       const streamResult = await agent.approveToolCall({
-        ...rest,
-        runId,
-        requestContext: finalRequestContext,
-        abortSignal: undefined, // TODO: Get abortSignal from context if needed
+        ...params,
+        abortSignal,
       });
 
       return streamResult.fullStream;
@@ -790,7 +769,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
   summary: 'Decline tool call',
   description: 'Declines a pending tool call and continues agent execution without executing the tool',
   tags: ['Agents', 'Tools'],
-  handler: async ({ mastra, requestContext, agentId, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -806,18 +785,9 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { runId, requestContext: agentRequestContext, ...rest } = params as any;
-
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(agentRequestContext ?? {})),
-      ]);
-
       const streamResult = await agent.declineToolCall({
-        ...rest,
-        runId,
-        requestContext: finalRequestContext,
-        abortSignal: undefined, // TODO: Get abortSignal from context if needed
+        ...params,
+        abortSignal,
       });
 
       return streamResult.fullStream;
@@ -833,12 +803,12 @@ export const STREAM_NETWORK_ROUTE = createRoute({
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
   pathParamSchema: agentIdPathParams,
-  bodySchema: agentExecutionBodySchema,
+  bodySchema: agentExecutionBodySchema.extend({ thread: z.string().optional() }),
   responseSchema: streamResponseSchema,
   summary: 'Stream agent network',
   description: 'Executes an agent network with multiple agents and streams the response',
   tags: ['Agents'],
-  handler: async ({ mastra, requestContext, agentId, ...params }) => {
+  handler: async ({ mastra, messages, agentId, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -846,22 +816,15 @@ export const STREAM_NETWORK_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, requestContext: agentRequestContext, ...rest } = params as any;
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(agentRequestContext ?? {})),
-      ]);
-
       validateBody({ messages });
 
       const streamResult = await agent.network(messages, {
-        ...rest,
+        ...params,
         memory: {
-          thread: rest.thread ?? '',
-          resource: rest.resourceId ?? '',
-          options: rest.memory?.options ?? {},
+          thread: params.thread ?? params.threadId ?? '',
+          resource: params.resourceId ?? '',
+          options: params.memory?.options ?? {},
         },
-        requestContext: finalRequestContext,
       });
 
       return streamResult;
@@ -976,12 +939,12 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
 
       const updated = {
         ...modelConfig,
-        model: newModel as any,
+        model: newModel,
         ...(maxRetries !== undefined ? { maxRetries } : {}),
         ...(enabled !== undefined ? { enabled } : {}),
       };
 
-      agent.updateModelInModelList(updated as any);
+      agent.updateModelInModelList(updated);
 
       return { message: 'Model updated in model list' };
     } catch (error) {
@@ -1001,7 +964,7 @@ export const STREAM_VNEXT_DEPRECATED_ROUTE = createRoute({
   description: '[DEPRECATED] This endpoint is deprecated. Please use /stream instead.',
   tags: ['Agents'],
   handler: async () => {
-    throw new Error('This endpoint is deprecated. Please use /stream instead.');
+    throw new HTTPException(410, { message: 'This endpoint is deprecated. Please use /stream instead.' });
   },
 });
 
