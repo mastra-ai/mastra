@@ -146,7 +146,7 @@ describe('PgVector', () => {
 
     it('should throw error when pool is used after disconnect', async () => {
       await testDB.disconnect();
-      expect(testDB.pool.connect()).rejects.toThrow();
+      await expect(testDB.pool.connect()).rejects.toThrow();
     });
   });
 
