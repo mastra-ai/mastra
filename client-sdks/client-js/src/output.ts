@@ -459,7 +459,8 @@ export class MastraClientModelOutput<OUTPUT extends OutputSchema = undefined> {
   }
 
   /**
-   * Async iterator for consuming stream chunks.
+   * ReadableStream for consuming stream chunks.
+   * ReadableStream is async iterable, so you can use it with for-await-of loops.
    *
    * @example
    * ```typescript
@@ -471,23 +472,24 @@ export class MastraClientModelOutput<OUTPUT extends OutputSchema = undefined> {
    * }
    * ```
    */
-  get fullStream(): AsyncIterable<ChunkType<OUTPUT>> {
+  get fullStream(): ReadableStream<ChunkType<OUTPUT>> {
     const self = this;
 
-    return {
-      async *[Symbol.asyncIterator]() {
+    return new ReadableStream<ChunkType<OUTPUT>>({
+      async start(controller) {
         // Start consumption if not started
         if (!self.#consumptionStarted) {
           self.#consumptionStarted = true;
         }
 
-        // Yield all buffered chunks first
+        // Enqueue all buffered chunks first
         for (const chunk of self.#bufferedChunks) {
-          yield chunk;
+          controller.enqueue(chunk);
         }
 
         // If stream is finished, we're done
         if (self.#streamFinished) {
+          controller.close();
           return;
         }
 
@@ -496,14 +498,19 @@ export class MastraClientModelOutput<OUTPUT extends OutputSchema = undefined> {
         try {
           while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
-            yield value;
+            if (done) {
+              controller.close();
+              break;
+            }
+            controller.enqueue(value);
           }
+        } catch (error) {
+          controller.error(error);
         } finally {
           reader.releaseLock();
         }
       },
-    };
+    });
   }
 
   /**
@@ -725,24 +732,26 @@ export class MastraClientNetworkOutput {
   }
 
   /**
-   * Async iterable that yields all chunks
+   * ReadableStream that yields all chunks.
+   * ReadableStream is async iterable, so you can use it with for-await-of loops.
    */
-  get fullStream(): AsyncIterable<NetworkChunkType> {
+  get fullStream(): ReadableStream<NetworkChunkType> {
     const self = this;
-    return {
-      async *[Symbol.asyncIterator]() {
+    return new ReadableStream<NetworkChunkType>({
+      async start(controller) {
         // Mark consumption as started
         if (!self.#consumptionStarted) {
           self.#consumptionStarted = true;
         }
 
-        // First yield any buffered chunks
+        // First enqueue any buffered chunks
         for (const chunk of self.#bufferedChunks) {
-          yield chunk;
+          controller.enqueue(chunk);
         }
 
         // If stream already finished, we're done
         if (self.#streamFinished) {
+          controller.close();
           return;
         }
 
@@ -751,14 +760,19 @@ export class MastraClientNetworkOutput {
         try {
           while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
-            yield value;
+            if (done) {
+              controller.close();
+              break;
+            }
+            controller.enqueue(value);
           }
+        } catch (error) {
+          controller.error(error);
         } finally {
           reader.releaseLock();
         }
       },
-    };
+    });
   }
 
   /**
