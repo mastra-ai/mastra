@@ -1,7 +1,7 @@
 import { delay } from '@ai-sdk/provider-utils-v5';
 import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { tool } from 'ai-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2, mockValues, mockId } from 'ai-v5/test';
+import { convertArrayToReadableStream, mockValues, mockId } from 'ai-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
@@ -17,6 +17,7 @@ import {
   testUsage,
   testUsage2,
 } from './utils';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 
 export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('result.fullStream', () => {
