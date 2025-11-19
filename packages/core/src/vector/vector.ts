@@ -11,6 +11,7 @@ import type {
   QueryResult,
   UpdateVectorParams,
   DeleteVectorParams,
+  DeleteVectorsByFilterParams,
   DescribeIndexParams,
   DeleteIndexParams,
 } from './types';
@@ -51,6 +52,38 @@ export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
   abstract updateVector(params: UpdateVectorParams): Promise<void>;
 
   abstract deleteVector(params: DeleteVectorParams): Promise<void>;
+
+  /**
+   * Delete vectors matching a metadata filter.
+   *
+   * This enables bulk deletion and source-based vector management.
+   * Implementations should throw MastraError with appropriate error code
+   * if filter deletion is not supported.
+   *
+   * @param params - Parameters including indexName and filter
+   * @throws {MastraError} If filter deletion is not supported or filter is invalid
+   *
+   * @example
+   * ```ts
+   * // Delete all chunks from a document
+   * await vectorStore.deleteVectorsByFilter({
+   *   indexName: 'docs',
+   *   filter: { source_id: 'manual.pdf' }
+   * });
+   *
+   * // Delete old temporary documents
+   * await vectorStore.deleteVectorsByFilter({
+   *   indexName: 'docs',
+   *   filter: {
+   *     $and: [
+   *       { bucket: 'temp' },
+   *       { indexed_at: { $lt: '2025-01-01' } }
+   *     ]
+   *   }
+   * });
+   * ```
+   */
+  abstract deleteVectorsByFilter(params: DeleteVectorsByFilterParams<Filter>): Promise<void>;
 
   protected async validateExistingIndex(indexName: string, dimension: number, metric: string) {
     let info: IndexStats;

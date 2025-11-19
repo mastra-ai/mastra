@@ -10,6 +10,7 @@ import type {
   DeleteIndexParams,
   DeleteVectorParams,
   UpdateVectorParams,
+  DeleteVectorsByFilterParams,
 } from '@mastra/core/vector';
 import { ChromaClient, CloudClient } from 'chromadb';
 import type { ChromaClientArgs, RecordSet, Where, WhereDocument, Collection, Metadata } from 'chromadb';
@@ -414,5 +415,15 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
         error,
       );
     }
+  }
+
+  async deleteVectorsByFilter({ indexName, filter }: DeleteVectorsByFilterParams<ChromaVectorFilter>): Promise<void> {
+    throw new MastraError({
+      id: 'CHROMA_VECTOR_DELETE_BY_FILTER_NOT_SUPPORTED',
+      text: 'deleteVectorsByFilter is not yet implemented for Chroma vector store',
+      domain: ErrorDomain.MASTRA_VECTOR,
+      category: ErrorCategory.SYSTEM,
+      details: { indexName, filter: JSON.stringify(filter) },
+    });
   }
 }

@@ -12,6 +12,7 @@ import type {
   DeleteIndexParams,
   DeleteVectorParams,
   UpdateVectorParams,
+  DeleteVectorsByFilterParams,
 } from '@mastra/core/vector';
 import type { AstraVectorFilter } from './filter';
 import { AstraFilterTranslator } from './filter';
@@ -320,5 +321,15 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
         error,
       );
     }
+  }
+
+  async deleteVectorsByFilter({ indexName, filter }: DeleteVectorsByFilterParams): Promise<void> {
+    throw new MastraError({
+      id: 'ASTRA_VECTOR_DELETE_BY_FILTER_NOT_SUPPORTED',
+      text: 'deleteVectorsByFilter is not yet implemented for Astra vector store',
+      domain: ErrorDomain.MASTRA_VECTOR,
+      category: ErrorCategory.SYSTEM,
+      details: { indexName, filter: JSON.stringify(filter) },
+    });
   }
 }

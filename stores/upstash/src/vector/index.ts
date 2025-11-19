@@ -8,6 +8,7 @@ import type {
   DescribeIndexParams,
   IndexStats,
   QueryResult,
+  DeleteVectorsByFilterParams,
 } from '@mastra/core/vector';
 import { Index } from '@upstash/vector';
 
@@ -288,5 +289,15 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
       );
       this.logger?.error(mastraError.toString());
     }
+  }
+
+  async deleteVectorsByFilter({ indexName, filter }: DeleteVectorsByFilterParams): Promise<void> {
+    throw new MastraError({
+      id: 'STORAGE_UPSTASH_VECTOR_DELETE_BY_FILTER_NOT_SUPPORTED',
+      text: 'deleteVectorsByFilter is not yet implemented for Upstash vector store',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      details: { indexName, filter: JSON.stringify(filter) },
+    });
   }
 }

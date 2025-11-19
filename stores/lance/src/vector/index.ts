@@ -12,6 +12,7 @@ import type {
   QueryVectorParams,
   UpdateVectorParams,
   UpsertVectorParams,
+  DeleteVectorsByFilterParams,
 } from '@mastra/core/vector';
 
 import { MastraVector } from '@mastra/core/vector';
@@ -937,5 +938,15 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
     });
 
     return result;
+  }
+
+  async deleteVectorsByFilter({ indexName, filter }: DeleteVectorsByFilterParams<LanceVectorFilter>): Promise<void> {
+    throw new MastraError({
+      id: 'STORAGE_LANCE_VECTOR_DELETE_BY_FILTER_NOT_SUPPORTED',
+      text: 'deleteVectorsByFilter is not yet implemented for Lance vector store',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      details: { indexName, filter: JSON.stringify(filter) },
+    });
   }
 }

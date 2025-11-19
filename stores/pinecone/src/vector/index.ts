@@ -10,6 +10,7 @@ import type {
   DeleteIndexParams,
   DeleteVectorParams,
   UpdateVectorParams,
+  DeleteVectorsByFilterParams,
 } from '@mastra/core/vector';
 import { Pinecone } from '@pinecone-database/pinecone';
 import type {
@@ -372,5 +373,15 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
         error,
       );
     }
+  }
+
+  async deleteVectorsByFilter({ indexName, filter }: DeleteVectorsByFilterParams<PineconeVectorFilter>): Promise<void> {
+    throw new MastraError({
+      id: 'STORAGE_PINECONE_VECTOR_DELETE_BY_FILTER_NOT_SUPPORTED',
+      text: 'deleteVectorsByFilter is not yet implemented for Pinecone vector store',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      details: { indexName, filter: JSON.stringify(filter) },
+    });
   }
 }

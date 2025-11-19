@@ -30,13 +30,30 @@ export interface IndexStats {
   metric?: 'cosine' | 'euclidean' | 'dotproduct';
 }
 
-export interface UpsertVectorParams {
+export interface UpsertVectorParams<Filter = VectorFilter> {
   indexName: string;
   vectors: number[][];
   metadata?: Record<string, any>[];
   ids?: string[];
   /** Optional array of sparse vectors for hybrid search */
   sparseVectors?: SparseVector[];
+  /**
+   * Optional filter to delete vectors before upserting.
+   * Useful for replacing all chunks from a source document.
+   * The delete and insert operations happen atomically in a transaction.
+   *
+   * @example
+   * ```ts
+   * // Replace all chunks from a document
+   * await vectorStore.upsert({
+   *   indexName: 'docs',
+   *   vectors: embeddings,
+   *   metadata: chunks.map(c => ({ text: c.text, source_id: 'doc.pdf' })),
+   *   deleteFilter: { source_id: 'doc.pdf' }
+   * });
+   * ```
+   */
+  deleteFilter?: Filter;
 }
 
 export interface CreateIndexParams {
@@ -72,4 +89,22 @@ export interface UpdateVectorParams {
 export interface DeleteVectorParams {
   indexName: string;
   id: string;
+}
+
+export interface DeleteVectorsByFilterParams<Filter = VectorFilter> {
+  indexName: string;
+  /**
+   * Filter to match vectors for deletion.
+   * Uses the same filter syntax as query operations.
+   *
+   * @example
+   * ```ts
+   * // Delete all chunks from a document
+   * { source_id: 'document.pdf' }
+   *
+   * // Delete with multiple conditions
+   * { $and: [{ tenant_id: 'acme' }, { bucket: 'temp' }] }
+   * ```
+   */
+  filter: Filter;
 }

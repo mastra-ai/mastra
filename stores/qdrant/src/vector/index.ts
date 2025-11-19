@@ -10,6 +10,7 @@ import type {
   DeleteIndexParams,
   DeleteVectorParams,
   UpdateVectorParams,
+  DeleteVectorsByFilterParams,
 } from '@mastra/core/vector';
 import { QdrantClient } from '@qdrant/js-client-rest';
 import type { QdrantClientParams, Schemas } from '@qdrant/js-client-rest';
@@ -381,5 +382,15 @@ export class QdrantVector extends MastraVector {
       return parseInt(id, 10);
     }
     return id;
+  }
+
+  async deleteVectorsByFilter({ indexName, filter }: DeleteVectorsByFilterParams<QdrantVectorFilter>): Promise<void> {
+    throw new MastraError({
+      id: 'STORAGE_QDRANT_VECTOR_DELETE_BY_FILTER_NOT_SUPPORTED',
+      text: 'deleteVectorsByFilter is not yet implemented for Qdrant vector store',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      details: { indexName, filter: JSON.stringify(filter) },
+    });
   }
 }

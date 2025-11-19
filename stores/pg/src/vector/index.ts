@@ -10,6 +10,7 @@ import type {
   DescribeIndexParams,
   DeleteIndexParams,
   DeleteVectorParams,
+  DeleteVectorsByFilterParams,
   UpdateVectorParams,
 } from '@mastra/core/vector';
 import { Mutex } from 'async-mutex';
@@ -20,7 +21,7 @@ import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfi
 import type { PgVectorConfig } from '../shared/config';
 import { PGFilterTranslator } from './filter';
 import type { PGVectorFilter } from './filter';
-import { buildFilterQuery } from './sql-builder';
+import { buildFilterQuery, buildDeleteFilterQuery } from './sql-builder';
 import type { IndexConfig, IndexType } from './types';
 
 export interface PGIndexStats extends IndexStats {
@@ -339,13 +340,40 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     }
   }
 
-  async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
+  async upsert({
+    indexName,
+    vectors,
+    metadata,
+    ids,
+    deleteFilter,
+  }: UpsertVectorParams<PGVectorFilter>): Promise<string[]> {
     const { tableName } = this.getTableName(indexName);
 
     // Start a transaction
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+
+      // Step 1: If deleteFilter is provided, delete matching vectors first
+      if (deleteFilter) {
+        this.logger?.debug(`Deleting vectors matching filter before upsert`, { indexName, deleteFilter });
+
+        // Reuse the filter translation logic
+        const translatedFilter = this.transformFilter(deleteFilter);
+        const { sql: filterQuery, values: filterValues } = buildDeleteFilterQuery(translatedFilter);
+
+        const whereClause = filterQuery.trim().replace(/^WHERE\s+/i, '');
+        if (whereClause) {
+          const deleteQuery = `DELETE FROM ${tableName} WHERE ${whereClause}`;
+          const result = await client.query(deleteQuery, filterValues);
+          this.logger?.debug(`Deleted ${result.rowCount || 0} vectors before upsert`, {
+            indexName,
+            deletedCount: result.rowCount || 0,
+          });
+        }
+      }
+
+      // Step 2: Insert/update new vectors
       const vectorIds = ids || vectors.map(() => crypto.randomUUID());
 
       // Get the properly qualified vector type
@@ -366,6 +394,13 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       }
 
       await client.query('COMMIT');
+
+      this.logger?.debug(`Upserted ${vectors.length} vectors to ${indexName}`, {
+        indexName,
+        vectorCount: vectors.length,
+        hadDeleteFilter: !!deleteFilter,
+      });
+
       return vectorIds;
     } catch (error) {
       await client.query('ROLLBACK');
@@ -1130,6 +1165,84 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             indexName,
             id,
           },
+        },
+        error,
+      );
+      this.logger?.trackException(mastraError);
+      throw mastraError;
+    } finally {
+      client?.release();
+    }
+  }
+
+  /**
+   * Delete vectors matching a metadata filter.
+   * @param indexName - The name of the index containing the vectors.
+   * @param filter - The filter to match vectors for deletion.
+   * @returns A promise that resolves when the deletion is complete.
+   * @throws Will throw an error if the deletion operation fails.
+   */
+  async deleteVectorsByFilter({ indexName, filter }: DeleteVectorsByFilterParams<PGVectorFilter>): Promise<void> {
+    let client;
+    try {
+      client = await this.pool.connect();
+      const { tableName } = this.getTableName(indexName);
+
+      // Safety check: Don't allow empty filters to prevent accidental deletion of all vectors
+      if (!filter || Object.keys(filter).length === 0) {
+        throw new MastraError({
+          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_EMPTY_FILTER',
+          text: 'Cannot delete with empty filter. Use deleteIndex to delete all vectors.',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.USER,
+          details: { indexName },
+        });
+      }
+
+      // Translate filter using existing infrastructure
+      const translatedFilter = this.transformFilter(filter);
+      const { sql: filterQuery, values: filterValues } = buildDeleteFilterQuery(translatedFilter);
+
+      // Extract WHERE clause (remove "WHERE" prefix if present)
+      const whereClause = filterQuery.trim().replace(/^WHERE\s+/i, '');
+
+      if (!whereClause) {
+        throw new MastraError({
+          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_INVALID_FILTER',
+          text: 'Filter produced empty WHERE clause',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.USER,
+          details: { indexName, filter: JSON.stringify(filter) },
+        });
+      }
+
+      // Build delete query
+      const query = `
+        DELETE FROM ${tableName}
+        WHERE ${whereClause}
+      `;
+
+      // Execute with the filter parameters
+      const result = await client.query(query, filterValues);
+
+      this.logger?.info(`Deleted ${result.rowCount || 0} vectors from ${indexName} matching filter`, {
+        indexName,
+        filter,
+        deletedCount: result.rowCount || 0,
+      });
+    } catch (error: any) {
+      // Re-throw MastraErrors as-is
+      if (error instanceof MastraError) {
+        throw error;
+      }
+
+      // Wrap other errors
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_BY_FILTER_FAILED',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, filter: JSON.stringify(filter) },
         },
         error,
       );
