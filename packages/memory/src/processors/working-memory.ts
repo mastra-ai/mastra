@@ -1,10 +1,10 @@
+import type { MessageList } from '@mastra/core/agent/message-list';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { parseMemoryRuntimeContext } from '@mastra/core/memory';
 import type { MastraDBMessage } from '@mastra/core/memory';
 import type { InputProcessor } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
-import type { MessageList } from '@mastra/core/agent/message-list';
 
 export interface WorkingMemoryTemplate {
   format: 'markdown' | 'json';
@@ -127,6 +127,15 @@ export class WorkingMemory implements InputProcessor {
           format: 'markdown' as const,
           content: this.defaultWorkingMemoryTemplate,
         };
+      }
+
+      // Check if this is a routing agent (agent network append mode)
+      // Routing agents should not receive working memory instructions to avoid redundant tool calls
+      const isRoutingAgent = runtimeContext?.get('MastraMemory._agentNetworkAppend') === true;
+
+      if (isRoutingAgent) {
+        // For routing agents, return the messageList/messages unchanged
+        return messageList || messages;
       }
 
       // Format working memory instruction

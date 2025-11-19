@@ -147,7 +147,7 @@ export class ProcessorRunner {
         processableMessages = result;
       }
 
-      processorSpan?.end({ 
+      processorSpan?.end({
         output: processableMessages,
         attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
       });
@@ -373,21 +373,21 @@ export class ProcessorRunner {
         tag?: string;
         message?: any;
       }>;
-      
+
       if ('get' in result) {
         // Processor returned a MessageList - it has been modified in place
         // Update processableMessages to reflect ALL current messages for next processor
         processableMessages = messageList.get.all.db();
-        
+
         // Stop recording and capture mutations
         mutations = messageList.stopRecording();
       } else {
         // Processor returned an array - stop recording before clear/add (that's just internal plumbing)
         mutations = messageList.stopRecording();
-        
+
         // Clear and re-add since processor worked with array
         messageList.clear.input.db();
-        
+
         // Separate system messages from other messages since they need different handling
         const systemMessages = result.filter(m => m.role === 'system');
         const nonSystemMessages = result.filter(m => m.role !== 'system');
@@ -405,11 +405,11 @@ export class ProcessorRunner {
         if (nonSystemMessages.length > 0) {
           messageList.add(nonSystemMessages, 'input');
         }
-        
+
         processableMessages = result;
       }
 
-      processorSpan?.end({ 
+      processorSpan?.end({
         output: processableMessages,
         attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
       });

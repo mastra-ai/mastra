@@ -1,8 +1,8 @@
-import type { MemoryStorage } from '@mastra/core/storage';
 import type { MastraDBMessage } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import type { MemoryStorage } from '@mastra/core/storage';
 import { WorkingMemory } from '@mastra/memory';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Mock storage for testing
 const mockStorage = {
