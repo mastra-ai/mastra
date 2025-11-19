@@ -13,8 +13,11 @@ import {
   createTestModels,
   defaultSettings,
   modelWithDocumentSources,
+  modelWithReasoning,
   testUsage,
   createMessageListWithUserMessage,
+  modelWithFiles,
+  modelWithSources,
 } from './utils';
 
 export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
@@ -559,7 +562,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
         methodType: 'stream',
         runId,
         messageList,
-        models: createTestModels(),
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         ...defaultSettings(),
       });
 
@@ -733,7 +736,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
         methodType: 'stream',
         runId,
         messageList,
-        models: createTestModels(),
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
         ...defaultSettings(),
       });
 
@@ -867,7 +870,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
         methodType: 'stream',
         runId,
         messageList,
-        models: createTestModels(),
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
         ...defaultSettings(),
       });
 
