@@ -221,8 +221,8 @@ export const memoryStatusResponseSchema = z.object({
 export const memoryConfigResponseSchema = z.object({
   config: z.object({
     lastMessages: z.union([z.number(), z.literal(false)]).optional(),
-    semanticRecall: z.union([z.boolean(), z.object({}).passthrough()]).optional(),
-    workingMemory: z.object({}).passthrough().optional(),
+    semanticRecall: z.union([z.boolean(), z.any()]).optional(),
+    workingMemory: z.any().optional(),
   }),
 });
 

@@ -1,4 +1,3 @@
-import { RequestContext } from '@mastra/core/di';
 import { isVercelTool } from '@mastra/core/tools';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
@@ -125,18 +124,9 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Tool is not executable' });
       }
 
-      const { data, requestContext: toolRequestContext } = bodyParams as {
-        data?: unknown;
-        requestContext?: Record<string, unknown>;
-      };
+      const { data } = bodyParams;
 
       validateBody({ data });
-
-      // Merge Context's requestContext with body's toolRequestContext
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(toolRequestContext ?? {})),
-      ]);
 
       if (isVercelTool(tool)) {
         const result = await (tool as any).execute(data);
@@ -145,7 +135,7 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
 
       const result = await tool.execute(data!, {
         mastra,
-        requestContext: finalRequestContext,
+        requestContext,
         // TODO: Pass proper tracing context when server API supports tracing
         tracingContext: { currentSpan: undefined },
         ...(runId
