@@ -54,7 +54,6 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
     <TabItem value="openai" label="Open AI">
 
     ```ts copy title="src/mastra/agents/searchAgent.ts"
-    import { openai } from "@ai-sdk/openai";
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
@@ -62,7 +61,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
-        model: openai("gpt-4.1-mini"),
+        model: "openai/gpt-4.1-mini",
     });
     ```
 
@@ -70,7 +69,6 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
     <TabItem value="gemini" label="Gemini">
 
     ```ts copy title="src/mastra/agents/searchAgent.ts"
-    import { google } from "@ai-sdk/google";
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
@@ -78,7 +76,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
-        model: google("gemini-2.5-flash"),
+        model: "google/gemini-2.5-flash",
     });
     ```
 
@@ -95,7 +93,7 @@ Setup the tool:
 <Tabs>
     <TabItem value="openai" label="Open AI">
 
-    ```ts copy title="src/mastra/agents/searchAgent.ts" {9-11}
+    ```ts copy title="src/mastra/agents/searchAgent.ts" {9-12}
     import { openai } from "@ai-sdk/openai";
     import { Agent } from "@mastra/core/agent";
 
@@ -104,7 +102,7 @@ Setup the tool:
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
-        model: openai("gpt-4.1-mini"),
+        model: "openai/gpt-4.1-mini",
         tools: {
             webSearch: openai.tools.webSearch()
         }
@@ -114,7 +112,7 @@ Setup the tool:
     </TabItem>
     <TabItem value="gemini" label="Gemini">
 
-    ```ts copy title="src/mastra/agents/searchAgent.ts" {9-11}
+    ```ts copy title="src/mastra/agents/searchAgent.ts" {9-12}
     import { google } from "@ai-sdk/google";
     import { Agent } from "@mastra/core/agent";
 
@@ -123,9 +121,9 @@ Setup the tool:
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
-        model: google("gemini-2.5-flash"),
+        model: "google/gemini-2.5-flash",
         tools: {
-            webSearch: google.tools.googleSearch()
+            webSearch: google.tools.googleSearch
         }
     });
     ```
@@ -186,7 +184,6 @@ npm install exa-js
 Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
 
 ```ts copy title="src/mastra/agents/searchAgent.ts"
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const searchAgent = new Agent({
@@ -194,7 +191,7 @@ export const searchAgent = new Agent({
   name: "Search Agent",
   instructions:
     "You are a search agent that can search the web for information.",
-  model: openai("gpt-4.1-mini"),
+  model: "openai/gpt-4.1-mini",
 });
 ```
 
@@ -248,7 +245,6 @@ export const webSearch = createTool({
 Add to your Agent
 
 ```ts copy title="src/mastra/agents/searchAgent.ts"
-import { openai } from "@ai-sdk/openai";
 import { webSearch } from "./tools/searchTool";
 
 export const searchAgent = new Agent({
@@ -256,7 +252,7 @@ export const searchAgent = new Agent({
   name: "Search Agent",
   instructions:
     "You are a search agent that can search the web for information.",
-  model: openai("gpt-4.1-mini"),
+  model: "openai/gpt-4.1-mini",
   tools: {
     webSearch,
   },
