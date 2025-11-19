@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SERVER_ROUTES } from '@mastra/server/server-adapter';
+import { SERVER_ROUTES } from '../server-adapter/routes';
 
 /**
  * Extract path parameters from a path pattern
