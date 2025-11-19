@@ -495,7 +495,7 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
   summary: 'Generate agent response',
   description: 'Executes an agent with the provided messages and returns the complete response',
   tags: ['Agents'],
-  handler: async ({ agentId, mastra, requestContext, ...params }) => {
+  handler: async ({ agentId, mastra, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -503,18 +503,12 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, requestContext: agentRequestContext, ...rest } = params as any;
-
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(agentRequestContext ?? {})),
-      ]);
+      const { messages, ...rest } = params as any;
 
       validateBody({ messages });
 
       const result = await agent.generate(messages, {
         ...rest,
-        requestContext: finalRequestContext,
         abortSignal: undefined, // TODO: Get abortSignal from context if needed
       });
 
@@ -536,7 +530,7 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
   summary: '[DEPRECATED] Generate with legacy format',
   description: 'Legacy endpoint for generating agent responses. Use /api/agents/:agentId/generate instead.',
   tags: ['Agents', 'Legacy'],
-  handler: async ({ mastra, requestContext, agentId, ...params }) => {
+  handler: async ({ mastra, agentId, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -544,14 +538,9 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, resourceId, resourceid, requestContext: agentRequestContext, ...rest } = params as any;
+      const { messages, resourceId, resourceid, ...rest } = params as any;
       // Use resourceId if provided, fall back to resourceid (deprecated)
       const finalResourceId = resourceId ?? resourceid;
-
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(agentRequestContext ?? {})),
-      ]);
 
       validateBody({ messages });
 
@@ -559,7 +548,6 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
         ...rest,
         abortSignal: undefined, // TODO: Get abortSignal from context if needed
         resourceId: finalResourceId,
-        requestContext: finalRequestContext,
       });
 
       return result;
@@ -579,7 +567,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
   summary: '[DEPRECATED] Stream with legacy format',
   description: 'Legacy endpoint for streaming agent responses. Use /api/agents/:agentId/stream instead.',
   tags: ['Agents', 'Legacy'],
-  handler: async ({ mastra, requestContext, agentId, ...params }) => {
+  handler: async ({ mastra, agentId, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -587,14 +575,9 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, resourceId, resourceid, requestContext: agentRequestContext, ...rest } = params as any;
+      const { messages, resourceId, resourceid, ...rest } = params as any;
       // Use resourceId if provided, fall back to resourceid (deprecated)
       const finalResourceId = resourceId ?? resourceid;
-
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(agentRequestContext ?? {})),
-      ]);
 
       validateBody({ messages });
 
@@ -602,7 +585,6 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
         ...rest,
         abortSignal: undefined, // TODO: Get abortSignal from context if needed
         resourceId: finalResourceId,
-        requestContext: finalRequestContext,
       });
 
       const streamResponse = rest.output
@@ -689,7 +671,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   summary: 'Stream agent response',
   description: 'Executes an agent with the provided messages and streams the response in real-time',
   tags: ['Agents'],
-  handler: async ({ mastra, requestContext, agentId, ...params }) => {
+  handler: async ({ mastra, agentId, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -697,17 +679,11 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, requestContext: agentRequestContext, ...rest } = params as any;
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(agentRequestContext ?? {})),
-      ]);
-
+      const { messages, ...rest } = params;
       validateBody({ messages });
 
-      const streamResult = await agent.stream(messages, {
+      const streamResult = await agent.stream(messages as any, {
         ...rest,
-        requestContext: finalRequestContext,
         abortSignal: undefined, // TODO: Get abortSignal from context if needed
       });
 

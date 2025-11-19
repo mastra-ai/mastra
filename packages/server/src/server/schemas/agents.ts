@@ -69,8 +69,8 @@ export const serializedAgentDefinitionSchema = z.object({
 const systemMessageSchema = z.union([
   z.string(),
   z.array(z.string()),
-  z.object({}).passthrough(), // CoreSystemMessage or SystemModelMessage
-  z.array(z.object({}).passthrough()),
+  z.any(), // CoreSystemMessage or SystemModelMessage
+  z.array(z.any()),
 ]);
 
 /**

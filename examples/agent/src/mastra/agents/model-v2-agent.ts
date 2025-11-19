@@ -1,37 +1,29 @@
 import { Agent } from '@mastra/core/agent';
 import { openai, openai as openai_v5 } from '@ai-sdk/openai-v5';
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
 import { lessComplexWorkflow, myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
 import { ModerationProcessor } from '@mastra/core/processors';
 import { logDataMiddleware } from '../../model-middleware';
 import { APICallError, wrapLanguageModel } from 'ai-v5';
-import { cookingTool } from '../tools';
-
-export const weatherInfo = createTool({
-  id: 'weather-info',
-  description: 'Fetches the current weather information for a given city',
-  inputSchema: z.object({
-    city: z.string(),
-  }),
-  execute: async inputData => {
-    return {
-      city: inputData.city,
-      weather: 'sunny',
-      temperature_celsius: 19,
-      temperature_fahrenheit: 66,
-      humidity: 50,
-      wind: '10 mph',
-    };
-  },
-  // requireApproval: true,
-});
+import { cookingTool, weatherTool } from '../tools';
 
 const memory = new Memory({
   options: {
     workingMemory: {
       enabled: true,
+      scope: 'thread', // Default - memory is isolated per thread
+      template: `# City Profile
+        - **location**:
+        - **temperature**:
+        - **feelsLike**:
+        - **humidity**:
+        - **wind**:
+        - **windSpeed**:
+        - **windGust**:
+        - **conditions**:
+        - **time**:
+        - **date**:
+      `,
     },
   },
 });
@@ -63,7 +55,7 @@ export const chefModelV2Agent = new Agent({
   }),
 
   tools: {
-    weatherInfo,
+    weatherTool,
     cookingTool,
   },
   workflows: {
@@ -99,11 +91,12 @@ const weatherAgent = new Agent({
   description: `An agent that can help you get a recipe for a given ingredient`,
   model: openai_v5('gpt-4o-mini'),
   tools: {
-    weatherInfo,
+    weatherTool,
   },
   workflows: {
     myWorkflow,
   },
+  memory,
 });
 
 export const networkAgent = new Agent({

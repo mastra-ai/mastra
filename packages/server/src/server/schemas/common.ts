@@ -107,7 +107,7 @@ export const coreMessageSchema = z.object({
         })
         .passthrough(), // Preserve additional fields like text, image, toolCall, etc.
     ),
-    z.object({}).passthrough(), // For complex message content objects
+    z.any(), // For complex message content objects
   ]),
 });
 
