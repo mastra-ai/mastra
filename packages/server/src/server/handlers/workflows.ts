@@ -671,13 +671,8 @@ export const RESTART_ASYNC_WORKFLOW_ROUTE = createRoute({
   summary: 'Restart workflow asynchronously',
   description: 'Restarts an active workflow execution asynchronously without streaming',
   tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
+  handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
-      const { tracingOptions, requestContext: workflowRequestContext } = params as {
-        tracingOptions?: TracingOptions;
-        requestContext?: Record<string, unknown>;
-      };
-
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
@@ -698,17 +693,8 @@ export const RESTART_ASYNC_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      // Merge Context's requestContext with body's workflowRequestContext
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(workflowRequestContext ?? {})),
-      ]);
-
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      const result = await _run.restart({
-        requestContext: finalRequestContext,
-        tracingOptions,
-      });
+      const result = await _run.restart(params);
 
       return result;
     } catch (error) {
@@ -728,13 +714,8 @@ export const RESTART_WORKFLOW_ROUTE = createRoute({
   summary: 'Restart workflow',
   description: 'Restarts an active workflow execution',
   tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
+  handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
-      const { tracingOptions, requestContext: workflowRequestContext } = params as {
-        tracingOptions?: TracingOptions;
-        requestContext?: Record<string, unknown>;
-      };
-
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
@@ -755,18 +736,9 @@ export const RESTART_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      // Merge Context's requestContext with body's workflowRequestContext
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(workflowRequestContext ?? {})),
-      ]);
-
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
-      void _run.restart({
-        requestContext: finalRequestContext,
-        tracingOptions,
-      });
+      void _run.restart(params);
 
       return { message: 'Workflow run restarted' };
     } catch (error) {
@@ -883,28 +855,23 @@ export const TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE = createRoute({
 
 export const TIME_TRAVEL_WORKFLOW_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/workflows/:workflowId/restart',
+  path: '/api/workflows/:workflowId/time-travel',
   responseType: 'json',
   pathParamSchema: workflowIdPathParams,
   queryParamSchema: runIdSchema,
-  bodySchema: restartBodySchema,
+  bodySchema: timeTravelBodySchema,
   responseSchema: workflowControlResponseSchema,
-  summary: 'Restart workflow',
-  description: 'Restarts an active workflow execution',
+  summary: 'Time travel workflow',
+  description: 'Time travels an active workflow execution',
   tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
+  handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
-      const { tracingOptions, requestContext: workflowRequestContext } = params as {
-        tracingOptions?: TracingOptions;
-        requestContext?: Record<string, unknown>;
-      };
-
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to restart workflow' });
+        throw new HTTPException(400, { message: 'runId required to time travel workflow' });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -919,22 +886,13 @@ export const TIME_TRAVEL_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      // Merge Context's requestContext with body's workflowRequestContext
-      const finalRequestContext = new RequestContext<Record<string, unknown>>([
-        ...Array.from(requestContext?.entries() ?? []),
-        ...Array.from(Object.entries(workflowRequestContext ?? {})),
-      ]);
-
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
-      void _run.restart({
-        requestContext: finalRequestContext,
-        tracingOptions,
-      });
+      void _run.timeTravel(params);
 
-      return { message: 'Workflow run restarted' };
+      return { message: 'Workflow run time travel started' };
     } catch (error) {
-      return handleError(error, 'Error restarting workflow');
+      return handleError(error, 'Error time traveling workflow');
     }
   },
 });
