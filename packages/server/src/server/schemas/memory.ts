@@ -89,12 +89,14 @@ const threadSchema = z.object({
  * Message structure for storage
  * Extends coreMessageSchema with storage-specific fields
  */
-const messageSchema = coreMessageSchema.extend({
-  id: z.string(),
-  createdAt: z.coerce.date(),
-  threadId: z.string().optional(),
-  resourceId: z.string().optional(),
-});
+const messageSchema = coreMessageSchema.and(
+  z.object({
+    id: z.string(),
+    createdAt: z.coerce.date(),
+    threadId: z.string().optional(),
+    resourceId: z.string().optional(),
+  }),
+);
 
 // ============================================================================
 // Query Parameter Schemas

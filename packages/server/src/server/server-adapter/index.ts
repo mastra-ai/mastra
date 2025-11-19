@@ -1,4 +1,5 @@
 import type { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import type { Tool } from '@mastra/core/tools';
 import { generateOpenAPIDocument } from './openapi-utils';
 import { SERVER_ROUTES } from './routes';
@@ -37,6 +38,19 @@ export abstract class MastraServerAdapter<TApp, TRequest, TResponse> {
     this.mastra = mastra;
     this.bodyLimitOptions = bodyLimitOptions;
     this.tools = tools;
+  }
+
+  protected mergeRequestContext({
+    paramsRequestContext,
+    bodyRequestContext,
+  }: {
+    paramsRequestContext: Record<string, any>;
+    bodyRequestContext: Record<string, any>;
+  }): RequestContext {
+    return new RequestContext([
+      ...Array.from(Object.entries(bodyRequestContext)),
+      ...Array.from(Object.entries(paramsRequestContext)),
+    ]);
   }
 
   abstract stream(route: ServerRoute, response: TResponse, result: unknown): Promise<unknown>;
