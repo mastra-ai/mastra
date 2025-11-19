@@ -180,7 +180,6 @@ export class DeepgramVoice extends MastraVoice {
     audioStream: NodeJS.ReadableStream,
     options?: {
       diarize?: boolean;
-      diarize_speaker_count?: number;
       [key: string]: any;
     },
   ): Promise<any> {
@@ -227,7 +226,7 @@ export class DeepgramVoice extends MastraVoice {
       raw: result
     };
 
-    if (options?.diarize && alt.words) {
+    if (diarize && alt.words) {
       response.speakerSegments = alt.words.map((w: DeepgramWord) => ({
         word: w.word,
         speaker: w.speaker,
