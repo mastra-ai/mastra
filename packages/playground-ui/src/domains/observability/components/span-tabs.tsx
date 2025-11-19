@@ -69,7 +69,12 @@ export function SpanTabs({
                 <CircleGaugeIcon /> Scoring
               </Section.Heading>
             </Section.Header>
-            <SpanScoring traceId={trace?.traceId} spanId={span?.spanId} entityType={entityType} />
+            <SpanScoring
+              traceId={trace?.traceId}
+              isTopLevelSpan={span?.parentSpanId === null}
+              spanId={span?.spanId}
+              entityType={entityType}
+            />
           </Section>
           <Section>
             <Section.Header>
