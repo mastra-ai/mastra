@@ -69,6 +69,11 @@
       "source": "/docs/v1/getting-started/installation",
       "destination": "/guides/v1/quickstarts/standalone-server",
       "permanent": true
+    },
+    {
+      "source": "/examples/v1/agents/ai-sdk-v5-integration",
+      "destination": "/guides/v1/quickstarts/nextjs",
+      "permanent": true
     }
   ]
 }
