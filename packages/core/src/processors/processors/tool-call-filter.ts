@@ -48,10 +48,7 @@ export class ToolCallFilter implements InputProcessor {
     abort: (reason?: string) => never;
     runtimeContext?: RequestContext;
   }): Promise<MessageList | MastraDBMessage[]> {
-    const { messages, messageList } = args;
-
-    // Filter all messages in the MessageList
-    const messagesToFilter = messageList.get.all.db();
+    const { messages } = args;
 
     // Helper to check if a message has tool invocations
     const hasToolInvocations = (message: MastraDBMessage): boolean => {
@@ -69,7 +66,7 @@ export class ToolCallFilter implements InputProcessor {
 
     // Case 1: Exclude all tool calls and tool results
     if (this.exclude === 'all') {
-      const result = messagesToFilter
+      const result = messages
         .map(message => {
           // Skip messages with tool invocations - they'll be filtered by sanitizeAIV4UIMessages
           if (!hasToolInvocations(message)) {
@@ -120,7 +117,7 @@ export class ToolCallFilter implements InputProcessor {
       const excludedToolCallIds = new Set<string>();
 
       // First pass: identify excluded tool call IDs
-      for (const message of messagesToFilter) {
+      for (const message of messages) {
         const toolInvocations = getToolInvocations(message);
         for (const part of toolInvocations) {
           const invocationPart = part as unknown as V2ToolInvocationPart;
@@ -135,7 +132,7 @@ export class ToolCallFilter implements InputProcessor {
       }
 
       // Second pass: filter out excluded tool invocation parts
-      const filteredMessages = messagesToFilter
+      const filteredMessages = messages
         .map(message => {
           if (!hasToolInvocations(message)) {
             return message;
