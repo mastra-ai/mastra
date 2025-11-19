@@ -446,7 +446,7 @@ export const testAgent = new Agent({
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
     return userTier === "enterprise"
-      ? "openai/gpt-4.1-mini"
+      ? "openai/gpt-5"
       : "openai/gpt-4.1-nano";
   },
 });
