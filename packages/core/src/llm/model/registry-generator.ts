@@ -31,7 +31,13 @@ export async function fetchProvidersFromGateways(
         for (const [providerId, config] of Object.entries(providers)) {
           // If gateway has a prefix, prepend it to the provider ID for type generation
           // This creates paths like: prefix/provider/model
-          const typeProviderId = gatewayPrefix ? `${gatewayPrefix}/${providerId}` : providerId;
+          //
+          // NOTE: Avoid doubling the prefix when provider ID equals gateway prefix.
+          // Some gateways (Azure) return a single provider whose ID matches
+          // the gateway prefix. Without this check, we'd get duplicates.
+
+          const typeProviderId =
+            gatewayPrefix && gatewayPrefix !== providerId ? `${gatewayPrefix}/${providerId}` : providerId;
 
           allProviders[typeProviderId] = config;
           // Sort models alphabetically for consistent ordering

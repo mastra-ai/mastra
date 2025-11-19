@@ -3,6 +3,9 @@ title: "Azure OpenAI | Gateways | Mastra"
 description: "Use Azure OpenAI Service with custom model deployments."
 ---
 
+{/* This file is MANUALLY MAINTAINED - DO NOT AUTO-GENERATE */}
+{/* Azure uses deployment-based routing which differs from standard providers */}
+
 # <img src="https://models.dev/logos/azure.svg" alt="Azure OpenAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Azure OpenAI
 
 Azure OpenAI provides enterprise-grade access to OpenAI models through dedicated deployments with security, compliance, and SLA guarantees.
@@ -17,6 +20,12 @@ The deployment name is **specific to your Azure account** and chosen when you cr
 - `azure/my-gpt4-deployment`
 - `azure/production-gpt-35-turbo`
 - `azure/staging-gpt-4o`
+
+:::note About IDE Autocomplete
+Your IDE may suggest deployment names like `azure/gpt-4o` when typing `model: "azure/"`. These are **example deployment names**, not your actual deployments.
+
+Azure uses custom deployment names that you configure in Azure Portal. Replace autocomplete suggestions with your own deployment names.
+:::
 
 ## Setup
 
@@ -36,9 +45,11 @@ From your Azure OpenAI resource:
 - **API Key**: Under "Keys and Endpoint"
 - **Region**: Your resource's Azure region
 
-### Step 3: Configure Environment Variables
+### Step 3: Configure Runtime Credentials
 
-#### Required (for API calls)
+Add these credentials to your `.env` file:
+
+#### Required
 
 ```bash
 AZURE_RESOURCE_NAME=my-openai-resource
@@ -52,19 +63,7 @@ AZURE_API_KEY=xxxxxxxxxxxxxxxxxxxxx
 OPENAI_API_VERSION=2024-04-01-preview
 ```
 
-#### For TypeScript Autocomplete (Optional)
-
-To get IDE autocomplete for your deployment names, provide Azure Management API credentials:
-
-```bash
-AZURE_TENANT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-AZURE_CLIENT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-AZURE_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxxx
-AZURE_SUBSCRIPTION_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-AZURE_RESOURCE_GROUP=my-resource-group
-```
-
-When these are set, Mastra will fetch your deployment names and provide autocomplete in your IDE.
+These credentials authenticate your application's API calls to Azure OpenAI Service.
 
 ## Usage
 
@@ -149,31 +148,40 @@ az cognitiveservices account deployment list \
   --resource-group my-resource-group
 ```
 
-### Option 3: IDE Autocomplete
-When Management API credentials are configured (see Setup Step 3), Mastra automatically fetches your deployments and provides autocomplete:
+### Option 3: IDE Autocomplete (Example Names)
+
+Your IDE provides autocomplete suggestions:
 
 ```typescript
 const agent = new Agent({
-  model: "azure/"  // ← Autocomplete shows your deployments
+  model: "azure/"  // ← Autocomplete shows example deployment names
 });
 ```
 
+:::warning
+Autocomplete suggestions are **examples only**. Your actual deployment names will differ. Use Azure Portal or CLI above to find your real deployment names.
+:::
+
 ## Troubleshooting
 
-### "Missing Azure Management API credentials"
+### "Deployment not found" or 404 Errors
 
-This warning appears if you haven't set the optional Management API credentials. You can either:
+**Cause:** The deployment name in your code doesn't match an actual deployment in your Azure account.
 
-**Option A**: Manually specify deployment names (no autocomplete)
+**Solution:**
+1. Find your deployment names using Azure Portal or CLI (see "Finding Your Deployment Names" above)
+2. Verify the name matches exactly (case-sensitive)
+3. Replace any autocomplete suggestions with your actual deployment name
+
 ```typescript
-model: "azure/my-deployment-name"
+// ❌ Wrong - using autocomplete example
+model: "azure/gpt-4o"
+
+// ✅ Correct - using your actual deployment from Azure Portal
+model: "azure/my-company-gpt4-deployment"
 ```
 
-**Option B**: Add Management API credentials for autocomplete (see Setup Step 3)
-
-### "Deployment not found"
-
-Verify:
+Also verify:
 1. Deployment exists in Azure Portal
 2. Deployment name matches exactly (case-sensitive)
 3. `AZURE_RESOURCE_NAME` is correct
@@ -186,14 +194,7 @@ Verify:
 - Check [Azure OpenAI Service regions](https://azure.microsoft.com/en-us/explore/global-infrastructure/products-by-region/?products=cognitive-services)
 
 ## Security Best Practices
-
-### Use Managed Identities
-For Azure-hosted applications, use Managed Identity instead of API keys:
-
-```typescript
-// Configure Azure SDK to use DefaultAzureCredential
-// Mastra will automatically use managed identity when available
-```
+Mastra currently authenticates to Azure OpenAI with API keys. Generate and rotate API keys in Azure Portal for production workloads.
 
 ### Key Rotation
 Regularly rotate API keys in Azure Portal:
