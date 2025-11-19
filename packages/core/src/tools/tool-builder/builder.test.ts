@@ -1021,7 +1021,7 @@ describe('CoreToolBuilder Output Schema', () => {
         name: 'weather-tool',
         logger: console as any,
         description: 'Get weather information',
-        requestContext: new RequestContext(),
+        runtimeContext: new RuntimeContext(),
         tracingContext: {},
         model: mockModel,
       },

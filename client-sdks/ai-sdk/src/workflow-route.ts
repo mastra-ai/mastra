@@ -52,7 +52,7 @@ export function workflowRoute({
                 resourceId: { type: 'string' },
                 inputData: { type: 'object', additionalProperties: true },
                 resumeData: { type: 'object', additionalProperties: true },
-                requestContext: { type: 'object', additionalProperties: true },
+                runtimeContext: { type: 'object', additionalProperties: true },
                 tracingOptions: { type: 'object', additionalProperties: true },
                 step: { type: 'string' },
               },
