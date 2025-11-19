@@ -962,7 +962,7 @@ export const STREAM_VNEXT_DEPRECATED_ROUTE = createRoute({
   description: '[DEPRECATED] This endpoint is deprecated. Please use /stream instead.',
   tags: ['Agents'],
   handler: async () => {
-    throw new Error('This endpoint is deprecated. Please use /stream instead.');
+    throw new HTTPException(410, { message: 'This endpoint is deprecated. Please use /stream instead.' });
   },
 });
 

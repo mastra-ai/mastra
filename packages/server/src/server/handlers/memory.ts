@@ -321,9 +321,8 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
           : template;
       const workingMemory = await memory.getWorkingMemory({ threadId: threadId!, resourceId, memoryConfig });
       const config = memory.getMergedThreadConfig(memoryConfig || {});
-      const source = (config.workingMemory?.scope !== 'thread' && resourceId ? 'resource' : 'thread') as
-        | 'thread'
-        | 'resource';
+      const source: 'thread' | 'resource' =
+        config.workingMemory?.scope !== 'thread' && resourceId ? 'resource' : 'thread';
       return { workingMemory, source, workingMemoryTemplate, threadExists };
     } catch (error) {
       return handleError(error, 'Error getting working memory');

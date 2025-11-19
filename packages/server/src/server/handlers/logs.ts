@@ -43,7 +43,7 @@ export const LIST_LOGS_ROUTE = createRoute({
   tags: ['Logs'],
   handler: async ({ mastra, ...params }) => {
     try {
-      const { transportId, fromDate, toDate, logLevel, filters: _filters, page, perPage } = params as any;
+      const { transportId, fromDate, toDate, logLevel, filters: _filters, page, perPage } = params;
 
       validateBody({ transportId });
 
@@ -88,7 +88,7 @@ export const LIST_LOGS_BY_RUN_ID_ROUTE = createRoute({
   tags: ['Logs'],
   handler: async ({ mastra, runId, ...params }) => {
     try {
-      const { transportId, fromDate, toDate, logLevel, filters: _filters, page, perPage } = params as any;
+      const { transportId, fromDate, toDate, logLevel, filters: _filters, page, perPage } = params;
 
       validateBody({ runId, transportId });
 
