@@ -2,6 +2,7 @@ import { PassThrough } from 'stream';
 
 import { MastraVoice } from '@mastra/core/voice';
 import OpenAI from 'openai';
+import type { ClientOptions } from 'openai';
 
 type OpenAIVoiceId = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer' | 'ash' | 'coral' | 'sage';
 type OpenAIModel = 'tts-1' | 'tts-1-hd' | 'whisper-1';
@@ -9,6 +10,7 @@ type OpenAIModel = 'tts-1' | 'tts-1-hd' | 'whisper-1';
 export interface OpenAIConfig {
   name?: OpenAIModel;
   apiKey?: string;
+  options?: Omit<ClientOptions, 'apiKey'>;
 }
 
 export interface OpenAIVoiceConfig {
@@ -16,10 +18,12 @@ export interface OpenAIVoiceConfig {
     model: 'tts-1' | 'tts-1-hd';
     apiKey?: string;
     speaker?: OpenAIVoiceId;
+    options?: Omit<ClientOptions, 'apiKey'>;
   };
   listening?: {
     model: 'whisper-1';
     apiKey?: string;
+    options?: Omit<ClientOptions, 'apiKey'>;
   };
 }
 
@@ -71,13 +75,19 @@ export class OpenAIVoice extends MastraVoice {
     if (!speechApiKey) {
       throw new Error('No API key provided for speech model');
     }
-    this.speechClient = new OpenAI({ apiKey: speechApiKey });
+    this.speechClient = new OpenAI({
+      apiKey: speechApiKey,
+      ...speechModel?.options,
+    });
 
     const listeningApiKey = listeningModel?.apiKey || defaultApiKey;
     if (!listeningApiKey) {
       throw new Error('No API key provided for listening model');
     }
-    this.listeningClient = new OpenAI({ apiKey: listeningApiKey });
+    this.listeningClient = new OpenAI({
+      apiKey: listeningApiKey,
+      ...listeningModel?.options,
+    });
 
     if (!this.speechClient && !this.listeningClient) {
       throw new Error('At least one of OPENAI_API_KEY, speechModel.apiKey, or listeningModel.apiKey must be set');
@@ -147,22 +157,21 @@ export class OpenAIVoice extends MastraVoice {
       throw new Error('Input text is empty');
     }
 
-    const audio = await this.traced(async () => {
-      const response = await this.speechClient!.audio.speech.create({
-        model: this.speechModel?.name ?? 'tts-1',
-        voice: (options?.speaker ?? this.speaker) as OpenAIVoiceId,
-        response_format: options?.responseFormat ?? 'mp3',
-        input,
-        speed: options?.speed || 1.0,
-      });
+    const { speaker, responseFormat, speed, ...otherOptions } = options || {};
 
-      const passThrough = new PassThrough();
-      const buffer = Buffer.from(await response.arrayBuffer());
-      passThrough.end(buffer);
-      return passThrough;
-    }, 'voice.openai.speak')();
+    const response = await this.speechClient!.audio.speech.create({
+      model: this.speechModel?.name ?? 'tts-1',
+      voice: (speaker ?? this.speaker) as OpenAIVoiceId,
+      response_format: responseFormat ?? 'mp3',
+      input,
+      speed: speed || 1.0,
+      ...otherOptions,
+    });
 
-    return audio;
+    const passThrough = new PassThrough();
+    const buffer = Buffer.from(await response.arrayBuffer());
+    passThrough.end(buffer);
+    return passThrough;
   }
 
   /**
@@ -208,19 +217,15 @@ export class OpenAIVoice extends MastraVoice {
     }
     const audioBuffer = Buffer.concat(chunks);
 
-    const text = await this.traced(async () => {
-      const { filetype, ...otherOptions } = options || {};
-      const file = new File([audioBuffer], `audio.${filetype || 'mp3'}`);
+    const { filetype, ...otherOptions } = options || {};
+    const file = new File([audioBuffer], `audio.${filetype || 'mp3'}`);
 
-      const response = await this.listeningClient!.audio.transcriptions.create({
-        model: this.listeningModel?.name || 'whisper-1',
-        file: file as any,
-        ...otherOptions,
-      });
+    const response = await this.listeningClient!.audio.transcriptions.create({
+      model: this.listeningModel?.name || 'whisper-1',
+      file: file as any,
+      ...otherOptions,
+    });
 
-      return response.text;
-    }, 'voice.openai.listen')();
-
-    return text;
+    return response.text;
   }
 }

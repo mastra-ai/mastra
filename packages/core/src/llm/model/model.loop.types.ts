@@ -10,10 +10,10 @@ import type {
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MessageList } from '../../agent';
-import type { TracingContext } from '../../ai-tracing';
 import type { LoopOptions } from '../../loop/types';
-import type { StructuredOutputOptions, OutputProcessor } from '../../processors';
-import type { RuntimeContext } from '../../runtime-context';
+import type { TracingContext } from '../../observability';
+import type { OutputProcessor } from '../../processors';
+import type { RequestContext } from '../../request-context';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { inferOutput } from './shared.types';
 
@@ -35,13 +35,15 @@ export type StreamTextOnStepFinishCallback<Tools extends ToolSet> = (
 ) => Promise<void> | void;
 
 export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT extends OutputSchema = undefined> = {
+  methodType: ModelMethodType;
   messages?: UIMessage[] | ModelMessage[];
-  structuredOutput?: OUTPUT extends OutputSchema ? StructuredOutputOptions<OUTPUT> : never;
   outputProcessors?: OutputProcessor[];
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   tracingContext: TracingContext;
   resourceId?: string;
   threadId?: string;
   returnScorerData?: boolean;
   messageList: MessageList;
 } & Omit<LoopOptions<TOOLS, OUTPUT>, 'models' | 'messageList'>;
+
+export type ModelMethodType = 'generate' | 'stream';

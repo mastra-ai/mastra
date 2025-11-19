@@ -4,7 +4,7 @@ import { databaseIntrospectionTool } from '../tools/database-introspection-tool'
 import { sqlGenerationTool } from '../tools/sql-generation-tool';
 import { sqlExecutionTool } from '../tools/sql-execution-tool';
 import { databaseSeedingTool } from '../tools/database-seeding-tool';
-import { RuntimeContext } from '@mastra/core/di';
+import { RequestContext } from '@mastra/core/di';
 
 // Step 1: Get connection string
 const getConnectionStep = createStep({
@@ -60,7 +60,7 @@ const seedDatabaseStep = createStep({
   suspendSchema: z.object({
     message: z.string(),
   }),
-  execute: async ({ inputData, resumeData, suspend, runtimeContext }) => {
+  execute: async ({ inputData, resumeData, suspend, requestContext }) => {
     const { connectionString } = inputData;
 
     if (resumeData === undefined) {
@@ -90,20 +90,22 @@ const seedDatabaseStep = createStep({
         throw new Error('Database seeding tool is not available');
       }
 
-      const seedResult = await databaseSeedingTool.execute({
-        context: { connectionString },
-        runtimeContext: runtimeContext || new RuntimeContext(),
-      });
+      const seedResult = await databaseSeedingTool.execute(
+        { connectionString },
+        {
+          requestContext: requestContext || new RequestContext(),
+        },
+      );
 
       // Type guard to ensure we have seed result
-      if (!seedResult || typeof seedResult !== 'object') {
-        throw new Error('Invalid seed result returned from seeding tool');
+      if ('error' in seedResult) {
+        throw new Error(`Invalid seed result returned from seeding tool: ${seedResult.error}`);
       }
 
       return {
         connectionString,
         seeded: true,
-        seedResult: seedResult as any,
+        seedResult,
       };
     } catch (error) {
       throw new Error(`Failed to seed database: ${error instanceof Error ? error.message : String(error)}`);
@@ -140,7 +142,7 @@ const introspectDatabaseStep = createStep({
       })
       .optional(),
   }),
-  execute: async ({ inputData, runtimeContext }) => {
+  execute: async ({ inputData, requestContext }) => {
     const { connectionString, seeded, seedResult } = inputData;
 
     try {
@@ -149,10 +151,12 @@ const introspectDatabaseStep = createStep({
         throw new Error('Database introspection tool is not available');
       }
 
-      const schemaData = await databaseIntrospectionTool.execute({
-        context: { connectionString },
-        runtimeContext: runtimeContext || new RuntimeContext(),
-      });
+      const schemaData = await databaseIntrospectionTool.execute(
+        { connectionString },
+        {
+          requestContext: requestContext || new RequestContext(),
+        },
+      );
 
       // Type guard to ensure we have schema data
       if (!schemaData || typeof schemaData !== 'object') {
@@ -221,7 +225,7 @@ const generateSQLStep = createStep({
       })
       .optional(),
   }),
-  execute: async ({ inputData, resumeData, suspend, runtimeContext }) => {
+  execute: async ({ inputData, resumeData, suspend, requestContext }) => {
     const { connectionString, schema, schemaPresentation, seeded, seedResult } = inputData;
 
     if (!resumeData?.naturalLanguageQuery) {
@@ -255,13 +259,15 @@ const generateSQLStep = createStep({
         throw new Error('SQL generation tool is not available');
       }
 
-      const generatedSQL = await sqlGenerationTool.execute({
-        context: {
+      const generatedSQL = await sqlGenerationTool.execute(
+        {
           naturalLanguageQuery,
           databaseSchema: schema,
         },
-        runtimeContext: runtimeContext || new RuntimeContext(),
-      });
+        {
+          requestContext: requestContext || new RequestContext(),
+        },
+      );
 
       // Type guard for generated SQL
       if (!generatedSQL || typeof generatedSQL !== 'object') {
@@ -319,7 +325,7 @@ const reviewAndExecuteStep = createStep({
     }),
     message: z.string(),
   }),
-  execute: async ({ inputData, resumeData, suspend, runtimeContext }) => {
+  execute: async ({ inputData, resumeData, suspend, requestContext }) => {
     const { connectionString, naturalLanguageQuery, generatedSQL } = inputData;
 
     if (!resumeData) {
@@ -354,13 +360,15 @@ const reviewAndExecuteStep = createStep({
         throw new Error('SQL execution tool is not available');
       }
 
-      const result = await sqlExecutionTool.execute({
-        context: {
+      const result = await sqlExecutionTool.execute(
+        {
           connectionString,
           query: finalSQL,
         },
-        runtimeContext: runtimeContext || new RuntimeContext(),
-      });
+        {
+          requestContext: requestContext || new RequestContext(),
+        },
+      );
 
       // Type guard for execution result
       if (!result || typeof result !== 'object') {

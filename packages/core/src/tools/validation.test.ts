@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+
 import { createTool } from './tool';
 
 describe('Tool Input Validation Integration Tests', () => {
@@ -12,13 +13,13 @@ describe('Tool Input Validation Integration Tests', () => {
           name: z.string(),
           age: z.number().min(0),
         }),
-        execute: async ({ context }) => {
-          return { success: true, data: context };
+        execute: async (inputData, _context) => {
+          return { success: true, data: inputData };
         },
       });
 
-      // Test missing required fields
-      const result = await tool.execute({ context: {} });
+      // Test missing required fields - pass raw data as first arg
+      const result = await tool.execute({} as any);
       expect(result.error).toBe(true);
       expect(result.message).toContain('Tool validation failed');
       expect(result.message).toContain('- name: Required');
@@ -33,17 +34,15 @@ describe('Tool Input Validation Integration Tests', () => {
           count: z.number(),
           active: z.boolean(),
         }),
-        execute: async ({ context }) => {
-          return { success: true, data: context };
+        execute: async inputData => {
+          return { success: true, data: inputData };
         },
       });
 
       const result = await tool.execute({
-        context: {
-          count: 'not a number',
-          active: 'not a boolean',
-        },
-      });
+        count: 'not a number',
+        active: 'not a boolean',
+      } as any);
 
       expect(result.error).toBe(true);
       expect(result.message).toContain('Tool validation failed');
@@ -64,17 +63,15 @@ describe('Tool Input Validation Integration Tests', () => {
               'Password must be at least 8 characters with letters and numbers',
             ),
         }),
-        execute: async ({ context }) => {
-          return { success: true, data: context };
+        execute: async inputData => {
+          return { success: true, data: inputData };
         },
       });
 
       const result = await tool.execute({
-        context: {
-          email: 'not-an-email',
-          username: 'ab',
-          password: 'weak',
-        },
+        email: 'not-an-email',
+        username: 'ab',
+        password: 'weak',
       });
 
       expect(result.error).toBe(true);
@@ -94,17 +91,15 @@ describe('Tool Input Validation Integration Tests', () => {
             deadline: z.string().datetime().optional(),
           }),
         }),
-        execute: async ({ context }) => {
-          return { success: true, data: context };
+        execute: async inputData => {
+          return { success: true, data: inputData };
         },
       });
 
       const result = await tool.execute({
-        context: {
-          tags: [],
-          metadata: {
-            priority: 'urgent', // Not in enum
-          },
+        tags: [],
+        metadata: {
+          priority: 'urgent' as any, // Not in enum - force type error
         },
       });
 
@@ -122,17 +117,15 @@ describe('Tool Input Validation Integration Tests', () => {
           age: z.number().min(0),
           email: z.string().email(),
         }),
-        execute: async ({ context }) => {
-          return { success: true, data: context };
+        execute: async inputData => {
+          return { success: true, data: inputData };
         },
       });
 
       const result = await tool.execute({
-        context: {
-          name: 'John Doe',
-          age: 30,
-          email: 'john@example.com',
-        },
+        name: 'John Doe',
+        age: 30,
+        email: 'john@example.com',
       });
 
       expect(result.error).toBeUndefined();
@@ -152,16 +145,14 @@ describe('Tool Input Validation Integration Tests', () => {
           name: z.string().trim().toLowerCase(),
           age: z.string().transform(val => parseInt(val, 10)),
         }),
-        execute: async ({ context }) => {
-          return { transformed: context };
+        execute: async inputData => {
+          return { transformed: inputData };
         },
       });
 
       const result = await tool.execute({
-        context: {
-          name: '  JOHN DOE  ',
-          age: '25',
-        },
+        name: '  JOHN DOE  ',
+        age: '25' as any, // Will be transformed to number
       });
 
       expect(result.error).toBeUndefined();
@@ -181,17 +172,14 @@ describe('Tool Input Validation Integration Tests', () => {
           email: z.string().email(),
           age: z.number().min(18, 'Must be 18 or older'),
         }),
-        execute: async ({ context }) => {
-          return { validated: true, user: context };
+        execute: async inputData => {
+          return { validated: true, user: inputData };
         },
       });
 
-      // Simulate tool execution with invalid data
       const result = await validateUser.execute({
-        context: {
-          email: 'invalid-email',
-          age: 16,
-        },
+        email: 'invalid-email',
+        age: 16,
       });
 
       expect(result.error).toBe(true);
@@ -211,9 +199,7 @@ describe('Tool Input Validation Integration Tests', () => {
         },
       });
 
-      const result = await tool.execute({
-        context: { username: 'ab' },
-      });
+      const result = await tool.execute({ username: 'ab' });
 
       expect(result.error).toBe(true);
       expect(result.message).toContain('Tool validation failed for user-registration');
@@ -228,24 +214,12 @@ describe('Tool Input Validation Integration Tests', () => {
         inputSchema: z.object({
           name: z.string(),
         }),
-        execute: async ({ context }) => {
-          // In workflow context, the data comes as inputData
-          const data = context.inputData || context;
-          return { result: data.name };
+        execute: async inputData => {
+          return { result: inputData.name };
         },
       });
 
-      const stepContext = {
-        context: {
-          inputData: {
-            name: 'test',
-          },
-        },
-        runId: 'test-run',
-        runtimeContext: {},
-      };
-
-      const result = await tool.execute(stepContext as any);
+      const result = await tool.execute({ name: 'test' });
 
       expect(result).toEqual({ result: 'test' });
     });
@@ -260,18 +234,15 @@ describe('Tool Input Validation Integration Tests', () => {
           context: z.string(),
           otherField: z.number(),
         }),
-        execute: async ({ context }) => {
-          return { received: context };
+        execute: async inputData => {
+          return { received: inputData };
         },
       });
 
-      // This should NOT unwrap the context field since the schema expects it
       const result: any = await tool?.execute?.({
-        context: {
-          context: 'my-context-value',
-          otherField: 42,
-        },
-      } as any);
+        context: 'my-context-value',
+        otherField: 42,
+      });
 
       expect(result.error).toBeUndefined();
       expect(result.received).toEqual({
@@ -290,20 +261,15 @@ describe('Tool Input Validation Integration Tests', () => {
             timestamp: z.number(),
           }),
         }),
-        execute: async ({ context }) => {
-          return { received: context };
+        execute: async inputData => {
+          return { received: inputData };
         },
       });
 
-      // This should NOT unwrap the inputData field since the schema expects it
-      const input = {
-        context: {
-          inputData: 'my-input-data',
-          metadata: { timestamp: 123456 },
-        },
-      };
-
-      const result: any = await tool?.execute?.(input as any);
+      const result: any = await tool?.execute?.({
+        inputData: 'my-input-data',
+        metadata: { timestamp: 123456 },
+      });
 
       expect(result.error).toBeUndefined();
       expect(result.received).toEqual({
@@ -321,28 +287,16 @@ describe('Tool Input Validation Integration Tests', () => {
           context: z.string(), // Schema expects a 'context' field
           otherValue: z.number(),
         }),
-        execute: async ({ context }) => {
-          return { received: context };
+        execute: async inputData => {
+          return { received: inputData };
         },
       });
 
-      // Input has ToolExecutionContext structure
-      const input = {
-        context: {
-          context: 'my-context-string-value', // This is the actual data for the context field
-          otherValue: 42,
-        },
-        runId: 'test-run',
-      };
+      const result: any = await tool?.execute?.({
+        context: 'my-context-string-value',
+        otherValue: 42,
+      });
 
-      const result: any = await tool?.execute?.(input as any);
-
-      // Before the fix, this would fail because the validation function would:
-      // 1. See 'context' in input and extract (input as any).context
-      // 2. Try to validate "my-context-string-value" against the schema
-      // 3. Fail because "my-context-string-value" is a string, not { context: string, otherValue: number }
-
-      // After the fix, it should work correctly
       expect(result.error).toBeUndefined();
       expect(result.received).toEqual({
         context: 'my-context-string-value',
@@ -359,18 +313,16 @@ describe('Tool Input Validation Integration Tests', () => {
           inputData: z.number(),
           regularField: z.boolean(),
         }),
-        execute: async ({ context }) => {
-          return { received: context };
+        execute: async inputData => {
+          return { received: inputData };
         },
       });
 
       const result: any = await tool?.execute?.({
-        context: {
-          context: 'context-value',
-          inputData: 42,
-          regularField: true,
-        },
-      } as any);
+        context: 'context-value',
+        inputData: 42,
+        regularField: true,
+      });
 
       expect(result.error).toBeUndefined();
       expect(result.received).toEqual({
@@ -380,7 +332,7 @@ describe('Tool Input Validation Integration Tests', () => {
       });
     });
 
-    it('should still unwrap context when schema does not expect it', async () => {
+    it('should NOT unwrap context in v1.0 - breaking change', async () => {
       const tool = createTool({
         id: 'no-context-field',
         description: 'Tool without context field in schema',
@@ -388,19 +340,15 @@ describe('Tool Input Validation Integration Tests', () => {
           name: z.string(),
           value: z.number(),
         }),
-        execute: async ({ context }) => {
-          return { received: context };
+        execute: async inputData => {
+          return { received: inputData };
         },
       });
 
-      // This should unwrap the context since schema doesn't expect a context field
       const result: any = await tool?.execute?.({
-        context: {
-          name: 'test',
-          value: 123,
-        },
-        runId: 'some-run-id',
-      } as any);
+        name: 'test',
+        value: 123,
+      });
 
       expect(result.error).toBeUndefined();
       expect(result.received).toEqual({
@@ -417,17 +365,15 @@ describe('Tool Input Validation Integration Tests', () => {
           context: z.string(),
           other: z.number(),
         }),
-        execute: async ({ context }) => {
-          return { received: context };
+        execute: async inputData => {
+          return { received: inputData };
         },
       });
 
       const result: any = await tool?.execute?.({
-        context: {
-          context: 123, // Wrong type - should be string
-          other: 456,
-        },
-      } as any);
+        context: 123 as any, // Wrong type - should be string
+        other: 456,
+      });
 
       expect(result.error).toBe(true);
       expect(result.message).toContain('Tool validation failed');
@@ -444,17 +390,15 @@ describe('Tool Input Validation Integration Tests', () => {
           }),
           metadata: z.string(),
         }),
-        execute: async ({ context }) => {
-          return { received: context };
+        execute: async inputData => {
+          return { received: inputData };
         },
       });
 
       const result: any = await tool?.execute?.({
-        context: {
-          inputData: 'should-be-object', // Wrong type - should be object
-          metadata: 'valid-string',
-        },
-      } as any);
+        inputData: 'should-be-object' as any, // Wrong type - should be object
+        metadata: 'valid-string',
+      });
 
       expect(result.error).toBe(true);
       expect(result.message).toContain('Tool validation failed');
@@ -467,35 +411,33 @@ describe('Tool Input Validation Integration Tests', () => {
       const tool = createTool({
         id: 'no-schema',
         description: 'Tool without schema',
-        execute: async ({ context }) => {
-          return { received: context };
+        execute: async inputData => {
+          return { received: inputData };
         },
       });
 
-      const result = await tool.execute({
-        context: { anything: 'goes' },
-      });
+      const result = await tool.execute({ anything: 'goes' } as any);
 
       expect(result.error).toBeUndefined();
       expect(result.received).toEqual({ anything: 'goes' });
     });
 
-    it('should handle empty context when schema expects data', async () => {
+    it('should handle missing required fields', async () => {
       const tool = createTool({
         id: 'empty-context',
         description: 'Test empty context',
         inputSchema: z.object({
           required: z.string(),
         }),
-        execute: async ({ context }) => {
-          return { data: context };
+        execute: async inputData => {
+          return { data: inputData };
         },
       });
 
-      // Test with undefined context - this represents a case where context is missing
-      const result = await tool.execute({ context: undefined as any });
+      const result = await tool.execute({} as any);
       expect(result.error).toBe(true);
       expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Required');
     });
 
     it('should preserve additional properties when using passthrough', async () => {
@@ -507,16 +449,14 @@ describe('Tool Input Validation Integration Tests', () => {
             required: z.string(),
           })
           .passthrough(),
-        execute: async ({ context }) => {
-          return { data: context };
+        execute: async inputData => {
+          return { data: inputData };
         },
       });
 
       const result = await tool.execute({
-        context: {
-          required: 'value',
-          extra: 'preserved',
-        },
+        required: 'value',
+        extra: 'preserved',
       });
 
       expect(result.error).toBeUndefined();
@@ -540,20 +480,18 @@ describe('Tool Input Validation Integration Tests', () => {
           }),
           action: z.enum(['create', 'update', 'delete']),
         }),
-        execute: async ({ context }) => {
-          return { processed: context };
+        execute: async inputData => {
+          return { processed: inputData };
         },
       });
 
       const result: any = await tool?.execute?.({
         context: {
-          context: {
-            user: { id: '123', name: 'John' },
-            settings: ['dark-mode', 'notifications'],
-          },
-          action: 'create',
+          user: { id: '123', name: 'John' },
+          settings: ['dark-mode', 'notifications'],
         },
-      } as any);
+        action: 'create',
+      });
 
       expect(result.error).toBeUndefined();
       expect(result.processed).toEqual({
@@ -564,5 +502,361 @@ describe('Tool Input Validation Integration Tests', () => {
         action: 'create',
       });
     });
+  });
+});
+
+describe('Tool Output Validation Tests', () => {
+  it('should validate output against schema', async () => {
+    const tool = createTool({
+      id: 'output-validation',
+      description: 'Test output validation',
+      inputSchema: z.object({
+        name: z.string(),
+      }),
+      outputSchema: z.object({
+        id: z.string(),
+        name: z.string(),
+        email: z.string().email(),
+      }),
+      execute: async inputData => {
+        return { id: '123', name: inputData.name, email: 'test@example.com' };
+      },
+    });
+
+    const result = await tool.execute({ name: 'John' });
+
+    expect(result && 'error' in result ? result.error : undefined).toBeUndefined();
+    expect(result).toEqual({
+      id: '123',
+      name: 'John',
+      email: 'test@example.com',
+    });
+  });
+
+  it('should fail validation when output does not match schema', async () => {
+    const tool = createTool({
+      id: 'invalid-output',
+      description: 'Test invalid output',
+      inputSchema: z.object({
+        name: z.string(),
+      }),
+      outputSchema: z.object({
+        id: z.string(),
+        name: z.string(),
+        email: z.string().email(),
+      }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => {
+        // Return invalid output - missing required fields
+        return { id: '123' };
+      },
+    });
+
+    const result = await tool.execute({ name: 'John' });
+
+    if ('error' in result) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool output validation failed');
+      expect(result.message).toContain('- name: Required');
+      expect(result.message).toContain('- email: Required');
+    } else {
+      throw new Error('Result is not a validation error');
+    }
+  });
+
+  it('should validate output types correctly', async () => {
+    const tool = createTool({
+      id: 'type-mismatch',
+      description: 'Test type validation',
+      outputSchema: z.object({
+        count: z.number(),
+        active: z.boolean(),
+      }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => {
+        return { count: 'not-a-number', active: 'not-a-boolean' };
+      },
+    });
+
+    const result = await tool.execute({});
+
+    if ('error' in result) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool output validation failed');
+      expect(result.message).toContain('- count: Expected number, received string');
+      expect(result.message).toContain('- active: Expected boolean, received string');
+    } else {
+      throw new Error('Result is not a validation error');
+    }
+  });
+
+  it('should validate complex nested output', async () => {
+    const tool = createTool({
+      id: 'nested-output',
+      description: 'Test nested output validation',
+      outputSchema: z.object({
+        user: z.object({
+          id: z.string(),
+          name: z.string(),
+          age: z.number().min(0),
+        }),
+        metadata: z.object({
+          createdAt: z.string().datetime(),
+          tags: z.array(z.string()).min(1),
+        }),
+      }),
+      execute: async () => {
+        return {
+          user: { id: '123', name: 'John', age: -5 }, // Invalid: age is negative
+          metadata: { createdAt: 'invalid-date', tags: [] }, // Invalid: not datetime, empty array
+        };
+      },
+    });
+
+    const result = await tool.execute({});
+
+    if ('error' in result) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool output validation failed');
+      expect(result.message).toContain('- user.age');
+      expect(result.message).toContain('- metadata.createdAt');
+      expect(result.message).toContain('- metadata.tags');
+    } else {
+      throw new Error('Result is not a validation error');
+    }
+  });
+
+  it('should transform output data after validation', async () => {
+    const tool = createTool({
+      id: 'transform-output',
+      description: 'Test output transformation',
+      outputSchema: z.object({
+        name: z.string().trim().toUpperCase(),
+        count: z.string().transform(val => parseInt(val, 10)),
+      }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => {
+        return { name: '  john doe  ', count: '42' };
+      },
+    });
+
+    const result = await tool.execute({});
+
+    expect(result && 'error' in result ? result.error : undefined).toBeUndefined();
+    expect(result).toEqual({
+      name: 'JOHN DOE',
+      count: 42,
+    });
+  });
+
+  it('should allow tools without output schema', async () => {
+    const tool = createTool({
+      id: 'no-output-schema',
+      description: 'Tool without output schema',
+      inputSchema: z.object({
+        name: z.string(),
+      }),
+      execute: async inputData => {
+        // Return anything - no validation
+        return { anything: 'goes', name: inputData.name, extra: 123 };
+      },
+    });
+
+    const result = await tool.execute({ name: 'John' });
+
+    expect(result.error).toBeUndefined();
+    expect(result).toEqual({ anything: 'goes', name: 'John', extra: 123 });
+  });
+
+  it('should include tool ID in output validation error messages', async () => {
+    const tool = createTool({
+      id: 'user-service',
+      description: 'User service tool',
+      outputSchema: z.object({
+        userId: z.string().uuid(),
+      }),
+      execute: async () => {
+        return { userId: 'not-a-uuid' };
+      },
+    });
+
+    const result = await tool.execute({});
+
+    if ('error' in result) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool output validation failed for user-service');
+      expect(result.message).toContain('Invalid uuid');
+    } else {
+      throw new Error('Result is not a validation error');
+    }
+  });
+
+  it('should handle both input and output validation together', async () => {
+    const tool = createTool({
+      id: 'full-validation',
+      description: 'Tool with both input and output validation',
+      inputSchema: z.object({
+        email: z.string().email(),
+      }),
+      outputSchema: z.object({
+        verified: z.boolean(),
+        email: z.string().email(),
+      }),
+      execute: async inputData => {
+        return { verified: true, email: inputData.email };
+      },
+    });
+
+    // Test valid input and output
+    const validResult = await tool.execute({ email: 'test@example.com' });
+    expect(validResult && 'error' in validResult ? validResult.error : undefined).toBeUndefined();
+    expect(validResult).toEqual({ verified: true, email: 'test@example.com' });
+
+    // Test invalid input
+    const invalidInputResult = await tool.execute({ email: 'not-an-email' });
+    if ('error' in invalidInputResult) {
+      expect(invalidInputResult.error).toBe(true);
+      expect(invalidInputResult.message).toContain('Tool validation failed');
+    } else {
+      throw new Error('Result is not a validation error');
+    }
+  });
+
+  it('should validate output even when input validation passes', async () => {
+    const tool = createTool({
+      id: 'input-pass-output-fail',
+      description: 'Valid input but invalid output',
+      inputSchema: z.object({
+        name: z.string(),
+      }),
+      outputSchema: z.object({
+        result: z.string(),
+        count: z.number(),
+      }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => {
+        // Return invalid output even though input was valid
+        return { result: 'success' }; // Missing count
+      },
+    });
+
+    const result = await tool.execute({ name: 'John' });
+
+    if ('error' in result) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool output validation failed');
+      expect(result.message).toContain('- count: Required');
+    } else {
+      throw new Error('Result is not a validation error');
+    }
+  });
+
+  it('should validate output with optional fields', async () => {
+    const tool = createTool({
+      id: 'optional-output',
+      description: 'Test optional output fields',
+      outputSchema: z.object({
+        id: z.string(),
+        name: z.string().optional(),
+        metadata: z.object({ created: z.string() }).optional(),
+      }),
+      execute: async () => {
+        return { id: '123' }; // Optional fields are not present
+      },
+    });
+
+    const result = await tool.execute({});
+
+    expect(result && 'error' in result ? result.error : undefined).toBeUndefined();
+    expect(result).toEqual({ id: '123' });
+  });
+
+  it('should validate enums in output', async () => {
+    const tool = createTool({
+      id: 'enum-output',
+      description: 'Test enum validation in output',
+      outputSchema: z.object({
+        status: z.enum(['pending', 'approved', 'rejected']),
+      }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => {
+        return { status: 'unknown' }; // Invalid enum value
+      },
+    });
+
+    const result = await tool.execute({});
+
+    if ('error' in result) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool output validation failed');
+      expect(result.message).toContain("Invalid enum value. Expected 'pending' | 'approved' | 'rejected'");
+    } else {
+      throw new Error('Result is not a validation error');
+    }
+  });
+
+  it('should truncate large output in error messages to prevent PII exposure', async () => {
+    // Create a large object that would exceed 200 characters when stringified
+    const largeData = {
+      users: Array.from({ length: 50 }, (_, i) => ({
+        id: i,
+        name: `User ${i}`,
+        email: `user${i}@example.com`,
+        sensitiveData: 'This could contain PII',
+      })),
+    };
+
+    const tool = createTool({
+      id: 'large-output',
+      description: 'Test output truncation',
+      outputSchema: z.object({
+        status: z.literal('success'),
+      }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => {
+        return largeData; // Return large invalid output
+      },
+    });
+
+    const result = await tool.execute({});
+
+    if ('error' in result) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool output validation failed');
+      expect(result.message).toContain('... (truncated)');
+      // Ensure the full large data is NOT in the error message
+      expect(result.message.length).toBeLessThan(500); // Should be much smaller than full output
+      // Ensure sensitive data is not exposed
+      expect(result.message).not.toContain('user49@example.com');
+    } else {
+      throw new Error('Result is not a validation error');
+    }
+  });
+
+  it('should handle non-serializable output gracefully', async () => {
+    const tool = createTool({
+      id: 'non-serializable',
+      description: 'Test non-serializable output',
+      outputSchema: z.object({
+        value: z.string(),
+      }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => {
+        // Create circular reference
+        const obj: any = { name: 'test' };
+        obj.self = obj;
+        return obj;
+      },
+    });
+
+    const result = await tool.execute({});
+
+    if ('error' in result) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool output validation failed');
+      expect(result.message).toContain('[Unable to serialize data]');
+    } else {
+      throw new Error('Result is not a validation error');
+    }
   });
 });

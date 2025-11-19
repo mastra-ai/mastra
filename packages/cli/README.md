@@ -1,120 +1,31 @@
-# The Mastra CLI
+# Mastra CLI
 
 ![Mastra Cli](https://github.com/mastra-ai/mastra/blob/main/packages/cli/mastra-cli.png)
 
-Mastra is the Typescript framework for building AI agents and assistants. It’s used by some of the largest companies in the world to build internal AI automation tooling and customer-facing agents.
+Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
 
-This is the CLI package, which allows you to:
+It includes everything you need to go from early prototypes to production-ready applications. Mastra integrates with frontend and backend frameworks like React, Next.js, and Node, or you can deploy it anywhere as a standalone server. It's the easiest way to build, tune, and scale reliable AI products.
+
+`mastra` is Mastra's CLI package and allows you to:
 
 - Create a new project
 - Spin up the Mastra dev server
-- Deploy to a Hono server, or a serverless environment like Cloudflare Workers or Vercel
+- Build your Mastra project so that you can deploy it anywhere
 
-## Installing the Mastra CLI
+## Usage
 
-```bash copy
+After installing `mastra` globally you can use it anywhere.
+
+```bash
 npm i -g mastra
+```
+
+If you prefer to not install packages globally, you can use `npx`:
+
+```bash
+npx mastra
 ```
 
 ## Commands
 
-### Init
-
-`mastra init` is used for initializing a new project.
-
-This creates a mastra directory under `src` containing an `index.ts` entrypoint and an `agent` directory containing two sample agents.
-
-```text
-project-root/
-├── src/
-   ├── app/
-   └── mastra/
-       ├── agents/
-       │   └── agents.ts
-       └── index.ts
-```
-
-### Dev
-
-`mastra dev`
-
-This spins up a local development server that hosts `REST` endpoints for all agents and workflows. It also has a chat interface for testing them.
-
-The server is useful for testing and developing agents, workflows, and integrations without needing to deploy your application.
-
-The server is available at `http://localhost:3000`.
-
-### Build
-
-`mastra build`
-
-This command builds your Mastra project for deployment to different environments. The build process:
-
-1. Reads your Mastra configuration
-2. Generates optimized files for your target environment
-3. Outputs them to a build directory
-
-Options:
-
-```bash
---dir     Directory containing Mastra files (default: src/mastra)
-```
-
-Example usage:
-
-```bash
-# Build using default directory
-mastra build
-
-# Build from custom directory
-mastra build --dir path/to/mastra
-```
-
-The build output is determined by your Mastra instance's deployer configuration:
-
-```typescript
-const mastra = new Mastra({
-  deployer: {
-    type: 'HONO', // Target environment (HONO, EXPRESS, NEXT)
-    // Environment-specific options
-  },
-});
-```
-
-### Lint
-
-`mastra lint`
-
-Validates your Mastra project structure and code.
-
-Options:
-
-```bash
---root    Path to your root folder
---tools   Comma-separated list of paths to tool files to include
-```
-
-Example usage:
-
-```bash
-# Lint default directory
-mastra lint
-```
-
-# Telemetry
-
-This CLI collects anonymous usage data (no personal/sensitive info) to help improve Mastra. This includes:
-
-- Commands used
-- Command execution time
-- Error occurrences
-- System information (OS, Node version)
-
-To opt-out:
-
-1. Add `MASTRA_TELEMETRY_DISABLED=1` to commands
-
-## Local development
-
-1. clone the repo
-2. Run `pnpm i` to install deps
+Find all available commands in the [CLI commands reference](https://mastra.ai/reference/cli/mastra).

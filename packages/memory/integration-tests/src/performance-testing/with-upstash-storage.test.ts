@@ -15,6 +15,7 @@ if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
 describe('Memory with UpstashStore Integration', () => {
   const memory = new Memory({
     storage: new UpstashStore({
+      id: 'perf-upstash-storage',
       url: process.env.KV_REST_API_URL!,
       token: process.env.KV_REST_API_TOKEN!,
     }),

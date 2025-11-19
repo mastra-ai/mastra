@@ -1,31 +1,37 @@
 import { z } from 'zod';
-import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
-import { RuntimeContext } from '../../../runtime-context';
+import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
+import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
+import { RequestContext } from '../../../request-context';
 import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
+import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 
-interface StreamStepOptions<FORMAT extends 'aisdk' | 'mastra' | undefined = undefined> {
+interface StreamStepOptions {
   capabilities: AgentCapabilities;
   runId: string;
   returnScorerData?: boolean;
-  format?: FORMAT;
   requireToolApproval?: boolean;
-  resumeContext?: any;
+  resumeContext?: {
+    resumeData: any;
+    snapshot: any;
+  };
+  agentId: string;
+  toolCallId?: string;
+  methodType: AgentMethodType;
 }
 
-export function createStreamStep<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
+export function createStreamStep<OUTPUT extends OutputSchema | undefined = undefined>({
   capabilities,
   runId,
   returnScorerData,
-  format = 'mastra' as FORMAT,
   requireToolApproval,
   resumeContext,
-}: StreamStepOptions<FORMAT>) {
+  agentId,
+  toolCallId,
+  methodType,
+}: StreamStepOptions) {
   return createStep({
     id: 'stream-text-step',
     inputSchema: z.any(), // tried to type this in various ways but it's too complex
@@ -46,10 +52,12 @@ export function createStreamStep<
         (capabilities.outputProcessors
           ? typeof capabilities.outputProcessors === 'function'
             ? await capabilities.outputProcessors({
-                runtimeContext: validatedInputData.runtimeContext || new RuntimeContext(),
+                requestContext: validatedInputData.requestContext || new RequestContext(),
               })
             : capabilities.outputProcessors
           : []);
+
+      const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
 
       const streamResult = capabilities.llm.stream({
         ...validatedInputData,
@@ -61,11 +69,10 @@ export function createStreamStep<
         _internal: {
           generateId: capabilities.generateMessageId,
         },
+        agentId,
+        toolCallId,
+        methodType: modelMethodType,
       });
-
-      if (format === 'aisdk') {
-        return streamResult.aisdk.v5;
-      }
 
       return streamResult;
     },

@@ -1,5 +1,6 @@
+import type { WritableStream } from 'stream/web';
 import type { StepResult, ToolSet } from 'ai-v5';
-import { InternalSpans } from '../../../ai-tracing';
+import { InternalSpans } from '../../../observability';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
@@ -12,27 +13,15 @@ import { isControllerOpen } from '../stream';
 
 interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>
   extends LoopRun<Tools, OUTPUT> {
-  controller: ReadableStreamDefaultController<ChunkType>;
-  writer: WritableStream<ChunkType>;
+  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
+  writer: WritableStream<ChunkType<OUTPUT>>;
 }
 
 export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>(
   params: AgenticLoopParams<Tools, OUTPUT>,
 ) {
-  const {
-    models,
-    _internal,
-    messageId,
-    runId,
-    modelStreamSpan,
-    telemetry_settings,
-    toolChoice,
-    messageList,
-    modelSettings,
-    controller,
-    writer,
-    ...rest
-  } = params;
+  const { models, _internal, messageId, runId, toolChoice, messageList, modelSettings, controller, writer, ...rest } =
+    params;
 
   // Track accumulated steps across iterations to pass to stopWhen
   const accumulatedSteps: StepResult<Tools>[] = [];
@@ -42,11 +31,9 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
   const agenticExecutionWorkflow = createAgenticExecutionWorkflow<Tools, OUTPUT>({
     messageId: messageId!,
     models,
-    telemetry_settings,
     _internal,
     modelSettings,
     toolChoice,
-    modelStreamSpan,
     controller,
     writer,
     messageList,
@@ -64,10 +51,14 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         // VNext execution as internal
         internal: InternalSpans.WORKFLOW,
       },
+      shouldPersistSnapshot: params => {
+        return params.workflowStatus === 'suspended';
+      },
+      validateInputs: false,
     },
   })
     .dowhile(agenticExecutionWorkflow, async ({ inputData }) => {
-      const typedInputData = inputData as LLMIterationData<Tools>;
+      const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
       let hasFinishedSteps = false;
 
       const allContent: StepResult<Tools>['content'] = typedInputData.messages.nonUser.flatMap(
@@ -136,26 +127,6 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
           });
         }
       }
-
-      modelStreamSpan.setAttributes({
-        'stream.response.id': typedInputData.metadata?.id,
-        'stream.response.model': typedInputData.metadata?.modelId,
-        ...(typedInputData.metadata?.providerMetadata
-          ? { 'stream.response.providerMetadata': JSON.stringify(typedInputData.metadata.providerMetadata) }
-          : {}),
-        'stream.response.finishReason': typedInputData.stepResult?.reason,
-        'stream.usage.inputTokens': typedInputData.output.usage?.inputTokens,
-        'stream.usage.outputTokens': typedInputData.output.usage?.outputTokens,
-        'stream.usage.totalTokens': typedInputData.output.usage?.totalTokens,
-        ...(telemetry_settings?.recordOutputs !== false
-          ? {
-              'stream.response.text': typedInputData.output.text,
-              'stream.prompt.messages': JSON.stringify(messageList.get.input.aiV5.model()),
-            }
-          : {}),
-      });
-
-      modelStreamSpan.end();
 
       const reason = typedInputData.stepResult?.reason;
 

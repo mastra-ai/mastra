@@ -1,11 +1,12 @@
-import type { Mastra, SerializedStepFlowEntry } from '..';
-import type { AISpan, AISpanType, TracingPolicy } from '../ai-tracing';
+import type { WritableStream } from 'stream/web';
 import { MastraBase } from '../base';
-import type { RuntimeContext } from '../di';
+import type { RequestContext } from '../di';
 import { RegisteredLogger } from '../logger';
+import type { Mastra } from '../mastra';
+import type { Span, SpanType, TracingPolicy } from '../observability';
 import type { ChunkType } from '../stream/types';
-import type { Emitter, StepResult } from './types';
-import type { StepFlowEntry } from '.';
+import type { Emitter, SerializedStepFlowEntry, StepResult, WorkflowRunStatus } from './types';
+import type { RestartExecutionParams, StepFlowEntry, TimeTravelExecutionParams } from '.';
 
 /**
  * Represents an execution graph for a workflow
@@ -18,7 +19,11 @@ export interface ExecutionGraph<TEngineType = any> {
 
 export interface ExecutionEngineOptions {
   tracingPolicy?: TracingPolicy;
-  validateInputs?: boolean;
+  validateInputs: boolean;
+  shouldPersistSnapshot: (params: {
+    stepResults: Record<string, StepResult<any, any, any, any>>;
+    workflowStatus: WorkflowRunStatus;
+  }) => boolean;
 }
 /**
  * Execution engine abstract class for building and executing workflow graphs
@@ -26,8 +31,8 @@ export interface ExecutionEngineOptions {
  */
 export abstract class ExecutionEngine extends MastraBase {
   protected mastra?: Mastra;
-  public options?: ExecutionEngineOptions;
-  constructor({ mastra, options }: { mastra?: Mastra; options?: ExecutionEngineOptions }) {
+  public options: ExecutionEngineOptions;
+  constructor({ mastra, options }: { mastra?: Mastra; options: ExecutionEngineOptions }) {
     super({ name: 'ExecutionEngine', component: RegisteredLogger.WORKFLOW });
     this.mastra = mastra;
     this.options = options;
@@ -43,7 +48,7 @@ export abstract class ExecutionEngine extends MastraBase {
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  abstract execute<TInput, TOutput>(params: {
+  abstract execute<TState, TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
     resourceId?: string;
@@ -51,21 +56,30 @@ export abstract class ExecutionEngine extends MastraBase {
     graph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
+    initialState?: TState;
+    timeTravel?: TimeTravelExecutionParams;
+    restart?: RestartExecutionParams;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
+      forEachIndex?: number;
+      label?: string;
     };
     emitter: Emitter;
-    runtimeContext: RuntimeContext;
-    workflowAISpan?: AISpan<AISpanType.WORKFLOW_RUN>;
+    requestContext: RequestContext;
+    workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
     retryConfig?: {
       attempts?: number;
       delay?: number;
     };
     abortController: AbortController;
     writableStream?: WritableStream<ChunkType>;
-    format?: 'aisdk' | 'mastra' | undefined;
+    format?: 'legacy' | 'vnext' | undefined;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
   }): Promise<TOutput>;
 }

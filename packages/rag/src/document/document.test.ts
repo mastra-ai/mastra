@@ -1,5 +1,6 @@
-import { createOpenAI } from '@ai-sdk/openai';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { embedMany } from 'ai';
+import type { EmbeddingModel } from 'ai';
 import { describe, it, expect, vi } from 'vitest';
 
 import { MDocument } from './document';
@@ -16,8 +17,71 @@ Welcome to our comprehensive guide on modern web development. This resource cove
 - Senior developers seeking a refresher on current best practices
 `;
 
-const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+// Mock embedding model for testing
+const mockEmbeddingModel: EmbeddingModel<string> = {
+  specificationVersion: 'v1',
+  provider: 'mock-provider',
+  modelId: 'mock-embedding-model',
+  maxEmbeddingsPerCall: 128,
+  supportsParallelCalls: true,
+  async doEmbed({ values }: { values: string[] }) {
+    // Return dummy embeddings with consistent dimension (384)
+    const dimension = 384;
+    const embeddings: number[][] = values.map(() =>
+      Array(dimension)
+        .fill(0)
+        .map(() => Math.random()),
+    );
+    return { embeddings };
+  },
+};
+
+// Mock language model for keyword/title/summary/questions extraction
+// Returns different responses based on input text to make tests more realistic
+const mockLanguageModel = new MockLanguageModelV1({
+  doGenerate: async ({ prompt }) => {
+    // Generate a simple response based on the input
+    let mockResponse = 'keyword1, keyword2, keyword3';
+
+    // Check if this is a title extraction (look for context in the prompt)
+    const promptText = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
+    const lowerPrompt = promptText.toLowerCase();
+
+    // Return different responses based on the type of extraction being done
+    // Match on the actual prompt patterns used by each extractor
+    if (promptText.includes('Alpha')) {
+      // Title extraction for Alpha document
+      mockResponse = 'Title for Alpha Document';
+    } else if (promptText.includes('Beta')) {
+      // Title extraction for Beta document
+      mockResponse = 'Title for Beta Document';
+    } else if (lowerPrompt.includes('extract') && lowerPrompt.includes('keywords')) {
+      // Keyword extraction (matches: "extract up to {maxKeywords} keywords")
+      mockResponse = 'KEYWORDS: keyword1, keyword2, keyword3';
+    } else if (lowerPrompt.includes('write a summary')) {
+      // Summary extraction
+      mockResponse = 'SUMMARY: This is a summary of the document content.';
+    } else if (lowerPrompt.includes('generate') && lowerPrompt.includes('questions')) {
+      // Question extraction
+      mockResponse = 'QUESTIONS: 1. What is this about?\n2. Why is this important?';
+    } else if (lowerPrompt.includes('give a title')) {
+      // Title extraction
+      mockResponse = 'Generated Document Title';
+    } else if (lowerPrompt.includes('based on the above candidate titles')) {
+      // Title combine template
+      mockResponse = 'Combined Document Title';
+    }
+
+    return {
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { promptTokens: 10, completionTokens: 20 },
+      text: mockResponse,
+    };
+  },
+  doStream: async () => {
+    throw new Error('Streaming not implemented for mock');
+  },
 });
 
 vi.setConfig({ testTimeout: 100_000, hookTimeout: 100_000 });
@@ -46,22 +110,42 @@ describe('MDocument', () => {
         maxSize: 1500,
         overlap: 0,
         extract: {
-          keywords: true,
+          keywords: { llm: mockLanguageModel },
         },
       });
 
       expect(doc.getMetadata()?.[0]).toBeTruthy();
       expect(chunks).toBeInstanceOf(Array);
-    }, 15000);
+      expect(chunks.length).toBeGreaterThan(0);
+      expect(chunks[0].metadata.excerptKeywords).toBeDefined();
+    });
 
     it('embed - create embedding from chunk', async () => {
+      // Ensure chunks are available (either from previous test or create new ones)
+      if (!chunks || chunks.length === 0) {
+        const testDoc = MDocument.fromMarkdown(sampleMarkdown);
+        chunks = await testDoc.chunk({ maxSize: 1500, overlap: 0 });
+      }
+
       const embeddings = await embedMany({
         values: chunks.map(chunk => chunk.text),
-        model: openai.embedding('text-embedding-3-small'),
+        model: mockEmbeddingModel,
       });
 
       expect(embeddings).toBeDefined();
-    }, 15000);
+      expect(embeddings.embeddings).toBeInstanceOf(Array);
+      expect(embeddings.embeddings.length).toBe(chunks.length);
+
+      // Verify each embedding has the correct dimension
+      embeddings.embeddings.forEach(embedding => {
+        expect(embedding).toBeInstanceOf(Array);
+        expect(embedding.length).toBe(384);
+
+        // Verify embeddings contain actual numbers (not all zeros)
+        const hasVariance = embedding.some(val => val !== embedding[0]);
+        expect(hasVariance).toBe(true);
+      });
+    });
   });
 
   describe('chunkCharacter', () => {
@@ -1874,9 +1958,9 @@ describe('MDocument', () => {
       const chunks = await doc.chunk({
         strategy: 'markdown',
         extract: {
-          title: true,
-          summary: true,
-          keywords: true,
+          title: { llm: mockLanguageModel },
+          summary: { llm: mockLanguageModel },
+          keywords: { llm: mockLanguageModel },
         },
       });
 
@@ -1884,8 +1968,8 @@ describe('MDocument', () => {
       expect(metadata).toBeDefined();
       expect(metadata.documentTitle).toBeDefined();
       expect(metadata.sectionSummary).toBeDefined();
-      expect(metadata.excerptKeywords).toMatch(/^KEYWORDS: .*/);
-    }, 15000);
+      expect(metadata.excerptKeywords).toBeDefined();
+    });
 
     it('should extract metadata with custom settings', async () => {
       const doc = MDocument.fromMarkdown(
@@ -1896,19 +1980,23 @@ describe('MDocument', () => {
         strategy: 'markdown',
         extract: {
           title: {
+            llm: mockLanguageModel,
             nodes: 2,
             nodeTemplate: 'Generate a title for this: {context}',
             combineTemplate: 'Combine these titles: {context}',
           },
           summary: {
+            llm: mockLanguageModel,
             summaries: ['self'],
             promptTemplate: 'Summarize this: {context}',
           },
           questions: {
+            llm: mockLanguageModel,
             questions: 2,
             promptTemplate: 'Generate {numQuestions} questions about: {context}',
           },
           keywords: {
+            llm: mockLanguageModel,
             keywords: 3,
             promptTemplate: 'Extract {maxKeywords} key terms from: {context}',
           },
@@ -1919,12 +2007,9 @@ describe('MDocument', () => {
       expect(metadata).toBeDefined();
       expect(metadata.documentTitle).toBeDefined();
       expect(metadata.sectionSummary).toBeDefined();
-      const qStr = metadata.questionsThisExcerptCanAnswer;
-      expect(qStr).toMatch(/1\..*\?/s);
-      expect(qStr).toMatch(/2\..*\?/s);
-      expect((qStr.match(/\?/g) || []).length).toBeGreaterThanOrEqual(2);
-      expect(metadata.excerptKeywords).toMatch(/^1\. .*\n2\. .*\n3\. .*$/);
-    }, 15000);
+      expect(metadata.questionsThisExcerptCanAnswer).toBeDefined();
+      expect(metadata.excerptKeywords).toBeDefined();
+    });
 
     it('should handle invalid summary types', async () => {
       const doc = MDocument.fromText('Test document');
@@ -1947,16 +2032,19 @@ describe('MDocument', () => {
 
     it('preserves metadata with KeywordExtractor', async () => {
       const doc = MDocument.fromText(baseText, { ...baseMetadata });
-      const chunks = await doc.chunk({ extract: { keywords: true } });
+      const chunks = await doc.chunk({ extract: { keywords: { llm: mockLanguageModel } } });
       const metadata = chunks[0].metadata;
+
       expect(metadata.source).toBe('unit-test');
       expect(metadata.customField).toBe(123);
       expect(metadata.excerptKeywords).toBeDefined();
+      expect(typeof metadata.excerptKeywords).toBe('string');
+      expect(metadata.excerptKeywords.length).toBeGreaterThan(0);
     });
 
     it('preserves metadata with SummaryExtractor', async () => {
       const doc = MDocument.fromText(baseText, { ...baseMetadata });
-      const chunks = await doc.chunk({ extract: { summary: true } });
+      const chunks = await doc.chunk({ extract: { summary: { llm: mockLanguageModel } } });
       const metadata = chunks[0].metadata;
       expect(metadata.source).toBe('unit-test');
       expect(metadata.customField).toBe(123);
@@ -1965,7 +2053,7 @@ describe('MDocument', () => {
 
     it('preserves metadata with QuestionsAnsweredExtractor', async () => {
       const doc = MDocument.fromText(baseText, { ...baseMetadata });
-      const chunks = await doc.chunk({ extract: { questions: true } });
+      const chunks = await doc.chunk({ extract: { questions: { llm: mockLanguageModel } } });
       const metadata = chunks[0].metadata;
       expect(metadata.source).toBe('unit-test');
       expect(metadata.customField).toBe(123);
@@ -1974,7 +2062,7 @@ describe('MDocument', () => {
 
     it('preserves metadata with TitleExtractor', async () => {
       const doc = MDocument.fromText(baseText, { ...baseMetadata });
-      const chunks = await doc.chunk({ extract: { title: true } });
+      const chunks = await doc.chunk({ extract: { title: { llm: mockLanguageModel } } });
       const metadata = chunks[0].metadata;
       expect(metadata.source).toBe('unit-test');
       expect(metadata.customField).toBe(123);
@@ -1985,19 +2073,24 @@ describe('MDocument', () => {
       const doc = MDocument.fromText(baseText, { ...baseMetadata });
       const chunks = await doc.chunk({
         extract: {
-          keywords: true,
-          summary: true,
-          questions: true,
-          title: true,
+          keywords: { llm: mockLanguageModel },
+          summary: { llm: mockLanguageModel },
+          questions: { llm: mockLanguageModel },
+          title: { llm: mockLanguageModel },
         },
       });
       const metadata = chunks[0].metadata;
+
       expect(metadata.source).toBe('unit-test');
       expect(metadata.customField).toBe(123);
       expect(metadata.excerptKeywords).toBeDefined();
       expect(metadata.sectionSummary).toBeDefined();
       expect(metadata.questionsThisExcerptCanAnswer).toBeDefined();
       expect(metadata.documentTitle).toBeDefined();
+
+      // Verify each extractor produces distinct output
+      expect(metadata.excerptKeywords).not.toBe(metadata.sectionSummary);
+      expect(metadata.sectionSummary).not.toBe(metadata.questionsThisExcerptCanAnswer);
     });
     it('preserves metadata on all chunks when multiple are created', async () => {
       const text = 'Chunk one.\n\nChunk two.\n\nChunk three.';
@@ -2007,7 +2100,7 @@ describe('MDocument', () => {
         separator: '\n\n',
         maxSize: 20,
         overlap: 0,
-        extract: { keywords: true },
+        extract: { keywords: { llm: mockLanguageModel } },
       });
       expect(chunks.length).toBeGreaterThan(1);
       for (const chunk of chunks) {
@@ -2024,7 +2117,7 @@ describe('MDocument', () => {
         unrelatedField: 'should stay',
         source: 'unit-test',
       });
-      const chunks = await doc.chunk({ extract: { keywords: true } });
+      const chunks = await doc.chunk({ extract: { keywords: { llm: mockLanguageModel } } });
       const metadata = chunks[0].metadata;
       expect(metadata.source).toBe('unit-test');
       expect(metadata.unrelatedField).toBe('should stay');
@@ -2042,7 +2135,7 @@ describe('MDocument', () => {
         type: 'text',
       });
 
-      await doc.extractMetadata({ title: true });
+      await doc.extractMetadata({ title: { llm: mockLanguageModel } });
       const chunks = doc.getDocs();
 
       const titleA1 = chunks[0].metadata.documentTitle;
@@ -2052,7 +2145,11 @@ describe('MDocument', () => {
       expect(titleA1).toBeDefined();
       expect(titleA2).toBeDefined();
       expect(titleB).toBeDefined();
+
+      // Chunks with same docId should get same title (grouped)
       expect(titleA1).toBe(titleA2);
+
+      // Chunks with different docId should get different titles
       expect(titleA1).not.toBe(titleB);
     });
   });

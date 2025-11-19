@@ -170,11 +170,8 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
       };
     }
 
-    // tool-output is a custom mastra chunk type used in ToolStream
-    // TODO: Should this be a data part instead of a tool output type
     case 'tool-output': {
       return {
-        toolCallId: part.toolCallId,
         ...part.output,
       };
     }

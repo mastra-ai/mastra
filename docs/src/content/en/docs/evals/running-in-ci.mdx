@@ -1,85 +1,113 @@
 ---
-title: "Running in CI"
-description: "Learn how to run Mastra evals in your CI/CD pipeline to monitor agent quality over time."
+title: "Running Scorers in CI | Evals"
+description: "Learn how to run scorer experiments in your CI/CD pipeline using the runEvals function."
 ---
 
-import { ScorerCallout } from '@/components/scorer-callout'
+# Running Scorers in CI
 
-# Running Evals in CI
+Running scorers in your CI pipeline provides quantifiable metrics for measuring agent quality over time. The `runEvals` function processes multiple test cases through your agent or workflow and returns aggregate scores.
 
-<ScorerCallout />
+## Basic Setup
 
-Running evals in your CI pipeline helps bridge this gap by providing quantifiable metrics for measuring agent quality over time.
+You can use any testing framework that supports ESM modules, such as [Vitest](https://vitest.dev/), [Jest](https://jestjs.io/), or [Mocha](https://mochajs.org/).
 
-## Setting Up CI Integration
+## Creating Test Cases
 
-We support any testing framework that supports ESM modules. For example, you can use [Vitest](https://vitest.dev/), [Jest](https://jestjs.io/) or [Mocha](https://mochajs.org/) to run evals in your CI/CD pipeline.
+Use `runEvals` to evaluate your agent against multiple test cases. The function accepts an array of data items, each containing an `input` and optional `groundTruth` for scorer validation.
 
-```typescript copy showLineNumbers filename="src/mastra/agents/index.test.ts"
-import { describe, it, expect } from "vitest";
-import { evaluate } from "@mastra/evals";
-import { ToneConsistencyMetric } from "@mastra/evals/nlp";
-import { myAgent } from "./index";
+```typescript copy showLineNumbers title="src/mastra/agents/weather-agent.test.ts"
+import { describe, it, expect } from 'vitest';
+import { createScorer, runEvals } from "@mastra/core/evals";
+import { weatherAgent } from "./weather-agent";
+import { locationScorer } from "../scorers/location-scorer";
 
-describe("My Agent", () => {
-  it("should validate tone consistency", async () => {
-    const metric = new ToneConsistencyMetric();
-    const result = await evaluate(myAgent, "Hello, world!", metric);
+describe('Weather Agent Tests', () => {
+  it('should correctly extract locations from queries', async () => {
+    const result = await runEvals({
+      data: [
+        {
+          input: 'weather in Berlin',
+          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'DE' }
+        },
+        {
+          input: 'weather in Berlin, Maryland',
+          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'US' }
+        },
+        {
+          input: 'weather in Berlin, Russia',
+          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'RU' }
+        },
+      ],
+      target: weatherAgent,
+      scorers: [locationScorer]
+    });
 
-    expect(result.score).toBe(1);
+    // Assert aggregate score meets threshold
+    expect(result.scores['location-accuracy']).toBe(1);
+    expect(result.summary.totalItems).toBe(3);
   });
 });
 ```
 
-You will need to configure a testSetup and globalSetup script for your testing framework to capture the eval results. It allows us to show these results in your mastra dashboard.
+View the full example [here](/examples/v1/evals/running-in-ci)
 
-## Framework Configuration
+## Understanding Results
 
-### Vitest Setup
+The `runEvals` function returns an object with:
 
-Add these files to your project to run evals in your CI/CD pipeline:
+- `scores`: Average scores for each scorer across all test cases
+- `summary.totalItems`: Total number of test cases processed
 
-```typescript copy showLineNumbers filename="globalSetup.ts"
-import { globalSetup } from "@mastra/evals";
-
-export default function setup() {
-  globalSetup();
+```typescript
+{
+  scores: {
+    'location-accuracy': 1.0,  // Average score across all items
+    'another-scorer': 0.85
+  },
+  summary: {
+    totalItems: 3
+  }
 }
 ```
 
-```typescript copy showLineNumbers filename="testSetup.ts"
-import { beforeAll } from "vitest";
-import { attachListeners } from "@mastra/evals";
+## Multiple Test Scenarios
 
-beforeAll(async () => {
-  await attachListeners();
+Create separate test cases for different evaluation scenarios:
+
+```typescript copy showLineNumbers title="src/mastra/agents/weather-agent.test.ts"
+describe('Weather Agent Tests', () => {
+  const locationScorer = createScorer({ /* ... */ });
+
+  it('should handle location disambiguation', async () => {
+    const result = await runEvals({
+      data: [
+        { input: 'weather in Berlin', groundTruth: { /* ... */ } },
+        { input: 'weather in Berlin, Maryland', groundTruth: { /* ... */ } },
+      ],
+      target: weatherAgent,
+      scorers: [locationScorer]
+    });
+
+    expect(result.scores['location-accuracy']).toBe(1);
+  });
+
+  it('should handle typos and misspellings', async () => {
+    const result = await runEvals({
+      data: [
+        { input: 'weather in Berln', groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'DE' } },
+        { input: 'weather in Parris', groundTruth: { expectedLocation: 'Paris', expectedCountry: 'FR' } },
+      ],
+      target: weatherAgent,
+      scorers: [locationScorer]
+    });
+
+    expect(result.scores['location-accuracy']).toBe(1);
+  });
 });
 ```
 
-```typescript copy showLineNumbers filename="vitest.config.ts"
-import { defineConfig } from "vitest/config";
+## Next Steps
 
-export default defineConfig({
-  test: {
-    globalSetup: "./globalSetup.ts",
-    setupFiles: ["./testSetup.ts"],
-  },
-});
-```
-
-## Storage Configuration
-
-To store eval results in Mastra Storage and capture results in the Mastra dashboard:
-
-```typescript copy showLineNumbers filename="testSetup.ts"
-import { beforeAll } from "vitest";
-import { attachListeners } from "@mastra/evals";
-import { mastra } from "./your-mastra-setup";
-
-beforeAll(async () => {
-  // Store evals in Mastra Storage (requires storage to be enabled)
-  await attachListeners(mastra);
-});
-```
-
-With file storage, evals persist and can be queried later. With memory storage, evals are isolated to the test process.
+- Learn about [creating custom scorers](/docs/v1/evals/custom-scorers)
+- Explore [built-in scorers](/docs/v1/evals/built-in-scorers)
+- Read the [runEvals API reference](/reference/v1/evals/run-evals)

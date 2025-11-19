@@ -3,6 +3,5 @@ export { createWatcher, getInputOptions as getWatcherInputOptions } from './watc
 export { analyzeBundle } from './analyze';
 export { FileService } from '../services/fs';
 export { Deps } from '../services/deps';
-export { writeTelemetryConfig } from './telemetry';
 export { getServerOptions } from './serverOptions';
 export { getBundlerOptions } from './bundlerOptions';

@@ -11,7 +11,6 @@ import type {
   Hotel,
   HotelApiResponse,
 } from "@/lib/types";
-import type { StepResult } from "@mastra/core/workflows";
 
 export class Booking {
   uri: string;
@@ -215,12 +214,12 @@ export class Booking {
     checkIn: string;
     checkOut: string;
     typeOfPlace: string;
-    payload?: StepResult<{ id: string }>;
+    payload?: { status: string; output?: { id: string } };
   }) {
     let place = placeId;
 
-    if (payload?.status === "success") {
-      place = payload.output?.id;
+    if (payload?.status === "success" && payload.output?.id) {
+      place = payload.output.id;
     }
 
     const url = `${this.uri}/searchPropertyByPlace?id=${place}&totalRecords=10&currency=USD&adults=1&typeOfPlace=${typeOfPlace}&checkin=${checkIn}&checkout=${checkOut}`;

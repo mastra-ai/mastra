@@ -14,7 +14,7 @@
  * 3. Full project type checking often runs out of memory
  *
  * Run manually: npm run test:types:zod
- * Runs in CI: As part of npm test
+ * Runs in CI: As a separate step before unit tests
  */
 
 import { exec } from 'child_process';
@@ -42,9 +42,8 @@ const v4Tool = createTool({
   outputSchema: zv4.object({
     output: zv4.string()
   }),
-  execute: async ({ context }) => {
-    const { input } = context;
-    const reversed = input.split("").reverse().join("");
+  execute: async (inputData) => {
+    const reversed = inputData.input.split("").reverse().join("");
     return {
       output: reversed
     };
@@ -61,8 +60,8 @@ const v3Tool = createTool({
   outputSchema: z.object({
     result: z.string()
   }),
-  execute: async ({ context }) => ({
-    result: context.message.toUpperCase()
+  execute: async (inputData) => ({
+    result: inputData.message.toUpperCase()
   })
 });
 

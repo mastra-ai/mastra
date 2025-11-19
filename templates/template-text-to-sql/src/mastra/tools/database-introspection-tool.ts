@@ -26,7 +26,8 @@ export const databaseIntrospectionTool = createTool({
     connectionString: z.string().describe('PostgreSQL connection string'),
   }),
   description: 'Introspects a PostgreSQL database to understand its schema, tables, columns, and relationships',
-  execute: async ({ context: { connectionString } }) => {
+  execute: async inputData => {
+    const { connectionString } = inputData;
     const client = createDatabaseConnection(connectionString);
 
     try {

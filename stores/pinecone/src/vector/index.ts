@@ -16,6 +16,7 @@ import type {
   IndexStatsDescription,
   QueryOptions,
   RecordSparseValues,
+  ServerlessSpecCloudEnum,
   UpdateOptions,
 } from '@pinecone-database/pinecone';
 
@@ -46,27 +47,38 @@ interface PineconeDeleteVectorParams extends DeleteVectorParams {
 
 export class PineconeVector extends MastraVector<PineconeVectorFilter> {
   private client: Pinecone;
+  private cloud: ServerlessSpecCloudEnum;
+  private region: string;
 
   /**
    * Creates a new PineconeVector client.
+   * @param id - The unique identifier for this vector store instance.
    * @param apiKey - The API key for Pinecone.
    * @param environment - The environment for Pinecone.
+   * @param cloud - The cloud provider for Pinecone.
+   * @param region - The region for Pinecone.
    */
-  constructor({ apiKey, environment }: { apiKey: string; environment?: string }) {
-    super();
+  constructor({
+    id,
+    apiKey,
+    environment,
+    cloud,
+    region,
+  }: {
+    id: string;
+    apiKey: string;
+    environment?: string;
+    region?: string;
+    cloud?: ServerlessSpecCloudEnum;
+  }) {
+    super({ id });
     const opts: { apiKey: string; controllerHostUrl?: string } = { apiKey };
     if (environment) {
       opts['controllerHostUrl'] = environment;
     }
-    const baseClient = new Pinecone(opts);
-    const telemetry = this.__getTelemetry();
-    this.client =
-      telemetry?.traceClass(baseClient, {
-        spanNamePrefix: 'pinecone-vector',
-        attributes: {
-          'vector.type': 'pinecone',
-        },
-      }) ?? baseClient;
+    this.client = new Pinecone(opts);
+    this.cloud = cloud || 'aws';
+    this.region = region || 'us-east-1';
   }
 
   get indexSeparator(): string {
@@ -100,8 +112,8 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
         metric: metric,
         spec: {
           serverless: {
-            cloud: 'aws',
-            region: 'us-east-1',
+            cloud: this.cloud,
+            region: this.region,
           },
         },
       });

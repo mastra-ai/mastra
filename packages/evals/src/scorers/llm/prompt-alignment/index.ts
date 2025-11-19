@@ -1,6 +1,6 @@
-import type { MastraLanguageModel } from '@mastra/core/agent';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
-import { createScorer } from '@mastra/core/scores';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
+import { createScorer } from '@mastra/core/evals';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import { z } from 'zod';
 import {
   getAssistantMessageFromRunOutput,
@@ -71,13 +71,14 @@ export function createPromptAlignmentScorerLLM({
   model,
   options,
 }: {
-  model: MastraLanguageModel;
+  model: MastraModelConfig;
   options?: PromptAlignmentOptions;
 }) {
   const scale = options?.scale || 1;
   const evaluationMode = options?.evaluationMode || 'both';
 
   return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+    id: 'prompt-alignment-scorer',
     name: 'Prompt Alignment (LLM)',
     description: 'Evaluates how well the agent response aligns with the intent and requirements of the user prompt',
     judge: {

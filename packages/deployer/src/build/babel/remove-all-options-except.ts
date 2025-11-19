@@ -38,36 +38,36 @@ export function removeAllOptionsFromMastraExcept(
           mastraArgs = path.node.arguments[0];
         }
 
-        let telemetry = mastraArgs.properties.find(
+        let configProperty = mastraArgs.properties.find(
           // @ts-ignore
           prop => prop.key.name === option,
         );
-        let telemetryValue: types.Expression = t.objectExpression([]);
+        let configValue: types.Expression = t.objectExpression([]);
 
         const programPath = path.scope.getProgramParent().path as NodePath<types.Program> | undefined;
         if (!programPath) {
           return;
         }
 
-        if (telemetry && t.isObjectProperty(telemetry) && t.isExpression(telemetry.value)) {
+        if (configProperty && t.isObjectProperty(configProperty) && t.isExpression(configProperty.value)) {
           result.hasCustomConfig = true;
-          telemetryValue = telemetry.value;
+          configValue = configProperty.value;
 
-          if (t.isIdentifier(telemetry.value) && telemetry.value.name === option) {
-            const telemetryBinding = state.file.scope.getBinding(option)!;
+          if (t.isIdentifier(configProperty.value) && configProperty.value.name === option) {
+            const configBinding = state.file.scope.getBinding(option)!;
 
-            if (telemetryBinding && t.isVariableDeclarator(telemetryBinding.path.node)) {
+            if (configBinding && t.isVariableDeclarator(configBinding.path.node)) {
               const id = path.scope.generateUidIdentifier(option);
 
-              telemetryBinding.path.replaceWith(t.variableDeclarator(id, telemetryBinding.path.node.init!));
-              telemetryValue = id;
+              configBinding.path.replaceWith(t.variableDeclarator(id, configBinding.path.node.init!));
+              configValue = id;
             }
           }
         }
 
         // add the deployer export
         const exportDeclaration = t.exportNamedDeclaration(
-          t.variableDeclaration('const', [t.variableDeclarator(t.identifier(option), telemetryValue)]),
+          t.variableDeclaration('const', [t.variableDeclarator(t.identifier(option), configValue)]),
           [],
         );
 

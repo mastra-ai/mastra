@@ -1,12 +1,13 @@
-import { delay } from '@ai-sdk/provider-utils';
-import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils/test';
+import { delay } from '@ai-sdk/provider-utils-v5';
+import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { tool } from 'ai-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2, mockValues, mockId } from 'ai-v5/test';
+import { convertArrayToReadableStream, mockValues, mockId } from 'ai-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import {
+  createMessageListWithUserMessage,
   createTestModels,
   defaultSettings,
   mockDate,
@@ -16,6 +17,7 @@ import {
   testUsage,
   testUsage2,
 } from './utils';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 
 export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('result.fullStream', () => {
@@ -44,6 +46,8 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
         'input',
       );
       const result = loopFn({
+        methodType: 'stream',
+        agentId: 'agent-id',
         runId,
         models: [
           {
@@ -142,6 +146,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               "headers": undefined,
               "id": "response-id",
               "modelId": "response-model-id",
+              "modelMetadata": {
+                "modelId": "mock-model-id",
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
+              },
               "timestamp": 1970-01-01T00:00:05.000Z,
             },
             "type": "finish-step",
@@ -165,16 +174,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     });
 
     it('should send text deltas', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
       const result = await loopFn({
+        methodType: 'stream',
         runId,
+        agentId: 'agent-id',
         models: [
           {
             maxRetries: 0,
@@ -265,6 +269,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               "headers": undefined,
               "id": "response-id",
               "modelId": "response-model-id",
+              "modelMetadata": {
+                "modelId": "mock-model-id",
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
+              },
               "timestamp": 1970-01-01T00:00:05.000Z,
             },
             "type": "finish-step",
@@ -288,9 +297,9 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     });
 
     it('should send reasoning deltas', async () => {
-      const messageList = new MessageList();
-
+      const messageList = createMessageListWithUserMessage();
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         messageList,
@@ -474,6 +483,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               "headers": undefined,
               "id": "id-0",
               "modelId": "mock-model-id",
+              "modelMetadata": {
+                "modelId": "mock-model-id",
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
+              },
               "timestamp": 1970-01-01T00:00:00.000Z,
             },
             "type": "finish-step",
@@ -497,9 +511,9 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     });
 
     it('should send sources', async () => {
-      const messageList = new MessageList();
-
+      const messageList = createMessageListWithUserMessage();
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
         messageList,
@@ -563,6 +577,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               "headers": undefined,
               "id": "id-0",
               "modelId": "mock-model-id",
+              "modelMetadata": {
+                "modelId": "mock-model-id",
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
+              },
               "modelProvider": "mock-provider",
               "modelVersion": "v2",
               "timestamp": 1970-01-01T00:00:00.000Z,
@@ -588,9 +607,9 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     });
 
     it('should send files', async () => {
-      const messageList = new MessageList();
-
+      const messageList = createMessageListWithUserMessage();
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         messageList,
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
@@ -650,6 +669,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               "headers": undefined,
               "id": "id-0",
               "modelId": "mock-model-id",
+              "modelMetadata": {
+                "modelId": "mock-model-id",
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
+              },
               "modelProvider": "mock-provider",
               "modelVersion": "v2",
               "timestamp": 1970-01-01T00:00:00.000Z,
@@ -675,16 +699,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     });
 
     it('should use fallback response metadata when response metadata is not provided', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
+        agentId: 'agent-id',
         runId,
         messageList,
         models: [
@@ -770,6 +789,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               "headers": undefined,
               "id": "id-2000",
               "modelId": "mock-model-id",
+              "modelMetadata": {
+                "modelId": "mock-model-id",
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
+              },
               "modelProvider": "mock-provider",
               "modelVersion": "v2",
               "timestamp": 1970-01-01T00:00:02.000Z,
@@ -795,17 +819,12 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     });
 
     it('should send tool calls', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
+        agentId: 'agent-id',
         messageList,
         models: [
           {
@@ -884,17 +903,12 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     });
 
     it('should send tool call deltas', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
+        agentId: 'agent-id',
         models: createTestModels({
           stream: convertArrayToReadableStream([
             {
@@ -1058,6 +1072,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               "headers": undefined,
               "id": "id-0",
               "modelId": "mock-model-id",
+              "modelMetadata": {
+                "modelId": "mock-model-id",
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
+              },
               "timestamp": 1970-01-01T00:00:00.000Z,
             },
             "type": "finish-step",
@@ -1085,17 +1104,12 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     });
 
     it('should send tool results', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
+        agentId: 'agent-id',
         models: createTestModels({
           stream: convertArrayToReadableStream([
             {
@@ -1120,14 +1134,14 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
         tools: {
           tool1: tool({
             inputSchema: z.object({ value: z.string() }),
-            execute: async (input, options) => {
-              console.info('TOOL 1', input, options);
+            execute: async (inputData, options) => {
+              console.info('TOOL 1', inputData, options);
 
-              expect(input).toStrictEqual({ value: 'value' });
+              expect(inputData).toStrictEqual({ value: 'value' });
               expect(options.messages).toStrictEqual([
                 { role: 'user', content: [{ type: 'text', text: 'test-input' }] },
               ]);
-              return `${input.value}-result`;
+              return `${inputData.value}-result`;
             },
           }),
         },
@@ -1146,17 +1160,12 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
     it('should send delayed asynchronous tool results', async () => {
       vi.useRealTimers();
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
+        agentId: 'agent-id',
         models: createTestModels({
           stream: convertArrayToReadableStream([
             {
@@ -1201,17 +1210,12 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     });
 
     it('should filter out empty text deltas', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
+        agentId: 'agent-id',
         models: createTestModels({
           stream: convertArrayToReadableStream([
             {
@@ -1289,6 +1293,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               "headers": undefined,
               "id": "id-0",
               "modelId": "mock-model-id",
+              "modelMetadata": {
+                "modelId": "mock-model-id",
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
+              },
               "timestamp": 1970-01-01T00:00:00.000Z,
             },
             "type": "finish-step",

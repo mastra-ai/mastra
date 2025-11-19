@@ -1,6 +1,6 @@
 import type { InputOptions, OutputOptions, Plugin } from 'rollup';
 import { watch } from 'rollup';
-import { join } from 'node:path';
+import { dirname, posix } from 'node:path';
 import * as pkg from 'empathic/package';
 import { getInputOptions as getBundlerInputOptions } from './bundler';
 import { aliasHono } from './plugins/hono-alias';
@@ -9,8 +9,7 @@ import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { noopLogger } from '@mastra/core/logger';
 import { getWorkspaceInformation } from '../bundler/workspaceDependencies';
 import { analyzeBundle } from './analyze';
-import path, { dirname } from 'path';
-import { getPackageName } from './utils';
+import { getPackageName, slash } from './utils';
 
 export async function getInputOptions(
   entryFile: string,
@@ -19,14 +18,14 @@ export async function getInputOptions(
   { sourcemap = false }: { sourcemap?: boolean } = {},
 ) {
   const closestPkgJson = pkg.up({ cwd: dirname(entryFile) });
-  const projectRoot = closestPkgJson ? dirname(closestPkgJson) : process.cwd();
+  const projectRoot = closestPkgJson ? dirname(slash(closestPkgJson)) : slash(process.cwd());
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: entryFile });
 
   const analyzeEntryResult = await analyzeBundle(
     [entryFile],
     entryFile,
     {
-      outputDir: path.join(process.cwd(), '.mastra/.build'),
+      outputDir: posix.join(process.cwd(), '.mastra', '.build'),
       projectRoot: workspaceRoot || process.cwd(),
       platform: 'node',
       isDev: true,
@@ -43,14 +42,13 @@ export async function getInputOptions(
   }
 
   // In `analyzeBundle` we output this file and we want to use that instead of the original entry file
-  // const analyzedEntryFile = join(path.join(projectRoot, '.mastra/.build'), 'entry-0.mjs');
+  //const analyzedEntryFile = posix.join(process.cwd(), '.mastra', '.build', 'entry-0.mjs');
 
   const inputOptions = await getBundlerInputOptions(
     entryFile,
     {
       dependencies: deps,
       externalDependencies: new Set(),
-      invalidChunks: new Set(),
       workspaceMap,
     },
     platform,

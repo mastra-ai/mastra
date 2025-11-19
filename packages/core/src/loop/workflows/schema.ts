@@ -1,4 +1,3 @@
-import type { LanguageModelV1LogProbs } from '@ai-sdk/provider';
 import type { ReasoningPart } from '@ai-sdk/provider-utils-v5';
 import type {
   LanguageModelV2FinishReason,
@@ -6,7 +5,7 @@ import type {
   SharedV2ProviderMetadata,
   LanguageModelV2Source,
 } from '@ai-sdk/provider-v5';
-import type { LanguageModelRequestMetadata } from 'ai';
+import type { LanguageModelRequestMetadata, LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
 import type {
   StepResult,
   ModelMessage,
@@ -21,6 +20,7 @@ import type {
   GeneratedFile,
 } from 'ai-v5';
 import z from 'zod';
+import type { InferSchemaOutput, OutputSchema } from '../../stream/base/schema';
 
 // Type definitions for the workflow data
 export interface LLMIterationStepResult {
@@ -34,7 +34,7 @@ export interface LLMIterationStepResult {
   request?: LanguageModelRequestMetadata;
 }
 
-export interface LLMIterationOutput<Tools extends ToolSet = ToolSet> {
+export interface LLMIterationOutput<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
   text?: string;
   reasoning?: ReasoningPart[];
   reasoningText?: string;
@@ -48,26 +48,32 @@ export interface LLMIterationOutput<Tools extends ToolSet = ToolSet> {
   dynamicToolResults?: DynamicToolResult[];
   usage: LanguageModelUsage;
   steps: StepResult<Tools>[];
+  object?: InferSchemaOutput<OUTPUT>;
 }
 
 export interface LLMIterationMetadata {
   id?: string;
   model?: string;
   modelId?: string; // Required by LanguageModelResponseMetadata
+  modelMetadata?: {
+    modelId: string;
+    modelVersion: string;
+    modelProvider: string;
+  };
   timestamp?: Date;
   providerMetadata?: SharedV2ProviderMetadata;
   headers?: Record<string, string>;
   request?: LanguageModelRequestMetadata;
 }
 
-export interface LLMIterationData<Tools extends ToolSet = ToolSet> {
+export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
   messageId: string;
   messages: {
     all: ModelMessage[];
     user: ModelMessage[];
     nonUser: ModelMessage[];
   };
-  output: LLMIterationOutput<Tools>;
+  output: LLMIterationOutput<Tools, OUTPUT>;
   metadata: LLMIterationMetadata;
   stepResult: LLMIterationStepResult;
 }
@@ -120,6 +126,13 @@ export const llmIterationOutputSchema = z.object({
     id: z.string().optional(),
     model: z.string().optional(),
     modelId: z.string().optional(),
+    modelMetadata: z
+      .object({
+        modelId: z.string(),
+        modelVersion: z.string(),
+        modelProvider: z.string(),
+      })
+      .optional(),
     timestamp: z.date().optional(),
     providerMetadata: z.record(z.any()).optional(),
     headers: z.record(z.string()).optional(),

@@ -9,7 +9,7 @@ import { esbuild } from '../plugins/esbuild';
 import { isNodeBuiltin } from '../isNodeBuiltin';
 import { removeDeployer } from '../plugins/remove-deployer';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
-import { getPackageName, getPackageRootPath } from '../utils';
+import { getPackageName, getPackageRootPath, slash } from '../utils';
 import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import { DEPS_TO_IGNORE } from './constants';
@@ -23,7 +23,7 @@ function getInputPlugins(
   mastraEntry: string,
   { sourcemapEnabled }: { sourcemapEnabled: boolean },
 ): Plugin[] {
-  const normalizedMastraEntry = mastraEntry.replaceAll('\\', '/');
+  const normalizedMastraEntry = slash(mastraEntry);
   let virtualPlugin = null;
   if (isVirtualFile) {
     virtualPlugin = virtual({
@@ -44,7 +44,7 @@ function getInputPlugins(
         name: 'custom-alias-resolver',
         resolveId(id: string) {
           if (id === '#server') {
-            return fileURLToPath(import.meta.resolve('@mastra/deployer/server')).replaceAll('\\', '/');
+            return slash(fileURLToPath(import.meta.resolve('@mastra/deployer/server')));
           }
           if (id === '#mastra') {
             return normalizedMastraEntry;
@@ -79,6 +79,7 @@ async function captureDependenciesToOptimize(
   output: OutputChunk,
   workspaceMap: Map<string, WorkspacePackageInfo>,
   projectRoot: string,
+  initialDepsToOptimize: Map<string, DependencyMetadata>,
   {
     logger,
   }: {
@@ -86,6 +87,17 @@ async function captureDependenciesToOptimize(
   },
 ): Promise<Map<string, DependencyMetadata>> {
   const depsToOptimize = new Map<string, DependencyMetadata>();
+
+  if (!output.facadeModuleId) {
+    throw new Error(
+      'Something went wrong, we could not find the package name of the entry file. Please open an issue.',
+    );
+  }
+
+  let entryRootPath = projectRoot;
+  if (!output.facadeModuleId.startsWith('\x00virtual:')) {
+    entryRootPath = (await getPackageRootPath(output.facadeModuleId)) || projectRoot;
+  }
 
   for (const [dependency, bindings] of Object.entries(output.importedBindings)) {
     if (isNodeBuiltin(dependency) || DEPS_TO_IGNORE.includes(dependency)) {
@@ -98,11 +110,13 @@ async function captureDependenciesToOptimize(
     let isWorkspace = false;
 
     if (pkgName) {
-      rootPath = await getPackageRootPath(pkgName);
+      rootPath = await getPackageRootPath(dependency, entryRootPath);
       isWorkspace = workspaceMap.has(pkgName);
     }
 
-    depsToOptimize.set(dependency, { exports: bindings, rootPath, isWorkspace });
+    const normalizedRootPath = rootPath ? slash(rootPath) : null;
+
+    depsToOptimize.set(dependency, { exports: bindings, rootPath: normalizedRootPath, isWorkspace });
   }
 
   /**
@@ -132,7 +146,6 @@ async function captureDependenciesToOptimize(
       try {
         // Absolute path to the dependency
         const resolvedPath = resolveFrom(projectRoot, dep);
-
         if (!resolvedPath) {
           logger.warn(`Could not resolve path for workspace dependency ${dep}`);
           continue;
@@ -143,6 +156,7 @@ async function captureDependenciesToOptimize(
           projectRoot,
           logger: noopLogger,
           sourcemapEnabled: false,
+          initialDepsToOptimize: depsToOptimize,
         });
 
         if (!analysis?.dependencies) {
@@ -173,7 +187,7 @@ async function captureDependenciesToOptimize(
     }
   }
 
-  await checkTransitiveDependencies(new Map());
+  await checkTransitiveDependencies(initialDepsToOptimize);
 
   // #tools is a generated dependency, we don't want our analyzer to handle it
   const dynamicImports = output.dynamicImports.filter(d => !DEPS_TO_IGNORE.includes(d));
@@ -215,11 +229,13 @@ export async function analyzeEntry(
     sourcemapEnabled,
     workspaceMap,
     projectRoot,
+    initialDepsToOptimize = new Map(), // used to avoid infinite recursion
   }: {
     logger: IMastraLogger;
     sourcemapEnabled: boolean;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     projectRoot: string;
+    initialDepsToOptimize?: Map<string, DependencyMetadata>;
   },
 ): Promise<{
   dependencies: Map<string, DependencyMetadata>;
@@ -244,9 +260,15 @@ export async function analyzeEntry(
 
   await optimizerBundler.close();
 
-  const depsToOptimize = await captureDependenciesToOptimize(output[0] as OutputChunk, workspaceMap, projectRoot, {
-    logger,
-  });
+  const depsToOptimize = await captureDependenciesToOptimize(
+    output[0] as OutputChunk,
+    workspaceMap,
+    projectRoot,
+    initialDepsToOptimize,
+    {
+      logger,
+    },
+  );
 
   return {
     dependencies: depsToOptimize,

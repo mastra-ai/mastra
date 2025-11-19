@@ -1,11 +1,12 @@
 import { z } from 'zod';
-import type { AISpan, AISpanType } from '../../../ai-tracing';
 import type { MastraMemory } from '../../../memory/memory';
 import type { StorageThreadType } from '../../../memory/types';
-import type { RuntimeContext } from '../../../runtime-context';
+import type { Span, SpanType } from '../../../observability';
+import type { RequestContext } from '../../../request-context';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
+import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 import { prepareToolsStepOutputSchema } from './schema';
 
@@ -18,10 +19,9 @@ interface PrepareToolsStepOptions<
   threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
   resourceId?: string;
   runId: string;
-  runtimeContext: RuntimeContext;
-  agentAISpan: AISpan<AISpanType.AGENT_RUN>;
-  methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
-  format?: FORMAT;
+  requestContext: RequestContext;
+  agentSpan: Span<SpanType.AGENT_RUN>;
+  methodType: AgentMethodType;
   memory?: MastraMemory;
 }
 
@@ -34,10 +34,9 @@ export function createPrepareToolsStep<
   threadFromArgs,
   resourceId,
   runId,
-  runtimeContext,
-  agentAISpan,
+  requestContext,
+  agentSpan,
   methodType,
-  format,
   memory,
 }: PrepareToolsStepOptions<OUTPUT, FORMAT>) {
   return createStep({
@@ -70,11 +69,10 @@ export function createPrepareToolsStep<
         threadId,
         resourceId,
         runId,
-        runtimeContext,
-        tracingContext: { currentSpan: agentAISpan },
+        requestContext,
+        tracingContext: { currentSpan: agentSpan },
         writableStream: options.writableStream,
         methodType,
-        format: format as 'aisdk' | 'mastra' | undefined,
       });
 
       return {

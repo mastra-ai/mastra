@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { describeRoute } from 'hono-openapi';
-import { getAITraceHandler, getAITracesPaginatedHandler, processTraceScoringHandler } from './handlers';
+import { getTraceHandler, getTracesPaginatedHandler, listScoresBySpan, processTraceScoringHandler } from './handlers';
 
 export function observabilityRouter() {
   const router = new Hono();
@@ -8,7 +8,7 @@ export function observabilityRouter() {
   router.get(
     '/traces',
     describeRoute({
-      description: 'Get paginated list of AI traces',
+      description: 'Get paginated list of traces',
       tags: ['observability'],
       parameters: [
         {
@@ -56,20 +56,20 @@ export function observabilityRouter() {
       ],
       responses: {
         200: {
-          description: 'Paginated list of AI traces',
+          description: 'Paginated list of traces',
         },
         400: {
           description: 'Bad request - invalid parameters',
         },
       },
     }),
-    getAITracesPaginatedHandler,
+    getTracesPaginatedHandler,
   );
 
   router.get(
     '/traces/:traceId',
     describeRoute({
-      description: 'Get a specific AI trace by ID',
+      description: 'Get a specific trace by ID',
       tags: ['observability'],
       parameters: [
         {
@@ -82,7 +82,7 @@ export function observabilityRouter() {
       ],
       responses: {
         200: {
-          description: 'AI trace with all its spans',
+          description: 'Trace with all its spans',
         },
         400: {
           description: 'Bad request - missing trace ID',
@@ -92,7 +92,51 @@ export function observabilityRouter() {
         },
       },
     }),
-    getAITraceHandler,
+    getTraceHandler,
+  );
+
+  router.get(
+    '/traces/:traceId/:spanId/scores',
+    describeRoute({
+      description: 'Get scores by trace ID and span ID',
+      tags: ['scores'],
+      parameters: [
+        {
+          name: 'traceId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          description: 'Trace ID',
+        },
+        {
+          name: 'spanId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          description: 'Span ID',
+        },
+        {
+          name: 'page',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+          description: 'Page number for pagination (default: 0)',
+        },
+        {
+          name: 'perPage',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+          description: 'Number of items per page (default: 10)',
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Paginated list of scores for span',
+        },
+      },
+    }),
+    listScoresBySpan,
   );
 
   router.post(

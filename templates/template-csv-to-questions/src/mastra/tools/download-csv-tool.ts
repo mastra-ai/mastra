@@ -65,8 +65,8 @@ export const csvFetcherTool = createTool({
     columnCount: z.number().describe('Number of columns in the CSV'),
     characterCount: z.number().describe('Number of characters in the original CSV'),
   }),
-  execute: async ({ context, mastra }) => {
-    const { csvUrl } = context;
+  execute: async (inputData, context) => {
+    const { csvUrl } = inputData;
 
     console.log('📥 Downloading CSV from URL:', csvUrl);
 
@@ -151,7 +151,7 @@ export const csvFetcherTool = createTool({
 
       // Step 3: Generate summary using the AI agent
       console.log('🧠 Generating AI summary...');
-      const csvSummarizationAgent = mastra?.getAgent('csvSummarizationAgent');
+      const csvSummarizationAgent = context?.mastra?.getAgent('csvSummarizationAgent');
       if (!csvSummarizationAgent) {
         throw new Error('CSV summarization agent not found');
       }
