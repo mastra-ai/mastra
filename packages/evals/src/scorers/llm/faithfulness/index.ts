@@ -45,12 +45,23 @@ export function createFaithfulnessScorer({
       createPrompt: ({ results, run }) => {
         // Use the context provided by the user, or the context from the tool invocations
         const assistantMessage = run.output.find(({ role }) => role === 'assistant');
+        const toolResultParts =
+          assistantMessage?.content?.parts?.filter(
+            (part): part is Extract<typeof part, { type: 'tool-invocation' }> =>
+              part.type === 'tool-invocation' && part.toolInvocation?.state === 'result',
+          ) ?? [];
+
         const context =
           options?.context ??
-          assistantMessage?.content?.toolInvocations?.map(toolCall =>
-            toolCall.state === 'result' ? JSON.stringify(toolCall.result) : '',
-          ) ??
-          [];
+          toolResultParts
+            .map(part => {
+              if (part.toolInvocation.state === 'result') {
+                return JSON.stringify(part.toolInvocation.result);
+              }
+              return '';
+            })
+            .filter(Boolean);
+
         const prompt = createFaithfulnessAnalyzePrompt({
           claims: results.preprocessStepResult || [],
           context,
@@ -74,10 +85,15 @@ export function createFaithfulnessScorer({
       description: 'Reason about the results',
       createPrompt: ({ run, results, score }) => {
         const assistantMessage = run.output.find(({ role }) => role === 'assistant');
+        const toolInvocationParts =
+          assistantMessage?.content?.parts?.filter(
+            (part): part is Extract<typeof part, { type: 'tool-invocation' }> => part.type === 'tool-invocation',
+          ) ?? [];
+
         const prompt = createFaithfulnessReasonPrompt({
           input: getUserMessageFromRunInput(run.input) ?? '',
           output: getAssistantMessageFromRunOutput(run.output) ?? '',
-          context: assistantMessage?.content?.toolInvocations?.map(toolCall => JSON.stringify(toolCall)) || [],
+          context: toolInvocationParts.map(part => JSON.stringify(part.toolInvocation)),
           score,
           scale: options?.scale || 1,
           verdicts: results.analyzeStepResult?.verdicts || [],

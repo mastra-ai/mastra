@@ -230,9 +230,11 @@ export class CouchbaseVector extends MastraVector {
           embedding: vector,
           metadata: metadataObj,
         };
-        // If metadata has a text field, save it as content
+        // If metadata has a text field, save it as content in parts array format
         if (metadataObj.text) {
-          record.content = metadataObj.text;
+          record.content = {
+            parts: [{ type: 'text', text: metadataObj.text }],
+          };
         }
         return record;
       });
@@ -281,12 +283,15 @@ export class CouchbaseVector extends MastraVector {
       for (const match of results.rows) {
         const cleanedMetadata: Record<string, any> = {};
         const fields = (match.fields as Record<string, any>) || {}; // Ensure fields is an object
+
         for (const key in fields) {
           if (Object.prototype.hasOwnProperty.call(fields, key)) {
+            // Include content in metadata (removing the 'metadata.' prefix if present)
             const newKey = key.startsWith('metadata.') ? key.substring('metadata.'.length) : key;
             cleanedMetadata[newKey] = fields[key];
           }
         }
+
         output.push({
           id: match.id as string,
           score: (match.score as number) || 0,

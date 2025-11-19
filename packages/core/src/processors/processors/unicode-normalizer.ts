@@ -56,10 +56,6 @@ export class UnicodeNormalizer implements Processor {
             }
             return part;
           }),
-          content:
-            typeof message.content.content === 'string'
-              ? this.normalizeText(message.content.content)
-              : message.content.content,
         },
       }));
     } catch {

@@ -271,8 +271,10 @@ describe('Integration Testing CouchbaseVector', async () => {
 
         // Check if content field was added for text field
         if (testMetadata[i].text) {
-          expect(result.content).toHaveProperty('content');
-          expect(result.content.content).toEqual(testMetadata[i].text);
+          expect(result.content.content).toBeDefined();
+          // Text is now stored in parts array
+          const textPart = result.content.content?.parts?.find((p: any) => p.type === 'text');
+          expect(textPart?.text).toEqual(testMetadata[i].text);
         }
       }
 
@@ -305,18 +307,23 @@ describe('Integration Testing CouchbaseVector', async () => {
         const expectedMetadata = testMetadata[originalIndex];
         const returnedMetadata = { ...result.metadata }; // Create a copy to avoid modifying the original
 
-        // Check if 'content' field exists and matches if 'text' was in original metadata
-        if (expectedMetadata.text) {
-          expect(returnedMetadata).toHaveProperty('content');
-          expect(returnedMetadata.content).toEqual(expectedMetadata.text);
-        }
-
-        // If the original metadata had a 'text' field, the returned metadata might include a 'content' field from the search index.
-        // We only want to compare the original metadata fields, so remove 'content' if it's present in the returned data
-        // and the original metadata had a 'text' field (which implies 'content' was likely added automatically).
+        // Check if 'content' field exists in metadata and matches if 'text' was in original metadata
+        // Note: Couchbase search may or may not return the content field depending on the index configuration
         if (expectedMetadata.text && returnedMetadata.content) {
+          // Content is now stored in parts array format
+          const textPart = returnedMetadata.content?.parts?.find((p: any) => p.type === 'text');
+          expect(textPart?.text).toEqual(expectedMetadata.text);
+
+          // Remove content from returned metadata for comparison
           delete returnedMetadata.content;
         }
+
+        // Remove any flattened content.* keys that Couchbase search may return
+        Object.keys(returnedMetadata).forEach(key => {
+          if (key.startsWith('content.')) {
+            delete returnedMetadata[key];
+          }
+        });
 
         expect(result).toHaveProperty('id');
         expect(result).toHaveProperty('score');

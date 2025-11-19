@@ -29,10 +29,6 @@ function getTextContent(message: any): string {
   if (message.content?.text) {
     return message.content.text;
   }
-  // Fallback: check if content.content exists (nested structure)
-  if (message.content?.content && typeof message.content.content === 'string') {
-    return message.content.content;
-  }
   return '';
 }
 import { z } from 'zod';

@@ -382,12 +382,11 @@ describe('Transformer Functions', () => {
       const trace = TransformerTestScenarios.agentWithToolCalls().buildTrace();
       const result = transformTraceToScorerInputAndOutput(trace);
 
-      expect(result.output[0]?.content.toolInvocations).toHaveLength(1);
-      expect(result.output[0]?.content.toolInvocations?.[0]?.toolName).toBe('weatherAPI');
-      expect(result.output[0]?.content.toolInvocations?.[0]?.args).toEqual({ location: 'Seattle' });
-
-      // @ts-ignore
-      expect(result.output[0]?.content.toolInvocations?.[0]?.result).toEqual({ temperature: 72, condition: 'sunny' });
+      const toolInvocations = result.output[0]?.content.parts?.filter(p => p.type === 'tool-invocation');
+      expect(toolInvocations).toHaveLength(1);
+      expect(toolInvocations?.[0]?.toolInvocation?.toolName).toBe('weatherAPI');
+      expect(toolInvocations?.[0]?.toolInvocation?.args).toEqual({ location: 'Seattle' });
+      expect(toolInvocations?.[0]?.toolInvocation?.result).toEqual({ temperature: 72, condition: 'sunny' });
     });
 
     it('should include both tool invocation and text parts', () => {
@@ -447,8 +446,9 @@ describe('Transformer Functions', () => {
       expect(getTextContent(result.input.inputMessages[0]!)).toBe('What is the weather?');
 
       // Output should have tool invocations
-      expect(result.output[0]?.content.toolInvocations).toHaveLength(1);
-      expect(result.output[0]?.content.toolInvocations?.[0]?.toolName).toBe('weatherAPI');
+      const toolInvocations = result.output[0]?.content.parts?.filter(p => p.type === 'tool-invocation');
+      expect(toolInvocations).toHaveLength(1);
+      expect(toolInvocations?.[0]?.toolInvocation?.toolName).toBe('weatherAPI');
     });
   });
 
@@ -457,7 +457,6 @@ describe('Transformer Functions', () => {
       const trace = TransformerTestScenarios.simpleAgentConversation().buildTrace();
       const result = transformTraceToScorerInputAndOutput(trace);
 
-      expect(result.output[0]?.content.toolInvocations).toHaveLength(0);
       expect(result.output[0]?.content.parts?.filter(p => p.type === 'tool-invocation')).toHaveLength(0);
     });
 

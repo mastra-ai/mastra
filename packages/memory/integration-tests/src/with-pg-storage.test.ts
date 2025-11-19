@@ -20,9 +20,6 @@ function getTextContent(message: any): string {
   if (message.content?.text) {
     return message.content.text;
   }
-  if (typeof message.content?.content === 'string') {
-    return message.content.content;
-  }
   return '';
 }
 

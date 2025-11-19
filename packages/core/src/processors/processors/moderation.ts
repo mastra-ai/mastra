@@ -351,9 +351,7 @@ export class ModerationProcessor implements Processor {
       }
     }
 
-    if (!text.trim() && typeof message.content.content === 'string') {
-      text = message.content.content;
-    }
+    // Content is now only in parts array
 
     return text.trim();
   }

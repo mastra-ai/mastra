@@ -216,7 +216,9 @@ function runStreamTest(version: 'v1' | 'v2') {
           .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
           .map(p => (p as ToolInvocationUIPart).toolInvocation.toolCallId),
       );
-      expect(assistantMsg!.content?.toolInvocations?.length).toBe(toolResultIds.size);
+      // Tool invocations are now only in parts array, not in separate toolInvocations field
+      const toolInvocationsCount = assistantMsg!.content.parts.filter(p => p.type === 'tool-invocation').length;
+      expect(toolInvocationsCount).toBe(toolResultIds.size);
     }, 500000);
 
     it('should incrementally save messages with multiple tools and multi-step streaming', async () => {
@@ -296,7 +298,9 @@ function runStreamTest(version: 'v1' | 'v2') {
           .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
           .map(p => (p as ToolInvocationUIPart).toolInvocation.toolCallId),
       );
-      expect(assistantMsg!.content?.toolInvocations?.length).toBe(toolResultIds.size);
+      // Tool invocations are now only in parts array, not in separate toolInvocations field
+      const toolInvocationsCount = assistantMsg!.content.parts.filter(p => p.type === 'tool-invocation').length;
+      expect(toolInvocationsCount).toBe(toolResultIds.size);
     }, 500000);
 
     it('should persist the full message after a successful run', async () => {
@@ -439,7 +443,9 @@ function runStreamTest(version: 'v1' | 'v2') {
       const messages = result.messages;
       expect(messages.length).toBe(1);
       expect(messages[0].role).toBe('user');
-      expect(messages[0].content.content).toBe('no progress');
+      // Content is now in parts array
+      const textPart = messages[0].content.parts.find((p: any) => p.type === 'text');
+      expect(textPart?.text).toBe('no progress');
     });
 
     it('should not save any message if interrupted before any part is emitted', async () => {

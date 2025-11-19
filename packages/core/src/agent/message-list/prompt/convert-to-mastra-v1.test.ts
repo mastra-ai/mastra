@@ -117,21 +117,20 @@ describe('convertToV1Messages', () => {
         resourceId: 'resource-1',
         content: {
           format: 2,
-          content: 'Processing your request',
           parts: [
             {
               type: 'text',
               text: 'Let me check that for you:',
             },
-          ],
-          // This toolInvocations array should be processed even though parts exists
-          toolInvocations: [
             {
-              state: 'result',
-              toolCallId: 'call-1',
-              toolName: 'searchTool',
-              args: { query: 'test' },
-              result: { found: true },
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-1',
+                toolName: 'searchTool',
+                args: { query: 'test' },
+                result: { found: true },
+              },
             },
           ],
         },
@@ -453,7 +452,6 @@ describe('convertToV1Messages', () => {
       threadId: 'thread-1',
       role: 'assistant',
       content: {
-        content: 'Multiple tools test',
         format: 2,
         parts: [
           {
@@ -470,29 +468,25 @@ describe('convertToV1Messages', () => {
               result: { results: ['Restaurant A', 'Restaurant B'] },
             },
           },
-        ],
-        // Additional tool invocations in the toolInvocations array
-        toolInvocations: [
           {
-            state: 'result',
-            toolCallId: 'tool-in-parts-1', // This is a duplicate, should be ignored
-            toolName: 'searchTool',
-            args: { query: 'best restaurants' },
-            result: { results: ['Restaurant A', 'Restaurant B'] },
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-in-array-1',
+              toolName: 'reservationTool',
+              args: { restaurant: 'Restaurant A', time: '19:00' },
+              result: { confirmed: true, reservationId: 'RES123' },
+            },
           },
           {
-            state: 'result',
-            toolCallId: 'tool-in-array-1',
-            toolName: 'reservationTool',
-            args: { restaurant: 'Restaurant A', time: '19:00' },
-            result: { confirmed: true, reservationId: 'RES123' },
-          },
-          {
-            state: 'result',
-            toolCallId: 'tool-in-array-2',
-            toolName: 'mapsTool',
-            args: { destination: 'Restaurant A' },
-            result: { distance: '2.5km', duration: '10 minutes' },
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-in-array-2',
+              toolName: 'mapsTool',
+              args: { destination: 'Restaurant A' },
+              result: { distance: '2.5km', duration: '10 minutes' },
+            },
           },
         ],
       },
@@ -508,12 +502,14 @@ describe('convertToV1Messages', () => {
 
     // The actual behavior:
     // 1. text
-    // 2. tool-call (from parts)
-    // 3. tool-result (from parts)
-    // 4. tool-call (both array invocations grouped together since same step)
-    // 5. tool-result (both array results grouped together)
-    // Total: 5 messages
-    expect(result.length).toBe(5);
+    // 2. tool-call for searchTool
+    // 3. tool-result for searchTool
+    // 4. tool-call for reservationTool
+    // 5. tool-result for reservationTool
+    // 6. tool-call for mapsTool
+    // 7. tool-result for mapsTool
+    // Total: 7 messages (each tool invocation creates call + result)
+    expect(result.length).toBe(7);
 
     // First message should keep original ID
     expect(result[0].id).toBe(testMessage.id);
@@ -523,8 +519,11 @@ describe('convertToV1Messages', () => {
     expect(result[2].id).toBe(`${testMessage.id}__split-2`);
     expect(result[3].id).toBe(`${testMessage.id}__split-3`);
     expect(result[4].id).toBe(`${testMessage.id}__split-4`);
+    expect(result[5].id).toBe(`${testMessage.id}__split-5`);
+    expect(result[6].id).toBe(`${testMessage.id}__split-6`);
 
     expect(result).toEqual([
+      // 1. Text
       expect.objectContaining({
         ...sharedFields,
         id: testMessage.id,
@@ -532,6 +531,7 @@ describe('convertToV1Messages', () => {
         type: 'text',
         content: 'Let me gather some information for you.',
       }),
+      // 2. Tool call for searchTool
       expect.objectContaining({
         ...sharedFields,
         role: 'assistant',
@@ -545,6 +545,7 @@ describe('convertToV1Messages', () => {
           }),
         ],
       }),
+      // 3. Tool result for searchTool
       expect.objectContaining({
         ...sharedFields,
         role: 'tool',
@@ -558,6 +559,7 @@ describe('convertToV1Messages', () => {
           }),
         ],
       }),
+      // 4. Tool call for reservationTool
       expect.objectContaining({
         ...sharedFields,
         role: 'assistant',
@@ -569,14 +571,9 @@ describe('convertToV1Messages', () => {
             toolName: 'reservationTool',
             args: { restaurant: 'Restaurant A', time: '19:00' },
           }),
-          expect.objectContaining({
-            type: 'tool-call',
-            toolCallId: 'tool-in-array-2',
-            toolName: 'mapsTool',
-            args: { destination: 'Restaurant A' },
-          }),
         ],
       }),
+      // 5. Tool result for reservationTool
       expect.objectContaining({
         ...sharedFields,
         role: 'tool',
@@ -588,6 +585,28 @@ describe('convertToV1Messages', () => {
             toolName: 'reservationTool',
             result: { confirmed: true, reservationId: 'RES123' },
           }),
+        ],
+      }),
+      // 6. Tool call for mapsTool
+      expect.objectContaining({
+        ...sharedFields,
+        role: 'assistant',
+        type: 'tool-call',
+        content: [
+          expect.objectContaining({
+            type: 'tool-call',
+            toolCallId: 'tool-in-array-2',
+            toolName: 'mapsTool',
+            args: { destination: 'Restaurant A' },
+          }),
+        ],
+      }),
+      // 7. Tool result for mapsTool
+      expect.objectContaining({
+        ...sharedFields,
+        role: 'tool',
+        type: 'tool-result',
+        content: [
           expect.objectContaining({
             type: 'tool-result',
             toolCallId: 'tool-in-array-2',

@@ -274,21 +274,20 @@ describe('convertToV1Messages - reasoning and file support', () => {
         resourceId: 'resource-1',
         content: {
           format: 2,
-          content: 'Please analyze this image',
           parts: [
             {
               type: 'text',
               text: 'Please analyze this image',
             },
-          ],
-          experimental_attachments: [
             {
+              type: 'file',
               url: 'https://example.com/image.png',
-              contentType: 'image/png',
+              mimeType: 'image/png',
             },
             {
+              type: 'file',
               url: 'data:image/jpeg;base64,/9j/4AAQ...',
-              contentType: 'image/jpeg',
+              mimeType: 'image/jpeg',
             },
           ],
         },

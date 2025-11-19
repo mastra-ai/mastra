@@ -327,7 +327,7 @@ export class D1Store extends MastraStorage {
       id: string;
       content?: {
         metadata?: MastraMessageContentV2['metadata'];
-        content?: MastraMessageContentV2['content'];
+        parts?: MastraMessageContentV2['parts'];
       };
     })[];
   }): Promise<MastraDBMessage[]> {
