@@ -1,4 +1,4 @@
-import { injectJsonInstructionIntoMessages, isAbortError } from '@ai-sdk/provider-utils-v5';
+import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2, LanguageModelV2Prompt, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
 import { APICallError } from 'ai-v5';
@@ -180,11 +180,6 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
           },
         );
       } catch (error) {
-        const abortSignal = options?.abortSignal || modelSettings?.abortSignal;
-        if (isAbortError(error) && abortSignal?.aborted) {
-          console.error('Abort error', error);
-        }
-
         if (shouldThrowError) {
           throw error;
         }
