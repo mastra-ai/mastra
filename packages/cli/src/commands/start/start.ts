@@ -4,6 +4,7 @@ import { join } from 'path';
 import { isWebContainer } from '@webcontainer/env';
 import { config } from 'dotenv';
 import { logger } from '../../utils/logger';
+import { shouldSkipDotenvLoading } from '../utils';
 interface StartOptions {
   dir?: string;
   telemetry?: boolean;
@@ -12,8 +13,9 @@ interface StartOptions {
 
 export async function start(options: StartOptions = {}) {
   // Load environment variables from .env files
-  config({ path: [options.env || '.env.production', '.env'] });
-
+  if (!shouldSkipDotenvLoading()) {
+    config({ path: [options.env || '.env.production', '.env'], quiet: true });
+  }
   const outputDir = options.dir || '.mastra/output';
   const telemetry = options.telemetry ?? true;
 
