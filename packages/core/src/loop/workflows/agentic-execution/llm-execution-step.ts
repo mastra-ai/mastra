@@ -252,7 +252,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
               parts: [
                 {
                   type: 'reasoning' as const,
-                  reasoning: runState.state.reasoningDeltas.join(''),
+                  reasoning: '',
                   details: [{ type: 'text', text: runState.state.reasoningDeltas.join('') }],
                   providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
                 },
