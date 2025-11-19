@@ -4,6 +4,7 @@ import { GeminiLiveVoice } from './index';
 
 // Mock WebSocket
 let mockWsInstance: any;
+let currentWsUrl: string | undefined;
 
 vi.mock('ws', () => {
   class MockWebSocket {
@@ -19,7 +20,8 @@ vi.mock('ws', () => {
     emit = vi.fn();
     readyState = 1;
 
-    constructor() {
+    constructor(url?: string) {
+      currentWsUrl = url;
       mockWsInstance = this;
       return this;
     }
@@ -60,6 +62,7 @@ describe('GeminiLiveVoice', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockWsInstance = null;
+    currentWsUrl = undefined;
 
     // Create voice instance with test config
     voice = new GeminiLiveVoice({
@@ -130,7 +133,7 @@ describe('GeminiLiveVoice', () => {
   });
 
   describe('Vertex AI configuration', () => {
-    it('should build fully-qualified Vertex AI model path for bare model names', async () => {
+    it('should build fully-qualified Vertex AI model path and default location for bare model names', async () => {
       const vertexVoice = new GeminiLiveVoice({
         vertexAI: true,
         project: 'test-project',
@@ -141,6 +144,9 @@ describe('GeminiLiveVoice', () => {
       (vertexVoice as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
 
       await vertexVoice.connect();
+
+      expect(currentWsUrl).toContain('us-central1-aiplatform.googleapis.com');
+      expect(currentWsUrl).toContain('LlmBidiService/BidiGenerateContent');
 
       const wsSent = ((vertexVoice as any).connectionManager.getWebSocket() as any).send as any;
       const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
