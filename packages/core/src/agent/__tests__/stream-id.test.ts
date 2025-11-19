@@ -287,8 +287,21 @@ describe('Stream ID Consistency', () => {
   describe('onFinish callback with structured output', () => {
     it('should include object field in onFinish callback when using structured output', async () => {
       const mockModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [
+            {
+              type: 'text',
+              text: '{"name":"John","age":30}',
+            },
+          ],
+          warnings: [],
+        }),
         doStream: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
@@ -356,8 +369,21 @@ describe('Stream ID Consistency', () => {
 
   it('should include object field in onFinish callback when using structuredOutput key', async () => {
     const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [
+          {
+            type: 'text',
+            text: 'The person is John who is 30 years old',
+          },
+        ],
+        warnings: [],
+      }),
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
           { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
@@ -374,8 +400,21 @@ describe('Stream ID Consistency', () => {
     });
 
     const structuringModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [
+          {
+            type: 'text',
+            text: '{"name":"John","age":30}',
+          },
+        ],
+        warnings: [],
+      }),
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
           { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },

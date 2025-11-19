@@ -575,7 +575,6 @@ describe('Structured Output with Tool Execution', () => {
         const collected: any[] = [];
         for await (const chunk of stream.fullStream) {
           collected.push(chunk);
-          console.log('Chunk:', chunk.type, chunk.type === 'finish' ? chunk : '');
         }
         return collected;
       })(),
