@@ -64,6 +64,26 @@
       "source": "/docs/server-db/production-server",
       "destination": "/docs/server-db/mastra-server",
       "permanent": true
+    },
+    {
+      "source": "/docs/v1/getting-started/installation",
+      "destination": "/guides/v1/quickstarts/standalone-server",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/agents/ai-sdk-v5-integration",
+      "destination": "/guides/v1/quickstarts/nextjs",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/agents/calling-agents",
+      "destination": "/docs/v1/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/agents/system-prompt",
+      "destination": "/docs/v1/agents/overview",
+      "permanent": true
     }
   ]
 }

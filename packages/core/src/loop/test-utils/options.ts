@@ -5,13 +5,8 @@ import type {
   LanguageModelV2ProviderDefinedTool,
 } from '@ai-sdk/provider-v5';
 import { stepCountIs, tool } from 'ai-v5';
-import {
-  convertArrayToReadableStream,
-  convertReadableStreamToArray,
-  mockId,
-  MockLanguageModelV2,
-  mockValues,
-} from 'ai-v5/test';
+import { convertArrayToReadableStream, convertReadableStreamToArray, mockId, mockValues } from 'ai-v5/test';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import type { loop } from '../loop';

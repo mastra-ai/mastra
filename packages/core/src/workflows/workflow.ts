@@ -1147,16 +1147,16 @@ export class Workflow<
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
 
-    if (validateInputs) {
-      this.#options = {
-        ...(this.#options || {}),
-        validateInputs: validateInputs,
-      };
-    }
+    const effectiveValidateInputs = validateInputs ?? this.#options.validateInputs ?? true;
+
+    this.#options = {
+      ...(this.#options || {}),
+      validateInputs: effectiveValidateInputs,
+    };
 
     this.executionEngine.options = {
       ...(this.executionEngine.options || {}),
-      validateInputs: validateInputs ?? false,
+      validateInputs: effectiveValidateInputs,
     };
 
     const isResume =

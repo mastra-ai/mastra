@@ -3,9 +3,10 @@ import type {
   LanguageModelV2StreamPart,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream, mockId } from 'ai-v5/test';
+import { convertArrayToReadableStream, mockId } from 'ai-v5/test';
 import type { ModelManagerModelConfig } from '../../stream/types';
 import { MessageList } from '../../agent/message-list';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 
 export const mockDate = new Date('2024-01-01T00:00:00Z');
 
