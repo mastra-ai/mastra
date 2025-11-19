@@ -20,7 +20,6 @@ let allPackages = await globby(
     '!**/mcp-docs-server/**',
     '!**/mcp-registry-registry/**',
     '!**/stores/_test-utils/**',
-    '!**/server-adapters/_test-utils/**',
     '!**/explorations/**',
   ],
   {
