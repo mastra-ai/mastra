@@ -22,7 +22,7 @@ The deployment name is **specific to your Azure account** and chosen when you cr
 - `azure/staging-gpt-4o`
 
 :::note About IDE Autocomplete
-When you configure optional Management API credentials (see below), IDE autocomplete will show your actual deployment names.
+When you configure optional Management API credentials (see below) and run `pnpm mastra dev` (or build the project), IDE autocomplete will show your actual deployment names from the generated `.d.ts` files.
 :::
 
 ## Configuration
@@ -40,7 +40,8 @@ OPENAI_API_VERSION=2024-04-01-preview
 
 ### IDE Autocomplete (Optional)
 
-For IDE autocomplete with your deployment names, add Management API credentials and run dev mode:
+The Azure gateway works without Management API credentials—you just need to know your deployment names.
+For IDE autocomplete with your actual deployment names, add Management API credentials and run dev mode:
 
 ```bash
 # Service Principal credentials (requires "Cognitive Services User" role)
@@ -68,7 +69,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "azure/my-gpt4-deployment"  // Your deployment name (autocompleted if credentials provided and running in dev mode)
+  model: "azure/my-gpt4-deployment"  // Use your Azure deployment name (autocompleted in dev mode)
 });
 
 // Generate a response
