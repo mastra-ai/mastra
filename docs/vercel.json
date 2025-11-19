@@ -69,6 +69,11 @@
       "source": "/:path(ja)?/docs/agents/human-in-the-loop-with-tools",
       "destination": "/:path/docs/agents/agent-approval",
       "permanent": true
+    },
+    {
+      "source": "/docs/v1/getting-started/installation",
+      "destination": "/guides/v1/quickstarts/standalone-server",
+      "permanent": true
     }
   ]
 }
