@@ -200,6 +200,8 @@ export class SemanticRecall implements Processor {
         return messageList;
       }
 
+      const sameThreadMessages = newMessages.filter(m => !m.threadId || m.threadId === threadId);
+
       // If scope is 'resource', check for cross-thread messages and format them specially
       if (this.scope === 'resource') {
         const crossThreadMessages = newMessages.filter(m => m.threadId && m.threadId !== threadId);
@@ -207,21 +209,15 @@ export class SemanticRecall implements Processor {
           // Format cross-thread messages as a system message for context
           const formattedSystemMessage = this.formatCrossThreadMessages(crossThreadMessages, threadId);
 
-          // Add cross-thread messages as a context message
-          messageList.add([formattedSystemMessage], 'context');
-
-          // Add same-thread messages with 'memory' source
-          const sameThreadMessages = newMessages.filter(m => !m.threadId || m.threadId === threadId);
-          if (sameThreadMessages.length > 0) {
-            messageList.add(sameThreadMessages, 'memory');
-          }
-
-          return messageList;
+          // Add cross-thread messages as a memory tagged system message
+          messageList.addSystem(formattedSystemMessage, 'memory');
         }
       }
 
-      // Add all recalled messages with 'memory' source
-      messageList.add(newMessages, 'memory');
+      if (sameThreadMessages.length) {
+        // Add all recalled messages with 'memory' source
+        messageList.add(sameThreadMessages, 'memory');
+      }
       return messageList;
     } catch (error) {
       // Log error but don't fail the request
