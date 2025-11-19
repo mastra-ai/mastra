@@ -1,0 +1,59 @@
+---
+title: "Reference: Mastra.getGateway() | Core"
+description: "Retrieve a registered gateway by its registration key"
+---
+
+# Mastra.getGateway()
+
+Retrieves a gateway by its registration key (the key used when adding the gateway to Mastra).
+
+## Usage example
+
+```typescript
+import { Mastra } from '@mastra/core';
+
+const mastra = new Mastra({
+  gateways: {
+    myGateway: new MyCustomGateway(),
+  },
+});
+
+const gateway = mastra.getGateway('myGateway');
+console.log(gateway.name); // 'My Custom Gateway'
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: 'key',
+      type: 'string',
+      description: 'The registration key of the gateway',
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: 'gateway',
+      type: 'MastraModelGateway',
+      description: 'The gateway instance',
+    },
+  ]}
+/>
+
+## Throws
+
+Throws an error if no gateway is found with the specified key.
+
+## Related
+
+- [Mastra.getGatewayById()](/reference/v1/core/getGatewayById) - Get gateway by ID
+- [Mastra.listGateways()](/reference/v1/core/listGateways) - List all gateways
+- [Mastra.addGateway()](/reference/v1/core/addGateway) - Add a gateway
+- [MastraModelGateway](/reference/v1/core/mastra-model-gateway) - Gateway base class
+- [Custom Gateways Guide](/models/v1/gateways/custom-gateways) - Creating custom gateways

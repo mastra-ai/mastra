@@ -48,6 +48,7 @@ export function cloneWorkflow<
     outputSchema: workflow.outputSchema,
     steps: workflow.stepDefs,
     mastra: workflow.mastra,
+    options: workflow.options,
   });
 
   wf.setStepFlow(workflow.stepGraph);
@@ -64,7 +65,12 @@ export function cloneStep<TStepId extends string>(
     description: step.description,
     inputSchema: step.inputSchema,
     outputSchema: step.outputSchema,
+    suspendSchema: step.suspendSchema,
+    resumeSchema: step.resumeSchema,
+    stateSchema: step.stateSchema,
     execute: step.execute,
+    retries: step.retries,
+    scorers: step.scorers,
     component: step.component,
   };
 }
@@ -314,7 +320,7 @@ export function createWorkflow<
     mastra: params.mastra!,
     eventProcessor,
     options: {
-      validateInputs: params.options?.validateInputs ?? false,
+      validateInputs: params.options?.validateInputs ?? true,
       shouldPersistSnapshot: params.options?.shouldPersistSnapshot ?? (() => true),
       tracingPolicy: params.options?.tracingPolicy,
     },

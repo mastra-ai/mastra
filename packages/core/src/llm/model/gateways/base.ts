@@ -17,6 +17,11 @@ export interface ProviderConfig {
 
 export abstract class MastraModelGateway {
   /**
+   * Unique identifier for the gateway
+   */
+  abstract readonly id: string;
+
+  /**
    * Name of the gateway provider
    */
   abstract readonly name: string;
@@ -27,6 +32,13 @@ export abstract class MastraModelGateway {
    * Registry gateways (like models.dev) typically don't have a prefix
    */
   abstract readonly prefix?: string;
+
+  /**
+   * Get the gateway ID
+   */
+  getId(): string {
+    return this.id;
+  }
 
   /**
    * Fetch provider configurations from the gateway
