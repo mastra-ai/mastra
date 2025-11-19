@@ -130,11 +130,13 @@ describe('GeminiLiveVoice', () => {
   });
 
   describe('Vertex AI configuration', () => {
-    it('should send fully-qualified Vertex AI model paths when needed', async () => {
+    it('should preserve fully-qualified Vertex AI model paths when provided', async () => {
+      const fullModelPath =
+        'projects/test-project/locations/us-central1/publishers/google/models/gemini-2.0-flash-live-001';
       const vertexVoice = new GeminiLiveVoice({
         vertexAI: true,
         project: 'test-project',
-        model: 'gemini-2.0-flash-live-001',
+        model: fullModelPath,
       });
 
       vi.spyOn((vertexVoice as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
@@ -145,9 +147,7 @@ describe('GeminiLiveVoice', () => {
       const wsSent = ((vertexVoice as any).connectionManager.getWebSocket() as any).send as any;
       const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
       const setupMsg = payloads.find((p: any) => p.setup);
-      expect(setupMsg.setup.model).toBe(
-        'projects/test-project/locations/us-central1/publishers/google/models/gemini-2.0-flash-live-001',
-      );
+      expect(setupMsg.setup.model).toBe(fullModelPath);
 
       await vertexVoice.disconnect();
     });
