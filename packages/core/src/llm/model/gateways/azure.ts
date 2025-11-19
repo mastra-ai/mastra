@@ -42,34 +42,55 @@ export class AzureGateway extends MastraModelGateway {
    * Fetch Azure OpenAI deployments from Management API
    */
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
-    // Step 1: Get Management API credentials
-    const credentials = this.getManagementCredentials();
+    try {
+      // Step 1: Get Management API credentials
+      const credentials = this.getManagementCredentials();
 
-    // Step 2: Get Azure AD access token (cached)
-    const token = await this.getAzureADToken({
-      tenantId: credentials.tenantId,
-      clientId: credentials.clientId,
-      clientSecret: credentials.clientSecret,
-    });
+      // Step 2: Get Azure AD access token (cached)
+      const token = await this.getAzureADToken({
+        tenantId: credentials.tenantId,
+        clientId: credentials.clientId,
+        clientSecret: credentials.clientSecret,
+      });
 
-    // Step 3: Fetch deployments from Management API
-    const deployments = await this.fetchDeployments(token, {
-      subscriptionId: credentials.subscriptionId,
-      resourceGroup: credentials.resourceGroup,
-      resourceName: credentials.resourceName,
-    });
+      // Step 3: Fetch deployments from Management API
+      const deployments = await this.fetchDeployments(token, {
+        subscriptionId: credentials.subscriptionId,
+        resourceGroup: credentials.resourceGroup,
+        resourceName: credentials.resourceName,
+      });
 
-    // Step 4: Transform to ProviderConfig format
-    return {
-      azure: {
-        apiKeyEnvVar: 'AZURE_API_KEY',
-        apiKeyHeader: 'api-key',
-        name: 'Azure OpenAI',
-        models: deployments.map(d => d.name),
-        docUrl: 'https://learn.microsoft.com/en-us/azure/ai-services/openai/',
-        gateway: 'azure',
-      },
-    };
+      // Step 4: Transform to ProviderConfig format
+      return {
+        azure: {
+          apiKeyEnvVar: 'AZURE_API_KEY',
+          apiKeyHeader: 'api-key',
+          name: 'Azure OpenAI',
+          models: deployments.map(d => d.name),
+          docUrl: 'https://learn.microsoft.com/en-us/azure/ai-services/openai/',
+          gateway: 'azure',
+        },
+      };
+    } catch (error) {
+      // Log warning explaining fallback
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[AzureGateway] Skipping deployment discovery: ${errorMsg}`,
+        '\nReturning fallback configuration. Azure OpenAI can still be used by manually specifying deployment names.',
+      );
+
+      // Return fallback configuration with empty models
+      return {
+        azure: {
+          apiKeyEnvVar: 'AZURE_API_KEY',
+          apiKeyHeader: 'api-key',
+          name: 'Azure OpenAI',
+          models: [], // Empty - users specify deployments manually
+          docUrl: 'https://learn.microsoft.com/en-us/azure/ai-services/openai/',
+          gateway: 'azure',
+        },
+      };
+    }
   }
 
   /**
