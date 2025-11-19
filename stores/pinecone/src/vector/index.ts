@@ -45,7 +45,7 @@ interface PineconeDeleteVectorParams extends DeleteVectorParams {
   namespace?: string;
 }
 
-export class PineconeVector extends MastraVector {
+export class PineconeVector extends MastraVector<PineconeVectorFilter> {
   private client: Pinecone;
   private cloud: ServerlessSpecCloudEnum;
   private region: string;
