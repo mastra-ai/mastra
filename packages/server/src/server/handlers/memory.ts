@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { RequestContext } from '@mastra/core/di';
+import type { RequestContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { HTTPException } from '../http-exception';

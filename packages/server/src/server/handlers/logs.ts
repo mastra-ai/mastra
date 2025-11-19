@@ -1,4 +1,3 @@
-import type { LogLevel } from '@mastra/core/logger';
 import { runIdSchema } from '../schemas/common';
 import { listLogsQuerySchema, listLogsResponseSchema, listLogTransportsResponseSchema } from '../schemas/logs';
 import { createRoute } from '../server-adapter/routes/route-builder';
