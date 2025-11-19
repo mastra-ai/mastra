@@ -2721,7 +2721,7 @@ export class MessageList {
       } else if (part.type === 'reasoning') {
         const v2ReasoningPart: MastraDBMessage['content']['parts'][number] = {
           type: 'reasoning',
-          reasoning: part.text,
+          reasoning: '', // leave this blank so we aren't double storing it in the db along with details
           details: [{ type: 'text', text: part.text }],
         };
         if (part.providerOptions) {
