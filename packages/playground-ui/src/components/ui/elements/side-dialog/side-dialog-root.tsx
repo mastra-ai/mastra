@@ -31,7 +31,10 @@ export function SideDialogRoot({
     <Dialog.Root open={isOpen} onOpenChange={onClose}>
       <Dialog.Portal>
         {!isConfirmation && (
-          <Dialog.Overlay className={cn('bg-black top-0 bottom-0 right-0 left-0 fixed z-50 opacity-40')} />
+          <Dialog.Overlay
+            className={cn('bg-black top-0 bottom-0 right-0 left-0 fixed z-50 opacity-40')}
+            onClick={onClose}
+          />
         )}
         <Dialog.Content
           className={cn(
