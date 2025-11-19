@@ -1851,7 +1851,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     const workflows = await this.listWorkflows({ requestContext });
     if (Object.keys(workflows).length > 0) {
       for (const [workflowName, workflow] of Object.entries(workflows)) {
-        // Extend workflow input schema with execution control options
         const extendedInputSchema = z.object({
           inputData: workflow.inputSchema,
           ...(workflow.stateSchema ? { initialState: workflow.stateSchema } : {}),
@@ -1887,10 +1886,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
               const run = await workflow.createRun();
 
-              // Separate workflow-specific options from workflow input data
               const { initialState, inputData: workflowInputData } = inputData;
 
-              let result: WorkflowResult<any, any, any, any> | undefined;
+              let result: WorkflowResult<any, any, any, any> | undefined = undefined;
 
               if (methodType === 'generate' || methodType === 'generateLegacy') {
                 result = await run.start({
@@ -1928,9 +1926,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 }
 
                 result = await streamResult.result;
-              } else {
-                // This is just to satisfy typescript, it should never get here
-                result = undefined;
               }
 
               if (result?.status === 'success') {
