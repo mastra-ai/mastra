@@ -64,7 +64,7 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
         doGenerate: async () => {
           return {
             rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
+            finishReason: 'tool-calls',
             usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
             text: `Agent model response`,
             content: [
