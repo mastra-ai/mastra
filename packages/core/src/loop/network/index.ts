@@ -1043,6 +1043,7 @@ export async function createNetworkLoop({
     }),
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      validateInputs: false,
     },
   });
 
@@ -1200,6 +1201,7 @@ export async function networkLoop<
     }),
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      validateInputs: false,
     },
   })
     .dountil(networkWorkflow, async ({ inputData }) => {

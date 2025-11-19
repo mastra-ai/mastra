@@ -1,8 +1,9 @@
-import { injectJsonInstructionIntoMessages, isAbortError } from '@ai-sdk/provider-utils-v5';
+import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2, LanguageModelV2Prompt, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import { APICallError } from 'ai-v5';
 import type { ToolChoice, ToolSet } from 'ai-v5';
 import type { StructuredOutputOptions } from '../../../agent/types';
+import type { ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { LoopOptions } from '../../../loop/types';
 import { getResponseFormat } from '../../base/schema';
 import type { OutputSchema } from '../../base/schema';
@@ -39,6 +40,7 @@ type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   */
   headers?: Record<string, string | undefined>;
   shouldThrowError?: boolean;
+  methodType: ModelMethodType;
 };
 
 export function execute<OUTPUT extends OutputSchema = undefined>({
@@ -153,11 +155,6 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
           },
         );
       } catch (error) {
-        const abortSignal = options?.abortSignal;
-        if (isAbortError(error) && abortSignal?.aborted) {
-          console.error('Abort error', error);
-        }
-
         if (shouldThrowError) {
           throw error;
         }

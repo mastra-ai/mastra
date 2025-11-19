@@ -7,7 +7,7 @@
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "^4.0.8",
     "@vitest/ui": "^4.0.8",
-    "changesets-changelog-github-local": "^1.0.0",
+    "changesets-changelog-github-local": "^1.0.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.1.6",
     "npm-run-all2": "^8.0.4",
@@ -52,6 +52,7 @@
     "test:deployer": "pnpm --filter ./packages/deployer test",
     "test:server": "pnpm --filter ./packages/server test",
     "test:core": "pnpm --filter ./packages/core test",
+    "test:core:zod": "pnpm --filter ./packages/core test:types:zod",
     "test:mcp": "pnpm --filter ./packages/mcp test",
     "test:rag": "pnpm --filter ./packages/rag test",
     "test:clients": "pnpm --filter \"./client-sdks/*\" test",
@@ -77,7 +78,7 @@
     "format": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!@internal/playground\" lint -- --fix",
     "dev:services:up": "docker compose -f .dev/docker-compose.yaml up -d",
     "dev:services:down": "docker compose -f .dev/docker-compose.yaml down",
-    "setup": "pnpm install --ignore-scripts && pnpm run build:cli"
+    "setup": "pnpm install && pnpm run build"
   },
   "lint-staged": {
     "*.{js,mjs,ts,tsx,md,mdx,json,graphql,gql}": [
@@ -85,7 +86,7 @@
     ]
   },
   "engines": {
-    "pnpm": ">=9.7.0"
+    "pnpm": ">=10.18.0"
   },
   "resolutions": {
     "typescript": "^5.8.3",

@@ -1,5 +1,4 @@
 import { join } from 'path';
-import { copy } from 'fs-extra';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { getAuthEntrypoint } from './utils/auth.js';
@@ -52,6 +51,8 @@ vi.mock('@mastra/deployer', () => {
     constructor() {}
     _bundle = mockBundle;
     writePackageJson = mockWritePackageJson;
+
+    getAllToolPaths = () => ['/test/project/src/mastra/tools'];
   }
 
   // Use a class for FileService constructor (Vitest v4 requirement)
@@ -84,7 +85,6 @@ describe('CloudDeployer', () => {
     // @ts-ignore - accessing protected method for testing
     deployer._bundle = mockBundle;
 
-    vi.mocked(copy).mockResolvedValue(undefined);
     vi.mocked(installDeps).mockResolvedValue(undefined);
     vi.mocked(getMastraEntryFile).mockReturnValue('/test/src/mastra/index.ts');
     vi.mocked(getAuthEntrypoint).mockReturnValue('// auth entrypoint code');
@@ -246,11 +246,6 @@ describe('CloudDeployer', () => {
       expect(entry).toContain('mastra.storage.init()');
       expect(entry).toContain('new LibSQLStore');
       expect(entry).toContain('new LibSQLVector');
-
-      // Check for hooks registration
-      expect(entry).toContain('registerHook(AvailableHooks.ON_GENERATION');
-      expect(entry).toContain('registerHook(AvailableHooks.ON_EVALUATION');
-
       // Check for server creation
       expect(entry).toContain(
         'await createNodeServer(mastra, { playground: false, swaggerUI: false, tools: getToolExports(tools) });',
@@ -317,7 +312,6 @@ describe('CloudDeployer', () => {
       expect(getMastraEntryFile).toHaveBeenCalled();
       expect(mockBundle).toHaveBeenCalled();
       expect(writePackageJsonSpy).toHaveBeenCalled();
-      expect(copy).toHaveBeenCalled();
     });
 
     it('should handle different process.cwd scenarios', async () => {

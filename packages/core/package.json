@@ -186,7 +186,7 @@
     "generate:model-router": "pnpx tsx scripts/generate-providers.ts && pnpx tsx scripts/generate-model-docs.ts && cd ../.. && pnpm prettier:changed",
     "test:unit": "vitest run --exclude '**/tool-builder/**'",
     "test:types:zod": "node test-zod-compat.mjs",
-    "test": "npm run test:types:zod && npm run test:unit"
+    "test": "npm run test:unit"
   },
   "dependencies": {
     "@a2a-js/sdk": "~0.2.4",
@@ -201,7 +201,7 @@
     "@sindresorhus/slugify": "^2.2.1",
     "ai-v5": "npm:ai@5.0.76",
     "dotenv": "^16.6.1",
-    "hono": "^4.9.7",
+    "hono": "^4.10.5",
     "hono-openapi": "^0.4.8",
     "js-tiktoken": "^1.0.20",
     "json-schema": "^0.4.0",
