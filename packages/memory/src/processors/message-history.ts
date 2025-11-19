@@ -61,9 +61,15 @@ export class MessageHistory implements Processor {
     });
 
     // 2. Filter based on includeSystemMessages option
-    const filteredMessages = result.messages.filter(
-      (msg: MastraDBMessage) => this.includeSystemMessages || msg.role !== 'system',
-    );
+    const filteredMessages = result.messages
+      .filter((msg: MastraDBMessage) => {
+        // Filter out system messages if not included
+        if (!this.includeSystemMessages && msg.role === 'system') {
+          return false;
+        }
+
+        return true;
+      });
 
     // 3. Merge with incoming messages (avoiding duplicates by ID)
     const messageIds = new Set(messages.map((m: MastraDBMessage) => m.id).filter(Boolean));
