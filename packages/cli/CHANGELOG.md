@@ -1,5 +1,41 @@
 # mastra
 
+## 1.0.0-beta.2
+
+### Minor Changes
+
+- Add host:port support to --inspect and --inspect-brk flags ([#10077](https://github.com/mastra-ai/mastra/pull/10077))
+
+  Enable optional host:port values for Docker debugging (e.g., `--inspect=0.0.0.0:9229`) while maintaining backward compatibility with boolean flags.
+
+### Patch Changes
+
+- Add support to skip dotenv/env file loading by adding MASTRA_SKIP_DOTENV ([#9455](https://github.com/mastra-ai/mastra/pull/9455))
+
+- dependencies updates: ([#9781](https://github.com/mastra-ai/mastra/pull/9781))
+  - Updated dependency [`posthog-node@5.11.2` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.11.2) (from `4.18.0`, in `dependencies`)
+
+- Add restart method to workflow run that allows restarting an active workflow run ([#9750](https://github.com/mastra-ai/mastra/pull/9750))
+  Add status filter to `listWorkflowRuns`
+  Add automatic restart to restart active workflow runs when server starts
+
+- Fix scorer filtering for SpanScoring, add error and info message for user ([#10160](https://github.com/mastra-ai/mastra/pull/10160))
+
+- Templates now don't dynamically create a branch for every provider, each template should be agnostic and just use a env var to set the models until the user wants to set it otherwise. ([#10036](https://github.com/mastra-ai/mastra/pull/10036))
+  MCP docs server will install the beta version of the docs server if they create a project with the beta tag.
+  Updates to the templates now will get pushed to the beta branch, when beta goes stable we will merge the beta branch into the main branch for all templates and update the github script to push to main.
+  Templates have been cleaned up
+  small docs updates based off of how the template migrations went
+
+- Update internal dependencies, no change in behavior ([#10000](https://github.com/mastra-ai/mastra/pull/10000))
+
+- Fix double scroll on agent chat container ([#10253](https://github.com/mastra-ai/mastra/pull/10253))
+
+- Updated dependencies [[`2319326`](https://github.com/mastra-ai/mastra/commit/2319326f8c64e503a09bbcf14be2dd65405445e0), [`2319326`](https://github.com/mastra-ai/mastra/commit/2319326f8c64e503a09bbcf14be2dd65405445e0), [`df9fdcd`](https://github.com/mastra-ai/mastra/commit/df9fdcd8403652c894cf4ac0503afea3b822588c), [`65591d2`](https://github.com/mastra-ai/mastra/commit/65591d2b7cecb83fff4ebc1d743e2f71859a2f7d), [`52e5984`](https://github.com/mastra-ai/mastra/commit/52e5984b067254e955646d09b217165b3f145292), [`d629361`](https://github.com/mastra-ai/mastra/commit/d629361a60f6565b5bfb11976fdaf7308af858e2), [`08c31c1`](https://github.com/mastra-ai/mastra/commit/08c31c188ebccd598acaf55e888b6397d01f7eae), [`fd3d338`](https://github.com/mastra-ai/mastra/commit/fd3d338a2c362174ed5b383f1f011ad9fb0302aa), [`c30400a`](https://github.com/mastra-ai/mastra/commit/c30400a49b994b1b97256fe785eb6c906fc2b232), [`69e0a87`](https://github.com/mastra-ai/mastra/commit/69e0a878896a2da9494945d86e056a5f8f05b851), [`01f8878`](https://github.com/mastra-ai/mastra/commit/01f88783de25e4de048c1c8aace43e26373c6ea5), [`4c77209`](https://github.com/mastra-ai/mastra/commit/4c77209e6c11678808b365d545845918c40045c8), [`d827d08`](https://github.com/mastra-ai/mastra/commit/d827d0808ffe1f3553a84e975806cc989b9735dd), [`23c10a1`](https://github.com/mastra-ai/mastra/commit/23c10a1efdd9a693c405511ab2dc8a1236603162), [`676ccc7`](https://github.com/mastra-ai/mastra/commit/676ccc7fe92468d2d45d39c31a87825c89fd1ea0), [`c10398d`](https://github.com/mastra-ai/mastra/commit/c10398d5b88f1d4af556f4267ff06f1d11e89179), [`00c2387`](https://github.com/mastra-ai/mastra/commit/00c2387f5f04a365316f851e58666ac43f8c4edf), [`ad6250d`](https://github.com/mastra-ai/mastra/commit/ad6250dbdaad927e29f74a27b83f6c468b50a705), [`3a73998`](https://github.com/mastra-ai/mastra/commit/3a73998fa4ebeb7f3dc9301afe78095fc63e7999), [`e16d553`](https://github.com/mastra-ai/mastra/commit/e16d55338403c7553531cc568125c63d53653dff), [`4d59f58`](https://github.com/mastra-ai/mastra/commit/4d59f58de2d90d6e2810a19d4518e38ddddb9038), [`e1bb9c9`](https://github.com/mastra-ai/mastra/commit/e1bb9c94b4eb68b019ae275981be3feb769b5365), [`351a11f`](https://github.com/mastra-ai/mastra/commit/351a11fcaf2ed1008977fa9b9a489fc422e51cd4)]:
+  - @mastra/core@1.0.0-beta.3
+  - @mastra/deployer@1.0.0-beta.3
+  - @mastra/loggers@1.0.0-beta.1
+
 ## 1.0.0-beta.1
 
 ### Patch Changes

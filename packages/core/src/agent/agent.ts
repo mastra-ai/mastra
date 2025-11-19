@@ -18,6 +18,7 @@ import { runScorer } from '../evals/hooks';
 import { resolveModelConfig } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
 import type { GenerateObjectResult, GenerateTextResult, StreamTextResult } from '../llm/model/base.types';
+import { isV2Model } from '../llm/model/is-v2-model';
 import { MastraLLMVNext } from '../llm/model/model.loop';
 import type { MastraLanguageModel, MastraLanguageModelV2, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
@@ -1695,11 +1696,25 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               let result: any;
 
               if ((methodType === 'generate' || methodType === 'generateLegacy') && modelVersion === 'v2') {
+                if (!agent.hasOwnMemory() && this.#memory) {
+                  agent.__setMemory(this.#memory);
+                }
+                const subAgentThreadId = randomUUID();
+                const slugify = await import(`@sindresorhus/slugify`); // this is an esm package, need to dynamic import incase we're running in cjs
+                const subAgentResourceId = `${slugify.default(this.id)}-${agentName}`;
                 const generateResult = await agent.generate(inputData.prompt, {
                   requestContext,
                   tracingContext: context?.tracingContext,
+                  ...(resourceId && threadId
+                    ? {
+                        memory: {
+                          resource: subAgentResourceId,
+                          thread: subAgentThreadId,
+                        },
+                      }
+                    : {}),
                 });
-                result = { text: generateResult.text };
+                result = { text: generateResult.text, subAgentThreadId, subAgentResourceId };
               } else if (methodType === 'generate' && modelVersion === 'v1') {
                 const generateResult = await agent.generateLegacy(inputData.prompt, {
                   requestContext,
@@ -2241,7 +2256,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       const resolvedModel =
         typeof modelToUse === 'function' ? await modelToUse({ requestContext, mastra: this.#mastra }) : modelToUse;
 
-      if ((resolvedModel as MastraLanguageModel).specificationVersion !== 'v2') {
+      if ((resolvedModel as MastraLanguageModel)?.specificationVersion !== 'v2') {
         const mastraError = new MastraError({
           id: 'AGENT_PREPARE_MODELS_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
           domain: ErrorDomain.AGENT,
@@ -2255,9 +2270,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         this.logger.error(mastraError.toString());
         throw mastraError;
       }
+
       return [
         {
           id: 'main',
+          // TODO fix type check
           model: resolvedModel as MastraLanguageModelV2,
           maxRetries: this.maxRetries ?? 0,
           enabled: true,
@@ -2269,7 +2286,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       this.model.map(async modelConfig => {
         const model = await this.resolveModelConfig(modelConfig.model, requestContext);
 
-        if (model.specificationVersion !== 'v2') {
+        if (!isV2Model(model)) {
           const mastraError = new MastraError({
             id: 'AGENT_PREPARE_MODELS_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
             domain: ErrorDomain.AGENT,
@@ -2302,7 +2319,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
         return {
           id: modelId,
-          model: model as MastraLanguageModelV2,
+          model: model,
           maxRetries: modelConfig.maxRetries ?? 0,
           enabled: modelConfig.enabled ?? true,
         };
