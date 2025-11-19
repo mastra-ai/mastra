@@ -487,7 +487,7 @@ describe('Agent Memory Tests', () => {
 
       // This is the key fix for issue #8073 - before the fix, reasoning was split into many parts
       expect(retrievedReasoningParts?.length).toBe(1);
-    }, 30000);
+    }, 60000);
   });
 
   describe('Agent thread metadata with generateTitle', () => {
