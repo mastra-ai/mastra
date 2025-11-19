@@ -2478,6 +2478,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       input: options.messages,
       attributes: {
         agentId: this.id,
+        agentName: this.name,
+        conversationId: threadFromArgs?.id,
         instructions: this.#convertInstructionsToString(instructions),
       },
       metadata: {

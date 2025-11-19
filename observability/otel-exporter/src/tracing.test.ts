@@ -44,10 +44,10 @@ vi.mock('@opentelemetry/resources', () => ({
 
 vi.mock('./loadExporter', () => ({
   loadExporter: vi.fn().mockResolvedValue(
-    vi.fn().mockImplementation(() => ({
-      export: vi.fn().mockResolvedValue(undefined),
-      shutdown: vi.fn().mockResolvedValue(undefined),
-    })),
+    class MockExporter {
+      export = vi.fn().mockResolvedValue(undefined);
+      shutdown = vi.fn().mockResolvedValue(undefined);
+    },
   ),
 }));
 
