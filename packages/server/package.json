@@ -108,8 +108,6 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "fetch-to-node": "^2.1.0",
-    "hono": "^4.10.5",
-    "zod-to-json-schema": "^3.24.6"
+    "hono": "^4.10.5"
   }
 }

@@ -2948,15 +2948,9 @@ importers:
 
   packages/server:
     dependencies:
-      fetch-to-node:
-        specifier: ^2.1.0
-        version: 2.1.0
       hono:
         specifier: ^4.10.5
         version: 4.10.6
-      zod-to-json-schema:
-        specifier: ^3.24.6
-        version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.24

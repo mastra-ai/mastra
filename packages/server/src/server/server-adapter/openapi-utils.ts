@@ -1,5 +1,5 @@
-import type { ZodSchema } from 'zod';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
+import type { ZodSchema } from 'zod';
 import type { ServerRoute } from './routes';
 
 interface RouteOpenAPIConfig {

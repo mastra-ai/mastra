@@ -1,3 +1,4 @@
+import z from 'zod';
 import {
   streamWorkflowBodySchema,
   resumeBodySchema,
@@ -6,7 +7,6 @@ import {
 } from './workflows';
 
 // Path parameter schemas
-import z from 'zod';
 
 export const actionIdPathParams = z.object({
   actionId: z.string().describe('Unique identifier for the agent-builder action'),

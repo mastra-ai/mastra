@@ -1,5 +1,4 @@
 import type { MCPServerBase as MastraMCPServerImplementation, ServerInfo } from '@mastra/core/mcp';
-import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context } from 'hono';
 import { HTTPException } from '../http-exception';
 import {
@@ -14,52 +13,6 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 // ============================================================================
 // Standalone Handlers (for direct Hono Context usage)
 // ============================================================================
-
-/**
- * Handler for MCP server HTTP protocol messages
- * Works with raw Hono Context and Node.js req/res
- */
-export async function getMcpServerMessageHandler(c: Context): Promise<Response> {
-  const serverId = c.req.param('serverId');
-  const mastra = c.get('mastra');
-  const requestUrl = c.req.url;
-
-  const server = mastra.getMCPServerById(serverId);
-
-  const { req, res } = toReqRes(c.req.raw);
-
-  if (!server) {
-    res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: `MCP server '${serverId}' not found` }));
-    return await toFetchResponse(res);
-  }
-
-  try {
-    await server.startHTTP({
-      url: new URL(requestUrl),
-      httpPath: `/api/mcp/${serverId}/mcp`,
-      req,
-      res,
-    });
-
-    return await toFetchResponse(res);
-  } catch {
-    if (!res.headersSent) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(
-        JSON.stringify({
-          jsonrpc: '2.0',
-          error: {
-            code: -32603,
-            message: 'Internal server error',
-          },
-          id: null,
-        }),
-      );
-    }
-    return await toFetchResponse(res);
-  }
-}
 
 /**
  * Handler for listing MCP registry servers with pagination
@@ -215,6 +168,5 @@ export const GET_MCP_SERVER_DETAIL_ROUTE = createRoute({
   },
 });
 
-// Note: The MCP message handler uses raw Node.js req/res and doesn't fit
-// the standard createRoute pattern. It should be registered directly with
-// the server adapter's router.
+// Note: The MCP message handler (getMcpServerMessageHandler) uses raw Node.js req/res
+// and is located in @mastra/deployer/src/server/handlers/mcp.ts
