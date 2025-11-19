@@ -152,7 +152,8 @@ export class ProcessorRunner {
           });
         }
         processableMessages = result.get.all.db();
-      } else {
+      } else if (Array.isArray(result)) {
+        messageList.clear.response.db();
         processableMessages = result;
       }
 
