@@ -71,6 +71,9 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
                 id: toolCall.toolCallId,
               });
               controller.enqueue(toolCall);
+            } else if (message.type === 'tool-result') {
+              const toolResult = message;
+              controller.enqueue(toolResult);
             } else if (message.type === 'text') {
               const text = message;
               const id = `msg_${randomUUID()}`;

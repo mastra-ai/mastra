@@ -63,11 +63,20 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
                 providerOptions: sdkTool.providerOptions,
               };
             case 'provider-defined':
+              // For provider-defined tools, extract the name from the ID to match doStream behavior
+              // ID format is typically "provider.toolName" (e.g. "openai.web_search")
+              // doStream returns just "toolName" part, so we use that as name for consistency
+              const providerId = (sdkTool as any).id;
+              const providerToolName =
+                providerId && providerId.includes('.')
+                  ? providerId.split('.').slice(1).join('.') // Take everything after first dot
+                  : name; // Fallback to our key if no dot in ID
+
               return {
                 type: 'provider-defined' as const,
-                name,
+                name: providerToolName,
                 // TODO: as any seems wrong here. are there cases where we don't have an id?
-                id: (sdkTool as any).id,
+                id: providerId,
                 args: (sdkTool as any).args,
               };
             default: {
