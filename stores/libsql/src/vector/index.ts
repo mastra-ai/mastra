@@ -14,6 +14,7 @@ import type {
   DeleteIndexParams,
   DeleteVectorParams,
   UpdateVectorParams,
+  DeleteVectorsByFilterParams,
 } from '@mastra/core/vector';
 import type { LibSQLVectorFilter } from './filter';
 import { LibSQLFilterTranslator } from './filter';
@@ -488,6 +489,16 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     await this.turso.execute({
       sql: `DELETE FROM ${parsedIndexName} WHERE vector_id = ?`,
       args: [id],
+    });
+  }
+
+  async deleteVectorsByFilter({ indexName, filter }: DeleteVectorsByFilterParams<LibSQLVectorFilter>): Promise<void> {
+    throw new MastraError({
+      id: 'LIBSQL_VECTOR_DELETE_BY_FILTER_NOT_SUPPORTED',
+      text: 'deleteVectorsByFilter is not yet implemented for LibSQL vector store',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      details: { indexName, filter: JSON.stringify(filter) },
     });
   }
 
