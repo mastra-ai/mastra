@@ -3,22 +3,28 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GeminiLiveVoice } from './index';
 
 // Mock WebSocket
-vi.mock('ws', () => {
-  const mockWs = {
-    send: vi.fn(),
-    close: vi.fn(),
-    on: vi.fn(),
-    once: vi.fn(),
-    emit: vi.fn(),
-    readyState: 1,
-  };
+let mockWsInstance: any;
+let currentWsUrl: string | undefined;
 
-  const MockWebSocket = vi.fn().mockImplementation(() => mockWs);
-  // Add static properties to the constructor function
-  (MockWebSocket as any).OPEN = 1;
-  (MockWebSocket as any).CLOSED = 3;
-  (MockWebSocket as any).CONNECTING = 0;
-  (MockWebSocket as any).CLOSING = 2;
+vi.mock('ws', () => {
+  class MockWebSocket {
+    static OPEN = 1;
+    static CLOSED = 3;
+    static CONNECTING = 0;
+    static CLOSING = 2;
+    send = vi.fn();
+    close = vi.fn();
+    on = vi.fn();
+    once = vi.fn();
+    emit = vi.fn();
+    readyState = 1;
+
+    constructor(url?: string) {
+      currentWsUrl = url;
+      mockWsInstance = this;
+      return this;
+    }
+  }
 
   return { WebSocket: MockWebSocket };
 });
@@ -48,6 +54,8 @@ describe('GeminiLiveVoice', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockWsInstance = null;
+    currentWsUrl = undefined;
 
     // Create voice instance with test config
     voice = new GeminiLiveVoice({
@@ -114,6 +122,33 @@ describe('GeminiLiveVoice', () => {
           vertexAI: true,
         });
       }).toThrow('Google Cloud project ID is required');
+    });
+  });
+
+  describe('Vertex AI configuration', () => {
+    it('should build fully-qualified Vertex AI model path and default location for bare model names', async () => {
+      const vertexVoice = new GeminiLiveVoice({
+        vertexAI: true,
+        project: 'test-project',
+        model: 'gemini-2.0-flash-live-001',
+      });
+
+      vi.spyOn((vertexVoice as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (vertexVoice as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await vertexVoice.connect();
+
+      expect(currentWsUrl).toContain('us-central1-aiplatform.googleapis.com');
+      expect(currentWsUrl).toContain('LlmBidiService/BidiGenerateContent');
+
+      const wsSent = ((vertexVoice as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.model).toBe(
+        'projects/test-project/locations/us-central1/publishers/google/models/gemini-2.0-flash-live-001',
+      );
+
+      await vertexVoice.disconnect();
     });
   });
 
