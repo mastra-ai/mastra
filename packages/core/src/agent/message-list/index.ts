@@ -1414,6 +1414,14 @@ export class MessageList {
       });
     }
 
+    if (!message.threadId && this.memoryInfo?.threadId) {
+      message.threadId = this.memoryInfo.threadId;
+
+      if (!message.resourceId && this.memoryInfo?.resourceId) {
+        message.resourceId = this.memoryInfo.resourceId;
+      }
+    }
+
     return message;
   }
 
