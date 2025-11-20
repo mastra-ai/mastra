@@ -661,7 +661,7 @@ describe('Gemini Model Compatibility Tests', () => {
       expect(result2.error).toBeUndefined();
     }, 30000);
 
-    it.skip('should handle multi-step tool calls with gemini 3 pro', async () => {
+    it('should handle multi-step tool calls with gemini 3 pro', async () => {
       const weatherTool = createTool({
         id: 'get-weather-multi',
         description: 'Gets the current weather for a location',
@@ -698,6 +698,7 @@ describe('Gemini Model Compatibility Tests', () => {
       expect(result).toBeDefined();
       expect(result.text).toBeDefined();
       expect(result.text.length).toBeGreaterThan(0);
+      expect(result.error).toBeUndefined();
     }, 30000);
   });
 });
