@@ -2,7 +2,7 @@ import { runIdSchema } from '../schemas/common';
 import { listLogsQuerySchema, listLogsResponseSchema, listLogTransportsResponseSchema } from '../schemas/logs';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
-import { validateBody } from './utils';
+import { parseFilters, validateBody } from './utils';
 
 // ============================================================================
 // Route Definitions (new pattern - handlers defined inline with createRoute)
@@ -47,14 +47,7 @@ export const LIST_LOGS_ROUTE = createRoute({
       validateBody({ transportId });
 
       // Parse filter query parameter if present
-      const filters = _filters
-        ? Object.fromEntries(
-            (Array.isArray(_filters) ? _filters : [_filters]).map((attr: string) => {
-              const [key, value] = attr.split(':');
-              return [key, value];
-            }),
-          )
-        : undefined;
+      const filters = parseFilters(_filters);
 
       const logs = await mastra.listLogs(transportId!, {
         fromDate,
@@ -88,14 +81,7 @@ export const LIST_LOGS_BY_RUN_ID_ROUTE = createRoute({
       validateBody({ runId, transportId });
 
       // Parse filter query parameter if present
-      const filters = _filters
-        ? Object.fromEntries(
-            (Array.isArray(_filters) ? _filters : [_filters]).map((attr: string) => {
-              const [key, value] = attr.split(':');
-              return [key, value];
-            }),
-          )
-        : undefined;
+      const filters = parseFilters(_filters);
 
       const logs = await mastra.listLogsByRunId({
         runId: runId!,
