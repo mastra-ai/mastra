@@ -918,6 +918,35 @@ const voice = new GeminiLiveVoice({
 Visit the [Google Gemini Live Reference](/reference/v1/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
 
   </TabItem>
+  <TabItem value="aisdk" label="AI SDK">
+
+```typescript
+// AI SDK Voice Configuration
+import { CompositeVoice } from "@mastra/core/voice";
+import { openai } from "@ai-sdk/openai";
+import { elevenlabs } from "@ai-sdk/elevenlabs";
+
+// Use AI SDK models directly - no need to install separate packages
+const voice = new CompositeVoice({
+  input: openai.transcription('whisper-1'),      // AI SDK transcription
+  output: elevenlabs.speech('eleven_turbo_v2'),  // AI SDK speech
+});
+
+// Works seamlessly with your agent
+const voiceAgent = new Agent({
+  id: "aisdk-voice-agent",
+  name: "AI SDK Voice Agent",
+  instructions: "You are a helpful assistant with voice capabilities.",
+  model: openai("gpt-4o"),
+  voice,
+});
+```
+<>
+For the complete list of supported AI SDK providers and their capabilities:
+* [Transcription](https://ai-sdk.dev/docs/providers/openai/transcription)
+* [Speech](https://ai-sdk.dev/docs/providers/elevenlabs/speech)
+</>
+  </TabItem>
 </Tabs>
 
 ### Using Multiple Voice Providers

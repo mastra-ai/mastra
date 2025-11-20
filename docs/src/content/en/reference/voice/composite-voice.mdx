@@ -7,9 +7,11 @@ description: "Documentation for the CompositeVoice class, which enables combinin
 
 The CompositeVoice class allows you to combine different voice providers for text-to-speech and speech-to-text operations. This is particularly useful when you want to use the best provider for each operation - for example, using OpenAI for speech-to-text and PlayAI for text-to-speech.
 
-CompositeVoice is used internally by the Agent class to provide flexible voice capabilities.
+CompositeVoice supports both Mastra voice providers and AI SDK model providers
 
-## Usage Example
+## Usage Examples
+
+### Using Mastra Voice Providers
 
 ```typescript
 import { CompositeVoice } from "@mastra/core/voice";
@@ -33,6 +35,41 @@ const text = await voice.listen(audioStream);
 const audio = await voice.speak("Hello, world!");
 ```
 
+### Using AI SDK Model Providers
+
+You can pass AI SDK transcription and speech models directly to CompositeVoice:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { openai } from "@ai-sdk/openai";
+import { elevenlabs } from "@ai-sdk/elevenlabs";
+
+// Use AI SDK models directly - they will be auto-wrapped
+const voice = new CompositeVoice({
+  input: openai.transcription('whisper-1'),      // AI SDK transcription
+  output: elevenlabs.speech('eleven_turbo_v2'),  // AI SDK speech
+});
+
+// Works the same way as with Mastra providers
+const text = await voice.listen(audioStream);
+const audio = await voice.speak("Hello from AI SDK!");
+```
+
+### Mix and Match
+
+You can combine Mastra providers with AI SDK models:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { PlayAIVoice } from "@mastra/voice-playai";
+import { groq } from "@ai-sdk/groq";
+
+const voice = new CompositeVoice({
+  input: groq.transcription('whisper-large-v3'),  // AI SDK for STT
+  output: new PlayAIVoice(),                       // Mastra for TTS
+});
+```
+
 ## Constructor Parameters
 
 <PropertiesTable
@@ -45,14 +82,20 @@ const audio = await voice.speak("Hello, world!");
     },
     {
       name: "config.input",
-      type: "MastraVoice",
-      description: "Voice provider to use for speech-to-text operations",
+      type: "MastraVoice | TranscriptionModel",
+      description: "Voice provider or AI SDK transcription model to use for speech-to-text operations. AI SDK models are automatically wrapped.",
       isOptional: true,
     },
     {
       name: "config.output",
+      type: "MastraVoice | SpeechModel",
+      description: "Voice provider or AI SDK speech model to use for text-to-speech operations. AI SDK models are automatically wrapped.",
+      isOptional: true,
+    },
+    {
+      name: "config.realtime",
       type: "MastraVoice",
-      description: "Voice provider to use for text-to-speech operations",
+      description: "Voice provider to use for real-time speech-to-speech operations",
       isOptional: true,
     },
   ]}
