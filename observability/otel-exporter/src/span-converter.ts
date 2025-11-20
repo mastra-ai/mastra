@@ -32,6 +32,24 @@ const SPAN_KIND_MAPPING: Partial<Record<SpanType, SpanKind>> = {
   [SpanType.WORKFLOW_RUN]: SpanKind.SERVER,
 };
 
+/**
+ * Get the appropriate SpanKind based on span type and context.
+ * Works with both CreateSpanOptions (at span creation) and AnyExportedSpan (at export).
+ *
+ * @param type - The Mastra span type
+ * @param isRootSpan - Whether this is a root span (no parent)
+ * @returns The appropriate OTEL SpanKind
+ */
+export function getSpanKind(type: SpanType, isRootSpan: boolean): SpanKind {
+  // Root spans should be SERVER
+  if (isRootSpan) {
+    if (type === SpanType.AGENT_RUN || type === SpanType.WORKFLOW_RUN) {
+      return SpanKind.SERVER;
+    }
+  }
+  return SPAN_KIND_MAPPING[type] || SpanKind.INTERNAL;
+}
+
 export class SpanConverter {
   private resource?: Resource;
   private instrumentationLibrary: InstrumentationScope;
@@ -39,7 +57,7 @@ export class SpanConverter {
   constructor(resource?: Resource) {
     this.resource = resource;
     this.instrumentationLibrary = {
-      name: '@mastra/otel',
+      name: '@mastra/otel-exporter',
       version: '1.0.0',
     };
   }
@@ -48,35 +66,22 @@ export class SpanConverter {
    * Convert a Mastra Span to an OpenTelemetry ReadableSpan
    * This preserves Mastra's trace and span IDs
    */
-  convertSpan(Span: AnyExportedSpan): MastraReadableSpan {
-    const spanKind = this.getSpanKind(Span);
-    const attributes = this.buildAttributes(Span);
-    const spanName = this.buildSpanName(Span);
+  convertSpan(span: AnyExportedSpan): MastraReadableSpan {
+    const spanKind = getSpanKind(span.type, span.isRootSpan);
+    const attributes = this.buildAttributes(span);
+    const spanName = this.buildSpanName(span);
 
     // Create a new span with OTEL-compliant naming
-    const otelSpan = { ...Span, name: spanName };
+    const otelSpan = { ...span, name: spanName };
 
     return new MastraReadableSpan(
       otelSpan,
       attributes,
       spanKind,
-      Span.parentSpanId, // Use the parentSpanId from the Mastra span directly
+      span.parentSpanId, // Use the parentSpanId from the Mastra span directly
       this.resource,
       this.instrumentationLibrary,
     );
-  }
-
-  /**
-   * Get the appropriate SpanKind based on span type and context
-   */
-  private getSpanKind(Span: AnyExportedSpan): SpanKind {
-    // Root spans should be SERVER
-    if (Span.isRootSpan) {
-      if (Span.type === SpanType.AGENT_RUN || Span.type === SpanType.WORKFLOW_RUN) {
-        return SpanKind.SERVER;
-      }
-    }
-    return SPAN_KIND_MAPPING[Span.type] || SpanKind.INTERNAL;
   }
 
   /**
@@ -365,7 +370,7 @@ export class SpanConverter {
    * Get span kind as string for attribute
    */
   private getSpanKindString(Span: AnyExportedSpan): string {
-    const kind = this.getSpanKind(Span);
+    const kind = getSpanKind(Span.type, Span.isRootSpan);
     switch (kind) {
       case SpanKind.SERVER:
         return 'server';

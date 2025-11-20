@@ -13,12 +13,13 @@ import { z } from 'zod';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import { SpanType, wrapMastra } from '../../observability';
+import { executeWithContext } from '../../observability/utils';
 import { RequestContext } from '../../request-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { ToolStream } from '../stream';
 import type { CoreTool, MastraToolInvocationOptions, ToolAction, VercelTool, VercelToolV5 } from '../types';
-import { validateToolInput, validateToolOutput } from '../validation';
+import { validateToolInput } from '../validation';
 
 /**
  * Types that can be converted to Mastra tools.
@@ -69,7 +70,7 @@ export class CoreToolBuilder extends MastraBase {
     }
 
     // For Mastra tools, inputSchema might also be a function
-    let schema = this.originalTool.inputSchema;
+    let schema = this.originalTool.inputSchema ?? z.object({});
 
     // If schema is a function, call it to get the actual schema
     if (typeof schema === 'function') {
@@ -102,54 +103,18 @@ export class CoreToolBuilder extends MastraBase {
       typeof tool.id === 'string' &&
       tool.id.includes('.')
     ) {
-      // Get schema directly from provider-defined tool (v4 uses parameters, v5 uses inputSchema)
-      let parameters: unknown =
-        'parameters' in tool ? tool.parameters : 'inputSchema' in tool ? (tool as any).inputSchema : undefined;
-
-      // If schema is a function, call it to get the actual schema
-      if (typeof parameters === 'function') {
-        parameters = parameters();
-      }
-
-      // Get output schema directly from provider-defined tool
-      let outputSchema: unknown = 'outputSchema' in tool ? (tool as any).outputSchema : undefined;
-
-      // If schema is a function, call it to get the actual schema
-      if (typeof outputSchema === 'function') {
-        outputSchema = outputSchema();
-      }
-
-      // Convert parameters to AI SDK Schema format
-      let processedParameters;
-      if (parameters !== undefined && parameters !== null) {
-        if (typeof parameters === 'object' && 'jsonSchema' in parameters) {
-          // Already in AI SDK Schema format
-          processedParameters = parameters;
-        } else {
-          // Convert Zod schema to AI SDK Schema
-          processedParameters = convertZodSchemaToAISDKSchema(parameters as z.ZodType);
-        }
-      }
-
-      // Convert output schema to AI SDK Schema format if present
-      let processedOutputSchema;
-      if (outputSchema !== undefined && outputSchema !== null) {
-        if (typeof outputSchema === 'object' && 'jsonSchema' in outputSchema) {
-          // Already in AI SDK Schema format
-          processedOutputSchema = outputSchema;
-        } else {
-          // Convert Zod schema to AI SDK Schema
-          processedOutputSchema = convertZodSchemaToAISDKSchema(outputSchema as z.ZodType);
-        }
-      }
+      const parameters = this.getParameters();
+      const outputSchema = this.getOutputSchema();
 
       return {
-        ...(processedOutputSchema ? { outputSchema: processedOutputSchema } : {}),
         type: 'provider-defined' as const,
         id: tool.id as `${string}.${string}`,
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
-        parameters: processedParameters,
+        parameters: parameters.jsonSchema ? parameters : convertZodSchemaToAISDKSchema(parameters),
+        ...(outputSchema
+          ? { outputSchema: outputSchema.jsonSchema ? outputSchema : convertZodSchemaToAISDKSchema(outputSchema) }
+          : {}),
         execute: this.originalTool.execute
           ? this.createExecute(
               this.originalTool,
@@ -157,7 +122,7 @@ export class CoreToolBuilder extends MastraBase {
               this.logType,
             )
           : undefined,
-      } as unknown as (CoreTool & { id: `${string}.${string}` }) | undefined;
+      };
     }
 
     return undefined;
@@ -224,7 +189,11 @@ export class CoreToolBuilder extends MastraBase {
 
         if (isVercelTool(tool)) {
           // Handle Vercel tools (AI SDK tools)
-          result = await tool?.execute?.(args, execOptions as ToolExecutionOptions);
+          // Execute within the tool span's OTEL context for proper nesting
+          result = await executeWithContext({
+            span: toolSpan,
+            fn: async () => tool?.execute?.(args, execOptions as ToolExecutionOptions),
+          });
         } else {
           // Handle Mastra tools - wrap mastra instance with tracing context for context propagation
 
@@ -326,24 +295,12 @@ export class CoreToolBuilder extends MastraBase {
             toolContext = baseContext;
           }
 
-          result = await tool?.execute?.(args, toolContext);
+          // Execute within the tool span's OTEL context for proper nesting
+          result = await executeWithContext({ span: toolSpan, fn: async () => tool?.execute?.(args, toolContext) });
         }
 
-        // Validate output if outputSchema exists
-        const outputSchema = this.getOutputSchema();
-        const outputValidation = validateToolOutput(outputSchema, result, options.name);
-        if (outputValidation.error) {
-          logger?.warn(`Tool output validation failed for '${options.name}'`, {
-            toolName: options.name,
-            errors: outputValidation.error.validationErrors,
-            output: result,
-          });
-          toolSpan?.end({ output: outputValidation.error });
-          return outputValidation.error;
-        }
-
-        toolSpan?.end({ output: outputValidation.data });
-        return outputValidation.data;
+        toolSpan?.end({ output: result });
+        return result ?? undefined;
       } catch (error) {
         toolSpan?.error({ error: error as Error });
         throw error;
@@ -482,7 +439,7 @@ export class CoreToolBuilder extends MastraBase {
         compatLayers: schemaCompatLayers,
         mode: 'aiSdkSchema',
       });
-    } else if (originalSchema) {
+    } else {
       // No compatibility layer applies, use original schema
       processedZodSchema = originalSchema;
       processedSchema = applyCompatLayer({
@@ -490,19 +447,14 @@ export class CoreToolBuilder extends MastraBase {
         compatLayers: schemaCompatLayers,
         mode: 'aiSdkSchema',
       });
-    } else {
-      // No schema to process, set to undefined
-      processedZodSchema = undefined;
-      processedSchema = undefined;
     }
 
     let processedOutputSchema;
 
     if (this.getOutputSchema()) {
-      // Don't add any compat layers to outputSchema since it's never sent to the LLM
       processedOutputSchema = applyCompatLayer({
         schema: this.getOutputSchema(),
-        compatLayers: [],
+        compatLayers: schemaCompatLayers,
         mode: 'aiSdkSchema',
       });
     }
@@ -510,6 +462,8 @@ export class CoreToolBuilder extends MastraBase {
     const definition = {
       type: 'function' as const,
       description: this.originalTool.description,
+      parameters: this.getParameters(),
+      outputSchema: this.getOutputSchema(),
       requireApproval: this.options.requireApproval,
       execute: this.originalTool.execute
         ? this.createExecute(
@@ -524,7 +478,7 @@ export class CoreToolBuilder extends MastraBase {
     return {
       ...definition,
       id: 'id' in this.originalTool ? this.originalTool.id : undefined,
-      parameters: processedSchema ?? z.object({}),
+      parameters: processedSchema,
       outputSchema: processedOutputSchema,
     } as unknown as CoreTool;
   }

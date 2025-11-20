@@ -1,8 +1,9 @@
 import type { ObservabilityExporter, TracingEvent } from '@mastra/core/observability';
-import { SpanType, SamplingStrategyType } from '@mastra/core/observability';
+import { SpanType, SamplingStrategyType, InternalSpans } from '@mastra/core/observability';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { DefaultObservabilityInstance } from '../instances';
+import { getExternalParentId } from './base';
 
 // Simple test exporter for capturing events
 class TestExporter implements ObservabilityExporter {
@@ -194,6 +195,260 @@ describe('Span', () => {
       const foundStep = llmSpan.findParent(SpanType.WORKFLOW_STEP);
       expect(foundStep).toBeDefined();
       expect(foundStep?.name).toBe('step-2');
+
+      agentSpan.end();
+    });
+  });
+
+  describe('getExternalParentId', () => {
+    it('should return undefined when no parent', () => {
+      const options = {
+        type: SpanType.AGENT_RUN,
+        name: 'test',
+        attributes: { agentId: 'agent-1' },
+      };
+
+      expect(getExternalParentId(options)).toBeUndefined();
+    });
+
+    it('should return parent ID when parent is external', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const parent = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'parent-span',
+        attributes: { agentId: 'agent-1' },
+        tracingPolicy: {
+          internal: InternalSpans.NONE, // All spans external
+        },
+      });
+
+      const options = {
+        type: SpanType.MODEL_GENERATION,
+        name: 'test',
+        attributes: { model: 'gpt-4' },
+        parent,
+      };
+
+      expect(getExternalParentId(options)).toBe(parent.id);
+
+      parent.end();
+    });
+
+    it('should return grandparent ID when parent is internal', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      // Create external grandparent
+      const grandparent = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent',
+        attributes: { agentId: 'agent-1' },
+        tracingPolicy: {
+          internal: InternalSpans.NONE,
+        },
+      });
+
+      // Create internal parent
+      const parent = grandparent.createChildSpan({
+        type: SpanType.WORKFLOW_STEP,
+        name: 'workflow-step',
+        attributes: { stepId: 'step-1' },
+        tracingPolicy: {
+          internal: InternalSpans.WORKFLOW, // Workflow spans are internal
+        },
+      });
+
+      expect(parent.isInternal).toBe(true);
+
+      const options = {
+        type: SpanType.MODEL_GENERATION,
+        name: 'llm-call',
+        attributes: { model: 'gpt-4' },
+        parent,
+      };
+
+      // Should skip internal parent and return grandparent ID
+      expect(getExternalParentId(options)).toBe(grandparent.id);
+
+      grandparent.end();
+    });
+
+    it('should skip multiple internal ancestors', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      // Create external great-grandparent
+      const greatGrandparent = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent',
+        attributes: { agentId: 'agent-1' },
+        tracingPolicy: {
+          internal: InternalSpans.NONE,
+        },
+      });
+
+      // Create internal grandparent
+      const grandparent = greatGrandparent.createChildSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: 'workflow',
+        attributes: { workflowId: 'workflow-1' },
+        tracingPolicy: {
+          internal: InternalSpans.WORKFLOW,
+        },
+      });
+
+      // Create internal parent
+      const parent = grandparent.createChildSpan({
+        type: SpanType.WORKFLOW_STEP,
+        name: 'workflow-step',
+        attributes: { stepId: 'step-1' },
+        tracingPolicy: {
+          internal: InternalSpans.WORKFLOW,
+        },
+      });
+
+      expect(grandparent.isInternal).toBe(true);
+      expect(parent.isInternal).toBe(true);
+
+      const options = {
+        type: SpanType.MODEL_GENERATION,
+        name: 'llm-call',
+        attributes: { model: 'gpt-4' },
+        parent,
+      };
+
+      // Should skip both internal ancestors and return great-grandparent ID
+      expect(getExternalParentId(options)).toBe(greatGrandparent.id);
+
+      greatGrandparent.end();
+    });
+
+    it('should return undefined when all ancestors are internal (no external parent)', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      // Create internal root (unusual, but possible)
+      const grandparent = tracing.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: 'workflow',
+        attributes: { workflowId: 'workflow-1' },
+        tracingPolicy: {
+          internal: InternalSpans.WORKFLOW,
+        },
+      });
+
+      const parent = grandparent.createChildSpan({
+        type: SpanType.WORKFLOW_STEP,
+        name: 'workflow-step',
+        attributes: { stepId: 'step-1' },
+        tracingPolicy: {
+          internal: InternalSpans.WORKFLOW,
+        },
+      });
+
+      expect(grandparent.isInternal).toBe(true);
+      expect(parent.isInternal).toBe(true);
+
+      const options = {
+        type: SpanType.MODEL_GENERATION,
+        name: 'llm-call',
+        attributes: { model: 'gpt-4' },
+        parent,
+      };
+
+      // No external ancestor exists
+      expect(getExternalParentId(options)).toBeUndefined();
+
+      grandparent.end();
+    });
+
+    it('should handle mixed internal/external hierarchy correctly', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      // External -> Internal -> Internal -> External -> Internal
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent',
+        attributes: { agentId: 'agent-1' },
+        tracingPolicy: {
+          internal: InternalSpans.NONE,
+        },
+      });
+
+      const workflowSpan = agentSpan.createChildSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: 'workflow',
+        attributes: { workflowId: 'workflow-1' },
+        tracingPolicy: {
+          internal: InternalSpans.WORKFLOW,
+        },
+      });
+
+      const stepSpan = workflowSpan.createChildSpan({
+        type: SpanType.WORKFLOW_STEP,
+        name: 'step',
+        attributes: { stepId: 'step-1' },
+        tracingPolicy: {
+          internal: InternalSpans.WORKFLOW,
+        },
+      });
+
+      const llmSpan = stepSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'llm-call',
+        attributes: { model: 'gpt-4' },
+        tracingPolicy: {
+          internal: InternalSpans.NONE,
+        },
+      });
+
+      const toolSpan = llmSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'tool-call',
+        attributes: { toolId: 'tool-1' },
+        tracingPolicy: {
+          internal: InternalSpans.TOOL,
+        },
+      });
+
+      expect(agentSpan.isInternal).toBe(false);
+      expect(workflowSpan.isInternal).toBe(true);
+      expect(stepSpan.isInternal).toBe(true);
+      expect(llmSpan.isInternal).toBe(false);
+      expect(toolSpan.isInternal).toBe(true);
+
+      // From toolSpan (internal), should return llmSpan (external parent)
+      const options = {
+        type: SpanType.MODEL_GENERATION,
+        name: 'another-llm',
+        attributes: { model: 'gpt-4' },
+        parent: toolSpan,
+      };
+
+      expect(getExternalParentId(options)).toBe(llmSpan.id);
 
       agentSpan.end();
     });

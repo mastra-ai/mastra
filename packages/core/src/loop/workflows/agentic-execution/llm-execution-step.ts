@@ -6,6 +6,7 @@ import { MessageList } from '../../../agent/message-list';
 import type { MastraDBMessage } from '../../../agent/message-list';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import type { MastraLanguageModelV2 } from '../../../llm/model/shared.types';
+import { executeWithContextSync } from '../../../observability';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { MastraModelOutput } from '../../../stream/base/output';
@@ -463,6 +464,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   downloadConcurrency,
   processorStates,
   methodType,
+  modelSpanTracker,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'llm-execution',
@@ -542,46 +544,50 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
               }
             }
 
-            modelResult = execute({
-              runId,
-              model: stepModel,
-              providerOptions,
-              inputMessages,
-              tools: stepTools,
-              toolChoice: stepToolChoice,
-              options,
-              modelSettings,
-              includeRawChunks,
-              structuredOutput,
-              headers,
-              methodType,
-              onResult: ({
-                warnings: warningsFromStream,
-                request: requestFromStream,
-                rawResponse: rawResponseFromStream,
-              }) => {
-                warnings = warningsFromStream;
-                request = requestFromStream || {};
-                rawResponse = rawResponseFromStream;
-
-                if (!isControllerOpen(controller)) {
-                  // Controller is closed or errored, skip enqueueing
-                  // This can happen when downstream errors (like in onStepFinish) close the controller
-                  return;
-                }
-
-                controller.enqueue({
+            modelResult = executeWithContextSync({
+              span: modelSpanTracker?.getTracingContext()?.currentSpan,
+              fn: () =>
+                execute({
                   runId,
-                  from: ChunkFrom.AGENT,
-                  type: 'step-start',
-                  payload: {
-                    request: request || {},
-                    warnings: warnings || [],
-                    messageId: messageId,
+                  model: stepModel,
+                  providerOptions,
+                  inputMessages,
+                  tools: stepTools,
+                  toolChoice: stepToolChoice,
+                  options,
+                  modelSettings,
+                  includeRawChunks,
+                  structuredOutput,
+                  headers,
+                  methodType,
+                  onResult: ({
+                    warnings: warningsFromStream,
+                    request: requestFromStream,
+                    rawResponse: rawResponseFromStream,
+                  }) => {
+                    warnings = warningsFromStream;
+                    request = requestFromStream || {};
+                    rawResponse = rawResponseFromStream;
+
+                    if (!isControllerOpen(controller)) {
+                      // Controller is closed or errored, skip enqueueing
+                      // This can happen when downstream errors (like in onStepFinish) close the controller
+                      return;
+                    }
+
+                    controller.enqueue({
+                      runId,
+                      from: ChunkFrom.AGENT,
+                      type: 'step-start',
+                      payload: {
+                        request: request || {},
+                        warnings: warnings || [],
+                        messageId: messageId,
+                      },
+                    });
                   },
-                });
-              },
-              shouldThrowError: !isLastModel,
+                  shouldThrowError: !isLastModel,
+                }),
             });
             break;
           }
