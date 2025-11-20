@@ -3,6 +3,7 @@ import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import type { ToolSet } from 'ai-v5';
 import { MessageList } from '../../../agent/message-list';
+import type { MastraDBMessage } from '../../../agent/message-list';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import type { MastraLanguageModelV2 } from '../../../llm/model/shared.types';
 import { execute } from '../../../stream/aisdk/v5/execute';
@@ -79,25 +80,22 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         const textStartPayload = chunk.payload as TextStartPayload;
         const providerMetadata = textStartPayload.providerMetadata ?? runState.state.providerOptions;
 
-        messageList.add(
-          {
-            id: messageId,
-            role: 'assistant',
-            content: [
-              providerMetadata
-                ? {
-                    type: 'text',
-                    text: runState.state.textDeltas.join(''),
-                    providerOptions: providerMetadata,
-                  }
-                : {
-                    type: 'text',
-                    text: runState.state.textDeltas.join(''),
-                  },
+        const message: MastraDBMessage = {
+          id: messageId,
+          role: 'assistant' as const,
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'text' as const,
+                text: runState.state.textDeltas.join(''),
+                ...(providerMetadata ? { providerMetadata } : {}),
+              },
             ],
           },
-          'response',
-        );
+          createdAt: new Date(),
+        };
+        messageList.add(message, 'response');
       }
 
       runState.setState({
@@ -201,20 +199,23 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         });
 
         if (Object.values(chunk.payload.providerMetadata || {}).find((v: any) => v?.redactedData)) {
-          messageList.add(
-            {
-              id: messageId,
-              role: 'assistant',
-              content: [
+          const message: MastraDBMessage = {
+            id: messageId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
                 {
-                  type: 'reasoning',
-                  text: '',
-                  providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
+                  type: 'reasoning' as const,
+                  reasoning: '',
+                  details: [{ type: 'redacted', data: '' }],
+                  providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
                 },
               ],
             },
-            'response',
-          );
+            createdAt: new Date(),
+          };
+          messageList.add(message, 'response');
           if (isControllerOpen(controller)) {
             controller.enqueue(chunk);
           }
@@ -243,20 +244,24 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       case 'reasoning-end': {
         // Use the accumulated reasoning deltas from runState
         if (runState.state.reasoningDeltas.length > 0) {
-          messageList.add(
-            {
-              id: messageId,
-              role: 'assistant',
-              content: [
+          const message: MastraDBMessage = {
+            id: messageId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
                 {
-                  type: 'reasoning',
-                  text: runState.state.reasoningDeltas.join(''),
-                  providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
+                  type: 'reasoning' as const,
+                  reasoning: '',
+                  details: [{ type: 'text', text: runState.state.reasoningDeltas.join('') }],
+                  providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
                 },
               ],
             },
-            'response',
-          );
+            createdAt: new Date(),
+          };
+
+          messageList.add(message, 'response');
         }
 
         // Reset reasoning state
@@ -272,28 +277,33 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       }
 
       case 'file':
-        messageList.add(
-          {
+        {
+          const message: MastraDBMessage = {
             id: messageId,
-            role: 'assistant',
-            content: [
-              {
-                type: 'file',
-                data: chunk.payload.data,
-                mimeType: chunk.payload.mimeType,
-              },
-            ],
-          },
-          'response',
-        );
-        controller.enqueue(chunk);
+            role: 'assistant' as const,
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'file' as const,
+                  // @ts-expect-error
+                  data: chunk.payload.data, // TODO: incorrect string type
+                  mimeType: chunk.payload.mimeType,
+                },
+              ],
+            },
+            createdAt: new Date(),
+          };
+          messageList.add(message, 'response');
+          controller.enqueue(chunk);
+        }
         break;
 
       case 'source':
-        messageList.add(
-          {
+        {
+          const message: MastraDBMessage = {
             id: messageId,
-            role: 'assistant',
+            role: 'assistant' as const,
             content: {
               format: 2,
               parts: [
@@ -310,11 +320,10 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
               ],
             },
             createdAt: new Date(),
-          },
-          'response',
-        );
-
-        controller.enqueue(chunk);
+          };
+          messageList.add(message, 'response');
+          controller.enqueue(chunk);
+        }
         break;
 
       case 'finish':
@@ -710,25 +719,27 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
       });
 
       if (toolCalls.length > 0) {
-        const assistantContent = [
-          ...toolCalls.map(toolCall => {
-            return {
-              type: 'tool-call' as const,
-              toolCallId: toolCall.toolCallId,
-              toolName: toolCall.toolName,
-              args: toolCall.args,
-            };
-          }),
-        ];
-
-        messageList.add(
-          {
-            id: messageId,
-            role: 'assistant',
-            content: assistantContent,
+        const message: MastraDBMessage = {
+          id: messageId,
+          role: 'assistant' as const,
+          content: {
+            format: 2,
+            parts: toolCalls.map(toolCall => {
+              return {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: toolCall.toolCallId,
+                  toolName: toolCall.toolName,
+                  args: toolCall.args,
+                },
+                ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
+              };
+            }),
           },
-          'response',
-        );
+          createdAt: new Date(),
+        };
+        messageList.add(message, 'response');
       }
 
       const finishReason = runState?.state?.stepResult?.reason ?? outputStream._getImmediateFinishReason();
