@@ -9,6 +9,7 @@ import type {
   IndexStats,
   QueryResult,
   DeleteVectorsParams,
+  UpdateVectorParams,
 } from '@mastra/core/vector';
 import { Index } from '@upstash/vector';
 
@@ -221,7 +222,12 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector({ indexName: namespace, id, update }: UpstashUpdateVectorParams): Promise<void> {
+  async updateVector(params: UpdateVectorParams<UpstashVectorFilter>): Promise<void> {
+    const { indexName: namespace, id, update } = params;
+    // Extract Upstash-specific sparseVector field from update
+    const upstashUpdate = update as UpstashUpdateVectorParams['update'];
+    const sparseVector = upstashUpdate.sparseVector;
+
     if (!id) {
       throw new MastraError({
         id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
@@ -232,7 +238,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
       });
     }
 
-    if (!update.vector && !update.metadata && !update.sparseVector) {
+    if (!update.vector && !update.metadata && !sparseVector) {
       throw new MastraError({
         id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_FAILED',
         domain: ErrorDomain.STORAGE,
@@ -247,7 +253,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
 
     // The upstash client throws an exception as: 'This index requires dense/sparse vectors' when
     // only metadata is present in the update object.
-    if (!update.vector && !update.sparseVector && update.metadata) {
+    if (!update.vector && !sparseVector && update.metadata) {
       throw new MastraError({
         id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_FAILED',
         domain: ErrorDomain.STORAGE,
@@ -265,7 +271,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
 
       if (update.vector) points.vector = update.vector;
       if (update.metadata) points.metadata = update.metadata;
-      if (update.sparseVector) points.sparseVector = update.sparseVector;
+      if (sparseVector) points.sparseVector = sparseVector;
 
       await this.client.upsert(points, { namespace });
     } catch (error) {

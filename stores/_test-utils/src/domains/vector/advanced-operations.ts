@@ -5,9 +5,7 @@ import type { VectorTestConfig } from '../../vector-factory';
  * Shared test suite for advanced vector operations (deleteVectors and updateVector with filters).
  * These tests validate the new unified deletion and update APIs that support both
  * filter-based and ID-based operations.
- *
- * Context: GitHub issue #9712 - Enhanced vector store API for batch operations
- * and source management capabilities.
+ 
  */
 export function createAdvancedOperationsTest({
   vector,
@@ -240,7 +238,7 @@ export function createAdvancedOperationsTest({
 
         await vector.deleteVectors({
           indexName: testIndexName,
-          ids: [ids[0], ids[2]],
+          ids: [ids[0]!, ids[2]!],
         });
 
         await waitForIndexing();

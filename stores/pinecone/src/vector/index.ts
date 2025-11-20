@@ -312,7 +312,11 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector({ indexName, id, update, namespace }: PineconeUpdateVectorParams): Promise<void> {
+  async updateVector(params: UpdateVectorParams<PineconeVectorFilter>): Promise<void> {
+    const { indexName, id, update } = params;
+    // Extract Pinecone-specific namespace field
+    const namespace = (params as PineconeUpdateVectorParams).namespace;
+
     if (!id) {
       throw new MastraError({
         id: 'STORAGE_PINECONE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
