@@ -113,6 +113,7 @@ describe('Agent usage tracking', () => {
         // Create a V1 mock that returns usage in legacy format
         const model = createMockModel({
           mockText: 'Hello world!',
+          version: 'v1',
         });
 
         const agent = new Agent({
@@ -138,6 +139,7 @@ describe('Agent usage tracking', () => {
       it('should expose usage with promptTokens and completionTokens (legacy format)', async () => {
         const model = createMockModel({
           mockText: 'Hello world!',
+          version: 'v1',
         });
 
         const agent = new Agent({
@@ -171,6 +173,7 @@ describe('Agent usage tracking', () => {
       it('generate should use promptTokens/completionTokens until migration', async () => {
         const model = createMockModel({
           mockText: 'Hello world!',
+          version: 'v1',
         });
 
         const agent = new Agent({
@@ -190,6 +193,7 @@ describe('Agent usage tracking', () => {
       it('stream should use promptTokens/completionTokens until migration', async () => {
         const model = createMockModel({
           mockText: 'Hello world!',
+          version: 'v1',
         });
 
         const agent = new Agent({
