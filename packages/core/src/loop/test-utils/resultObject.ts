@@ -305,8 +305,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             {
               "id": "msg-0",
               "metadata": {
-                "__originalContent": "Hello",
-                "createdAt": 2024-01-01T00:00:00.001Z,
+                "createdAt": 2024-01-01T00:00:00.000Z,
               },
               "parts": [
                 {
@@ -742,8 +741,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 {
                   "id": "msg-0",
                   "metadata": {
-                    "__originalContent": "Hello!",
-                    "createdAt": 2024-01-01T00:00:00.003Z,
+                    "createdAt": 2024-01-01T00:00:00.002Z,
                   },
                   "parts": [
                     {
