@@ -176,6 +176,9 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
       return response.json(result as any, 200);
     } else if (route.responseType === 'stream') {
       return this.stream(route, response, result as { fullStream: ReadableStream });
+    } else if (route.responseType === 'datastream-response') {
+      const fetchResponse = result as globalThis.Response;
+      return fetchResponse;
     } else {
       return response.status(500);
     }
