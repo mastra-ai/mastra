@@ -44,6 +44,7 @@ export interface ClientOptions {
   /** Number of retry attempts for failed requests */
   retries?: number;
   /** Initial backoff time in milliseconds between retries */
+  description?: string;
   backoffMs?: number;
   /** Maximum backoff time in milliseconds between retries */
   maxBackoffMs?: number;
@@ -81,6 +82,7 @@ export type NetworkStreamParams = {
 export interface GetAgentResponse {
   id: string;
   name: string;
+  description?: string;
   instructions: AgentInstructions;
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;
@@ -176,6 +178,7 @@ export type GetWorkflowRunExecutionResultResponse = WorkflowState;
 
 export interface GetWorkflowResponse {
   name: string;
+  description?: string;
   description?: string;
   steps: {
     [key: string]: {
@@ -326,6 +329,7 @@ export type RequestFunction = (path: string, options?: RequestOptions) => Promis
 export interface GetVNextNetworkResponse {
   id: string;
   name: string;
+  description?: string;
   instructions: string;
   agents: Array<{
     name: string;
@@ -397,6 +401,7 @@ export interface McpServerListResponse {
 export interface McpToolInfo {
   id: string;
   name: string;
+  description?: string;
   description?: string;
   inputSchema: string;
   toolType?: MCPToolType;
@@ -536,6 +541,7 @@ export interface ListAgentsModelProvidersResponse {
 export interface Provider {
   id: string;
   name: string;
+  description?: string;
   envVar: string;
   connected: boolean;
   docUrl?: string;

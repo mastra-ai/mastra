@@ -26,7 +26,7 @@ const NameCell = ({ row }: { row: Row<AgentTableColumn> }) => {
           {row.original.name}
         </Link>
       }
-      description={extractPrompt(row.original.instructions)}
+      description={row.original.description || extractPrompt(row.original.instructions)}
     />
   );
 };
