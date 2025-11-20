@@ -6,6 +6,7 @@ import type { ToolAction, VercelTool } from '@mastra/core/tools';
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
+import { createTestRuntimeContext } from './test-utils';
 import {
   LIST_TOOLS_ROUTE,
   GET_TOOL_BY_ID_ROUTE,
@@ -13,7 +14,6 @@ import {
   EXECUTE_AGENT_TOOL_ROUTE,
   GET_AGENT_TOOL_ROUTE,
 } from './tools';
-import { createTestRuntimeContext } from './test-utils';
 
 describe('Tools Handlers', () => {
   const mockExecute = vi.fn();

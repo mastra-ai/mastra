@@ -5,6 +5,7 @@ import type { Workflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import { getWorkflowInfo } from '../utils';
+import { createTestRuntimeContext } from './test-utils';
 import {
   LIST_WORKFLOWS_ROUTE,
   GET_WORKFLOW_BY_ID_ROUTE,
@@ -20,7 +21,6 @@ import {
   LIST_WORKFLOW_RUNS_ROUTE,
   GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE,
 } from './workflows';
-import { createTestRuntimeContext } from './test-utils';
 
 vi.mock('zod', async importOriginal => {
   const actual: {} = await importOriginal();
