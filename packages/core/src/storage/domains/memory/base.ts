@@ -1,6 +1,7 @@
 import type { MastraMessageContentV2 } from '../../../agent';
 import { MastraBase } from '../../../base';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
+import type { TABLE_MESSAGES, TABLE_RESOURCES, TABLE_THREADS } from '../../constants';
 import type {
   StorageResourceType,
   ThreadOrderBy,
@@ -10,15 +11,19 @@ import type {
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
   StorageOrderBy,
+  CreateIndexOptions,
+  IndexInfo,
+  StorageIndexStats,
 } from '../../types';
-
-export abstract class MemoryStorage extends MastraBase {
+export abstract class MemoryStorageBase extends MastraBase {
   constructor() {
     super({
       component: 'STORAGE',
       name: 'MEMORY',
     });
   }
+
+  abstract init(): Promise<void>;
 
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
@@ -99,6 +104,45 @@ export abstract class MemoryStorage extends MastraBase {
           ? orderBy.direction
           : defaultDirection,
     };
+  }
+
+  abstract dropData(): Promise<void>;
+
+  async createIndexes(): Promise<void> {
+    // Optional: subclasses can override this method to implement index creation
+  }
+
+  async dropIndexes(): Promise<void> {
+    // Optional: subclasses can override this method to implement index dropping
+  }
+
+  async createIndex<T extends typeof TABLE_MESSAGES | typeof TABLE_THREADS | typeof TABLE_RESOURCES>({
+    name: _name,
+    table: _table,
+    columns: _columns,
+  }: {
+    table: T;
+  } & Omit<CreateIndexOptions, 'table'>): Promise<void> {
+    // Optional: subclasses can override this method to implement index creation
+  }
+
+  async listIndexes<T extends typeof TABLE_MESSAGES | typeof TABLE_THREADS | typeof TABLE_RESOURCES>(
+    _table: T,
+  ): Promise<IndexInfo[]> {
+    // Optional: subclasses can override this method to implement index listing
+    return [];
+  }
+
+  async describeIndex(_name: string): Promise<StorageIndexStats> {
+    // Optional: subclasses can override this method to implement index description
+    throw new Error(
+      `Index description is not supported by this storage adapter (${this.constructor.name}). ` +
+        `The describeIndex method needs to be implemented in the storage adapter.`,
+    );
+  }
+
+  async dropIndex(_name: string): Promise<void> {
+    // Optional: subclasses can override this method to implement index dropping
   }
 }
 

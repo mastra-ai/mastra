@@ -1,8 +1,15 @@
-import type { Connection } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { WorkflowRun, StorageListWorkflowRunsInput, WorkflowRuns } from '@mastra/core/storage';
-import { ensureDate, normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import {
+  ensureDate,
+  normalizePerPage,
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_SCHEMAS,
+  WorkflowsStorageBase,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import { LanceDomainBase } from '../base';
+import type { LanceDomainConfig } from '../base';
 
 function parseWorkflowRun(row: any): WorkflowRun {
   let parsedSnapshot: WorkflowRunState | string = row.snapshot;
@@ -25,22 +32,52 @@ function parseWorkflowRun(row: any): WorkflowRun {
   };
 }
 
-export class StoreWorkflowsLance extends WorkflowsStorage {
-  client: Connection;
-  constructor({ client }: { client: Connection }) {
+export class WorkflowsStorageLance extends WorkflowsStorageBase {
+  private domainBase: LanceDomainBase;
+
+  private constructor(domainBase: LanceDomainBase) {
     super();
-    this.client = client;
+    this.domainBase = domainBase;
+  }
+
+  /**
+   * Static factory method to create a StoreWorkflowsLance instance
+   * Required because LanceDB connection is async
+   */
+  static async create(opts: LanceDomainConfig): Promise<WorkflowsStorageLance> {
+    const domainBase = await LanceDomainBase.create(opts);
+    return new WorkflowsStorageLance(domainBase);
+  }
+
+  async init(): Promise<void> {
+    await this.domainBase.getOperations().createTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+    });
+    await this.domainBase.getOperations().alterTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+      ifNotExists: ['resourceId'],
+    });
+  }
+
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    await this.domainBase.getOperations().clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   updateWorkflowResults(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // stepId,
       // result,
       // requestContext,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
@@ -51,11 +88,11 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
   }
   updateWorkflowState(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // opts,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       opts: {
         status: string;
@@ -69,41 +106,45 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     throw new Error('Method not implemented.');
   }
 
-  async persistWorkflowSnapshot({
-    workflowName,
+  async createWorkflowSnapshot({
+    workflowId,
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     try {
-      const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
+      const table = await this.domainBase.getClient().openTable(TABLE_WORKFLOW_SNAPSHOT);
 
       // Try to find the existing record
-      const query = table.query().where(`workflow_name = '${workflowName}' AND run_id = '${runId}'`);
+      const query = table.query().where(`workflow_name = '${workflowId}' AND run_id = '${runId}'`);
       const records = await query.toArray();
-      let createdAt: number;
+      let createdAtVar: number;
       const now = Date.now();
 
       if (records.length > 0) {
-        createdAt = records[0].createdAt ?? now;
+        createdAtVar = records[0].createdAt ?? now;
       } else {
-        createdAt = now;
+        createdAtVar = createdAt ? createdAt.getTime() : now;
       }
 
       const { status, value, ...rest } = snapshot;
 
       const record = {
-        workflow_name: workflowName,
+        workflow_name: workflowId,
         run_id: runId,
         resourceId,
         snapshot: JSON.stringify({ status, value, ...rest }), // this is to ensure status is always just before value, for when querying the db by status
-        createdAt,
-        updatedAt: now,
+        createdAt: createdAtVar,
+        updatedAt: updatedAt ? updatedAt.getTime() : now,
       };
 
       await table
@@ -117,22 +158,22 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
           id: 'LANCE_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName, runId },
+          details: { workflowId, runId },
         },
         error,
       );
     }
   }
-  async loadWorkflowSnapshot({
-    workflowName,
+  async getWorkflowSnapshot({
+    workflowId,
     runId,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
-      const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
-      const query = table.query().where(`workflow_name = '${workflowName}' AND run_id = '${runId}'`);
+      const table = await this.domainBase.getClient().openTable(TABLE_WORKFLOW_SNAPSHOT);
+      const query = table.query().where(`workflow_name = '${workflowId}' AND run_id = '${runId}'`);
       const records = await query.toArray();
       return records.length > 0 ? JSON.parse(records[0].snapshot) : null;
     } catch (error: any) {
@@ -141,25 +182,19 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
           id: 'LANCE_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName, runId },
+          details: { workflowId, runId },
         },
         error,
       );
     }
   }
 
-  async getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<{
-    workflowName: string;
-    runId: string;
-    snapshot: any;
-    createdAt: Date;
-    updatedAt: Date;
-  } | null> {
+  async getWorkflowRunById(args: { runId: string; workflowId?: string }): Promise<WorkflowRun | null> {
     try {
-      const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
+      const table = await this.domainBase.getClient().openTable(TABLE_WORKFLOW_SNAPSHOT);
       let whereClause = `run_id = '${args.runId}'`;
-      if (args.workflowName) {
-        whereClause += ` AND workflow_name = '${args.workflowName}'`;
+      if (args.workflowId) {
+        whereClause += ` AND workflow_name = '${args.workflowId}'`;
       }
       const query = table.query().where(whereClause);
       const records = await query.toArray();
@@ -172,7 +207,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
           id: 'LANCE_STORE_GET_WORKFLOW_RUN_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { runId: args.runId, workflowName: args.workflowName ?? '' },
+          details: { runId: args.runId, workflowId: args.workflowId ?? '' },
         },
         error,
       );
@@ -181,14 +216,14 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
 
   async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     try {
-      const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
+      const table = await this.domainBase.getClient().openTable(TABLE_WORKFLOW_SNAPSHOT);
 
       let query = table.query();
 
       const conditions: string[] = [];
 
-      if (args?.workflowName) {
-        conditions.push(`workflow_name = '${args.workflowName.replace(/'/g, "''")}'`);
+      if (args?.workflowId) {
+        conditions.push(`workflow_name = '${args.workflowId.replace(/'/g, "''")}'`);
       }
 
       if (args?.status) {
@@ -255,7 +290,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
           id: 'LANCE_STORE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId: args?.resourceId ?? '', workflowName: args?.workflowName ?? '' },
+          details: { resourceId: args?.resourceId ?? '', workflowId: args?.workflowId ?? '' },
         },
         error,
       );

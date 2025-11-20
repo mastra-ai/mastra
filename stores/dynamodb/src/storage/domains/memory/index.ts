@@ -2,7 +2,7 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV1, MastraDBMessage } from '@mastra/core/memory';
-import { MemoryStorage, normalizePerPage, calculatePagination } from '@mastra/core/storage';
+import { MemoryStorageBase, normalizePerPage, calculatePagination } from '@mastra/core/storage';
 import type {
   StorageResourceType,
   StorageListMessagesInput,
@@ -10,13 +10,38 @@ import type {
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
-import type { Service } from 'electrodb';
+import { DynamoDBDomainBase } from '../base';
+import type { DynamoDBDomainConfig } from '../base';
 
-export class MemoryStorageDynamoDB extends MemoryStorage {
-  private service: Service<Record<string, any>>;
-  constructor({ service }: { service: Service<Record<string, any>> }) {
+export class MemoryStorageDynamoDB extends MemoryStorageBase {
+  protected domainBase: DynamoDBDomainBase;
+
+  constructor(opts: DynamoDBDomainConfig) {
     super();
-    this.service = service;
+    this.domainBase = new DynamoDBDomainBase(opts);
+  }
+
+  /**
+   * Initialize the domain
+   */
+  async init(): Promise<void> {
+    await this.domainBase.init();
+  }
+
+  /**
+   * Clean up owned resources (only if standalone)
+   */
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    // Clear all memory-related entities
+    await Promise.all([
+      this.domainBase.clearEntityData('thread'),
+      this.domainBase.clearEntityData('message'),
+      this.domainBase.clearEntityData('resource'),
+    ]);
   }
 
   // Helper function to parse message data (handle JSON fields)
@@ -54,7 +79,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     this.logger.debug('Getting thread by ID', { threadId });
     try {
-      const result = await this.service.entities.thread.get({ entity: 'thread', id: threadId }).go();
+      const result = await this.domainBase.getService().entities.thread.get({ entity: 'thread', id: threadId }).go();
 
       if (!result.data) {
         return null;
@@ -99,7 +124,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     };
 
     try {
-      await this.service.entities.thread.upsert(threadData).go();
+      await this.domainBase.getService().entities.thread.upsert(threadData).go();
 
       return {
         id: thread.id,
@@ -170,7 +195,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       }
 
       // Update the thread using the primary key
-      await this.service.entities.thread.update({ entity: 'thread', id }).set(updateData).go();
+      await this.domainBase.getService().entities.thread.update({ entity: 'thread', id }).set(updateData).go();
 
       // Return the potentially updated thread object
       return {
@@ -206,8 +231,9 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           const batch = messages.slice(i, i + batchSize);
           await Promise.all(
             batch.map((message: MastraDBMessage) =>
-              this.service.entities.message
-                .delete({
+              this.domainBase
+                .getService()
+                .entities.message.delete({
                   entity: 'message',
                   id: message.id,
                   threadId: message.threadId,
@@ -219,7 +245,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       }
 
       // Then delete the thread using the primary key
-      await this.service.entities.thread.delete({ entity: 'thread', id: threadId }).go();
+      await this.domainBase.getService().entities.thread.delete({ entity: 'thread', id: threadId }).go();
     } catch (error) {
       throw new MastraError(
         {
@@ -239,7 +265,9 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     try {
       const results = await Promise.all(
-        messageIds.map(id => this.service.entities.message.query.primary({ entity: 'message', id }).go()),
+        messageIds.map(id =>
+          this.domainBase.getService().entities.message.query.primary({ entity: 'message', id }).go(),
+        ),
       );
 
       const data = results.map(result => result.data).flat(1);
@@ -315,7 +343,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       });
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
-      const query = this.service.entities.message.query.byThread({ entity: 'message', threadId });
+      const query = this.domainBase.getService().entities.message.query.byThread({ entity: 'message', threadId });
       const results = await query.go();
 
       let allThreadMessages = results.data
@@ -498,13 +526,13 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         }
 
         try {
-          await this.service.entities.message.put(messageData).go();
+          await this.domainBase.getService().entities.message.put(messageData).go();
           savedMessageIds.push(messageData.id);
         } catch (error) {
           // Rollback: delete all previously saved messages
           for (const savedId of savedMessageIds) {
             try {
-              await this.service.entities.message.delete({ entity: 'message', id: savedId }).go();
+              await this.domainBase.getService().entities.message.delete({ entity: 'message', id: savedId }).go();
             } catch (rollbackError) {
               this.logger.error('Failed to rollback message during save error', {
                 messageId: savedId,
@@ -517,8 +545,9 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       }
 
       // Update thread's updatedAt timestamp
-      await this.service.entities.thread
-        .update({ entity: 'thread', id: threadId })
+      await this.domainBase
+        .getService()
+        .entities.thread.update({ entity: 'thread', id: threadId })
         .set({
           updatedAt: new Date().toISOString(),
         })
@@ -571,7 +600,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     try {
       // Query threads by resource ID using the GSI
-      const query = this.service.entities.thread.query.byResource({ entity: 'thread', resourceId });
+      const query = this.domainBase.getService().entities.thread.query.byResource({ entity: 'thread', resourceId });
 
       // Get all threads for this resource ID (DynamoDB doesn't support OFFSET/LIMIT)
       const results = await query.go();
@@ -631,7 +660,9 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         });
 
         // Get all messages for the target thread
-        const query = this.service.entities.message.query.byThread({ entity: 'message', threadId: searchThreadId });
+        const query = this.domainBase
+          .getService()
+          .entities.message.query.byThread({ entity: 'message', threadId: searchThreadId });
         const results = await query.go();
         const allMessages = results.data
           .map((data: any) => this.parseMessageData(data))
@@ -710,7 +741,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         const { id, ...updates } = updateData;
 
         // Get the existing message
-        const existingMessage = await this.service.entities.message.get({ entity: 'message', id }).go();
+        const existingMessage = await this.domainBase.getService().entities.message.get({ entity: 'message', id }).go();
         if (!existingMessage.data) {
           this.logger.warn('Message not found for update', { id });
           continue;
@@ -761,10 +792,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         }
 
         // Update the message
-        await this.service.entities.message.update({ entity: 'message', id }).set(updatePayload).go();
+        await this.domainBase.getService().entities.message.update({ entity: 'message', id }).set(updatePayload).go();
 
         // Get the updated message
-        const updatedMessage = await this.service.entities.message.get({ entity: 'message', id }).go();
+        const updatedMessage = await this.domainBase.getService().entities.message.get({ entity: 'message', id }).go();
         if (updatedMessage.data) {
           updatedMessages.push(this.parseMessageData(updatedMessage.data) as MastraDBMessage);
         }
@@ -772,8 +803,9 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       // Update timestamps for all affected threads
       for (const threadId of affectedThreadIds) {
-        await this.service.entities.thread
-          .update({ entity: 'thread', id: threadId })
+        await this.domainBase
+          .getService()
+          .entities.thread.update({ entity: 'thread', id: threadId })
           .set({
             updatedAt: new Date().toISOString(),
           })
@@ -797,7 +829,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     this.logger.debug('Getting resource by ID', { resourceId });
     try {
-      const result = await this.service.entities.resource.get({ entity: 'resource', id: resourceId }).go();
+      const result = await this.domainBase
+        .getService()
+        .entities.resource.get({ entity: 'resource', id: resourceId })
+        .go();
 
       if (!result.data) {
         return null;
@@ -842,7 +877,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     };
 
     try {
-      await this.service.entities.resource.upsert(resourceData).go();
+      await this.domainBase.getService().entities.resource.upsert(resourceData).go();
 
       return {
         id: resource.id,
@@ -910,7 +945,11 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       }
 
       // Update the resource using the primary key
-      await this.service.entities.resource.update({ entity: 'resource', id: resourceId }).set(updateData).go();
+      await this.domainBase
+        .getService()
+        .entities.resource.update({ entity: 'resource', id: resourceId })
+        .set(updateData)
+        .go();
 
       // Return the updated resource object
       return {

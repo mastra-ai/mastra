@@ -6,7 +6,7 @@ import type { UIMessageWithMetadata } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import { MockStore } from '@mastra/core/storage';
+import { InMemoryStore } from '@mastra/core/storage';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
@@ -679,7 +679,7 @@ describe('Agent with message processors', () => {
 
 describe('Agent memory test gemini', () => {
   const memory = new Memory({
-    storage: new MockStore(),
+    storage: new InMemoryStore(),
     options: {
       generateTitle: false,
       lastMessages: 2,

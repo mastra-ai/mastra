@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { TracingStorageStrategy } from '@mastra/core/observability';
-import { ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
+import { ObservabilityStorageBase, TABLE_SPANS } from '@mastra/core/storage';
 import type {
   SpanRecord,
   TraceRecord,
@@ -9,14 +9,32 @@ import type {
   PaginationInfo,
   UpdateSpanRecord,
 } from '@mastra/core/storage';
-import type { StoreOperationsMongoDB } from '../operations';
+import { MongoDBDomainBase } from '../base';
+import type { MongoDBDomainConfig } from '../base';
 
-export class ObservabilityMongoDB extends ObservabilityStorage {
-  private operations: StoreOperationsMongoDB;
+export class ObservabilityMongoDB extends ObservabilityStorageBase {
+  protected db: MongoDBDomainBase['db'];
+  private domainBase: MongoDBDomainBase;
 
-  constructor({ operations }: { operations: StoreOperationsMongoDB }) {
+  constructor(opts: MongoDBDomainConfig) {
     super();
-    this.operations = operations;
+    this.domainBase = new MongoDBDomainBase(opts);
+    this.db = this.domainBase.getOperations();
+  }
+
+  /**
+   * Clean up owned resources (only if standalone)
+   */
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async init(): Promise<void> {
+    // no op
+  }
+
+  async dropData(): Promise<void> {
+    await this.db.deleteCollection({ tableName: TABLE_SPANS });
   }
 
   public get tracingStrategy(): {
@@ -42,7 +60,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
         updatedAt: new Date().toISOString(),
       };
 
-      return this.operations.insert({ tableName: TABLE_SPANS, record });
+      return this.domainBase.getOperations().insert({ tableName: TABLE_SPANS, record });
     } catch (error) {
       throw new MastraError(
         {
@@ -63,7 +81,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
 
   async getTrace(traceId: string): Promise<TraceRecord | null> {
     try {
-      const collection = await this.operations.getCollection(TABLE_SPANS);
+      const collection = await this.domainBase.getOperations().getCollection(TABLE_SPANS);
 
       const spans = await collection.find({ traceId }).sort({ startedAt: -1 }).toArray();
 
@@ -114,7 +132,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
         updatedAt: new Date().toISOString(),
       };
 
-      await this.operations.update({
+      await this.domainBase.getOperations().update({
         tableName: TABLE_SPANS,
         keys: { spanId, traceId },
         data: updateData,
@@ -135,7 +153,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     }
   }
 
-  async getTracesPaginated({
+  async listTraces({
     filters,
     pagination,
   }: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
@@ -144,7 +162,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     const { entityId, entityType, ...actualFilters } = filters || {};
 
     try {
-      const collection = await this.operations.getCollection(TABLE_SPANS);
+      const collection = await this.domainBase.getOperations().getCollection(TABLE_SPANS);
 
       // Build MongoDB query filter
       const mongoFilter: Record<string, any> = {
@@ -253,7 +271,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
         };
       });
 
-      return this.operations.batchInsert({
+      return this.domainBase.getOperations().batchInsert({
         tableName: TABLE_SPANS,
         records,
       });
@@ -277,7 +295,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     }[];
   }): Promise<void> {
     try {
-      return this.operations.batchUpdate({
+      return this.domainBase.getOperations().batchUpdate({
         tableName: TABLE_SPANS,
         updates: args.records.map(record => {
           const data: Partial<UpdateSpanRecord> = { ...record.updates };
@@ -315,7 +333,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
 
   async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
     try {
-      const collection = await this.operations.getCollection(TABLE_SPANS);
+      const collection = await this.domainBase.getOperations().getCollection(TABLE_SPANS);
 
       await collection.deleteMany({
         traceId: { $in: args.traceIds },

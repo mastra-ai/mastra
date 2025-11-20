@@ -8,19 +8,18 @@ import type {
   PaginationInfo,
   UpdateSpanRecord,
 } from '../../types';
-import type { StoreOperations } from '../operations';
-import { ObservabilityStorage } from './base';
+import { ObservabilityStorageBase } from './base';
 
-export type InMemoryObservability = Map<string, SpanRecord>;
-export class ObservabilityInMemory extends ObservabilityStorage {
-  operations: StoreOperations;
-  collection: InMemoryObservability;
+export type InMemoryObservabilityData = Map<string, SpanRecord>;
+export class ObservabilityStorageInMemory extends ObservabilityStorageBase {
+  collection: InMemoryObservabilityData;
 
-  constructor({ collection, operations }: { collection: InMemoryObservability; operations: StoreOperations }) {
+  constructor() {
     super();
-    this.collection = collection;
-    this.operations = operations;
+    this.collection = new Map<string, SpanRecord>();
   }
+
+  async init(): Promise<void> {}
 
   public get tracingStrategy(): {
     preferred: TracingStorageStrategy;
@@ -84,7 +83,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     };
   }
 
-  async getTracesPaginated({
+  async listTraces({
     filters,
     pagination,
   }: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
@@ -177,5 +176,9 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         this.collection.delete(this.generateId(span));
       }
     }
+  }
+
+  async dropData(): Promise<void> {
+    this.collection.clear();
   }
 }

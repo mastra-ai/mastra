@@ -12,35 +12,28 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '../../types';
 import { safelyParseJSON } from '../../utils';
-import type { StoreOperations } from '../operations';
-import { MemoryStorage } from './base';
+import { MemoryStorageBase } from './base';
 
 export type InMemoryThreads = Map<string, StorageThreadType>;
 export type InMemoryResources = Map<string, StorageResourceType>;
 export type InMemoryMessages = Map<string, StorageMessageType>;
 
-export class InMemoryMemory extends MemoryStorage {
+export class MemoryStorageInMemory extends MemoryStorageBase {
   private collection: {
     threads: InMemoryThreads;
     resources: InMemoryResources;
     messages: InMemoryMessages;
   };
-  private operations: StoreOperations;
-  constructor({
-    collection,
-    operations,
-  }: {
-    collection: {
-      threads: InMemoryThreads;
-      resources: InMemoryResources;
-      messages: InMemoryMessages;
-    };
-    operations: StoreOperations;
-  }) {
+  constructor() {
     super();
-    this.collection = collection;
-    this.operations = operations;
+    this.collection = {
+      threads: new Map<string, StorageThreadType>(),
+      resources: new Map<string, StorageResourceType>(),
+      messages: new Map<string, StorageMessageType>(),
+    };
   }
+
+  async init(): Promise<void> {}
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     this.logger.debug(`MockStore: getThreadById called for ${threadId}`);
@@ -574,5 +567,11 @@ export class InMemoryMemory extends MemoryStorage {
         ? String(aValue).localeCompare(String(bValue))
         : String(bValue).localeCompare(String(aValue));
     });
+  }
+
+  async dropData(): Promise<void> {
+    this.collection.threads.clear();
+    this.collection.resources.clear();
+    this.collection.messages.clear();
   }
 }

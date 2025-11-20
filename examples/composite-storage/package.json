@@ -1,0 +1,48 @@
+{
+  "name": "examples-composite-storage",
+  "type": "module",
+  "private": true,
+  "description": "",
+  "main": "index.js",
+  "version": "0.0.1",
+  "dependencies": {
+    "@ai-sdk/provider": "^2.0.0",
+    "@ai-sdk/openai": "^2.0.15",
+    "@mastra/core": "latest",
+    "@mastra/evals": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/pg": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/mcp": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "ai": "^4.3.19",
+    "ai-v5": "npm:ai@^5.0.15",
+    "fetch-to-node": "^2.1.0",
+    "mastra": "latest",
+    "pg-promise": "^11.15.0",
+    "typescript": "^5.8.3",
+    "zod": "^3.25.76"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/loggers": "link:../../packages/loggers",
+      "@mastra/memory": "link:../../packages/memory",
+      "@mastra/mcp": "link:../../packages/mcp",
+      "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/pg": "link:../../stores/pg",
+      "@mastra/observability": "link:../../observability/mastra",
+      "@mastra/evals": "link:../../packages/evals",
+      "mastra": "link:../../packages/cli"
+    }
+  },
+  "scripts": {
+    "mastra:build": "mastra build",
+    "mastra:dev": "mastra dev"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.9.0+sha512.0486e394640d3c1fb3c9d43d49cf92879ff74f8516959c235308f5a8f62e2e19528a65cdc2a3058f587cde71eba3d5b56327c8c33a97e4c4051ca48a10ca2d5f"
+}

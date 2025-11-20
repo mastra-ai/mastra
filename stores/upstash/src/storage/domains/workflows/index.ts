@@ -1,9 +1,9 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorageBase } from '@mastra/core/storage';
 import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import type { Redis } from '@upstash/redis';
-import type { StoreOperationsUpstash } from '../operations';
+import { UpstashDomainBase } from '../base';
+import type { UpstashDomainConfig } from '../base';
 import { ensureDate, getKey } from '../utils';
 
 function parseWorkflowRun(row: any): WorkflowRun {
@@ -26,25 +26,35 @@ function parseWorkflowRun(row: any): WorkflowRun {
     resourceId: row.resourceId,
   };
 }
-export class WorkflowsUpstash extends WorkflowsStorage {
-  private client: Redis;
-  private operations: StoreOperationsUpstash;
+export class WorkflowsStorageUpstash extends WorkflowsStorageBase {
+  private domainBase: UpstashDomainBase;
 
-  constructor({ client, operations }: { client: Redis; operations: StoreOperationsUpstash }) {
+  constructor(opts: UpstashDomainConfig) {
     super();
-    this.client = client;
-    this.operations = operations;
+    this.domainBase = new UpstashDomainBase(opts);
+  }
+
+  async init(): Promise<void> {
+    // Upstash/Redis doesn't require table creation
+  }
+
+  async close(): Promise<void> {
+    // Redis client doesn't need explicit cleanup
+  }
+
+  async dropData(): Promise<void> {
+    await this.domainBase.getOperations().clearKeyspace({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   updateWorkflowResults(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // stepId,
       // result,
       // requestContext,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
@@ -55,11 +65,11 @@ export class WorkflowsUpstash extends WorkflowsStorage {
   }
   updateWorkflowState(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // opts,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       opts: {
         status: string;
@@ -73,25 +83,27 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     throw new Error('Method not implemented.');
   }
 
-  async persistWorkflowSnapshot(params: {
+  async createWorkflowSnapshot(params: {
     namespace: string;
-    workflowName: string;
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
-    const { namespace = 'workflows', workflowName, runId, resourceId, snapshot } = params;
+    const { namespace = 'workflows', workflowId, runId, resourceId, snapshot } = params;
     try {
-      await this.operations.insert({
+      await this.domainBase.getOperations().insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         record: {
           namespace,
-          workflow_name: workflowName,
+          workflow_name: workflowId,
           run_id: runId,
           resourceId,
           snapshot,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt: params.createdAt ?? new Date(),
+          updatedAt: params.updatedAt ?? new Date(),
         },
       });
     } catch (error) {
@@ -102,7 +114,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             namespace,
-            workflowName,
+            workflowId,
             runId,
           },
         },
@@ -111,19 +123,19 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     }
   }
 
-  async loadWorkflowSnapshot(params: {
+  async getWorkflowSnapshot(params: {
     namespace: string;
-    workflowName: string;
+    workflowId: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
-    const { namespace = 'workflows', workflowName, runId } = params;
+    const { namespace = 'workflows', workflowId, runId } = params;
     const key = getKey(TABLE_WORKFLOW_SNAPSHOT, {
       namespace,
-      workflow_name: workflowName,
+      workflow_name: workflowId,
       run_id: runId,
     });
     try {
-      const data = await this.client.get<{
+      const data = await this.domainBase.getClient().get<{
         namespace: string;
         workflow_name: string;
         run_id: string;
@@ -139,7 +151,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             namespace,
-            workflowName,
+            workflowId,
             runId,
           },
         },
@@ -148,20 +160,14 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRunById({
-    runId,
-    workflowName,
-  }: {
-    runId: string;
-    workflowName?: string;
-  }): Promise<WorkflowRun | null> {
+  async getWorkflowRunById({ runId, workflowId }: { runId: string; workflowId?: string }): Promise<WorkflowRun | null> {
     try {
       const key =
-        getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName, run_id: runId }) + '*';
-      const keys = await this.operations.scanKeys(key);
+        getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowId, run_id: runId }) + '*';
+      const keys = await this.domainBase.getOperations().scanKeys(key);
       const workflows = await Promise.all(
         keys.map(async key => {
-          const data = await this.client.get<{
+          const data = await this.domainBase.getClient().get<{
             workflow_name: string;
             run_id: string;
             snapshot: WorkflowRunState | string;
@@ -172,7 +178,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           return data;
         }),
       );
-      const data = workflows.find(w => w?.run_id === runId && w?.workflow_name === workflowName) as WorkflowRun | null;
+      const data = workflows.find(w => w?.run_id === runId && w?.workflow_name === workflowId) as WorkflowRun | null;
       if (!data) return null;
       return parseWorkflowRun(data);
     } catch (error) {
@@ -184,7 +190,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           details: {
             namespace: 'workflows',
             runId,
-            workflowName: workflowName || '',
+            workflowId: workflowId || '',
           },
         },
         error,
@@ -193,14 +199,14 @@ export class WorkflowsUpstash extends WorkflowsStorage {
   }
 
   async listWorkflowRuns({
-    workflowName,
+    workflowId,
     fromDate,
     toDate,
     perPage,
     page,
     resourceId,
     status,
-  }: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       if (page !== undefined && page < 0) {
         throw new MastraError(
@@ -216,15 +222,15 @@ export class WorkflowsUpstash extends WorkflowsStorage {
 
       // Get all workflow keys
       let pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' }) + ':*';
-      if (workflowName && resourceId) {
+      if (workflowId && resourceId) {
         pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, {
           namespace: 'workflows',
-          workflow_name: workflowName,
+          workflow_name: workflowId,
           run_id: '*',
           resourceId,
         });
-      } else if (workflowName) {
-        pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName }) + ':*';
+      } else if (workflowId) {
+        pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowId }) + ':*';
       } else if (resourceId) {
         pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, {
           namespace: 'workflows',
@@ -233,7 +239,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           resourceId,
         });
       }
-      const keys = await this.operations.scanKeys(pattern);
+      const keys = await this.domainBase.getOperations().scanKeys(pattern);
 
       // Check if we have any keys before using pipeline
       if (keys.length === 0) {
@@ -241,7 +247,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       }
 
       // Use pipeline for batch fetching to improve performance
-      const pipeline = this.client.pipeline();
+      const pipeline = this.domainBase.getClient().pipeline();
       keys.forEach(key => pipeline.get(key));
       const results = await pipeline.exec();
 
@@ -253,7 +259,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
             record !== null && record !== undefined && typeof record === 'object' && 'workflow_name' in record,
         )
         // Only filter by workflowName if it was specifically requested
-        .filter(record => !workflowName || record.workflow_name === workflowName)
+        .filter(record => !workflowId || record.workflow_name === workflowId)
         .map(w => parseWorkflowRun(w!))
         .filter(w => {
           if (fromDate && w.createdAt < fromDate) return false;
@@ -292,7 +298,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             namespace: 'workflows',
-            workflowName: workflowName || '',
+            workflowId: workflowId || '',
             resourceId: resourceId || '',
           },
         },

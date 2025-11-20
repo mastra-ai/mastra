@@ -1,6 +1,6 @@
 # @mastra/mongodb
 
-MongoDB Atlas Search implementation for Mastra, providing vector similarity search and index management using MongoDB Atlas Local or Atlas Cloud.
+MongoDB storage and vector store implementation for Mastra.
 
 ## Installation
 
@@ -10,187 +10,73 @@ npm install @mastra/mongodb
 
 ## Prerequisites
 
-- MongoDB Atlas Local (via Docker) or MongoDB Atlas Cloud instance with Atlas Search enabled
-- MongoDB 7.0+ recommended
+- MongoDB 7.0+ (Atlas Local or Atlas Cloud)
+- Atlas Search enabled (for vector store)
 
-## Usage
+## Quick Start
+
+### Storage
+
+```typescript
+import { MongoDBStore } from '@mastra/mongodb';
+import { Mastra } from '@mastra/core/mastra';
+
+// Initialize MongoDBStore
+const storage = new MongoDBStore({
+  id: 'my-storage-id',
+  uri: 'mongodb://localhost:27017',
+  dbName: 'mastra',
+});
+
+// Configure Mastra
+const mastra = new Mastra({
+  storage: storage,
+});
+
+// Access domain stores
+const memoryStore = await storage.getStore('memory');
+const workflowsStore = await storage.getStore('workflows');
+const evalsStore = await storage.getStore('evals');
+const observabilityStore = await storage.getStore('observability');
+```
 
 ### Vector Store
 
 ```typescript
 import { MongoDBVector } from '@mastra/mongodb';
 
-const vectorDB = new MongoDBVector({
-  uri: 'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true',
+const vectorStore = new MongoDBVector({
+  uri: 'mongodb://localhost:27017',
   dbName: 'vector_db',
 });
 
-// Connect to MongoDB
-await vectorDB.connect();
+await vectorStore.connect();
 
-// Create a new vector index (collection)
-await vectorDB.createIndex({
+// Create index
+await vectorStore.createIndex({
   indexName: 'my_vectors',
   dimension: 1536,
-  metric: 'cosine', // or 'euclidean', 'dotproduct'
+  metric: 'cosine',
 });
 
 // Upsert vectors
-const ids = await vectorDB.upsert({
+await vectorStore.upsert({
   indexName: 'my_vectors',
   vectors: [[0.1, 0.2, ...], [0.3, 0.4, ...]],
   metadata: [{ text: 'doc1' }, { text: 'doc2' }],
 });
-
-// Query vectors
-const results = await vectorDB.query({
-  indexName: 'my_vectors',
-  queryVector: [0.1, 0.2, ...],
-  topK: 10,
-  filter: { text: 'doc1' },
-  includeVector: false,
-  minScore: 0.5,
-});
-
-// Clean up
-await vectorDB.disconnect();
 ```
 
-### Storage
-
-```typescript
-import { MongoDBStore } from '@mastra/mongodb';
-
-const store = new MongoDBStore({
-  uri: 'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true',
-  dbName: 'mastra',
-});
-
-// Create a thread
-await store.saveThread({
-  thread: {
-    id: 'thread-123',
-    resourceId: 'resource-456',
-    title: 'My Thread',
-    metadata: { key: 'value' },
-    createdAt: new Date(),
-  },
-});
-
-// Add messages to thread
-await store.saveMessages({
-  messages: [
-    {
-      id: 'msg-789',
-      threadId: 'thread-123',
-      role: 'user',
-      content: { content: 'Hello' },
-      resourceId: 'resource-456',
-      createdAt: new Date(),
-    },
-  ],
-});
-
-// Query threads and messages
-const savedThread = await store.getThreadById({ threadId: 'thread-123' });
-const { messages } = await store.listMessages({ threadId: 'thread-123' });
-```
-
-## Configuration
-
-The MongoDB vector store is initialized with:
-
-- `uri`: MongoDB connection string (with credentials and options)
-- `dbName`: Name of the database to use
-
-Example:
-
-```typescript
-const vectorDB = new MongoDBVector({
-  uri: 'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true',
-  dbName: 'vector_db',
-});
-```
-
-## Features
-
-### Vector Store Features
-
-- Vector similarity search with cosine, euclidean, and dotproduct metrics (Atlas Search)
-- Metadata filtering with MongoDB-style query syntax
-- Minimum score threshold for queries
-- Automatic UUID generation for vectors
-- Collection (index) management: create, list, describe, delete
-- Atlas Search readiness checks for reliable testing
-
-### Storage Features
-
-- Thread and message storage with JSON support
-- Efficient batch operations
-- Rich metadata support
-- Timestamp tracking
-
-## Supported Filter Operators
-
-- Comparison: `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`
-- Logical: `$and`, `$or`
-- Array: `$in`, `$nin`
-- Text: `$regex`, `$like`
-
-Example filter:
-
-```typescript
-{
-  $and: [{ age: { $gt: 25 } }, { tags: { $in: ['tag1', 'tag2'] } }];
-}
-```
-
-## Distance Metrics
-
-The following distance metrics are supported:
-
-- `cosine` → Cosine similarity (default)
-- `euclidean` → Euclidean distance
-- `dotproduct` → Dot product
-
-## Vector Store Methods
-
-- `createIndex({indexName, dimension, metric})`: Create a new collection with vector search support
-- `upsert({indexName, vectors, metadata?, ids?})`: Add or update vectors
-- `query({indexName, queryVector, topK?, filter?, includeVector?, minScore?, documentFilter?})`: Search for similar vectors (optionally filter by document content)
-
-> **Note:** `documentFilter` allows filtering results based on the content of the `document` field. Example: `{ $contains: 'specific text' }` will return only vectors whose associated document contains the specified text.
-
-- `listIndexes()`: List all vector-enabled collections
-- `describeIndex(indexName)`: Get collection statistics (dimension, count, metric)
-- `updateIndexById(indexName, id, { vector?, metadata? })`: Update a vector and/or its metadata by ID
-- `deleteIndexById(indexName, id)`: Delete a vector by ID
-- `deleteIndex(indexName)`: Delete a collection
-- `disconnect()`: Close the MongoDB connection
-
-## Storage Methods
-
-- `saveThread({ thread })`: Create or update a thread
-- `getThreadById({ threadId })`: Get a thread by ID
-- `deleteThread({ threadId })`: Delete a thread and its messages
-- `saveMessages({ messages })`: Save multiple messages in a transaction
-- `listMessages({ threadId, perPage?, page? })`: Get messages for a thread with pagination
-- `deleteMessages(messageIds)`: Delete specific messages
-
-## Query Response Format
-
-Each query result includes:
-
-- `id`: Vector ID
-- `score`: Similarity score (higher is more similar)
-- `metadata`: Associated metadata
-- `vector`: Original vector (if `includeVector` is true)
-
-## Testing
-
-Integration tests use MongoDB Atlas Local via Docker. See `docker-compose.yml` for setup. The test suite includes readiness checks for Atlas Search before running vector operations.
-
-## Related Links
+## Documentation
 
 - [MongoDB Atlas Search Documentation](https://www.mongodb.com/docs/atlas/atlas-search/)
 - [MongoDB Node.js Driver](https://mongodb.github.io/node-mongodb-native/)
+
+For complete documentation, see:
+
+- [Storage Overview](https://mastra.ai/docs/v1/server-db/storage) - Learn about storage domains and composite storage
+- [Memory Domain Reference](https://mastra.ai/reference/v1/storage-domains/memory) - Threads, messages, and resources API
+- [Workflows Domain Reference](https://mastra.ai/reference/v1/storage-domains/workflows) - Workflow snapshots and runs API
+- [Evals Domain Reference](https://mastra.ai/reference/v1/storage-domains/evals) - Evaluation scores API
+- [Observability Domain Reference](https://mastra.ai/reference/v1/storage-domains/observability) - Traces and spans API
+- [MongoDB Vector Store Reference](https://mastra.ai/reference/v1/vectors/mongodb) - Vector store API

@@ -32,7 +32,7 @@ class PGPerformanceVector extends PgVector {
   private perfPool: pg.Pool;
 
   constructor(connectionString: string) {
-    super(connectionString);
+    super({ connectionString, id: 'perf-test-vector' });
 
     const basePool = new pg.Pool({
       connectionString,
@@ -116,15 +116,25 @@ describe('PostgreSQL Index Performance', () => {
     vectorDB = new PGPerformanceVector(connectionString);
   });
   beforeEach(async () => {
-    await vectorDB.deleteIndex({ indexName: testIndexName });
+    if (vectorDB) {
+      await vectorDB.deleteIndex({ indexName: testIndexName });
+    }
   });
 
   afterEach(async () => {
-    await vectorDB.deleteIndex({ indexName: testIndexName });
+    if (vectorDB) {
+      await vectorDB.deleteIndex({ indexName: testIndexName });
+    }
   });
 
   afterAll(async () => {
-    await vectorDB.disconnect();
+    if (vectorDB) {
+      await vectorDB.disconnect();
+      // Also close the perfPool if it exists
+      if (vectorDB['perfPool']) {
+        await vectorDB['perfPool'].end();
+      }
+    }
     analyzeResults(results);
   });
 

@@ -9,7 +9,8 @@ import type { MastraScorer } from '@mastra/core/evals';
 import { createScorer, runEvals } from '@mastra/core/evals';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import { MockStore, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import type { WorkflowsStorageBase } from '@mastra/core/storage';
+import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import type { StreamEvent } from '@mastra/core/workflows';
 import { createHonoServer } from '@mastra/deployer/server';
@@ -46,7 +47,12 @@ describe('MastraInngestWorkflow', () => {
     vi.restoreAllMocks();
   });
 
-  describe.sequential('Basic Workflow Execution', () => {
+  describe.sequential.only('Basic Workflow Execution', () => {
+    const storage = new DefaultStorage({
+      id: 'test-storage',
+      url: ':memory:',
+    });
+
     it('should be able to bail workflow execution', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
@@ -89,10 +95,7 @@ describe('MastraInngestWorkflow', () => {
       workflow.then(step1).then(step2).commit();
 
       const mastra = new Mastra({
-        storage: new DefaultStorage({
-          id: 'test-storage',
-          url: ':memory:',
-        }),
+        storage,
         workflows: {
           'test-workflow': workflow,
         },
@@ -179,10 +182,7 @@ describe('MastraInngestWorkflow', () => {
       workflow.then(step1).commit();
 
       const mastra = new Mastra({
-        storage: new DefaultStorage({
-          id: 'test-storage',
-          url: ':memory:',
-        }),
+        storage,
         workflows: {
           'test-workflow': workflow,
         },
@@ -243,10 +243,7 @@ describe('MastraInngestWorkflow', () => {
       workflow.then(step1).commit();
 
       const mastra = new Mastra({
-        storage: new DefaultStorage({
-          id: 'test-storage',
-          url: ':memory:',
-        }),
+        storage,
         workflows: {
           'test-workflow': workflow,
         },
@@ -316,10 +313,7 @@ describe('MastraInngestWorkflow', () => {
         .commit();
 
       const mastra = new Mastra({
-        storage: new DefaultStorage({
-          id: 'test-storage',
-          url: ':memory:',
-        }),
+        storage,
         workflows: {
           'test-workflow': workflow,
         },
@@ -414,10 +408,7 @@ describe('MastraInngestWorkflow', () => {
         .commit();
 
       const mastra = new Mastra({
-        storage: new DefaultStorage({
-          id: 'test-storage',
-          url: ':memory:',
-        }),
+        storage,
         workflows: {
           'test-workflow': workflow,
         },
@@ -527,10 +518,7 @@ describe('MastraInngestWorkflow', () => {
         .commit();
 
       const mastra = new Mastra({
-        storage: new DefaultStorage({
-          id: 'test-storage',
-          url: ':memory:',
-        }),
+        storage,
         workflows: {
           'test-workflow': workflow,
         },
@@ -609,10 +597,7 @@ describe('MastraInngestWorkflow', () => {
       workflow.parallel([step1, step2]).commit();
 
       const mastra = new Mastra({
-        storage: new DefaultStorage({
-          id: 'test-storage',
-          url: ':memory:',
-        }),
+        storage,
         workflows: {
           'test-workflow': workflow,
         },
@@ -690,10 +675,7 @@ describe('MastraInngestWorkflow', () => {
         .commit();
 
       const mastra = new Mastra({
-        storage: new DefaultStorage({
-          id: 'test-storage',
-          url: ':memory:',
-        }),
+        storage,
         workflows: {
           'test-workflow': workflow,
         },
@@ -4512,9 +4494,16 @@ describe('MastraInngestWorkflow', () => {
   });
 
   describe('Time travel', () => {
-    const testStorage = new MockStore();
+    let testStorage: InMemoryStore | undefined;
+    let workflowStore: WorkflowsStorageBase | undefined;
+
+    beforeEach(async () => {
+      testStorage = new InMemoryStore();
+      workflowStore = await testStorage.getStore('workflows');
+    });
+
     afterEach(async () => {
-      await testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+      await workflowStore?.dropData();
     });
 
     it('should throw error if trying to timetravel a workflow execution that is still running', async ctx => {
@@ -4591,8 +4580,8 @@ describe('MastraInngestWorkflow', () => {
 
       const runId = 'test-run-id';
 
-      await testStorage.persistWorkflowSnapshot({
-        workflowName: 'testWorkflow',
+      await workflowStore?.createWorkflowSnapshot({
+        workflowId: 'testWorkflow',
         runId,
         snapshot: {
           runId,
@@ -5277,6 +5266,7 @@ describe('MastraInngestWorkflow', () => {
       await resetInngest();
 
       const run = await workflow.createRun();
+
       const result = await run.timeTravel({
         step: 'nestedWorkflow.step3',
         context: {
@@ -7539,7 +7529,7 @@ describe('MastraInngestWorkflow', () => {
           const otherVal = getStepResult(otherStep)?.other ?? 0;
           return { finalValue: startVal + otherVal };
         });
-        const last = vi.fn().mockImplementation(async ({}) => {
+        const last = vi.fn().mockImplementation(async () => {
           return { success: true };
         });
         const begin = vi.fn().mockImplementation(async ({ inputData }) => {

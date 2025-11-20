@@ -3,7 +3,7 @@ import { SpanType } from '@mastra/core/observability';
 import type { TracesPaginatedArg, StoragePagination } from '@mastra/core/storage';
 import {
   getTraceHandler as getOriginalTraceHandler,
-  getTracesPaginatedHandler as getOriginalTracesPaginatedHandler,
+  listTracesHandler as getOriginalListTracesHandler,
   scoreTracesHandler as getOriginalScoreTracesHandler,
   listScoresBySpan as getOriginalScoresBySpanHandler,
 } from '@mastra/server/handlers/observability';
@@ -30,7 +30,7 @@ export async function getTraceHandler(c: Context) {
   }
 }
 
-export async function getTracesPaginatedHandler(c: Context) {
+export async function listTracesHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const { page, perPage, name, spanType, dateRange, entityId, entityType } = c.req.query();
@@ -70,7 +70,7 @@ export async function getTracesPaginatedHandler(c: Context) {
       pagination.dateRange = { start, end };
     }
 
-    const result = await getOriginalTracesPaginatedHandler({
+    const result = await getOriginalListTracesHandler({
       mastra,
       body: {
         pagination,

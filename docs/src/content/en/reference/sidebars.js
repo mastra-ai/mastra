@@ -34,6 +34,7 @@ const sidebars = {
         { type: "doc", id: "core/listVectors", label: ".listVectors()" },
         { type: "doc", id: "core/getDeployer", label: ".getDeployer()" },
         { type: "doc", id: "core/getStorage", label: ".getStorage()" },
+        { type: "doc", id: "core/getStore", label: ".getStore()" },
         { type: "doc", id: "core/listMCPServers", label: ".listMCPServers()" },
         { type: "doc", id: "core/getTelemetry", label: ".getTelemetry()" },
         { type: "doc", id: "core/setTelemetry", label: ".setTelemetry()" },
@@ -359,6 +360,32 @@ const sidebars = {
       label: "Storage",
       collapsed: true,
       items: [
+        {
+          type: "category",
+          label: "Storage Domains",
+          items: [
+            {
+              type: "doc",
+              id: "storage-domains/memory",
+              label: "Memory",
+            },
+            {
+              type: "doc",
+              id: "storage-domains/workflows",
+              label: "Workflows",
+            },
+            {
+              type: "doc",
+              id: "storage-domains/evals",
+              label: "Evals",
+            },
+            {
+              type: "doc",
+              id: "storage-domains/observability",
+              label: "Observability",
+            },
+          ],
+        },
         { type: "doc", id: "storage/libsql", label: "LibSQL Storage" },
         { type: "doc", id: "storage/postgresql", label: "PostgreSQL Storage" },
         { type: "doc", id: "storage/upstash", label: "Upstash Storage" },

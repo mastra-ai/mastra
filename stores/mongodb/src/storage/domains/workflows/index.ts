@@ -1,26 +1,44 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
-import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT, safelyParseJSON, normalizePerPage } from '@mastra/core/storage';
+import { WorkflowsStorageBase, TABLE_WORKFLOW_SNAPSHOT, safelyParseJSON, normalizePerPage } from '@mastra/core/storage';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import type { StoreOperationsMongoDB } from '../operations';
+import { MongoDBDomainBase } from '../base';
+import type { MongoDBDomainConfig } from '../base';
 
-export class WorkflowsStorageMongoDB extends WorkflowsStorage {
-  private operations: StoreOperationsMongoDB;
+export class WorkflowsStorageMongoDB extends WorkflowsStorageBase {
+  protected db: MongoDBDomainBase['db'];
+  private domainBase: MongoDBDomainBase;
 
-  constructor({ operations }: { operations: StoreOperationsMongoDB }) {
+  constructor(opts: MongoDBDomainConfig) {
     super();
-    this.operations = operations;
+    this.domainBase = new MongoDBDomainBase(opts);
+    this.db = this.domainBase.getOperations();
+  }
+
+  /**
+   * Clean up owned resources (only if standalone)
+   */
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async init(): Promise<void> {
+    // no op
+  }
+
+  async dropData(): Promise<void> {
+    await this.db.deleteCollection({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   updateWorkflowResults(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // stepId,
       // result,
       // requestContext,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
@@ -31,11 +49,11 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   }
   updateWorkflowState(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // opts,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       opts: {
         status: string;
@@ -49,29 +67,33 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     throw new Error('Method not implemented.');
   }
 
-  async persistWorkflowSnapshot({
-    workflowName,
+  async createWorkflowSnapshot({
+    workflowId,
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     try {
-      const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const collection = await this.domainBase.getOperations().getCollection(TABLE_WORKFLOW_SNAPSHOT);
       await collection.updateOne(
-        { workflow_name: workflowName, run_id: runId },
+        { workflow_name: workflowId, run_id: runId },
         {
           $set: {
-            workflow_name: workflowName,
+            workflow_name: workflowId,
             run_id: runId,
             resourceId,
             snapshot,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            createdAt: createdAt || new Date(),
+            updatedAt: updatedAt || new Date(),
           },
         },
         { upsert: true },
@@ -82,25 +104,25 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
           id: 'STORAGE_MONGODB_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName, runId },
+          details: { workflowId, runId },
         },
         error,
       );
     }
   }
 
-  async loadWorkflowSnapshot({
-    workflowName,
+  async getWorkflowSnapshot({
+    workflowId,
     runId,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
-      const result = await this.operations.load<any[]>({
+      const result = await this.domainBase.getOperations().load<any[]>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: {
-          workflow_name: workflowName,
+          workflow_name: workflowId,
           run_id: runId,
         },
       });
@@ -116,7 +138,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
           id: 'STORAGE_MONGODB_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName, runId },
+          details: { workflowId, runId },
         },
         error,
       );
@@ -127,8 +149,8 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     const options = args || {};
     try {
       const query: any = {};
-      if (options.workflowName) {
-        query['workflow_name'] = options.workflowName;
+      if (options.workflowId) {
+        query['workflow_name'] = options.workflowId;
       }
       if (options.status) {
         query['snapshot.status'] = options.status;
@@ -147,7 +169,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
         query['resourceId'] = options.resourceId;
       }
 
-      const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const collection = await this.domainBase.getOperations().getCollection(TABLE_WORKFLOW_SNAPSHOT);
       let total = 0;
 
       let cursor = collection.find(query).sort({ createdAt: -1 });
@@ -193,7 +215,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
           id: 'STORAGE_MONGODB_STORE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName: options.workflowName || 'unknown' },
+          details: { workflowName: options.workflowId || 'unknown' },
         },
         error,
       );
@@ -210,7 +232,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
         query['workflow_name'] = args.workflowName;
       }
 
-      const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const collection = await this.domainBase.getOperations().getCollection(TABLE_WORKFLOW_SNAPSHOT);
       const result = await collection.findOne(query);
       if (!result) {
         return null;

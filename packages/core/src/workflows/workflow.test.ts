@@ -10,13 +10,11 @@ import { RequestContext } from '../di';
 import { MastraError } from '../error';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { Mastra } from '../mastra';
-import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
-import { MockStore } from '../storage/mock';
+import type { WorkflowsStorageBase } from '../storage';
+import { InMemoryStore } from '../storage/inmemory';
 import { createTool } from '../tools';
 import type { ChunkType, StreamEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
-
-const testStorage = new MockStore();
 
 vi.mock('crypto', () => {
   return {
@@ -25,7 +23,10 @@ vi.mock('crypto', () => {
 });
 
 describe('Workflow', () => {
+  let testStorage: InMemoryStore;
+
   beforeEach(() => {
+    testStorage = new InMemoryStore();
     vi.resetAllMocks();
 
     let counter = 0;
@@ -5892,8 +5893,13 @@ describe('Workflow', () => {
     });
 
     it('should persist error message without stack trace in snapshot', async () => {
-      const mockStorage = new MockStore();
-      const persistSpy = vi.spyOn(mockStorage, 'persistWorkflowSnapshot');
+      const mockStorage = new InMemoryStore();
+      const workflowStorage = await mockStorage.getStore('workflows');
+      expect(workflowStorage).toBeDefined();
+      if (!workflowStorage) {
+        throw new Error('Workflow storage is not defined');
+      }
+      const persistSpy = vi.spyOn(workflowStorage!, 'createWorkflowSnapshot');
 
       const mastra = new Mastra({
         storage: mockStorage,
@@ -5945,8 +5951,13 @@ describe('Workflow', () => {
     });
 
     it('should persist MastraError message without stack trace in snapshot', async () => {
-      const mockStorage = new MockStore();
-      const persistSpy = vi.spyOn(mockStorage, 'persistWorkflowSnapshot');
+      const mockStorage = new InMemoryStore();
+      const workflowStorage = await mockStorage.getStore('workflows');
+      expect(workflowStorage).toBeDefined();
+      if (!workflowStorage) {
+        throw new Error('Workflow storage is not defined');
+      }
+      const persistSpy = vi.spyOn(workflowStorage!, 'createWorkflowSnapshot');
 
       const mastra = new Mastra({
         storage: mockStorage,
@@ -10421,11 +10432,11 @@ describe('Workflow', () => {
       });
 
       const runId = 'test-run-id';
-      const storage = mastra.getStorage();
+      const storage = await mastra.getStore('workflows');
 
       //mimic a workflow run that was previously active
-      await storage?.persistWorkflowSnapshot({
-        workflowName: 'testWorkflow',
+      await storage?.createWorkflowSnapshot({
+        workflowId: 'testWorkflow',
         runId,
         snapshot: {
           runId,
@@ -10581,11 +10592,11 @@ describe('Workflow', () => {
       });
 
       const runId = 'test-run-id';
-      const storage = mastra.getStorage();
+      const storage = await mastra.getStore('workflows');
 
       //mimic a workflow run that was previously active
-      await storage?.persistWorkflowSnapshot({
-        workflowName: 'testWorkflow',
+      await storage?.createWorkflowSnapshot({
+        workflowId: 'testWorkflow',
         runId,
         snapshot: {
           runId,
@@ -10617,8 +10628,8 @@ describe('Workflow', () => {
       });
 
       //mimic a workflow run that was previously active for the nested workflow
-      await storage?.persistWorkflowSnapshot({
-        workflowName: 'nestedWorkflow',
+      await storage?.createWorkflowSnapshot({
+        workflowId: 'nestedWorkflow',
         runId,
         snapshot: {
           runId,
@@ -10707,8 +10718,8 @@ describe('Workflow', () => {
       const runId2 = 'test-run-id-2';
 
       //mimic a workflow run that was previously active
-      await storage?.persistWorkflowSnapshot({
-        workflowName: 'testWorkflow',
+      await storage?.createWorkflowSnapshot({
+        workflowId: 'testWorkflow',
         runId: runId2,
         snapshot: {
           runId: runId2,
@@ -10740,8 +10751,8 @@ describe('Workflow', () => {
       });
 
       //mimic a workflow run that was previously created for the nested workflow but server died before it started running
-      await storage?.persistWorkflowSnapshot({
-        workflowName: 'nestedWorkflow',
+      await storage?.createWorkflowSnapshot({
+        workflowId: 'nestedWorkflow',
         runId: runId2,
         snapshot: {
           runId: runId2,
@@ -10904,11 +10915,11 @@ describe('Workflow', () => {
       });
 
       const runId = 'test-run-id';
-      const storage = mastra.getStorage();
+      const storage = await mastra.getStore('workflows');
 
       //mimic a workflow run that was previously active
-      await storage?.persistWorkflowSnapshot({
-        workflowName: 'promptEvalWorkflow',
+      await storage?.createWorkflowSnapshot({
+        workflowId: 'promptEvalWorkflow',
         runId,
         snapshot: {
           runId,
@@ -11143,11 +11154,11 @@ describe('Workflow', () => {
       });
 
       const runId = 'test-run-id';
-      const storage = mastra.getStorage();
+      const storage = await mastra.getStore('workflows');
 
       //mimic a workflow run that was previously active
-      await storage?.persistWorkflowSnapshot({
-        workflowName: 'dowhile-workflow',
+      await storage?.createWorkflowSnapshot({
+        workflowId: 'dowhile-workflow',
         runId,
         snapshot: {
           runId,
@@ -11175,8 +11186,8 @@ describe('Workflow', () => {
       });
 
       //mimic a workflow run that was previously active for the nested workflow
-      await storage?.persistWorkflowSnapshot({
-        workflowName: 'simple-nested-workflow',
+      await storage?.createWorkflowSnapshot({
+        workflowId: 'simple-nested-workflow',
         runId,
         snapshot: {
           runId,
@@ -11331,11 +11342,11 @@ describe('Workflow', () => {
       });
 
       const runId = 'test-run-id';
-      const storage = mastra.getStorage();
+      const storage = await mastra.getStore('workflows');
 
       //mimic a workflow run that was previously active
-      await storage?.persistWorkflowSnapshot({
-        workflowName: 'test-parallel-workflow',
+      await storage?.createWorkflowSnapshot({
+        workflowId: 'test-parallel-workflow',
         runId,
         snapshot: {
           runId,
@@ -11452,8 +11463,16 @@ describe('Workflow', () => {
   });
 
   describe('Time travel', () => {
+    let workflowStore: WorkflowsStorageBase | undefined;
+    let testStorage: InMemoryStore | undefined;
+
+    beforeEach(async () => {
+      testStorage = new InMemoryStore();
+      workflowStore = await testStorage.getStore('workflows');
+    });
+
     afterEach(async () => {
-      await testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+      await workflowStore?.dropData();
     });
 
     it('should throw error if trying to timetravel a workflow execution that is still running', async () => {
@@ -11506,8 +11525,8 @@ describe('Workflow', () => {
 
       const runId = 'test-run-id';
 
-      await testStorage.persistWorkflowSnapshot({
-        workflowName: 'testWorkflow',
+      await workflowStore?.createWorkflowSnapshot({
+        workflowId: 'testWorkflow',
         runId,
         snapshot: {
           runId,
@@ -12143,10 +12162,12 @@ describe('Workflow', () => {
       expect(execute).toHaveBeenCalledTimes(0);
       expect(executeStep2).toHaveBeenCalledTimes(0);
 
-      const nestedWorkflowSnapshot = await testStorage.loadWorkflowSnapshot({
-        workflowName: 'nestedWorkflow',
+      const nestedWorkflowSnapshot = await workflowStore?.getWorkflowSnapshot({
+        workflowId: 'nestedWorkflow',
         runId: run.runId,
       });
+
+      console.log(nestedWorkflowSnapshot);
 
       expect(nestedWorkflowSnapshot?.context).toEqual({
         input: { step1Result: 2 },
@@ -12214,8 +12235,8 @@ describe('Workflow', () => {
       expect(execute).toHaveBeenCalledTimes(0);
       expect(executeStep2).toHaveBeenCalledTimes(0);
 
-      const nestedWorkflowSnapshot2 = await testStorage.loadWorkflowSnapshot({
-        workflowName: 'nestedWorkflow',
+      const nestedWorkflowSnapshot2 = await workflowStore?.getWorkflowSnapshot({
+        workflowId: 'nestedWorkflow',
         runId: run2.runId,
       });
 
@@ -12285,8 +12306,8 @@ describe('Workflow', () => {
       expect(execute).toHaveBeenCalledTimes(0);
       expect(executeStep2).toHaveBeenCalledTimes(1);
 
-      const nestedWorkflowSnapshot3 = await testStorage.loadWorkflowSnapshot({
-        workflowName: 'nestedWorkflow',
+      const nestedWorkflowSnapshot3 = await workflowStore?.getWorkflowSnapshot({
+        workflowId: 'nestedWorkflow',
         runId: run3.runId,
       });
 
@@ -12789,10 +12810,11 @@ describe('Workflow', () => {
         },
       });
 
-      const simpleNestedWorkflowSnapshot = await testStorage.loadWorkflowSnapshot({
-        workflowName: 'simple-nested-workflow',
+      const simpleNestedWorkflowSnapshot = await workflowStore?.getWorkflowSnapshot({
+        workflowId: 'simple-nested-workflow',
         runId: run.runId,
       });
+
       expect(simpleNestedWorkflowSnapshot?.context).toEqual({
         input: {
           value: 9,
@@ -13371,10 +13393,10 @@ describe('Workflow', () => {
   });
 
   describe('Workflow Runs', () => {
-    let testStorage: MockStore;
+    let testStorage: InMemoryStore;
 
     beforeEach(async () => {
-      testStorage = new MockStore();
+      testStorage = new InMemoryStore();
     });
 
     it('should return empty result when mastra is not initialized', async () => {
@@ -15114,7 +15136,7 @@ describe('Workflow', () => {
           const otherVal = getStepResult(otherStep)?.other ?? 0;
           return { finalValue: startVal + otherVal };
         });
-        const last = vi.fn().mockImplementation(async ({}) => {
+        const last = vi.fn().mockImplementation(async () => {
           return { success: true };
         });
         const begin = vi.fn().mockImplementation(async ({ inputData }) => {
@@ -15437,7 +15459,7 @@ describe('Workflow', () => {
       });
 
       it('should preserve request context in nested workflows after suspend/resume', async () => {
-        const testStorage = new MockStore();
+        const testStorage = new InMemoryStore();
 
         // Step that sets request context data
         const setupStep = createStep({
@@ -15841,7 +15863,7 @@ describe('Workflow', () => {
     });
 
     it('should not execute incorrect branches after resuming from suspended nested workflow', async () => {
-      const testStorage = new MockStore();
+      const testStorage = new InMemoryStore();
 
       // Mock functions to track execution
       const fetchItemsAction = vi.fn().mockResolvedValue([
@@ -16146,7 +16168,7 @@ describe('Workflow', () => {
     });
 
     it('should inject requestContext dependencies into steps during resume', async () => {
-      const initialStorage = new MockStore();
+      const initialStorage = new InMemoryStore();
 
       const requestContext = new RequestContext();
       const testValue = 'test-dependency';
@@ -16598,10 +16620,10 @@ describe('Workflow', () => {
     });
   });
   describe('Parallel Suspended Steps', () => {
-    let testStorage: InstanceType<typeof MockStore>;
+    let testStorage: InstanceType<typeof InMemoryStore>;
 
     beforeEach(async () => {
-      testStorage = new MockStore();
+      testStorage = new InMemoryStore();
     });
 
     it('should remain suspended when only one of multiple parallel suspended steps is resumed - #6418', async () => {

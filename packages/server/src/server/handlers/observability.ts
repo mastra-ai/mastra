@@ -1,3 +1,4 @@
+import type { MastraScorer } from '@mastra/core/evals';
 import { scoreTraces } from '@mastra/core/evals/scoreTraces';
 import type { TracesPaginatedArg, StoragePagination } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
@@ -30,12 +31,12 @@ export async function getTraceHandler({ mastra, traceId }: ObservabilityContext 
       throw new HTTPException(400, { message: 'Trace ID is required' });
     }
 
-    const storage = mastra.getStorage();
-    if (!storage) {
-      throw new HTTPException(500, { message: 'Storage is not available' });
-    }
+    const observabilityStore = await mastra.getStore('observability');
 
-    const trace = await storage.getTrace(traceId);
+    if (!observabilityStore) {
+      throw new HTTPException(500, { message: 'Mastra Storage: Observability store is not configured.' });
+    }
+    const trace = await observabilityStore.getTrace(traceId);
 
     if (!trace) {
       throw new HTTPException(404, { message: `Trace with ID '${traceId}' not found` });
@@ -51,9 +52,9 @@ export async function getTraceHandler({ mastra, traceId }: ObservabilityContext 
  * Get paginated traces with filtering and pagination
  * Returns only root spans (parent spans) for pagination, not child spans
  */
-export async function getTracesPaginatedHandler({ mastra, body }: ObservabilityContext) {
+export async function listTracesHandler({ mastra, body }: ObservabilityContext) {
   try {
-    const storage = mastra.getStorage();
+    const storage = await mastra.getStore('observability');
     if (!storage) {
       throw new HTTPException(500, { message: 'Storage is not available' });
     }
@@ -84,7 +85,7 @@ export async function getTracesPaginatedHandler({ mastra, body }: ObservabilityC
       }
     }
 
-    return storage.getTracesPaginated({
+    return storage.listTraces({
       pagination,
       filters,
     });
@@ -113,20 +114,30 @@ export async function scoreTracesHandler({ mastra, body }: ScoreTracesContext) {
       throw new HTTPException(400, { message: 'At least one target is required' });
     }
 
-    const storage = mastra.getStorage();
+    const storage = await mastra.getStore('evals');
+
     if (!storage) {
       throw new HTTPException(500, { message: 'Storage is not available' });
     }
 
-    const scorer = mastra.getScorerById(scorerName);
-    if (!scorer) {
+    let scorer: MastraScorer;
+
+    try {
+      scorer = mastra.getScorerById(scorerName);
+    } catch {
       throw new HTTPException(404, { message: `Scorer '${scorerName}' not found` });
     }
 
     const logger = mastra.getLogger();
 
+    const scorerId = scorer.config.id || scorer.config.name;
+
+    if (!scorerId) {
+      return handleError(new Error('Scorer ID is required'), 'Error getting scorer ID');
+    }
+
     scoreTraces({
-      scorerId: scorer.config.id || scorer.config.name,
+      scorerId,
       targets,
       mastra,
     }).catch(error => {
@@ -151,7 +162,7 @@ export async function listScoresBySpan({
   pagination,
 }: Context & { traceId: string; spanId: string; pagination: StoragePagination }) {
   try {
-    const storage = mastra.getStorage();
+    const storage = await mastra.getStore('evals');
     if (!storage) {
       throw new HTTPException(500, { message: 'Storage is not available' });
     }

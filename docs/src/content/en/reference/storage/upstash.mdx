@@ -3,6 +3,11 @@ title: "Reference: Upstash Storage | Storage"
 description: Documentation for the Upstash storage implementation in Mastra.
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+import StorageDomainsNoObservability from "./_storage-domains-no-observability.mdx";
+import SchemaManagementNoObservability from "./_schema-management-no-observability.mdx";
+
 # Upstash Storage
 
 The Upstash storage implementation provides a serverless-friendly storage solution using Upstash's Redis-compatible key-value store.
@@ -15,9 +20,36 @@ The Upstash storage implementation provides a serverless-friendly storage soluti
 
 ## Installation
 
+<Tabs>
+<TabItem value="npm" label="npm">
+
 ```bash copy
 npm install @mastra/upstash@beta
 ```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm add @mastra/upstash@beta
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn add @mastra/upstash@beta
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bun add @mastra/upstash@beta
+```
+
+</TabItem>
+</Tabs>
 
 ## Usage
 
@@ -26,8 +58,8 @@ import { UpstashStore } from "@mastra/upstash";
 
 const storage = new UpstashStore({
   id: 'upstash-storage',
-  url: process.env.UPSTASH_URL,
-  token: process.env.UPSTASH_TOKEN,
+  url: process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 ```
 
@@ -36,58 +68,98 @@ const storage = new UpstashStore({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this storage instance",
+      isOptional: false,
+    },
+    {
       name: "url",
       type: "string",
-      description: "Upstash Redis URL",
+      description: "Upstash Redis REST URL",
       isOptional: false,
     },
     {
       name: "token",
       type: "string",
-      description: "Upstash Redis authentication token",
+      description: "Upstash Redis REST authentication token",
       isOptional: false,
-    },
-    {
-      name: "prefix",
-      type: "string",
-      description: "Key prefix for all stored items",
-      isOptional: true,
-      defaultValue: "mastra:",
     },
   ]}
 />
 
-## Additional Notes
+## Storage Domains
 
-### Key Structure
+Upstash storage supports the following domains:
 
-The Upstash storage implementation uses a key-value structure:
+<StorageDomainsNoObservability />
 
-- Thread keys: `{prefix}thread:{threadId}`
-- Message keys: `{prefix}message:{messageId}`
-- Metadata keys: `{prefix}metadata:{entityId}`
+To access domain-specific operations, use `getStore()`:
 
-### Serverless Benefits
+```typescript copy
+const storage = new UpstashStore({
+  id: 'upstash-storage',
+  url: process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+});
 
-Upstash storage is particularly well-suited for serverless deployments:
+// Access memory domain for threads and messages
+const memoryStore = await storage.getStore('memory');
 
-- No connection management needed
-- Pay-per-request pricing
-- Global replication options
-- Edge-compatible
+const threads = await memoryStore.listThreadsByResourceId({
+  resourceId: 'user-123',
+  page: 0,
+  perPage: 20,
+});
+  
+const messages = await memoryStore.listMessages({
+  threadId: 'thread-123',
+  page: 0,
+  perPage: 50,
+});
 
-### Data Persistence
+// Access workflows domain for workflow snapshots
+const workflowsStore = await storage.getStore('workflows');
 
-Upstash provides:
+const snapshot = await workflowsStore.getWorkflowSnapshot({
+  workflowId: 'my-workflow',
+  runId: 'run-123',
+});
 
-- Automatic data persistence
-- Point-in-time recovery
-- Cross-region replication options
+// Access evals domain for scores
+const evalsStore = await storage.getStore('evals');
 
-### Performance Considerations
+const scores = await evalsStore.listScoresByScorerId({
+  scorerId: 'my-scorer',
+  pagination: { page: 0, perPage: 50 },
+});
+```
 
-For optimal performance:
+See the [Storage overview](/docs/v1/server-db/storage) for more information about storage domains and composite storage.
 
-- Use appropriate key prefixes to organize data
-- Monitor Redis memory usage
-- Consider data expiration policies if needed
+## Key Structure
+
+The Upstash storage implementation uses a structured key-value format based on table names and identifiers:
+
+**Memory Domain:**
+- **Threads**: `mastra_threads:id:{threadId}`
+  - Example: `mastra_threads:id:thread_123`
+- **Messages**: `mastra_messages:threadId:{threadId}:id:{messageId}`
+  - Example: `mastra_messages:threadId:thread_123:id:msg_456`
+- **Thread Message Index**: `thread:{threadId}:messages`
+  - Sorted set used to maintain message order within a thread
+  - Example: `thread:thread_123:messages`
+- **Resources**: `mastra_resources:id:{resourceId}`
+  - Example: `mastra_resources:id:resource_789`
+
+**Evals Domain:**
+- **Scores**: `mastra_scorers:runId:{runId}`
+  - Example: `mastra_scorers:runId:run_abc123`
+
+**Workflows Domain:**
+- **Workflow Snapshots**: `mastra_workflow_snapshot:namespace:workflows:workflow_name:{workflowId}:run_id:{runId}[:resourceId:{resourceId}]`
+  - Example: `mastra_workflow_snapshot:namespace:workflows:workflow_name:myWorkflow:run_id:run_xyz`
+  - With resourceId: `mastra_workflow_snapshot:namespace:workflows:workflow_name:myWorkflow:run_id:run_xyz:resourceId:res_123`
+
+**Key Format Pattern:**
+All keys follow the pattern: `{tableName}:{keyPart1}:{value1}:{keyPart2}:{value2}...`

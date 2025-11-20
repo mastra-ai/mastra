@@ -1,8 +1,8 @@
 import { DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
-  StoreOperations,
   TABLE_SPANS,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -14,7 +14,7 @@ import {
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
 
-export class StoreOperationsDynamoDB extends StoreOperations {
+export class StoreOperationsDynamoDB extends MastraBase {
   client: DynamoDBDocumentClient;
   tableName: string;
   service: Service<Record<string, any>>;
@@ -27,7 +27,10 @@ export class StoreOperationsDynamoDB extends StoreOperations {
     tableName: string;
     client: DynamoDBDocumentClient;
   }) {
-    super();
+    super({
+      component: 'STORAGE',
+      name: 'DYNAMODB_OPERATIONS',
+    });
     this.service = service;
     this.client = client;
     this.tableName = tableName;

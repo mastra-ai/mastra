@@ -3,7 +3,7 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
-  MemoryStorage,
+  MemoryStorageBase,
   normalizePerPage,
   calculatePagination,
   TABLE_MESSAGES,
@@ -17,17 +17,24 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  CreateIndexOptions,
+  IndexInfo,
+  StorageIndexStats,
 } from '@mastra/core/storage';
 import sql from 'mssql';
-import type { StoreOperationsMSSQL } from '../operations';
+import { MSSQLDomainBase } from '../base';
+import type { MSSQLDomainConfig } from '../base';
+import { IndexManagementMSSQL } from '../operations';
 import { getTableName, getSchemaName, buildDateRangeFilter, prepareWhereClause } from '../utils';
 
-export class MemoryMSSQL extends MemoryStorage {
-  private pool: sql.ConnectionPool;
-  private schema: string;
-  private operations: StoreOperationsMSSQL;
+type MemoryTableNames = typeof TABLE_MESSAGES | typeof TABLE_THREADS | typeof TABLE_RESOURCES;
 
-  private _parseAndFormatMessages(messages: any[], format?: 'v1' | 'v2') {
+export class MemoryStorageMSSQL extends MemoryStorageBase {
+  private domainBase: MSSQLDomainBase;
+  indexManagement?: IndexManagementMSSQL;
+  schemaPrefix?: string;
+
+  private _parseAndFormatMessages(messages: any[]) {
     // Parse content back to objects if they were stringified during storage
     const messagesWithParsedContent = messages.map(message => {
       if (typeof message.content === 'string') {
@@ -46,22 +53,111 @@ export class MemoryMSSQL extends MemoryStorage {
 
     // Use MessageList to ensure proper structure for both v1 and v2
     const list = new MessageList().add(cleanMessages, 'memory');
-    return format === 'v2' ? list.get.all.db() : list.get.all.v1();
+    return list.get.all.db();
   }
 
-  constructor({
-    pool,
-    schema,
-    operations,
-  }: {
-    pool: sql.ConnectionPool;
-    schema: string;
-    operations: StoreOperationsMSSQL;
-  }) {
+  constructor(opts: MSSQLDomainConfig) {
     super();
-    this.pool = pool;
-    this.schema = schema;
-    this.operations = operations;
+    this.domainBase = new MSSQLDomainBase(opts);
+    this.schemaPrefix =
+      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'dbo' ? `${this.domainBase.getSchema()}_` : '';
+  }
+
+  private getIndexManagement() {
+    if (!this.indexManagement) {
+      this.indexManagement = new IndexManagementMSSQL({
+        pool: this.domainBase.getClient(),
+        schemaName: this.domainBase.getSchema(),
+      });
+    }
+    return this.indexManagement;
+  }
+
+  async createIndex<T extends MemoryTableNames>({
+    name,
+    table,
+    columns,
+  }: {
+    table: T;
+  } & Omit<CreateIndexOptions, 'table'>) {
+    const indexManagement = this.getIndexManagement();
+
+    await indexManagement.createIndex({
+      name: `${this.schemaPrefix}${name}`,
+      table,
+      columns,
+    });
+  }
+
+  async listIndexes<T extends MemoryTableNames>(table: T): Promise<IndexInfo[]> {
+    const indexManagement = this.getIndexManagement();
+    return indexManagement.listIndexes(table);
+  }
+
+  async describeIndex(name: string): Promise<StorageIndexStats> {
+    const indexManagement = this.getIndexManagement();
+    return indexManagement.describeIndex(`${this.schemaPrefix}${name}`);
+  }
+
+  async dropIndex(name: string) {
+    const indexManagement = this.getIndexManagement();
+    await indexManagement.dropIndex(`${this.schemaPrefix}${name}`);
+  }
+
+  async createIndexes(): Promise<void> {
+    // Create threads index
+    try {
+      await this.createIndex({
+        name: 'mastra_threads_resourceid_seqid_idx',
+        table: TABLE_THREADS,
+        columns: ['resourceId', 'seq_id DESC'],
+      });
+    } catch (error) {
+      // Log but don't fail initialization - indexes are performance optimizations
+      this.logger?.warn?.('Failed to create memory threads index:', error);
+    }
+
+    // Create messages index
+    try {
+      await this.createIndex({
+        name: 'mastra_messages_thread_id_seqid_idx',
+        table: TABLE_MESSAGES,
+        columns: ['thread_id', 'seq_id DESC'],
+      });
+    } catch (error) {
+      // Log but don't fail initialization - indexes are performance optimizations
+      this.logger?.warn?.('Failed to create memory messages index:', error);
+    }
+  }
+
+  async dropIndexes(): Promise<void> {
+    await this.dropIndex('mastra_threads_resourceid_seqid_idx');
+    await this.dropIndex('mastra_messages_thread_id_seqid_idx');
+  }
+
+  async init(): Promise<void> {
+    await this.domainBase
+      .getOperations()
+      .createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.domainBase
+      .getOperations()
+      .createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
+    await this.domainBase
+      .getOperations()
+      .createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+    await this.createIndexes();
+  }
+
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    await Promise.all([
+      this.domainBase.getOperations().clearTable({ tableName: TABLE_THREADS }),
+      this.domainBase.getOperations().clearTable({ tableName: TABLE_MESSAGES }),
+      this.domainBase.getOperations().clearTable({ tableName: TABLE_RESOURCES }),
+    ]);
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -73,9 +169,9 @@ export class MemoryMSSQL extends MemoryStorage {
         metadata,
         [createdAt],
         [updatedAt]
-      FROM ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })}
+      FROM ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.domainBase.getSchema()) })}
       WHERE id = @threadId`;
-      const request = this.pool.request();
+      const request = this.domainBase.getClient().request();
       request.input('threadId', threadId);
       const resultSet = await request.query(sql);
       const thread = resultSet.recordset[0] || null;
@@ -125,10 +221,10 @@ export class MemoryMSSQL extends MemoryStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);
     try {
-      const baseQuery = `FROM ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })} WHERE [resourceId] = @resourceId`;
+      const baseQuery = `FROM ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.domainBase.getSchema()) })} WHERE [resourceId] = @resourceId`;
 
       const countQuery = `SELECT COUNT(*) as count ${baseQuery}`;
-      const countRequest = this.pool.request();
+      const countRequest = this.domainBase.getClient().request();
       countRequest.input('resourceId', resourceId);
       const countResult = await countRequest.query(countQuery);
       const total = parseInt(countResult.recordset[0]?.count ?? '0', 10);
@@ -147,7 +243,7 @@ export class MemoryMSSQL extends MemoryStorage {
       const dir = (direction || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
       const limitValue = perPageInput === false ? total : perPage;
       const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${dir} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
-      const dataRequest = this.pool.request();
+      const dataRequest = this.domainBase.getClient().request();
       dataRequest.input('resourceId', resourceId);
       dataRequest.input('offset', offset);
 
@@ -199,7 +295,7 @@ export class MemoryMSSQL extends MemoryStorage {
 
   public async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
-      const table = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+      const table = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.domainBase.getSchema()) });
       const mergeSql = `MERGE INTO ${table} WITH (HOLDLOCK) AS target
         USING (SELECT @id AS id) AS source
         ON (target.id = source.id)
@@ -212,7 +308,7 @@ export class MemoryMSSQL extends MemoryStorage {
         WHEN NOT MATCHED THEN
           INSERT (id, [resourceId], title, metadata, [createdAt], [updatedAt])
           VALUES (@id, @resourceId, @title, @metadata, @createdAt, @updatedAt);`;
-      const req = this.pool.request();
+      const req = this.domainBase.getClient().request();
       req.input('id', thread.id);
       req.input('resourceId', thread.resourceId);
       req.input('title', thread.title);
@@ -274,14 +370,14 @@ export class MemoryMSSQL extends MemoryStorage {
     };
 
     try {
-      const table = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+      const table = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.domainBase.getSchema()) });
       const sql = `UPDATE ${table}
         SET title = @title,
             metadata = @metadata,
             [updatedAt] = @updatedAt
         OUTPUT INSERTED.*
         WHERE id = @id`;
-      const req = this.pool.request();
+      const req = this.domainBase.getClient().request();
       req.input('id', id);
       req.input('title', title);
       req.input('metadata', JSON.stringify(mergedMetadata));
@@ -327,11 +423,17 @@ export class MemoryMSSQL extends MemoryStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
-    const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+    const messagesTable = getTableName({
+      indexName: TABLE_MESSAGES,
+      schemaName: getSchemaName(this.domainBase.getSchema()),
+    });
+    const threadsTable = getTableName({
+      indexName: TABLE_THREADS,
+      schemaName: getSchemaName(this.domainBase.getSchema()),
+    });
     const deleteMessagesSql = `DELETE FROM ${messagesTable} WHERE [thread_id] = @threadId`;
     const deleteThreadSql = `DELETE FROM ${threadsTable} WHERE id = @threadId`;
-    const tx = this.pool.transaction();
+    const tx = this.domainBase.getClient().transaction();
     try {
       await tx.begin();
       const req = tx.request();
@@ -393,7 +495,7 @@ export class MemoryMSSQL extends MemoryStorage {
             m.seq_id
           FROM (
             SELECT *, ROW_NUMBER() OVER (ORDER BY [createdAt] ASC) as row_num
-            FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })}
+            FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.domainBase.getSchema()) })}
             WHERE [thread_id] = ${pThreadId}
           ) AS m
           WHERE m.id = ${pId}
@@ -401,7 +503,7 @@ export class MemoryMSSQL extends MemoryStorage {
             SELECT 1
             FROM (
               SELECT *, ROW_NUMBER() OVER (ORDER BY [createdAt] ASC) as row_num
-              FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })}
+              FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.domainBase.getSchema()) })}
               WHERE [thread_id] = ${pThreadId}
             ) AS target
             WHERE target.id = ${pId}
@@ -428,7 +530,7 @@ export class MemoryMSSQL extends MemoryStorage {
       ORDER BY [seq_id] ASC
     `;
 
-    const req = this.pool.request();
+    const req = this.domainBase.getClient().request();
     for (let i = 0; i < paramValues.length; ++i) {
       req.input(paramNames[i] as string, paramValues[i]);
     }
@@ -453,8 +555,8 @@ export class MemoryMSSQL extends MemoryStorage {
     const orderByStatement = `ORDER BY [seq_id] DESC`;
     try {
       let rows: any[] = [];
-      let query = `${selectStatement} FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })} WHERE [id] IN (${messageIds.map((_, i) => `@id${i}`).join(', ')})`;
-      const request = this.pool.request();
+      let query = `${selectStatement} FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.domainBase.getSchema()) })} WHERE [id] IN (${messageIds.map((_, i) => `@id${i}`).join(', ')})`;
+      const request = this.domainBase.getClient().request();
       messageIds.forEach((id, i) => request.input(`id${i}`, id));
 
       query += ` ${orderByStatement}`;
@@ -532,7 +634,10 @@ export class MemoryMSSQL extends MemoryStorage {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       const orderByStatement = `ORDER BY [${field}] ${direction}, [seq_id] ${direction}`;
 
-      const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
+      const tableName = getTableName({
+        indexName: TABLE_MESSAGES,
+        schemaName: getSchemaName(this.domainBase.getSchema()),
+      });
       const baseQuery = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId FROM ${tableName}`;
 
       const filters: Record<string, any> = {
@@ -550,13 +655,13 @@ export class MemoryMSSQL extends MemoryStorage {
       };
 
       // Get total count
-      const countRequest = this.pool.request();
+      const countRequest = this.domainBase.getClient().request();
       bindWhereParams(countRequest);
       const countResult = await countRequest.query(`SELECT COUNT(*) as total FROM ${tableName}${actualWhereClause}`);
       const total = parseInt(countResult.recordset[0]?.total, 10) || 0;
 
       const fetchBaseMessages = async (): Promise<any[]> => {
-        const request = this.pool.request();
+        const request = this.domainBase.getClient().request();
         bindWhereParams(request);
 
         if (perPageInput === false) {
@@ -604,10 +709,10 @@ export class MemoryMSSQL extends MemoryStorage {
         });
       }
       // Parse and format messages to V2
-      const parsed = this._parseAndFormatMessages(messages, 'v2');
+      const parsed = this._parseAndFormatMessages(messages);
       const mult = direction === 'ASC' ? 1 : -1;
 
-      const finalMessages = (parsed as MastraDBMessage[]).sort((a, b) => {
+      const finalMessages = parsed.sort((a, b) => {
         const aVal = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
         const bVal = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
 
@@ -686,10 +791,16 @@ export class MemoryMSSQL extends MemoryStorage {
         details: { threadId },
       });
     }
-    const tableMessages = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
-    const tableThreads = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+    const tableMessages = getTableName({
+      indexName: TABLE_MESSAGES,
+      schemaName: getSchemaName(this.domainBase.getSchema()),
+    });
+    const tableThreads = getTableName({
+      indexName: TABLE_THREADS,
+      schemaName: getSchemaName(this.domainBase.getSchema()),
+    });
     try {
-      const transaction = this.pool.transaction();
+      const transaction = this.domainBase.getClient().transaction();
       await transaction.begin();
       try {
         for (const message of messages) {
@@ -779,13 +890,13 @@ export class MemoryMSSQL extends MemoryStorage {
 
     const messageIds = messages.map(m => m.id);
     const idParams = messageIds.map((_, i) => `@id${i}`).join(', ');
-    let selectQuery = `SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })}`;
+    let selectQuery = `SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.domainBase.getSchema()) })}`;
     if (idParams.length > 0) {
       selectQuery += ` WHERE id IN (${idParams})`;
     } else {
       return [];
     }
-    const selectReq = this.pool.request();
+    const selectReq = this.domainBase.getClient().request();
     messageIds.forEach((id, i) => selectReq.input(`id${i}`, id));
     const existingMessagesDb = (await selectReq.query(selectQuery)).recordset;
     if (!existingMessagesDb || existingMessagesDb.length === 0) {
@@ -802,7 +913,7 @@ export class MemoryMSSQL extends MemoryStorage {
     });
 
     const threadIdsToUpdate = new Set<string>();
-    const transaction = this.pool.transaction();
+    const transaction = this.domainBase.getClient().transaction();
 
     try {
       await transaction.begin();
@@ -840,7 +951,7 @@ export class MemoryMSSQL extends MemoryStorage {
           }
         }
         if (setClauses.length > 0) {
-          const updateSql = `UPDATE ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })} SET ${setClauses.join(', ')} WHERE id = @id`;
+          const updateSql = `UPDATE ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.domainBase.getSchema()) })} SET ${setClauses.join(', ')} WHERE id = @id`;
           await req.query(updateSql);
         }
       }
@@ -851,7 +962,7 @@ export class MemoryMSSQL extends MemoryStorage {
         const threadReq = transaction.request();
         Array.from(threadIdsToUpdate).forEach((tid, i) => threadReq.input(`tid${i}`, tid));
         threadReq.input('updatedAt', new Date().toISOString());
-        const threadSql = `UPDATE ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })} SET updatedAt = @updatedAt WHERE id IN (${threadIdParams})`;
+        const threadSql = `UPDATE ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.domainBase.getSchema()) })} SET updatedAt = @updatedAt WHERE id IN (${threadIdParams})`;
         await threadReq.query(threadSql);
       }
       await transaction.commit();
@@ -867,7 +978,7 @@ export class MemoryMSSQL extends MemoryStorage {
       );
     }
 
-    const refetchReq = this.pool.request();
+    const refetchReq = this.domainBase.getClient().request();
     messageIds.forEach((id, i) => refetchReq.input(`id${i}`, id));
     const updatedMessages = (await refetchReq.query(selectQuery)).recordset;
     return (updatedMessages || []).map(message => {
@@ -886,14 +997,20 @@ export class MemoryMSSQL extends MemoryStorage {
     }
 
     try {
-      const messageTableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
-      const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+      const messageTableName = getTableName({
+        indexName: TABLE_MESSAGES,
+        schemaName: getSchemaName(this.domainBase.getSchema()),
+      });
+      const threadTableName = getTableName({
+        indexName: TABLE_THREADS,
+        schemaName: getSchemaName(this.domainBase.getSchema()),
+      });
 
       // Build placeholders for the IN clause
       const placeholders = messageIds.map((_, idx) => `@p${idx + 1}`).join(',');
 
       // Get thread IDs for all messages first
-      const request = this.pool.request();
+      const request = this.domainBase.getClient().request();
       messageIds.forEach((id, idx) => {
         request.input(`p${idx + 1}`, id);
       });
@@ -905,7 +1022,7 @@ export class MemoryMSSQL extends MemoryStorage {
       const threadIds = messages.recordset?.map(msg => msg.thread_id).filter(Boolean) || [];
 
       // Use transaction for the actual delete and update operations
-      const transaction = this.pool.transaction();
+      const transaction = this.domainBase.getClient().transaction();
       await transaction.begin();
 
       try {
@@ -951,9 +1068,12 @@ export class MemoryMSSQL extends MemoryStorage {
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
-    const tableName = getTableName({ indexName: TABLE_RESOURCES, schemaName: getSchemaName(this.schema) });
+    const tableName = getTableName({
+      indexName: TABLE_RESOURCES,
+      schemaName: getSchemaName(this.domainBase.getSchema()),
+    });
     try {
-      const req = this.pool.request();
+      const req = this.domainBase.getClient().request();
       req.input('resourceId', resourceId);
       const result = (await req.query(`SELECT * FROM ${tableName} WHERE id = @resourceId`)).recordset[0];
 
@@ -985,7 +1105,7 @@ export class MemoryMSSQL extends MemoryStorage {
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
-    await this.operations.insert({
+    await this.domainBase.getOperations().insert({
       tableName: TABLE_RESOURCES,
       record: {
         ...resource,
@@ -1029,9 +1149,12 @@ export class MemoryMSSQL extends MemoryStorage {
         updatedAt: new Date(),
       };
 
-      const tableName = getTableName({ indexName: TABLE_RESOURCES, schemaName: getSchemaName(this.schema) });
+      const tableName = getTableName({
+        indexName: TABLE_RESOURCES,
+        schemaName: getSchemaName(this.domainBase.getSchema()),
+      });
       const updates: string[] = [];
-      const req = this.pool.request();
+      const req = this.domainBase.getClient().request();
 
       if (workingMemory !== undefined) {
         updates.push('workingMemory = @workingMemory');
