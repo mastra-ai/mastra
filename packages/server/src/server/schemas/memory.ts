@@ -298,9 +298,15 @@ export const updateWorkingMemoryBodySchema = z.object({
 
 /**
  * Body schema for POST /api/memory/messages/delete
+ * Accepts: string | string[] | { id: string } | { id: string }[]
  */
 export const deleteMessagesBodySchema = z.object({
-  messageIds: z.union([z.string(), z.array(z.string())]),
+  messageIds: z.union([
+    z.string(),
+    z.array(z.string()),
+    z.object({ id: z.string() }),
+    z.array(z.object({ id: z.string() })),
+  ]),
 });
 
 /**
