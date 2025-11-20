@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { MessageList } from '@mastra/core/agent';
 import type { MemoryRuntimeContext } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
 import { MemoryStorage } from '@mastra/core/storage';
@@ -142,18 +143,22 @@ describe('MessageHistory', () => {
       ];
 
       const runtimeContext = createRuntimeContextWithMemory('thread-1');
+      const messageList = new MessageList();
+      messageList.add(newMessages, 'input');
 
       const result = await processor.processInput({
         messages: newMessages,
+        messageList,
         abort: mockAbort,
         runtimeContext,
       });
 
       // Should have last 2 historical messages + 1 new message
-      expect(result).toHaveLength(3);
-      expect(result[0].id).toBe('msg-2');
-      expect(result[1].id).toBe('msg-3');
-      expect(result[2].id).toBe('msg-4');
+      const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
+      expect(resultMessages).toHaveLength(3);
+      expect(resultMessages[0].id).toBe('msg-2');
+      expect(resultMessages[1].id).toBe('msg-3');
+      expect(resultMessages[2].id).toBe('msg-4');
     });
 
     it('should merge historical messages with new messages', async () => {
