@@ -633,10 +633,7 @@ export class MastraClientModelOutput<OUTPUT extends OutputSchema = undefined> {
 /**
  * MastraClientNetworkOutput - Client-side wrapper for network streaming
  */
-export class MastraClientNetworkOutput {
-  #baseStream: ReadableStream<NetworkChunkType>;
-  #bufferedChunks: NetworkChunkType[] = [];
-  #streamFinished = false;
+export class MastraClientNetworkOutput extends ReadableStream<NetworkChunkType> {
   #error: Error | undefined;
   #consumptionStarted = false;
 
@@ -653,126 +650,105 @@ export class MastraClientNetworkOutput {
   };
 
   constructor({ stream }: { stream: ReadableStream<NetworkChunkType> }) {
-    const self = this;
+    // Capture state in closures for use in the start callback
+    const state = {
+      error: undefined as Error | undefined,
+      consumptionStarted: false,
+      bufferedUsage: undefined as any,
+      bufferedResult: undefined as any,
+      bufferedStatus: undefined as string | undefined,
+      delayedPromises: {
+        usage: new DelayedPromise<any>(),
+        result: new DelayedPromise<any>(),
+        status: new DelayedPromise<string>(),
+      },
+    };
 
-    this.#baseStream = stream.pipeThrough(
-      new TransformStream<NetworkChunkType, NetworkChunkType>({
-        async transform(chunk, controller) {
-          self.#bufferedChunks.push(chunk);
-
-          try {
-            await self.#processChunk(chunk);
-          } catch (error) {
-            self.#error = error instanceof Error ? error : new Error(String(error));
-            self.#delayedPromises.status.reject(self.#error);
-          }
-
-          controller.enqueue(chunk);
-        },
-        flush() {
-          self.#streamFinished = true;
-          self.#resolveAllPromises();
-        },
-      }),
-    );
-  }
-
-  /**
-   * Process individual chunks and extract values from finish event
-   */
-  async #processChunk(chunk: NetworkChunkType): Promise<void> {
-    // Extract all values from the final network finish event
-    if (chunk.type === 'network-execution-event-finish') {
-      const payload = chunk.payload as any;
-
-      this.#bufferedResult = payload;
-      this.#bufferedStatus = payload?.completionReason ?? 'complete';
-      this.#bufferedUsage = payload?.usage;
-
-      this.#delayedPromises.result.resolve(this.#bufferedResult);
-      this.#delayedPromises.status.resolve(this.#bufferedStatus!);
-
-      if (this.#bufferedUsage) {
-        this.#delayedPromises.usage.resolve(this.#bufferedUsage);
-      }
-    }
-  }
-
-  /**
-   * Resolve all delayed promises with current values
-   */
-  #resolveAllPromises(): void {
-    try {
-      if (this.#bufferedUsage) {
-        this.#delayedPromises.usage.resolve(this.#bufferedUsage);
-      } else {
-        this.#delayedPromises.usage.resolve(undefined);
-      }
-    } catch (error) {
-      console.error('Error resolving usage promise:', error);
-    }
-
-    // Result and status are resolved when network-execution-event-finish is received
-    // If they haven't been resolved yet, resolve with undefined/default
-    if (this.#bufferedResult === undefined) {
-      try {
-        this.#delayedPromises.result.resolve(undefined);
-      } catch (error) {
-        console.error('Error resolving result promise:', error);
-      }
-    }
-
-    if (this.#bufferedStatus === undefined) {
-      try {
-        this.#delayedPromises.status.resolve('unknown');
-      } catch (error) {
-        console.error('Error resolving status promise:', error);
-      }
-    }
-  }
-
-  /**
-   * ReadableStream that yields all chunks.
-   * ReadableStream is async iterable, so you can use it with for-await-of loops.
-   */
-  get fullStream(): ReadableStream<NetworkChunkType> {
-    const self = this;
-    return new ReadableStream<NetworkChunkType>({
+    // Create the ReadableStream that this class extends
+    super({
       async start(controller) {
         // Mark consumption as started
-        if (!self.#consumptionStarted) {
-          self.#consumptionStarted = true;
+        if (!state.consumptionStarted) {
+          state.consumptionStarted = true;
         }
 
-        // First enqueue any buffered chunks
-        for (const chunk of self.#bufferedChunks) {
-          controller.enqueue(chunk);
-        }
-
-        // If stream already finished, we're done
-        if (self.#streamFinished) {
-          controller.close();
-          return;
-        }
-
-        // Continue reading from base stream
-        const reader = self.#baseStream.getReader();
+        // Process the incoming stream
+        const reader = stream.getReader();
         try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) {
+              // Resolve promises if not already resolved
+              try {
+                if (state.bufferedUsage) {
+                  state.delayedPromises.usage.resolve(state.bufferedUsage);
+                } else {
+                  state.delayedPromises.usage.resolve(undefined);
+                }
+              } catch (error) {
+                console.error('Error resolving usage promise:', error);
+              }
+              if (state.bufferedResult === undefined) {
+                try {
+                  state.delayedPromises.result.resolve(undefined);
+                } catch (error) {
+                  console.error('Error resolving result promise:', error);
+                }
+              }
+              if (state.bufferedStatus === undefined) {
+                try {
+                  state.delayedPromises.status.resolve('unknown');
+                } catch (error) {
+                  console.error('Error resolving status promise:', error);
+                }
+              }
               controller.close();
               break;
             }
+
+            // Process chunk to extract metadata
+            if (value.type === 'network-execution-event-finish') {
+              const payload = value.payload as any;
+              state.bufferedResult = payload;
+              state.bufferedStatus = payload?.completionReason ?? 'complete';
+              state.bufferedUsage = payload?.usage;
+
+              state.delayedPromises.result.resolve(state.bufferedResult);
+              state.delayedPromises.status.resolve(state.bufferedStatus!);
+
+              if (state.bufferedUsage) {
+                state.delayedPromises.usage.resolve(state.bufferedUsage);
+              }
+            }
+
+            // Enqueue the chunk
             controller.enqueue(value);
           }
         } catch (error) {
+          state.error = error instanceof Error ? error : new Error(String(error));
+          state.delayedPromises.status.reject(state.error);
           controller.error(error);
         } finally {
           reader.releaseLock();
         }
       },
     });
+
+    // Copy state to instance after super() is called
+    this.#error = state.error;
+    this.#consumptionStarted = state.consumptionStarted;
+    this.#bufferedUsage = state.bufferedUsage;
+    this.#bufferedResult = state.bufferedResult;
+    this.#bufferedStatus = state.bufferedStatus;
+    this.#delayedPromises = state.delayedPromises;
+  }
+
+  /**
+   * The stream itself - since this class extends ReadableStream, you can iterate over it directly
+   * This getter is provided for backward compatibility and clarity
+   */
+  get fullStream(): ReadableStream<NetworkChunkType> {
+    return this;
   }
 
   /**
@@ -808,13 +784,14 @@ export class MastraClientNetworkOutput {
 
   /**
    * Ensure stream consumption is triggered
+   * Since this class IS a ReadableStream, we trigger consumption by getting a reader
    */
   #ensureConsumption(): void {
     if (!this.#consumptionStarted) {
       this.#consumptionStarted = true;
-      // Consume the stream in the background
+      // Start consuming the stream (this class itself) in the background
       void consumeStream({
-        stream: this.#baseStream,
+        stream: this,
         onError: error => {
           this.#error = error instanceof Error ? error : new Error(String(error));
           this.#delayedPromises.status.reject(this.#error);
