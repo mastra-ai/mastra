@@ -1,9 +1,10 @@
 import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { convertArrayToReadableStream } from 'ai-v5/test';
 import { describe, expect, it } from 'vitest';
 import { createMessageListWithUserMessage } from './utils';
 import { testUsage } from '../../stream/aisdk/v5/test-utils';
 import type { loop } from '../loop';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 
 export function textStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('result.textStream', () => {

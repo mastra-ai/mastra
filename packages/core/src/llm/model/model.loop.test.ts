@@ -5,9 +5,10 @@ import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import { RequestContext } from '../../request-context';
 import { MastraLLMVNext } from './model.loop';
+import type { MastraLanguageModelV2 } from './shared.types';
 
 const model = new MastraLLMVNext({
-  models: [{ model: openai('gpt-4o-mini'), maxRetries: 0, id: 'test-model' }],
+  models: [{ model: openai('gpt-4o-mini') as unknown as MastraLanguageModelV2, maxRetries: 0, id: 'test-model' }],
 });
 
 describe.concurrent('MastraLLMVNext', () => {
@@ -25,6 +26,7 @@ describe.concurrent('MastraLLMVNext', () => {
       ),
       tracingContext: {},
       agentId: 'test-agent',
+      methodType: 'stream',
     });
 
     const res = await result.getFullOutput();
@@ -47,6 +49,7 @@ describe.concurrent('MastraLLMVNext', () => {
       requestContext: new RequestContext(),
       tracingContext: {},
       agentId: 'test-agent',
+      methodType: 'stream',
     });
 
     const res = await result.aisdk.v5.getFullOutput();
@@ -69,6 +72,7 @@ describe.concurrent('MastraLLMVNext', () => {
       requestContext: new RequestContext(),
       tracingContext: {},
       agentId: 'test-agent',
+      methodType: 'stream',
     });
 
     const chunks = await convertAsyncIterableToArray(result.fullStream);
@@ -90,6 +94,7 @@ describe.concurrent('MastraLLMVNext', () => {
       requestContext: new RequestContext(),
       tracingContext: {},
       agentId: 'test-agent',
+      methodType: 'stream',
     });
 
     const chunks = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
@@ -117,6 +122,7 @@ describe.concurrent('MastraLLMVNext', () => {
         }),
       },
       agentId: 'test-agent',
+      methodType: 'stream',
     });
 
     const objectStreamChunks = await convertAsyncIterableToArray(result.objectStream);
@@ -182,6 +188,7 @@ describe.concurrent('MastraLLMVNext', () => {
         }),
       },
       agentId: 'test-agent',
+      methodType: 'stream',
     });
 
     const res = await result.getFullOutput();
@@ -213,6 +220,7 @@ describe.concurrent('MastraLLMVNext', () => {
         }),
       },
       agentId: 'test-agent',
+      methodType: 'stream',
     });
 
     const res = await result.aisdk.v5.getFullOutput();
@@ -244,6 +252,7 @@ describe.concurrent('MastraLLMVNext', () => {
         }),
       },
       agentId: 'test-agent',
+      methodType: 'stream',
     });
 
     for await (const chunk of result.fullStream) {
@@ -280,6 +289,7 @@ describe.concurrent('MastraLLMVNext', () => {
         }),
       },
       agentId: 'test-agent',
+      methodType: 'stream',
     });
 
     for await (const chunk of result.aisdk.v5.fullStream) {
