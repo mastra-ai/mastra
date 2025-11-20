@@ -839,7 +839,7 @@ describe('ToolCallFilter', () => {
       expect(resultMessages[1]!.id).toBe('msg-2');
     });
 
-    it('should handle tool messages without toolCallId', async () => {
+    it('should handle tool result-only messages (no matching call)', async () => {
       const filter = new ToolCallFilter({ exclude: ['weather'] });
 
       const messages: MastraDBMessage[] = [
