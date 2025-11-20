@@ -3,6 +3,17 @@ import { Routes, Route, BrowserRouter, Outlet, useNavigate } from 'react-router'
 
 import { Layout } from '@/components/layout';
 
+// Extend window type for Mastra config
+declare global {
+  interface Window {
+    MASTRA_BASE_PATH?: string;
+    MASTRA_SERVER_HOST?: string;
+    MASTRA_SERVER_PORT?: string;
+    MASTRA_TELEMETRY_DISABLED?: string;
+    MASTRA_HIDE_CLOUD_CTA?: string;
+  }
+}
+
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import Tools from '@/pages/tools';
 
@@ -63,11 +74,18 @@ const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
 };
 
 function App() {
+  const basePath = window.MASTRA_BASE_PATH || '';
+  const host = window.MASTRA_SERVER_HOST || 'localhost';
+  const port = window.MASTRA_SERVER_PORT || '4111';
+  // Use current protocol to support both HTTP and HTTPS
+  const protocol = window.location.protocol;
+  const baseUrl = `${protocol}//${host}:${port}${basePath}`;
+
   return (
-    <MastraReactProvider>
+    <MastraReactProvider baseUrl={baseUrl}>
       <PlaygroundQueryClient>
         <PostHogProvider>
-          <BrowserRouter>
+          <BrowserRouter basename={basePath}>
             <LinkComponentWrapper>
               <Routes>
                 <Route
