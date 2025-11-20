@@ -1,5 +1,11 @@
 # @mastra/codemod
 
+## 0.1.0-beta.2
+
+### Patch Changes
+
+- Fix `mastra-required-id`, `mcp-get-toolsets`, and `mcp-get-tools` codemods to add missing imports and instances. ([#10221](https://github.com/mastra-ai/mastra/pull/10221))
+
 ## 0.1.0-beta.1
 
 ### Patch Changes

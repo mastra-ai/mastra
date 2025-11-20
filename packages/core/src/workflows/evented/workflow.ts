@@ -506,7 +506,7 @@ export class EventedRun<
       abortController: this.abortController,
     });
 
-    console.dir({ startResult: result }, { depth: null });
+    // console.dir({ startResult: result }, { depth: null });
 
     if (result.status !== 'suspended') {
       this.cleanup?.();

@@ -121,7 +121,7 @@ In this example, the response accurately addresses the input query with specific
 ```typescript title="src/example-high-answer-relevancy.ts" showLineNumbers copy
 import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-4o-mini" });
+const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-5.1" });
 
 const inputMessages = [
   {
@@ -159,7 +159,7 @@ In this example, the response addresses the query in part but includes additiona
 ```typescript title="src/example-partial-answer-relevancy.ts" showLineNumbers copy
 import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-4o-mini" });
+const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-5.1" });
 
 const inputMessages = [
   { role: "user", content: "What should a healthy breakfast include?" },
@@ -194,7 +194,7 @@ In this example, the response does not address the query and contains informatio
 ```typescript title="src/example-low-answer-relevancy.ts" showLineNumbers copy
 import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-4o-mini" });
+const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-5.1" });
 
 const inputMessages = [
   { role: "user", content: "What are the benefits of meditation?" },

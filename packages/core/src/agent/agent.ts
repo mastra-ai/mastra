@@ -18,6 +18,7 @@ import { runScorer } from '../evals/hooks';
 import { resolveModelConfig } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
 import type { GenerateObjectResult, GenerateTextResult, StreamTextResult } from '../llm/model/base.types';
+import { isV2Model } from '../llm/model/is-v2-model';
 import { MastraLLMVNext } from '../llm/model/model.loop';
 import type { MastraLanguageModel, MastraLanguageModelV2, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
@@ -1751,7 +1752,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 let fullText = '';
                 for await (const chunk of streamResult.fullStream) {
                   if (context?.writer) {
-                    await context.writer.write(chunk);
+                    // Data chunks from writer.custom() should bubble up directly without wrapping
+                    if (chunk.type.startsWith('data-')) {
+                      // Write data chunks directly to original stream to bubble up
+                      await context.writer.custom(chunk as any);
+                    } else {
+                      await context.writer.write(chunk);
+                    }
                   }
 
                   if (chunk.type === 'text-delta') {
@@ -1769,7 +1776,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 let fullText = '';
                 for await (const chunk of streamResult.fullStream) {
                   if (context?.writer) {
-                    await context.writer.write(chunk);
+                    // Data chunks from writer.custom() should bubble up directly without wrapping
+                    if (chunk.type.startsWith('data-')) {
+                      // Write data chunks directly to original stream to bubble up
+                      await context.writer.custom(chunk as any);
+                    } else {
+                      await context.writer.write(chunk);
+                    }
                   }
 
                   if (chunk.type === 'text-delta') {
@@ -2293,7 +2306,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       const resolvedModel =
         typeof modelToUse === 'function' ? await modelToUse({ requestContext, mastra: this.#mastra }) : modelToUse;
 
-      if ((resolvedModel as MastraLanguageModel).specificationVersion !== 'v2') {
+      if ((resolvedModel as MastraLanguageModel)?.specificationVersion !== 'v2') {
         const mastraError = new MastraError({
           id: 'AGENT_PREPARE_MODELS_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
           domain: ErrorDomain.AGENT,
@@ -2307,9 +2320,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         this.logger.error(mastraError.toString());
         throw mastraError;
       }
+
       return [
         {
           id: 'main',
+          // TODO fix type check
           model: resolvedModel as MastraLanguageModelV2,
           maxRetries: this.maxRetries ?? 0,
           enabled: true,
@@ -2321,7 +2336,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       this.model.map(async modelConfig => {
         const model = await this.resolveModelConfig(modelConfig.model, requestContext);
 
-        if (model.specificationVersion !== 'v2') {
+        if (!isV2Model(model)) {
           const mastraError = new MastraError({
             id: 'AGENT_PREPARE_MODELS_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
             domain: ErrorDomain.AGENT,
@@ -2354,7 +2369,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
         return {
           id: modelId,
-          model: model as MastraLanguageModelV2,
+          model: model,
           maxRetries: modelConfig.maxRetries ?? 0,
           enabled: modelConfig.enabled ?? true,
         };
