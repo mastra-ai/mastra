@@ -33,3 +33,16 @@ export const isWorkflowExecutionDataChunkType = (
     chunk.payload.type?.startsWith('data-')
   );
 };
+
+export function safeParseErrorObject(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message || error.name || 'Error';
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String(error.message);
+  }
+  return 'Error';
+}
