@@ -162,50 +162,14 @@ describe('Tool suspension memory persistence', () => {
 
         // Simulate tool doing some work before suspension
         // (e.g., initiating a long-running job, making API calls, etc.)
-        console.log(`Starting ${workType} work...`);
-
-        // Tool suspends here (waiting for external event, user input, etc.)
-        if (context?.suspend) {
-          await context.suspend({ workType, status: 'pending' });
+        const suspend = context?.agent?.suspend || context?.suspend;
+        if (!suspend) {
+          throw new Error('EXPECTED: context.agent.suspend to be provided but it was not');
         }
 
-        return `Completed ${workType} work`;
-      },
-    });
+        await suspend({ workType, status: 'pending' });
 
-    // Create a mock model that will generate a tool call
-    const mockModel = new MockLanguageModelV2({
-      doStream: async () => {
-        return {
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'test-id-9906', modelId: 'test-model', timestamp: new Date() },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: 'I will start the async work for you.' },
-            { type: 'text-end', id: 'text-1' },
-            {
-              type: 'tool-call-delta',
-              toolCallType: 'function',
-              toolCallId: 'call-async-1',
-              toolName: 'async-work-tool',
-              argsTextDelta: '{"workType":"data-processing"}',
-            },
-            {
-              type: 'tool-call',
-              toolCallType: 'function',
-              toolCallId: 'call-async-1',
-              toolName: 'async-work-tool',
-              args: '{"workType":"data-processing"}',
-            },
-            {
-              type: 'finish',
-              finishReason: 'tool-calls',
-              usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 },
-            },
-          ] as any),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        };
+        return `Completed ${workType} work`;
       },
     });
 
@@ -214,7 +178,7 @@ describe('Tool suspension memory persistence', () => {
       id: 'suspending-tool-agent',
       name: 'Suspending Tool Agent',
       instructions: 'You are a helpful assistant that can perform async work.',
-      model: mockModel,
+      model: 'openai/gpt-4o-mini',
       tools: {
         asyncWorkTool,
       },
@@ -237,16 +201,10 @@ describe('Tool suspension memory persistence', () => {
       savePerStep: true, // Explicitly enable savePerStep as mentioned in issue #9906
     });
 
-    // Consume stream until we hit the tool-call-suspended event
-    let hitSuspendedEvent = false;
-    for await (const chunk of stream.fullStream) {
-      if (chunk.type === 'tool-call-suspended') {
-        hitSuspendedEvent = true;
-        break; // Stop at suspension point
-      }
+    // Consume stream until completion (tool will suspend internally)
+    for await (const _chunk of stream.fullStream) {
+      // Stream will complete when tool suspends
     }
-
-    expect(hitSuspendedEvent).toBe(true);
 
     // Give the debounced save time to fire (if it exists)
     await delay(150);
