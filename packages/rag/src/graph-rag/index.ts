@@ -5,7 +5,6 @@
  *  - Utilize metadata for richer connections
  *  - Improve graph traversal and querying using types
  */
-
 type SupportedEdgeType = 'semantic';
 
 // Types for graph nodes and edges
@@ -246,11 +245,13 @@ export class GraphRAG {
     topK = 10,
     randomWalkSteps = 100,
     restartProb = 0.15,
+    filter,
   }: {
     query: number[];
     topK?: number;
     randomWalkSteps?: number;
     restartProb?: number;
+    filter?: Record<string, any>
   }): RankedNode[] {
     if (!query || query.length !== this.dimension) {
       throw new Error(`Query embedding must have dimension ${this.dimension}`);
@@ -264,8 +265,18 @@ export class GraphRAG {
     if (restartProb <= 0 || restartProb >= 1) {
       throw new Error('Restart probability must be between 0 and 1');
     }
+
+    // apply metadata filter if provided
+    let nodesToSearch = Array.from(this.nodes.values());
+    if (filter) {
+      nodesToSearch = nodesToSearch.filter(node => {
+        if (!node.metadata) return false;
+        return Object.entries(filter).every(([key, value]) => node.metadata?.[key] === value);
+      })
+    }
+
     // Retrieve nodes and calculate similarity
-    const similarities = Array.from(this.nodes.values()).map(node => ({
+    const similarities = nodesToSearch.map(node => ({
       node,
       similarity: this.cosineSimilarity(query, node.embedding!),
     }));

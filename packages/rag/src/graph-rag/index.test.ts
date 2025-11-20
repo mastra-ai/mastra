@@ -190,6 +190,34 @@ describe('GraphRAG', () => {
       );
     });
 
+    it('should apply metadata filters correctly', () => {
+      const graph = new GraphRAG(3);
+
+      graph.addNode({
+        id: '1',
+        content: 'Node 1',
+        embedding: [1, 2, 3],
+        metadata: { type: 'a' },
+      });
+      graph.addNode({
+        id: '2',
+        content: 'Node 2',
+        embedding: [4, 5, 6],
+        metadata: { type: 'b' },
+      });
+
+      const results = graph.query({
+        query: [1, 2, 3],
+        topK: 10,
+        randomWalkSteps: 5,
+        restartProb: 0.2,
+        filter: { type: 'a' },
+      });
+
+      expect(results.length).toBe(1);
+      expect(results[0]?.id).toBe('1');
+    });
+
     it('should return the top ranked nodes', () => {
       const graph = new GraphRAG(3);
       const node1: GraphNode = {
