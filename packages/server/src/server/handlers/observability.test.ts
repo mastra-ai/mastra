@@ -159,10 +159,8 @@ describe('Observability Handlers', () => {
 
       const result = await getTracesPaginatedHandler({
         mastra: mockMastra,
-        body: {
-          filters: { name: 'test' },
-          pagination: { page: 1, perPage: 10 },
-        },
+        filters: { name: 'test' },
+        pagination: { page: 1, perPage: 10 },
       });
 
       expect(result).toEqual(mockResult);
@@ -173,7 +171,7 @@ describe('Observability Handlers', () => {
       expect(handleErrorSpy).not.toHaveBeenCalled();
     });
 
-    it('should work with minimal body parameters', async () => {
+    it('should work without filters or pagination', async () => {
       const mockResult = {
         traces: [],
         totalItems: 0,
@@ -186,17 +184,10 @@ describe('Observability Handlers', () => {
 
       const result = await getTracesPaginatedHandler({
         mastra: mockMastra,
-        body: {
-          filters: {},
-          pagination: {},
-        },
       });
 
       expect(result).toEqual(mockResult);
-      expect(mockStorage.getTracesPaginated).toHaveBeenCalledWith({
-        filters: {},
-        pagination: {},
-      });
+      expect(mockStorage.getTracesPaginated).toHaveBeenCalledWith({});
     });
 
     it('should throw 500 when storage is not available', async () => {
@@ -205,14 +196,12 @@ describe('Observability Handlers', () => {
       await expect(
         getTracesPaginatedHandler({
           mastra: mastraWithoutStorage,
-          body: { filters: {}, pagination: {} },
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
         await getTracesPaginatedHandler({
           mastra: mastraWithoutStorage,
-          body: { filters: {}, pagination: {} },
         });
       } catch (error) {
         expect(error).toBeInstanceOf(HTTPException);
@@ -221,44 +210,19 @@ describe('Observability Handlers', () => {
       }
     });
 
-    it('should throw 400 when body is missing', async () => {
-      await expect(
-        getTracesPaginatedHandler({
-          mastra: mockMastra,
-          // body is undefined
-        }),
-      ).rejects.toThrow(HTTPException);
-
-      try {
-        await getTracesPaginatedHandler({
-          mastra: mockMastra,
-        });
-      } catch (error) {
-        expect(error).toBeInstanceOf(HTTPException);
-        expect(error.status).toBe(400);
-        expect(error.message).toBe('Request body is required');
-      }
-    });
-
     describe('pagination validation', () => {
       it('should throw 400 when page is negative', async () => {
         await expect(
           getTracesPaginatedHandler({
             mastra: mockMastra,
-            body: {
-              filters: {},
-              pagination: { page: -1, perPage: 10 },
-            },
+            pagination: { page: -1, perPage: 10 },
           }),
         ).rejects.toThrow(HTTPException);
 
         try {
           await getTracesPaginatedHandler({
             mastra: mockMastra,
-            body: {
-              filters: {},
-              pagination: { page: -1, perPage: 10 },
-            },
+            pagination: { page: -1, perPage: 10 },
           });
         } catch (error) {
           expect(error).toBeInstanceOf(HTTPException);
@@ -271,20 +235,14 @@ describe('Observability Handlers', () => {
         await expect(
           getTracesPaginatedHandler({
             mastra: mockMastra,
-            body: {
-              filters: {},
-              pagination: { page: 1, perPage: -1 },
-            },
+            pagination: { page: 1, perPage: -1 },
           }),
         ).rejects.toThrow(HTTPException);
 
         try {
           await getTracesPaginatedHandler({
             mastra: mockMastra,
-            body: {
-              filters: {},
-              pagination: { page: 1, perPage: -1 },
-            },
+            pagination: { page: 1, perPage: -1 },
           });
         } catch (error) {
           expect(error).toBeInstanceOf(HTTPException);
@@ -299,15 +257,11 @@ describe('Observability Handlers', () => {
 
         const result = await getTracesPaginatedHandler({
           mastra: mockMastra,
-          body: {
-            filters: {},
-            pagination: { page: 0, perPage: 0 },
-          },
+          pagination: { page: 0, perPage: 0 },
         });
 
         expect(result).toEqual(mockResult);
         expect(mockStorage.getTracesPaginated).toHaveBeenCalledWith({
-          filters: {},
           pagination: { page: 0, perPage: 0 },
         });
       });
@@ -323,13 +277,11 @@ describe('Observability Handlers', () => {
 
         const result = await getTracesPaginatedHandler({
           mastra: mockMastra,
-          body: {
-            filters: {},
-            pagination: {
-              dateRange: { start: startDate, end: endDate },
-              page: 1,
-              perPage: 10,
-            },
+          filters: {},
+          pagination: {
+            dateRange: { start: startDate, end: endDate },
+            page: 1,
+            perPage: 10,
           },
         });
 
@@ -348,13 +300,10 @@ describe('Observability Handlers', () => {
         await expect(
           getTracesPaginatedHandler({
             mastra: mockMastra,
-            body: {
-              filters: {},
-              pagination: {
-                dateRange: { start: 'invalid-date' as any },
-                page: 1,
-                perPage: 10,
-              },
+            pagination: {
+              dateRange: { start: 'invalid-date' as any },
+              page: 1,
+              perPage: 10,
             },
           }),
         ).rejects.toThrow(HTTPException);
@@ -362,13 +311,10 @@ describe('Observability Handlers', () => {
         try {
           await getTracesPaginatedHandler({
             mastra: mockMastra,
-            body: {
-              filters: {},
-              pagination: {
-                dateRange: { start: 'invalid-date' as any },
-                page: 1,
-                perPage: 10,
-              },
+            pagination: {
+              dateRange: { start: 'invalid-date' as any },
+              page: 1,
+              perPage: 10,
             },
           });
         } catch (error) {
@@ -382,13 +328,10 @@ describe('Observability Handlers', () => {
         await expect(
           getTracesPaginatedHandler({
             mastra: mockMastra,
-            body: {
-              filters: {},
-              pagination: {
-                dateRange: { end: 'invalid-date' as any },
-                page: 1,
-                perPage: 10,
-              },
+            pagination: {
+              dateRange: { end: 'invalid-date' as any },
+              page: 1,
+              perPage: 10,
             },
           }),
         ).rejects.toThrow(HTTPException);
@@ -396,13 +339,10 @@ describe('Observability Handlers', () => {
         try {
           await getTracesPaginatedHandler({
             mastra: mockMastra,
-            body: {
-              filters: {},
-              pagination: {
-                dateRange: { end: 'invalid-date' as any },
-                page: 1,
-                perPage: 10,
-              },
+            pagination: {
+              dateRange: { end: 'invalid-date' as any },
+              page: 1,
+              perPage: 10,
             },
           });
         } catch (error) {
@@ -420,7 +360,6 @@ describe('Observability Handlers', () => {
       await expect(
         getTracesPaginatedHandler({
           mastra: mockMastra,
-          body: { filters: {}, pagination: {} },
         }),
       ).rejects.toThrow();
     });
@@ -451,7 +390,7 @@ describe('Observability Handlers', () => {
 
       const result = await scoreTracesHandler({
         mastra: mockMastra,
-        body: requestBody,
+        ...requestBody,
       });
 
       expect(result).toEqual({
@@ -466,24 +405,6 @@ describe('Observability Handlers', () => {
         targets: requestBody.targets,
         mastra: mockMastra,
       });
-    });
-
-    it('should throw 400 when request body is missing', async () => {
-      await expect(
-        scoreTracesHandler({
-          mastra: mockMastra,
-        }),
-      ).rejects.toThrow(HTTPException);
-
-      try {
-        await scoreTracesHandler({
-          mastra: mockMastra,
-        });
-      } catch (error) {
-        expect(error).toBeInstanceOf(HTTPException);
-        expect(error.status).toBe(400);
-        expect(error.message).toBe('Request body is required');
-      }
     });
 
     it('should throw 400 when scorerId is missing', async () => {
@@ -516,20 +437,16 @@ describe('Observability Handlers', () => {
       await expect(
         scoreTracesHandler({
           mastra: mockMastra,
-          body: {
-            scorerName: 'test-scorer',
-            targets: [],
-          },
+          scorerName: 'test-scorer',
+          targets: [],
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
         await scoreTracesHandler({
           mastra: mockMastra,
-          body: {
-            scorerName: 'test-scorer',
-            targets: [],
-          },
+          scorerName: 'test-scorer',
+          targets: [],
         });
       } catch (error) {
         expect(error).toBeInstanceOf(HTTPException);
@@ -544,20 +461,16 @@ describe('Observability Handlers', () => {
       await expect(
         scoreTracesHandler({
           mastra: mockMastra,
-          body: {
-            scorerName: 'non-existent-scorer',
-            targets: [{ traceId: 'trace-123' }],
-          },
+          scorerName: 'non-existent-scorer',
+          targets: [{ traceId: 'trace-123' }],
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
         await scoreTracesHandler({
           mastra: mockMastra,
-          body: {
-            scorerName: 'non-existent-scorer',
-            targets: [{ traceId: 'trace-123' }],
-          },
+          scorerName: 'non-existent-scorer',
+          targets: [{ traceId: 'trace-123' }],
         });
       } catch (error) {
         expect(error).toBeInstanceOf(HTTPException);
@@ -572,20 +485,16 @@ describe('Observability Handlers', () => {
       await expect(
         scoreTracesHandler({
           mastra: mastraWithoutStorage,
-          body: {
-            scorerName: 'test-scorer',
-            targets: [{ traceId: 'trace-123' }],
-          },
+          scorerName: 'test-scorer',
+          targets: [{ traceId: 'trace-123' }],
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
         await scoreTracesHandler({
           mastra: mastraWithoutStorage,
-          body: {
-            scorerName: 'test-scorer',
-            targets: [{ traceId: 'trace-123' }],
-          },
+          scorerName: 'test-scorer',
+          targets: [{ traceId: 'trace-123' }],
         });
       } catch (error) {
         expect(error).toBeInstanceOf(HTTPException);
@@ -608,10 +517,8 @@ describe('Observability Handlers', () => {
       // Should still return success response since processing is fire-and-forget
       const result = await scoreTracesHandler({
         mastra: mockMastra,
-        body: {
-          scorerName: 'test-scorer',
-          targets: [{ traceId: 'trace-123' }],
-        },
+        scorerName: 'test-scorer',
+        targets: [{ traceId: 'trace-123' }],
       });
 
       expect(result).toEqual({
@@ -644,7 +551,7 @@ describe('Observability Handlers', () => {
         mastra: mockMastra,
         traceId: 'test-trace-1',
         spanId: 'test-span-1',
-        pagination,
+        ...pagination,
       });
 
       expect(mockStorage.listScoresBySpan).toHaveBeenCalledWith({
@@ -674,7 +581,7 @@ describe('Observability Handlers', () => {
           mastra: mastraWithoutStorage,
           traceId: 'test-trace-1',
           spanId: 'test-span-1',
-          pagination,
+          ...pagination,
         }),
       ).rejects.toThrow(HTTPException);
     });
@@ -690,7 +597,7 @@ describe('Observability Handlers', () => {
           mastra: mastraWithoutStorage,
           traceId: 'test-trace-1',
           spanId: 'test-span-1',
-          pagination,
+          ...pagination,
         }),
       ).rejects.toThrow(HTTPException);
     });
@@ -709,7 +616,7 @@ describe('Observability Handlers', () => {
           mastra: mockMastra,
           traceId: 'test-trace-1',
           spanId: 'test-span-1',
-          pagination,
+          ...pagination,
         });
       } catch (error) {
         expect(error.status).toBe(404);
@@ -725,7 +632,7 @@ describe('Observability Handlers', () => {
           mastra: mockMastra,
           traceId: '',
           spanId: 'test-span-1',
-          pagination,
+          ...pagination,
         }),
       ).rejects.toThrow(HTTPException);
     });
@@ -738,7 +645,7 @@ describe('Observability Handlers', () => {
           mastra: mockMastra,
           traceId: 'test-trace-1',
           spanId: '',
-          pagination,
+          ...pagination,
         }),
       ).rejects.toThrow(HTTPException);
     });
@@ -751,7 +658,7 @@ describe('Observability Handlers', () => {
           mastra: mockMastra,
           traceId: '',
           spanId: '',
-          pagination,
+          ...pagination,
         }),
       ).rejects.toThrow(HTTPException);
     });
