@@ -15,34 +15,36 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
 
   constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
     super(options, observabilityInstance);
-    this.id = generateSpanId();
 
-    // Set trace ID based on context:
-    if (options.parent) {
-      // Child span inherits trace ID from parent span
-      this.traceId = options.parent.traceId;
-    } else if (options.traceId) {
-      // Root span with provided trace ID
-      if (isValidTraceId(options.traceId)) {
-        this.traceId = options.traceId;
-      } else {
-        console.error(
-          `[Mastra Tracing] Invalid traceId: must be 1-32 hexadecimal characters, got "${options.traceId}". Generating new trace ID.`,
-        );
-        this.traceId = generateTraceId();
+    // If bride and not internal span, use bridge to init span
+    const bridge = observabilityInstance.getBridge();
+    if (bridge && !this.isInternal) {
+      const bridgeIds = bridge.createSpan(options);
+      if (bridgeIds) {
+        this.id = bridgeIds.spanId;
+        this.traceId = bridgeIds.traceId;
+        this.parentSpanId = bridgeIds.parentSpanId;
+        return;
       }
-    } else {
-      // Root span without provided trace ID - generate new
-      this.traceId = generateTraceId();
     }
 
-    // Set parent span ID if provided
-    if (!options.parent && options.parentSpanId) {
+    // No bridge or bridge failed - generate IDs ourselves
+    if (options.parent) {
+      this.traceId = options.parent.traceId;
+      this.parentSpanId = options.parent.id;
+      this.id = generateSpanId();
+      return;
+    }
+
+    this.traceId = getOrCreateTraceId(options);
+    this.id = generateSpanId();
+
+    if (options.parentSpanId) {
       if (isValidSpanId(options.parentSpanId)) {
         this.parentSpanId = options.parentSpanId;
       } else {
         console.error(
-          `[Mastra Tracing] Invalid parentSpanId: must be 1-16 hexadecimal characters, got "${options.parentSpanId}". Ignoring parent span ID.`,
+          `[Mastra Tracing] Invalid parentSpanId: must be 1-16 hexadecimal characters, got "${options.parentSpanId}". Ignoring.`,
         );
       }
     }
@@ -183,4 +185,17 @@ function isValidTraceId(traceId: string): boolean {
  */
 function isValidSpanId(spanId: string): boolean {
   return /^[0-9a-f]{1,16}$/i.test(spanId);
+}
+
+function getOrCreateTraceId(options: CreateSpanOptions<SpanType>): string {
+  if (options.traceId) {
+    if (isValidTraceId(options.traceId)) {
+      return options.traceId;
+    } else {
+      console.error(
+        `[Mastra Tracing] Invalid traceId: must be 1-32 hexadecimal characters, got "${options.traceId}". Generating new trace ID.`,
+      );
+    }
+  }
+  return generateTraceId();
 }
