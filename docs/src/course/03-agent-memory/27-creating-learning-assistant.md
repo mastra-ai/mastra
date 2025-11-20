@@ -88,7 +88,7 @@ export const learningAssistantAgent = new Agent({
     Always be encouraging and supportive. Focus on building the user's confidence
     and celebrating their progress.
   `,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   memory: learningMemory,
 });
 

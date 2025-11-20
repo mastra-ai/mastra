@@ -27,7 +27,7 @@ export const memoryAgent = new Agent({
     When a user shares information about themselves, acknowledge it and remember it for future reference.
     If asked about something mentioned earlier in the conversation, recall it accurately.
   `,
-  model: openai("gpt-5.1"), // You can use "gpt-3.5-turbo" if you prefer
+  model: openai("gpt-4o"), // You can use "gpt-3.5-turbo" if you prefer
   memory: memory,
 });
 ```

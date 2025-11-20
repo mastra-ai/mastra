@@ -52,7 +52,7 @@ export const memoryAgent = new Agent({
     Always refer to your working memory before asking for information the user has already provided.
     Use the information in your working memory to provide personalized responses.
   `,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   memory: memory,
 });
 ```
