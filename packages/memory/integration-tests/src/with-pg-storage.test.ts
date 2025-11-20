@@ -78,7 +78,12 @@ describe('Memory with PostgresStore Integration', () => {
 
           for (const row of tablesResult.rows) {
             const tableName = row.tablename;
-            await client.query(`DELETE FROM "public"."${tableName}" WHERE metadata->>'resource_id' = $1`, ['resource']);
+            // Clean up all test data - both 'test-resource' and any UUID-based resources
+            await client.query(`
+              DELETE FROM "public"."${tableName}" 
+              WHERE metadata->>'resource_id' LIKE 'test-%' 
+                 OR metadata->>'resource_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            `);
           }
         } finally {
           client.release();
