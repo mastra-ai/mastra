@@ -22,11 +22,11 @@ export class MockMemory extends MastraMemory {
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.storage.stores!.memory.getThreadById({ threadId });
+    return this.storage.getThreadById({ threadId });
   }
 
   async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {
-    return this.storage.stores!.memory.saveThread({ thread });
+    return this.storage.saveThread({ thread });
   }
 
   async saveMessages({
@@ -42,20 +42,20 @@ export class MockMemory extends MastraMemory {
       .add(messages, 'memory')
       .get.all.db();
 
-    return this.storage.stores!.memory.saveMessages({ messages: dbMessages });
+    return this.storage.saveMessages({ messages: dbMessages });
   }
 
   async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    return this.storage.stores!.memory.listThreadsByResourceId(args);
+    return this.storage.listThreadsByResourceId(args);
   }
 
   async recall(args: StorageListMessagesInput & { threadConfig?: MemoryConfig; vectorSearchString?: string }): Promise<{
     messages: MastraDBMessage[];
   }> {
     // Get raw messages from storage
-    const result = await this.storage.stores!.memory.listMessages({
+    const result = await this.storage.listMessages({
       threadId: args.threadId,
       resourceId: args.resourceId,
       perPage: args.perPage,
@@ -69,14 +69,14 @@ export class MockMemory extends MastraMemory {
   }
 
   async deleteThread(threadId: string) {
-    return this.storage.stores!.memory.deleteThread({ threadId });
+    return this.storage.deleteThread({ threadId });
   }
 
   async deleteMessages(messageIds: MessageDeleteInput): Promise<void> {
     const ids = Array.isArray(messageIds)
       ? messageIds?.map(item => (typeof item === 'string' ? item : item.id))
       : [messageIds];
-    return this.storage.stores!.memory.deleteMessages(ids);
+    return this.storage.deleteMessages(ids);
   }
 
   async getWorkingMemory({
@@ -102,7 +102,7 @@ export class MockMemory extends MastraMemory {
       return null;
     }
 
-    const resource = await this.storage.stores!.memory.getResourceById({ resourceId: id });
+    const resource = await this.storage.getResourceById({ resourceId: id });
     return resource?.workingMemory || null;
   }
 
@@ -178,7 +178,7 @@ export class MockMemory extends MastraMemory {
       throw new Error(`Cannot update working memory: ${scope} ID is required`);
     }
 
-    await this.storage.stores!.memory.updateResource({
+    await this.storage.updateResource({
       resourceId: id,
       workingMemory,
     });
