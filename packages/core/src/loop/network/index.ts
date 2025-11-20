@@ -748,7 +748,7 @@ export async function createNetworkLoop({
       // let result: any;
       // let stepResults: Record<string, any> = {};
       let chunks: ChunkType[] = [];
-      for await (const chunk of stream) {
+      for await (const chunk of stream.fullStream) {
         chunks.push(chunk);
         await writer?.write({
           type: `workflow-execution-event-${chunk.type}`,
