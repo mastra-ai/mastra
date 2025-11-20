@@ -14,6 +14,7 @@ describe('ToolCallFilter', () => {
     it('should exclude all tool calls and tool results', async () => {
       const filter = new ToolCallFilter();
 
+      const baseTime = Date.now();
       const messages: MastraDBMessage[] = [
         {
           id: 'msg-1',
@@ -23,7 +24,7 @@ describe('ToolCallFilter', () => {
             content: 'What is the weather?',
             parts: [{ type: 'text' as const, text: 'What is the weather?' }],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime),
         },
         {
           id: 'msg-2',
@@ -43,7 +44,7 @@ describe('ToolCallFilter', () => {
               },
             ],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime + 1),
         },
         {
           id: 'msg-3',
@@ -64,7 +65,7 @@ describe('ToolCallFilter', () => {
               },
             ],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime + 2),
         },
         {
           id: 'msg-4',
@@ -74,7 +75,7 @@ describe('ToolCallFilter', () => {
             content: 'The weather is sunny and 72°F',
             parts: [{ type: 'text' as const, text: 'The weather is sunny and 72°F' }],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime + 3),
         },
       ];
 
@@ -161,6 +162,7 @@ describe('ToolCallFilter', () => {
     it('should exclude multiple tool calls in sequence', async () => {
       const filter = new ToolCallFilter();
 
+      const baseTime = Date.now();
       const messages: MastraDBMessage[] = [
         {
           id: 'msg-1',
@@ -170,7 +172,7 @@ describe('ToolCallFilter', () => {
             content: 'What is 2+2 and the weather?',
             parts: [{ type: 'text' as const, text: 'What is 2+2 and the weather?' }],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime),
         },
         {
           id: 'msg-2',
@@ -190,7 +192,7 @@ describe('ToolCallFilter', () => {
               },
             ],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime + 1),
         },
         {
           id: 'msg-3',
@@ -211,7 +213,7 @@ describe('ToolCallFilter', () => {
               },
             ],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime + 2),
         },
         {
           id: 'msg-4',
@@ -231,7 +233,7 @@ describe('ToolCallFilter', () => {
               },
             ],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime + 3),
         },
         {
           id: 'msg-5',
@@ -252,7 +254,7 @@ describe('ToolCallFilter', () => {
               },
             ],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime + 4),
         },
         {
           id: 'msg-6',
@@ -262,7 +264,7 @@ describe('ToolCallFilter', () => {
             content: '2+2 is 4 and the weather is sunny',
             parts: [{ type: 'text' as const, text: '2+2 is 4 and the weather is sunny' }],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime + 5),
         },
       ];
 
@@ -296,6 +298,7 @@ describe('ToolCallFilter', () => {
     it('should exclude only specified tool calls', async () => {
       const filter = new ToolCallFilter({ exclude: ['weather'] });
 
+      const baseTime = Date.now();
       const messages: MastraDBMessage[] = [
         {
           id: 'msg-1',
@@ -305,7 +308,7 @@ describe('ToolCallFilter', () => {
             content: 'What is 2+2 and the weather?',
             parts: [{ type: 'text' as const, text: 'What is 2+2 and the weather?' }],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime),
         },
         {
           id: 'msg-2',
@@ -325,7 +328,7 @@ describe('ToolCallFilter', () => {
               },
             ],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime + 1),
         },
         {
           id: 'msg-3',
@@ -346,7 +349,7 @@ describe('ToolCallFilter', () => {
               },
             ],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime + 2),
         },
         {
           id: 'msg-4',
@@ -366,7 +369,7 @@ describe('ToolCallFilter', () => {
               },
             ],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime + 3),
         },
         {
           id: 'msg-5',
@@ -387,7 +390,7 @@ describe('ToolCallFilter', () => {
               },
             ],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime + 4),
         },
         {
           id: 'msg-6',
@@ -397,7 +400,7 @@ describe('ToolCallFilter', () => {
             content: 'Final answer',
             parts: [{ type: 'text' as const, text: 'Final answer' }],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime + 5),
         },
       ];
 
@@ -431,6 +434,7 @@ describe('ToolCallFilter', () => {
     it('should exclude multiple specified tools', async () => {
       const filter = new ToolCallFilter({ exclude: ['weather', 'search'] });
 
+      const baseTime = Date.now();
       const messages: MastraDBMessage[] = [
         {
           id: 'msg-1',
@@ -440,7 +444,7 @@ describe('ToolCallFilter', () => {
             content: 'Calculate, search, and check weather',
             parts: [{ type: 'text' as const, text: 'Calculate, search, and check weather' }],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime),
         },
         {
           id: 'msg-2',
@@ -460,7 +464,7 @@ describe('ToolCallFilter', () => {
               },
             ],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime + 1),
         },
         {
           id: 'msg-3',
@@ -481,7 +485,7 @@ describe('ToolCallFilter', () => {
               },
             ],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime + 2),
         },
         {
           id: 'msg-4',
@@ -501,7 +505,7 @@ describe('ToolCallFilter', () => {
               },
             ],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime + 3),
         },
         {
           id: 'msg-5',
@@ -522,7 +526,7 @@ describe('ToolCallFilter', () => {
               },
             ],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime + 4),
         },
         {
           id: 'msg-6',
@@ -542,7 +546,7 @@ describe('ToolCallFilter', () => {
               },
             ],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime + 5),
         },
         {
           id: 'msg-7',
@@ -563,7 +567,7 @@ describe('ToolCallFilter', () => {
               },
             ],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime + 6),
         },
       ];
 
@@ -599,6 +603,7 @@ describe('ToolCallFilter', () => {
     it('should handle empty exclude array (keep all messages)', async () => {
       const filter = new ToolCallFilter({ exclude: [] });
 
+      const baseTime = Date.now();
       const messages: MastraDBMessage[] = [
         {
           id: 'msg-1',
@@ -608,7 +613,7 @@ describe('ToolCallFilter', () => {
             content: 'What is the weather?',
             parts: [{ type: 'text' as const, text: 'What is the weather?' }],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime),
         },
         {
           id: 'msg-2',
@@ -628,7 +633,7 @@ describe('ToolCallFilter', () => {
               },
             ],
           },
-          createdAt: new Date('2024-01-01T12:00:00Z'),
+          createdAt: new Date(baseTime + 1),
         },
         {
           id: 'msg-3',
@@ -649,7 +654,7 @@ describe('ToolCallFilter', () => {
               },
             ],
           },
-          createdAt: new Date('2024-01-01T12:00:01Z'),
+          createdAt: new Date(baseTime + 2),
         },
       ];
 
@@ -663,16 +668,17 @@ describe('ToolCallFilter', () => {
       });
 
       // When exclude is empty, all original messages are returned (no filtering)
+      // After consolidation, msg-2 and msg-3 are merged into a single message with id 'msg-2'
       const resultMessages = Array.isArray(result) ? result : result.get.all.db();
-      expect(resultMessages).toHaveLength(3);
+      expect(resultMessages).toHaveLength(2);
       expect(resultMessages[0]!.id).toBe('msg-1');
       expect(resultMessages[1]!.id).toBe('msg-2');
-      expect(resultMessages[2]!.id).toBe('msg-3');
     });
 
     it('should handle tool calls that are not in exclude list', async () => {
       const filter = new ToolCallFilter({ exclude: ['nonexistent'] });
 
+      const baseTime = Date.now();
       const messages: MastraDBMessage[] = [
         {
           id: 'msg-1',
@@ -682,7 +688,7 @@ describe('ToolCallFilter', () => {
             content: 'What is the weather?',
             parts: [{ type: 'text' as const, text: 'What is the weather?' }],
           },
-          createdAt: new Date(),
+          createdAt: new Date(baseTime),
         },
         {
           id: 'msg-2',
@@ -702,7 +708,7 @@ describe('ToolCallFilter', () => {
               },
             ],
           },
-          createdAt: new Date('2024-01-01T12:00:00Z'),
+          createdAt: new Date(baseTime + 1),
         },
         {
           id: 'msg-3',
@@ -723,7 +729,7 @@ describe('ToolCallFilter', () => {
               },
             ],
           },
-          createdAt: new Date('2024-01-01T12:00:01Z'),
+          createdAt: new Date(baseTime + 2),
         },
       ];
 
@@ -737,17 +743,15 @@ describe('ToolCallFilter', () => {
       });
 
       // Should keep all messages since 'weather' is not in exclude list
+      // After consolidation, msg-2 and msg-3 are merged into a single message with id 'msg-2'
       const resultMessages = Array.isArray(result) ? result : result.get.all.db();
-      expect(resultMessages).toHaveLength(3);
+      expect(resultMessages).toHaveLength(2);
 
-      // Messages are sorted by createdAt, so msg-2 and msg-3 come first (2024 timestamps)
-      expect(resultMessages[0]!.id).toBe('msg-2');
-      expect(resultMessages[0]!.content.parts[0]!.type).toBe('tool-invocation');
-
-      expect(resultMessages[1]!.id).toBe('msg-3');
+      // Messages are sorted by createdAt
+      expect(resultMessages[0]!.id).toBe('msg-1');
+      
+      expect(resultMessages[1]!.id).toBe('msg-2');
       expect(resultMessages[1]!.content.parts[0]!.type).toBe('tool-invocation');
-
-      expect(resultMessages[2]!.id).toBe('msg-1');
     });
   });
 

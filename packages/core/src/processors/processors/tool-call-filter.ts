@@ -48,7 +48,9 @@ export class ToolCallFilter implements InputProcessor {
     abort: (reason?: string) => never;
     runtimeContext?: RequestContext;
   }): Promise<MessageList | MastraDBMessage[]> {
-    const { messages } = args;
+    const { messageList } = args;
+    // Use messages from messageList to respect consolidation
+    const messages = messageList.get.all.db();
 
     // Helper to check if a message has tool invocations
     const hasToolInvocations = (message: MastraDBMessage): boolean => {
