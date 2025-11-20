@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { AzureGateway } from './azure';
+import { AzureOpenAIGateway } from './azure';
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch as any;
 
-describe('AzureGateway', () => {
-  let gateway: AzureGateway;
+describe('AzureOpenAIGateway', () => {
+  let gateway: AzureOpenAIGateway;
 
   beforeEach(() => {
-    gateway = new AzureGateway();
+    gateway = new AzureOpenAIGateway();
     mockFetch.mockClear();
 
     delete process.env.AZURE_TENANT_ID;
@@ -126,10 +126,10 @@ describe('AzureGateway', () => {
       );
 
       expect(providers).toBeDefined();
-      expect(providers['azure']).toBeDefined();
-      expect(providers['azure'].models).toContain('my-gpt4');
-      expect(providers['azure'].models).toContain('staging-gpt-4o');
-      expect(providers['azure'].models).not.toContain('creating-deployment'); // Filtered out
+      expect(providers['azureopenai']).toBeDefined();
+      expect(providers['azureopenai'].models).toContain('my-gpt4');
+      expect(providers['azureopenai'].models).toContain('staging-gpt-4o');
+      expect(providers['azureopenai'].models).not.toContain('creating-deployment'); // Filtered out
     });
 
     it('should return ProviderConfig with correct format', async () => {
@@ -145,12 +145,12 @@ describe('AzureGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      const azureConfig = providers['azure'];
+      const azureConfig = providers['azureopenai'];
       expect(azureConfig).toBeDefined();
       expect(azureConfig.apiKeyEnvVar).toBe('AZURE_API_KEY');
       expect(azureConfig.apiKeyHeader).toBe('api-key');
       expect(azureConfig.name).toBe('Azure OpenAI');
-      expect(azureConfig.gateway).toBe('azure');
+      expect(azureConfig.gateway).toBe('azureopenai');
       expect(azureConfig.models.length).toBe(2); // Only 'Succeeded' deployments
     });
 
@@ -310,11 +310,11 @@ describe('AzureGateway', () => {
 
       expect(deploymentCalls[1][0]).toBe(firstPageResponse.nextLink);
 
-      expect(providers['azure'].models).toHaveLength(3);
-      expect(providers['azure'].models).toContain('deployment-1');
-      expect(providers['azure'].models).toContain('deployment-2');
-      expect(providers['azure'].models).toContain('deployment-3');
-      expect(providers['azure'].models).not.toContain('deployment-4');
+      expect(providers['azureopenai'].models).toHaveLength(3);
+      expect(providers['azureopenai'].models).toContain('deployment-1');
+      expect(providers['azureopenai'].models).toContain('deployment-2');
+      expect(providers['azureopenai'].models).toContain('deployment-3');
+      expect(providers['azureopenai'].models).not.toContain('deployment-4');
     });
 
     it('should return graceful fallback when Management API credentials are missing', async () => {
@@ -323,10 +323,10 @@ describe('AzureGateway', () => {
       const result = await gateway.fetchProviders();
 
       expect(result).toMatchObject({
-        azure: {
+        azureopenai: {
           apiKeyEnvVar: 'AZURE_API_KEY',
           models: [],
-          gateway: 'azure',
+          gateway: 'azureopenai',
         },
       });
     });
@@ -341,10 +341,10 @@ describe('AzureGateway', () => {
       const result = await gateway.fetchProviders();
 
       expect(result).toMatchObject({
-        azure: {
+        azureopenai: {
           apiKeyEnvVar: 'AZURE_API_KEY',
           models: [],
-          gateway: 'azure',
+          gateway: 'azureopenai',
         },
       });
     });
@@ -364,10 +364,10 @@ describe('AzureGateway', () => {
       const result = await gateway.fetchProviders();
 
       expect(result).toMatchObject({
-        azure: {
+        azureopenai: {
           apiKeyEnvVar: 'AZURE_API_KEY',
           models: [],
-          gateway: 'azure',
+          gateway: 'azureopenai',
         },
       });
     });
@@ -375,7 +375,7 @@ describe('AzureGateway', () => {
 
   describe('buildUrl', () => {
     it('should return undefined (SDK handles URL construction)', () => {
-      const url = gateway.buildUrl('azure/my-deployment');
+      const url = gateway.buildUrl('azureopenai/my-deployment');
       expect(url).toBeUndefined();
     });
   });
@@ -384,7 +384,7 @@ describe('AzureGateway', () => {
     it('should return AZURE_API_KEY from environment', async () => {
       process.env.AZURE_API_KEY = 'test-api-key';
 
-      const apiKey = await gateway.getApiKey('azure/my-deployment');
+      const apiKey = await gateway.getApiKey('azureopenai/my-deployment');
 
       expect(apiKey).toBe('test-api-key');
     });
@@ -392,7 +392,7 @@ describe('AzureGateway', () => {
     it('should throw error when AZURE_API_KEY is missing', async () => {
       delete process.env.AZURE_API_KEY;
 
-      await expect(gateway.getApiKey('azure/my-deployment')).rejects.toThrow('Missing AZURE_API_KEY');
+      await expect(gateway.getApiKey('azureopenai/my-deployment')).rejects.toThrow('Missing AZURE_API_KEY');
     });
   });
 
@@ -402,7 +402,7 @@ describe('AzureGateway', () => {
       process.env.AZURE_API_KEY = 'test-key';
 
       await expect(
-        gateway.resolveLanguageModel({ modelId: 'my-gpt4', providerId: 'azure', apiKey: 'test-key' }),
+        gateway.resolveLanguageModel({ modelId: 'my-gpt4', providerId: 'azureopenai', apiKey: 'test-key' }),
       ).resolves.toBeDefined();
     });
 
@@ -412,7 +412,7 @@ describe('AzureGateway', () => {
       await expect(
         gateway.resolveLanguageModel({
           modelId: 'my-gpt4',
-          providerId: 'azure',
+          providerId: 'azureopenai',
           apiKey: 'test-key',
         }),
       ).rejects.toThrow('Missing AZURE_RESOURCE_NAME');
@@ -423,7 +423,7 @@ describe('AzureGateway', () => {
       delete process.env.OPENAI_API_VERSION;
 
       await expect(
-        gateway.resolveLanguageModel({ modelId: 'my-gpt4', providerId: 'azure', apiKey: 'test-key' }),
+        gateway.resolveLanguageModel({ modelId: 'my-gpt4', providerId: 'azureopenai', apiKey: 'test-key' }),
       ).resolves.toBeDefined();
     });
   });

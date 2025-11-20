@@ -33,10 +33,10 @@ interface CachedToken {
   expiresAt: number;
 }
 
-export class AzureGateway extends MastraModelGateway {
-  readonly id = 'azure';
-  readonly name = 'azure';
-  readonly prefix = 'azure';
+export class AzureOpenAIGateway extends MastraModelGateway {
+  readonly id = 'azureopenai';
+  readonly name = 'azureopenai';
+  readonly prefix = 'azureopenai';
   private tokenCache = new InMemoryServerCache();
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
@@ -56,31 +56,31 @@ export class AzureGateway extends MastraModelGateway {
       });
 
       return {
-        azure: {
+        azureopenai: {
           apiKeyEnvVar: 'AZURE_API_KEY',
           apiKeyHeader: 'api-key',
           name: 'Azure OpenAI',
           models: deployments.map(d => d.name),
           docUrl: 'https://learn.microsoft.com/en-us/azure/ai-services/openai/',
-          gateway: 'azure',
+          gateway: 'azureopenai',
         },
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.warn(
-        `[AzureGateway] Skipping deployment discovery: ${errorMsg}`,
+        `[AzureOpenAIGateway] Skipping deployment discovery: ${errorMsg}`,
         '\nReturning fallback configuration. Azure OpenAI can still be used by manually specifying deployment names.',
       );
 
       // Return fallback configuration with empty models
       return {
-        azure: {
+        azureopenai: {
           apiKeyEnvVar: 'AZURE_API_KEY',
           apiKeyHeader: 'api-key',
           name: 'Azure OpenAI',
           models: [],
           docUrl: 'https://learn.microsoft.com/en-us/azure/ai-services/openai/',
-          gateway: 'azure',
+          gateway: 'azureopenai',
         },
       };
     }

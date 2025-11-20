@@ -4,13 +4,13 @@
 
 Add Azure OpenAI gateway with automatic deployment discovery
 
-The Azure gateway queries Azure's Management API to discover available model deployments at runtime. When Management API credentials are configured, deployments are automatically discovered and made available for IDE autocomplete in dev mode. The gateway gracefully falls back to basic functionality when credentials are missing.
+The Azure OpenAI gateway queries Azure's Management API to discover available model deployments at runtime. When Management API credentials are configured, deployments are automatically discovered and made available for IDE autocomplete in dev mode. The gateway gracefully falls back to basic functionality when credentials are missing.
 
-Use Azure OpenAI models with the `azure/<deployment-name>` format:
+Use Azure OpenAI models with the `azureopenai/<deployment-name>` format:
 
 ```typescript
 const agent = new Agent({
-  model: "azure/gpt-4-deployment",
+  model: "azureopenai/gpt-4-deployment",
   instructions: "You are a helpful assistant"
 });
 ```

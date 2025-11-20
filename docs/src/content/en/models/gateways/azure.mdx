@@ -14,12 +14,12 @@ Unlike other providers that have fixed model names, Azure uses **deployment name
 
 ## How Azure Deployments Work
 
-Azure model IDs follow this pattern: `azure/your-deployment-name`
+Azure model IDs follow this pattern: `azureopenai/your-deployment-name`
 
 The deployment name is **specific to your Azure account** and chosen when you create a deployment in Azure Portal. Common examples:
-- `azure/my-gpt4-deployment`
-- `azure/production-gpt-35-turbo`
-- `azure/staging-gpt-4o`
+- `azureopenai/my-gpt4-deployment`
+- `azureopenai/production-gpt-35-turbo`
+- `azureopenai/staging-gpt-4o`
 
 :::note About IDE Autocomplete
 When you configure optional Management API credentials (see below) and run `pnpm mastra dev` (or build the project), IDE autocomplete will show your actual deployment names from the generated `.d.ts` files.
@@ -69,7 +69,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "azure/my-gpt4-deployment"  // Use your Azure deployment name (autocompleted in dev mode)
+  model: "azureopenai/my-gpt4-deployment"  // Use your Azure deployment name (autocompleted in dev mode)
 });
 
 // Generate a response

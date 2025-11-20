@@ -1,6 +1,6 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { AzureGateway } from '../src/llm/model/gateways/azure.js';
+import { AzureOpenAIGateway } from '../src/llm/model/gateways/azure.js';
 import type { MastraModelGateway } from '../src/llm/model/gateways/index.js';
 import { ModelsDevGateway } from '../src/llm/model/gateways/models-dev.js';
 import { NetlifyGateway } from '../src/llm/model/gateways/netlify.js';
@@ -34,7 +34,7 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
 // Main execution
 async function main() {
   // Configure which gateways to use
-  const gateways: MastraModelGateway[] = [new ModelsDevGateway(), new NetlifyGateway(), new AzureGateway()];
+  const gateways: MastraModelGateway[] = [new ModelsDevGateway(), new NetlifyGateway(), new AzureOpenAIGateway()];
 
   await generateProviderRegistry(gateways);
 }
