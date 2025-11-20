@@ -4,6 +4,7 @@ import { GeminiLiveVoice } from './index';
 
 // Mock WebSocket
 let mockWsInstance: any;
+let currentWsUrl: string | undefined;
 
 vi.mock('ws', () => {
   class MockWebSocket {
@@ -19,7 +20,8 @@ vi.mock('ws', () => {
     emit = vi.fn();
     readyState = 1;
 
-    constructor() {
+    constructor(url?: string) {
+      currentWsUrl = url;
       mockWsInstance = this;
       return this;
     }
@@ -60,6 +62,7 @@ describe('GeminiLiveVoice', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockWsInstance = null;
+    currentWsUrl = undefined;
 
     // Create voice instance with test config
     voice = new GeminiLiveVoice({
@@ -126,6 +129,33 @@ describe('GeminiLiveVoice', () => {
           vertexAI: true,
         });
       }).toThrow('Google Cloud project ID is required');
+    });
+  });
+
+  describe('Vertex AI configuration', () => {
+    it('should build fully-qualified Vertex AI model path and default location for bare model names', async () => {
+      const vertexVoice = new GeminiLiveVoice({
+        vertexAI: true,
+        project: 'test-project',
+        model: 'gemini-2.0-flash-live-001',
+      });
+
+      vi.spyOn((vertexVoice as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (vertexVoice as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await vertexVoice.connect();
+
+      expect(currentWsUrl).toContain('us-central1-aiplatform.googleapis.com');
+      expect(currentWsUrl).toContain('LlmBidiService/BidiGenerateContent');
+
+      const wsSent = ((vertexVoice as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.model).toBe(
+        'projects/test-project/locations/us-central1/publishers/google/models/gemini-2.0-flash-live-001',
+      );
+
+      await vertexVoice.disconnect();
     });
   });
 

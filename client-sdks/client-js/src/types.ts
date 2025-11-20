@@ -82,6 +82,7 @@ export type NetworkStreamParams = {
 export interface GetAgentResponse {
   id: string;
   name: string;
+  description?: string;
   instructions: AgentInstructions;
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;
@@ -323,7 +324,6 @@ export type GetLogsResponse = {
 };
 
 export type RequestFunction = (path: string, options?: RequestOptions) => Promise<any>;
-
 export interface GetVNextNetworkResponse {
   id: string;
   name: string;

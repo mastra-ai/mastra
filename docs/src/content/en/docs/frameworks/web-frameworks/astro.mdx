@@ -31,34 +31,34 @@ This guide assumes you're using Astro's Actions with React and the Vercel adapte
 
 <StepItem>
 
-Install the required Mastra packages:
+Install the required packages:
 
 <Tabs>
 <TabItem value="npm" label="npm">
 
 ```bash copy
-npm install mastra@beta @mastra/core@beta @mastra/libsql@beta
+npm install mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
 ```bash copy
-yarn add mastra@beta @mastra/core@beta @mastra/libsql@beta
+yarn add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
 ```bash copy
-pnpm add mastra@beta @mastra/core@beta @mastra/libsql@beta
+pnpm add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
 ```bash copy
-bun add mastra@beta @mastra/core@beta @mastra/libsql@beta
+bun add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
 ```
 
 </TabItem>
@@ -140,14 +140,13 @@ Add `.mastra` and `.vercel` to your `.gitignore` file:
 
 Astro uses Vite, which accesses environment variables via `import.meta.env` rather than `process.env`. As a result, the model constructor must explicitly receive the `apiKey` from the Vite environment like this:
 
-```diff title="src/mastra/agents/weather-agent.ts"
-- import { openai } from "@ai-sdk/openai";
-+ import { createOpenAI } from "@ai-sdk/openai";
+```typescript title="src/mastra/agents/weather-agent.ts"
+ import { createOpenAI } from "@ai-sdk/openai";
 
-+ const openai = createOpenAI({
-+   apiKey: import.meta.env?.OPENAI_API_KEY,
-+   compatibility: "strict"
-+ });
+ const openai = createOpenAI({
+   apiKey: import.meta.env?.OPENAI_API_KEY,
+   compatibility: "strict"
+ });
 ```
 
 > More configuration details are available in the AI SDK docs. See [Provider Instance](https://ai-sdk.dev/providers/ai-sdk-providers/openai#provider-instance) for more information.
@@ -324,34 +323,34 @@ Before proceeding, ensure your Astro project is configured as follows:
 
 <StepItem>
 
-Install the required Mastra packages:
+Install the required packages:
 
 <Tabs>
 <TabItem value="npm" label="npm">
 
 ```bash copy
-npm install mastra@beta @mastra/core@beta @mastra/libsql@beta
+npm install mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
 ```bash copy
-yarn add mastra@beta @mastra/core@beta @mastra/libsql@beta
+yarn add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
 ```bash copy
-pnpm add mastra@beta @mastra/core@beta @mastra/libsql@beta
+pnpm add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
 ```bash copy
-bun add mastra@beta @mastra/core@beta @mastra/libsql@beta
+bun add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
 ```
 
 </TabItem>
@@ -433,14 +432,13 @@ Add `.mastra` to your `.gitignore` file:
 
 Astro uses Vite, which accesses environment variables via `import.meta.env` rather than `process.env`. As a result, the model constructor must explicitly receive the `apiKey` from the Vite environment like this:
 
-```diff title="src/mastra/agents/weather-agent.ts"
-- import { openai } from "@ai-sdk/openai";
-+ import { createOpenAI } from "@ai-sdk/openai";
+```typescript title="src/mastra/agents/weather-agent.ts"
+ import { createOpenAI } from "@ai-sdk/openai";
 
-+ const openai = createOpenAI({
-+   apiKey: import.meta.env?.OPENAI_API_KEY,
-+   compatibility: "strict"
-+ });
+ const openai = createOpenAI({
+   apiKey: import.meta.env?.OPENAI_API_KEY,
+   compatibility: "strict"
+ });
 ```
 
 > More configuration details are available in the AI SDK docs. See [Provider Instance](https://ai-sdk.dev/providers/ai-sdk-providers/openai#provider-instance) for more information.
