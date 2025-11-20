@@ -29,8 +29,8 @@ importers:
         specifier: ^5.3.0
         version: 5.4.1
       dotenv:
-        specifier: ^16.4.7
-        version: 16.5.0
+        specifier: ^17.2.3
+        version: 17.2.3
       ora:
         specifier: ^8.1.1
         version: 8.2.0
@@ -232,8 +232,8 @@ packages:
     resolution: {integrity: sha512-ywqV+5MmyL4E7ybXgKys4DugZbX0FC6LnwrhjuykIjnK9k8OQacQ7axGKnjDXWNhns0xot3bZI5h55H8yo9cJg==}
     engines: {node: '>=6'}
 
-  dotenv@16.5.0:
-    resolution: {integrity: sha512-m/C+AwOAr9/W1UOIZUo232ejMNnJAJtYQjUbHoNTBNTJSvqzzDh7vnrei3o3r3m9blf6ZoDkvcw0VmozNRFJxg==}
+  dotenv@17.2.3:
+    resolution: {integrity: sha512-JVUnt+DUIzu87TABbhPmNfVdBDt18BLOWjMUFJMSi/Qqg7NTYtabbvSNJGOJ7afbRuv9D/lngizHtP7QyLQ+9w==}
     engines: {node: '>=12'}
 
   emoji-regex@10.4.0:
@@ -442,7 +442,7 @@ snapshots:
 
   cli-spinners@2.9.2: {}
 
-  dotenv@16.5.0: {}
+  dotenv@17.2.3: {}
 
   emoji-regex@10.4.0: {}
 

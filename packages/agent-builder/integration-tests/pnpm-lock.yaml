@@ -22,8 +22,8 @@ importers:
         specifier: link:..
         version: link:..
       dotenv:
-        specifier: ^16.4.7
-        version: 16.6.1
+        specifier: ^17.2.3
+        version: 17.2.3
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -396,8 +396,8 @@ packages:
     resolution: {integrity: sha512-h5k/5U50IJJFpzfL6nO9jaaumfjO/f2NjK/oYB2Djzm4p9L+3T9qWpZqZ2hAbLPuuYq9wrU08WQyBTL5GbPk5Q==}
     engines: {node: '>=6'}
 
-  dotenv@16.6.1:
-    resolution: {integrity: sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow==}
+  dotenv@17.2.3:
+    resolution: {integrity: sha512-JVUnt+DUIzu87TABbhPmNfVdBDt18BLOWjMUFJMSi/Qqg7NTYtabbvSNJGOJ7afbRuv9D/lngizHtP7QyLQ+9w==}
     engines: {node: '>=12'}
 
   es-module-lexer@1.7.0:
@@ -831,7 +831,7 @@ snapshots:
 
   deep-eql@5.0.2: {}
 
-  dotenv@16.6.1: {}
+  dotenv@17.2.3: {}
 
   es-module-lexer@1.7.0: {}
 

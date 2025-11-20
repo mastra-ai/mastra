@@ -200,7 +200,7 @@
     "@openrouter/ai-sdk-provider-v5": "npm:@openrouter/ai-sdk-provider@1.2.3",
     "@sindresorhus/slugify": "^2.2.1",
     "ai-v5": "npm:ai@5.0.97",
-    "dotenv": "^16.6.1",
+    "dotenv": "^17.2.3",
     "hono": "^4.10.5",
     "hono-openapi": "^0.4.8",
     "js-tiktoken": "^1.0.20",

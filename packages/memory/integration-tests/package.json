@@ -37,7 +37,7 @@
     "@mastra/memory": "*",
     "@mastra/pg": "*",
     "@mastra/upstash": "*",
-    "dotenv": "^16.4.7",
+    "dotenv": "^17.2.3",
     "json-schema": "^0.4.0",
     "zod": "^3.25.76"
   },
