@@ -7,9 +7,35 @@ import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
 
 # Understanding Tracing and Logs
 
-Mastra Cloud captures execution data to help you monitor your application's behavior in the production environment.
+Mastra Cloud provides full observability for production applications, giving you insight into how your agents and workflows behave. Observability can be enabled whether your application is deployed to Mastra Cloud, running locally, or hosted on your own infrastructure. Any Mastra project can send traces and logs to the platform regardless of where it's running.
+
+For details on configuring observability, see the [Cloud Exporter](/docs/observability/ai-tracing/exporters/cloud) docs.
 
 <MastraCloudCallout />
+
+## Traces
+
+More detailed traces are available for both agents and workflows by enabling [observability](/docs/observability/ai-tracing/overview) using one of our [supported providers](/docs/observability/ai-tracing/overview#exporters).
+
+### Agents
+
+With observability enabled, you can view detailed outputs from your agents in the **Traces** section in Studio.
+
+![observability agents](/img/mastra-cloud/mastra-cloud-observability-agents.jpg)
+
+Key features:
+
+Agent traces break a run into clear steps, model calls, tool calls, and intermediate chunks, each with timing, inputs, outputs, and errors. You can drill into any span to inspect prompts, token usage, and results, making it easy to diagnose issues and understand how the agent produced its output.
+
+### Workflows
+
+With observability enabled, you can view detailed outputs from your workflows in the **Traces** section in Studio.
+
+![observability workflows](/img/mastra-cloud/mastra-cloud-observability-workflows.jpg)
+
+Key features:
+
+Workflow traces capture each step in the run, including transitions, branching, timing, and any tool calls inside the workflow. You can inspect inputs, outputs, and errors for every step, making it easy to debug long-running or multi-step processes and understand how data flows through the workflow.
 
 ## Logs
 
@@ -20,30 +46,6 @@ You can view detailed logs for debugging and monitoring your application's behav
 Key features:
 
 Each log entry includes its severity level and a detailed message showing agent, workflow, or storage activity.
-
-## Traces
-
-More detailed traces are available for both agents and workflows by using a [logger](/docs/observability/logging) or enabling [telemetry](/docs/observability/ai-tracing/overview) using one of our [supported providers](/reference/observability/otel-tracing/providers/).
-
-### Agents
-
-With a [logger](/docs/observability/logging) enabled, you can view detailed outputs from your agents in the **Traces** section in Studio.
-
-![observability agents](/img/mastra-cloud/mastra-cloud-observability-agents.jpg)
-
-Key features:
-
-Tools passed to the agent during generation are standardized using `convertTools`. This includes retrieving client-side tools, memory tools, and tools exposed from workflows.
-
-### Workflows
-
-With a [logger](/docs/observability/logging) enabled, you can view detailed outputs from your workflows in the **Traces** section in Studio.
-
-![observability workflows](/img/mastra-cloud/mastra-cloud-observability-workflows.jpg)
-
-Key features:
-
-Workflows are created using `createWorkflow`, which sets up steps, metadata, and tools. You can run them with `runWorkflow` by passing input and options.
 
 ## Next steps
 

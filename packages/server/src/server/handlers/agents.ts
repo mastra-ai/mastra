@@ -790,10 +790,7 @@ export async function streamNetworkHandler({
 }: Context & {
   runtimeContext: RuntimeContext;
   agentId: string;
-  body: GetBody<'network'> & {
-    thread?: string;
-    resourceId?: string;
-  };
+  body: GetBody<'network'>;
   // abortSignal?: AbortSignal;
 }): ReturnType<Agent['network']> {
   try {
@@ -814,8 +811,8 @@ export async function streamNetworkHandler({
     const streamResult = agent.network(messages, {
       ...rest,
       memory: {
-        thread: rest.thread ?? '',
-        resource: rest.resourceId ?? '',
+        thread: rest.memory?.thread ?? '',
+        resource: rest.memory?.resource ?? '',
         options: rest.memory?.options ?? {},
       },
       runtimeContext: finalRuntimeContext,
