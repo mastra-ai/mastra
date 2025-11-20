@@ -8,6 +8,7 @@ import { isDataChunkType } from './utils';
 export type OutputChunkType<OUTPUT extends OutputSchema = undefined> =
   | TextStreamPart<ToolSet>
   | ObjectStreamPart<PartialSchemaOutput<OUTPUT>>
+  | DataChunkType
   | undefined;
 
 export type ToolAgentChunkType = { type: 'tool-agent'; toolCallId: string; payload: any };
@@ -220,7 +221,13 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
         type: 'object',
         object: chunk.object,
       };
-
+    case 'tripwire':
+      return {
+        type: 'data-tripwire',
+        data: {
+          tripwireReason: chunk.payload.tripwireReason,
+        },
+      };
     default:
       if (chunk.type && 'payload' in chunk && chunk.payload) {
         return {
