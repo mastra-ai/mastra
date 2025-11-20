@@ -60,7 +60,7 @@ const response = await agent.generate({
 Stream responses from the agent for real-time interactions:
 
 ```typescript
-const response = await agent.stream({
+const stream = await agent.stream({
   messages: [
     {
       role: "user",
@@ -69,21 +69,32 @@ const response = await agent.stream({
   ],
 });
 
-// Process data stream with the processDataStream util
-response.processDataStream({
-  onChunk: async (chunk) => {
-    console.log(chunk);
-  },
-});
-
-// You can also read from response body directly
-const reader = response.body.getReader();
-while (true) {
-  const { done, value } = await reader.read();
-  if (done) break;
-  console.log(new TextDecoder().decode(value));
+// Iterate over stream chunks
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === "text-delta") {
+    console.log(chunk.payload.text);
+  }
 }
+
+// Or use promise-based properties for complete data
+const fullText = await stream.text;
+const usage = await stream.usage;
+const toolCalls = await stream.toolCalls;
 ```
+
+The stream provides access to:
+- **`fullStream`**: `ReadableStream<ChunkType>` - Iterate over stream chunks
+- **`text`**: `Promise<string>` - Complete text response
+- **`usage`**: `Promise<{ inputTokens?, outputTokens?, totalTokens? }>` - Token usage statistics
+- **`toolCalls`**: `Promise<Array>` - All tool calls made during execution
+- **`toolResults`**: `Promise<Array>` - All tool execution results
+- **`reasoning`**: `Promise<Array>` - Reasoning parts array (for models that support reasoning)
+- **`reasoningText`**: `Promise<string | undefined>` - Complete reasoning text
+- **`sources`**: `Promise<Array>` - Source citations
+- **`files`**: `Promise<Array>` - Generated files
+- **`steps`**: `Promise<Array>` - All step results
+- **`finishReason`**: `Promise<string | undefined>` - Why generation finished
+- **`error`**: `Error | undefined` - Error information if available
 
 ### Client tools
 
@@ -114,13 +125,12 @@ const response = await agent.generate({
 });
 
 // Use with stream
-const response = await agent.stream({
+const stream = await agent.stream({
   messages: "Change the background to green",
   clientTools: { colorChangeTool },
 });
 
-response.processDataStream({
-  onChunk: async (chunk) => {
+for await (const chunk of stream.fullStream) {
     if (chunk.type === "text-delta") {
       console.log(chunk.payload.text);
     } else if (chunk.type === "tool-call") {
@@ -128,8 +138,7 @@ response.processDataStream({
         `calling tool ${chunk.payload.toolName} with args ${JSON.stringify(chunk.payload.args, null, 2)}`,
       );
     }
-  },
-});
+}
 ```
 
 ### Get Agent Tool
@@ -152,53 +161,47 @@ const evals = await agent.evals();
 const liveEvals = await agent.liveEvals();
 ```
 
-### Stream
+### Network Streaming
 
-Stream responses using the enhanced API with improved method signatures. This method provides enhanced capabilities and format flexibility, with support for Mastra's native format.
+Stream network execution using the `network()` method:
 
 ```typescript
-const response = await agent.stream("Tell me a story", {
-  threadId: "thread-1",
-  clientTools: { colorChangeTool },
-});
+const networkStream = await agent.network("Help me organize my day");
 
-// Process the stream
-response.processDataStream({
-  onChunk: async (chunk) => {
-    if (chunk.type === "text-delta") {
-      console.log(chunk.payload.text);
+// Iterate over network execution chunks
+for await (const chunk of networkStream) {
+  console.log(chunk.type);
+  if (chunk.type === "network-execution-event-step-finish") {
+    console.log(chunk.payload.result);
     }
-  },
-});
+}
+
+// Or use promise-based properties
+const status = await networkStream.status;
+const result = await networkStream.result;
+const usage = await networkStream.usage;
 ```
+
+The network stream is a `ReadableStream<NetworkChunkType>` that you can iterate over directly, and also provides:
+- **`status`**: `Promise<string>` - Execution status
+- **`result`**: `Promise<any>` - Complete execution result
+- **`usage`**: `Promise<any>` - Token usage statistics
+- **`error`**: `Error | undefined` - Error information if available
 
 #### AI SDK compatible format
 
-To stream AI SDK-formatted parts on the client from an `agent.stream(...)` response, wrap `response.processDataStream` into a `ReadableStream<ChunkType>` and use `toAISdkFormat`:
+To stream AI SDK-formatted parts on the client from an `agent.stream(...)` response, use the `fullStream` directly:
 
 ```typescript title="client-ai-sdk-transform.ts" copy
 import { createUIMessageStream } from "ai";
-import { toAISdkFormat } from "@mastra/ai-sdk";
-import type { ChunkType, MastraModelOutput } from "@mastra/core/stream";
+import { toAISdkStream } from "@mastra/ai-sdk";
+import type { ChunkType } from "@mastra/core/stream";
 
-const response = await agent.stream({ messages: "Tell me a story" });
-
-const chunkStream: ReadableStream<ChunkType> = new ReadableStream<ChunkType>({
-  start(controller) {
-    response
-      .processDataStream({
-        onChunk: async (chunk) => controller.enqueue(chunk as ChunkType),
-      })
-      .finally(() => controller.close());
-  },
-});
+const stream = await agent.stream({ messages: "Tell me a story" });
 
 const uiMessageStream = createUIMessageStream({
   execute: async ({ writer }) => {
-    for await (const part of toAISdkFormat(
-      chunkStream as unknown as MastraModelOutput,
-      { from: "agent" },
-    )) {
+    for await (const part of toAISdkStream(stream.fullStream, { from: "agent" })) {
       writer.write(part);
     }
   },

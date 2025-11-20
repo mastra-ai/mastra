@@ -112,7 +112,7 @@ const testAgent = async () => {
 
 ## Streaming responses
 
-Use `.stream()` for real-time responses with an array of message objects that include `role` and `content`:
+Use `.stream()` for real-time responses with an array of message objects that include `role` and `content`. The `stream()` method returns a `MastraClientModelOutput` object:
 
 ```typescript showLineNumbers copy
 import { mastraClient } from "lib/mastra-client";
@@ -130,11 +130,16 @@ const testAgent = async () => {
       ],
     });
 
-    stream.processDataStream({
-      onTextPart: (text) => {
-        console.log(text);
-      },
-    });
+    // Iterate over stream chunks
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === "text-delta") {
+        console.log(chunk.payload.text);
+      }
+    }
+
+    // Or use promise-based properties
+    const fullText = await stream.text;
+    const usage = await stream.usage;
   } catch (error) {
     return "Error occurred while generating response";
   }
@@ -265,7 +270,10 @@ export async function action() {
     messages: [{ role: "user", content: "Hello" }],
   });
 
-  return new Response(stream.body);
+  // Convert the stream to a Response
+  return new Response(stream.fullStream, {
+    headers: { "Content-Type": "text/event-stream" },
+  });
 }
 ```
 
