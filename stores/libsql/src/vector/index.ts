@@ -416,6 +416,17 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     const { indexName, update } = params;
     const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
 
+    // Validate that both id and filter are not provided at the same time
+    if ('id' in params && params.id && 'filter' in params && params.filter) {
+      throw new MastraError({
+        id: 'LIBSQL_VECTOR_UPDATE_MUTUALLY_EXCLUSIVE_PARAMS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: 'id and filter are mutually exclusive - provide only one',
+      });
+    }
+
     if (!update.vector && !update.metadata) {
       throw new MastraError({
         id: 'LIBSQL_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
