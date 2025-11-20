@@ -100,7 +100,7 @@ describe('PosthogExporter', () => {
       type: SpanType.GENERIC,
       name: 'test-span',
       startTime: Date.now(),
-      endTime: Date.now() + 100, // 100ms duration
+      endTime: Date.now() + 100,
       attributes: {},
       metadata: {},
     };
@@ -353,7 +353,7 @@ describe('PosthogExporter', () => {
       );
     });
 
-    it('should handle minimal LLM attributes gracefully', async () => {
+    it('should handle minimal LLM attributes gracefully with defaults', async () => {
       const generation = createSpan({
         type: SpanType.MODEL_GENERATION,
         attributes: { model: 'gpt-3.5-turbo' },
@@ -365,6 +365,7 @@ describe('PosthogExporter', () => {
         expect.objectContaining({
           properties: expect.objectContaining({
             $ai_model: 'gpt-3.5-turbo',
+            $ai_provider: 'unknown-provider', // Updated expectation
           }),
         }),
       );
@@ -496,8 +497,6 @@ describe('PosthogExporter', () => {
       const props = mockCapture.mock.calls[0][0].properties;
       expect(props).not.toHaveProperty('$ai_input');
       expect(props).not.toHaveProperty('$ai_output_choices');
-
-      // But should still have metadata
       expect(props).toHaveProperty('$ai_model');
       expect(props).toHaveProperty('$ai_input_tokens');
     });
@@ -580,7 +579,7 @@ describe('PosthogExporter', () => {
       exporter = new PosthogExporter(validConfig);
     });
 
-    it('should capture event spans immediately', async () => {
+    it('should capture event spans immediately on start', async () => {
       const eventSpan = createSpan({
         id: 'event-1',
         type: SpanType.GENERIC,
@@ -601,6 +600,28 @@ describe('PosthogExporter', () => {
           }),
         }),
       );
+    });
+
+    it('should not re-capture event spans on end (no double counting)', async () => {
+      const eventSpan = createSpan({
+        id: 'event-1',
+        type: SpanType.GENERIC,
+        isEvent: true,
+      });
+
+      // Start (should capture)
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: eventSpan as any,
+      });
+
+      // End (should ignore)
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: eventSpan as any,
+      });
+
+      expect(mockCapture).toHaveBeenCalledTimes(1);
     });
 
     it('should not cache event spans', async () => {
@@ -625,7 +646,7 @@ describe('PosthogExporter', () => {
       exporter = new PosthogExporter(validConfig);
     });
 
-    it('should format string input as message array', async () => {
+    it('should format string input as user message array', async () => {
       const generation = createSpan({
         type: SpanType.MODEL_GENERATION,
         input: 'Hello, world!',
@@ -638,6 +659,23 @@ describe('PosthogExporter', () => {
         {
           role: 'user',
           content: [{ type: 'text', text: 'Hello, world!' }],
+        },
+      ]);
+    });
+
+    it('should format string output as assistant message array', async () => {
+      const generation = createSpan({
+        type: SpanType.MODEL_GENERATION,
+        output: 'This is the response.',
+      });
+
+      await exportSpanLifecycle(exporter, generation);
+
+      const capturedOutput = mockCapture.mock.calls[0][0].properties.$ai_output_choices;
+      expect(capturedOutput).toEqual([
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'This is the response.' }],
         },
       ]);
     });

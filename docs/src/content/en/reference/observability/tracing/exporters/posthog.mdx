@@ -1,0 +1,233 @@
+---
+title: "Reference: PosthogExporter | Observability | Mastra Docs"
+description: PostHog exporter for AI Tracing
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# PosthogExporter
+
+Sends AI tracing data to PostHog's LLM Analytics platform.
+
+## Constructor
+
+```typescript
+new PosthogExporter(config: PosthogExporterConfig)
+```
+
+## PosthogExporterConfig
+
+```typescript
+interface PosthogExporterConfig extends BaseExporterConfig {
+  apiKey: string;
+  host?: string;
+  flushAt?: number;
+  flushInterval?: number;
+  serverless?: boolean;
+  defaultDistinctId?: string;
+  enablePrivacyMode?: boolean;
+}
+```
+
+Extends `BaseExporterConfig`, which includes:
+- `logger?: IMastraLogger` - Logger instance
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "PostHog project API key (required)",
+      required: true,
+    },
+    {
+      name: "host",
+      type: "string",
+      description: "PostHog host URL (default: 'https://us.i.posthog.com')",
+      required: false,
+    },
+    {
+      name: "flushAt",
+      type: "number",
+      description: "Batch size before auto-flush (default: 20, serverless: 10)",
+      required: false,
+    },
+    {
+      name: "flushInterval",
+      type: "number",
+      description: "Flush interval in milliseconds (default: 10000, serverless: 2000)",
+      required: false,
+    },
+    {
+      name: "serverless",
+      type: "boolean",
+      description: "Auto-configure for serverless environments (default: false)",
+      required: false,
+    },
+    {
+      name: "defaultDistinctId",
+      type: "string",
+      description: "Fallback user identifier if no userId in metadata (default: 'anonymous')",
+      required: false,
+    },
+    {
+      name: "enablePrivacyMode",
+      type: "boolean",
+      description: "Exclude input/output from LLM events (default: false)",
+      required: false,
+    },
+    {
+      name: "logLevel",
+      type: "'debug' | 'info' | 'warn' | 'error'",
+      description: "Logger level (default: 'warn')",
+      required: false,
+    },
+  ]}
+/>
+
+## Methods
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+Exports a tracing event to PostHog as a structured event.
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Flushes pending batched events and shuts down the PostHog client. **Critical for serverless environments.**
+
+## Usage
+
+```typescript
+import { PosthogExporter } from "@mastra/posthog";
+
+const exporter = new PosthogExporter({
+  apiKey: process.env.POSTHOG_API_KEY!,
+  host: "https://us.i.posthog.com",
+  serverless: true,
+  enablePrivacyMode: false,
+});
+```
+
+## Span Type Mapping
+
+| Mastra Span Type           | PostHog Event Type | Notes                              |
+| -------------------------- | ------------------ | ---------------------------------- |
+| `MODEL_GENERATION`         | `$ai_generation`   | Full LLM call with tokens          |
+| `MODEL_STEP`               | `$ai_generation`   | Individual step within generation  |
+| `MODEL_CHUNK`              | `$ai_span`         | Streaming chunk (operation)        |
+| `TOOL_CALL`                | `$ai_span`         | Function/tool execution            |
+| `MCP_TOOL_CALL`            | `$ai_span`         | MCP tool execution                 |
+| `PROCESSOR_RUN`            | `$ai_span`         | Input/output processing            |
+| `AGENT_RUN`                | `$ai_span`         | Agent execution                    |
+| `WORKFLOW_RUN`             | `$ai_span`         | Workflow execution                 |
+| `WORKFLOW_*` (all)         | `$ai_span`         | Workflow operations                |
+| `GENERIC`                  | `$ai_span`         | Custom operations                  |
+
+## Event Properties
+
+### Common Properties (All Events)
+
+| Property           | Type      | Description                      |
+| ------------------ | --------- | -------------------------------- |
+| `$ai_trace_id`     | `string`  | Trace identifier                 |
+| `$ai_parent_id`    | `string`  | Parent span ID (if child)        |
+| `$ai_latency`      | `number`  | Duration in seconds              |
+| `$ai_is_error`     | `boolean` | Error flag                       |
+| `$ai_session_id`   | `string`  | Session identifier (optional)    |
+
+### LLM Generation Properties (`$ai_generation`)
+
+| Property                  | Type            | Description                           |
+| ------------------------- | --------------- | ------------------------------------- |
+| `$ai_generation_id`       | `string`        | Generation identifier                 |
+| `$ai_model`               | `string`        | Model name (e.g., "gpt-4o")           |
+| `$ai_provider`            | `string`        | Provider (e.g., "openai")             |
+| `$ai_input`               | `Message[]`     | Input messages (unless privacy mode)  |
+| `$ai_output_choices`      | `Message[]`     | Output messages (unless privacy mode) |
+| `$ai_input_tokens`        | `number`        | Input token count                     |
+| `$ai_output_tokens`       | `number`        | Output token count                    |
+| `$ai_total_tokens`        | `number`        | Total token count                     |
+| `$ai_temperature`         | `number`        | Temperature parameter                 |
+| `$ai_max_tokens`          | `number`        | Max tokens parameter                  |
+| `$ai_stream`              | `boolean`       | Streaming flag                        |
+| `reasoning_tokens`        | `number`        | Reasoning tokens (v5 models)          |
+| `cached_input_tokens`     | `number`        | Cached input tokens (v5 models)       |
+
+### Span Properties (`$ai_span`)
+
+| Property              | Type     | Description                    |
+| --------------------- | -------- | ------------------------------ |
+| `$ai_span_id`         | `string` | Span identifier                |
+| `$ai_span_name`       | `string` | Operation name                 |
+| `$ai_input_state`     | `any`    | Input data/parameters          |
+| `$ai_output_state`    | `any`    | Output/result data             |
+| `chunk_type`          | `string` | Chunk type (MODEL_CHUNK only)  |
+| `chunk_sequence_number` | `number` | Chunk sequence (MODEL_CHUNK only) |
+
+## Message Format
+
+LLM input/output are structured as message arrays:
+
+```typescript
+interface PostHogMessage {
+  role: 'user' | 'assistant' | 'system' | 'tool';
+  content: Array<{
+    type: string;
+    text?: string;
+    [key: string]: unknown;
+  }>;
+}
+```
+
+Example:
+```json
+{
+  "$ai_input": [
+    {
+      "role": "user",
+      "content": [{ "type": "text", "text": "Hello!" }]
+    }
+  ],
+  "$ai_output_choices": [
+    {
+      "role": "assistant",
+      "content": [{ "type": "text", "text": "Hi there!" }]
+    }
+  ]
+}
+```
+
+## Distinct ID Resolution
+
+The exporter determines the PostHog `distinctId` (user identifier) using this priority:
+
+1. `span.metadata.userId` - Span-level user ID
+2. `traceData.distinctId` - Cached from root span
+3. `config.defaultDistinctId` - Config fallback
+4. `"anonymous"` - Final fallback
+
+## Serverless Configuration
+
+When `serverless: true`:
+- `flushAt`: 10 (vs default 20)
+- `flushInterval`: 2000ms (vs default 10000ms)
+
+This configuration balances data safety with API efficiency for high-volume streaming events (MODEL_CHUNK). Always call `shutdown()` before function termination.
+
+## Privacy Mode
+
+When `enablePrivacyMode: true`:
+- `$ai_input` and `$ai_output_choices` are excluded from `$ai_generation` events
+- Token counts, latency, model info, and errors are still captured
+- `$ai_span` events are unaffected (tool calls, etc. still include input/output)
+
+This enables compliance tracking without storing sensitive conversation data.

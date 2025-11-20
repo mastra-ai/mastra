@@ -1,0 +1,222 @@
+---
+title: "PostHog Exporter | Tracing | Observability | Mastra Docs"
+description: "Send AI traces to PostHog for analytics and monitoring"
+---
+
+# PostHog Exporter
+
+[PostHog](https://posthog.com/) provides AI observability with LLM analytics, capturing token usage, costs, latency, and conversation data. The PostHog exporter sends your AI traces to PostHog as structured events, enabling analysis through dashboards and queries.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/posthog@beta
+```
+
+## Configuration
+
+### Prerequisites
+
+1. **PostHog Account**: Sign up at [posthog.com](https://posthog.com/)
+2. **Project API Key**: Get your project API key from PostHog Settings → Project API Key
+3. **Environment Variables**: Set your credentials:
+
+```bash title=".env"
+POSTHOG_API_KEY=phc_xxxxxxxxxxxxxxxx
+POSTHOG_HOST=https://us.i.posthog.com  # Optional: EU region or self-hosted URL
+```
+
+### Basic Setup
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { PosthogExporter } from "@mastra/posthog";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      posthog: {
+        serviceName: "my-service",
+        exporters: [
+          new PosthogExporter({
+            apiKey: process.env.POSTHOG_API_KEY,
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+### Complete Configuration
+
+```typescript
+new PosthogExporter({
+  // Required
+  apiKey: process.env.POSTHOG_API_KEY!,
+
+  // Optional: Region/Host
+  host: "https://us.i.posthog.com", // Default: US region
+  // or "https://eu.i.posthog.com" for EU region
+  // or your self-hosted URL
+
+  // Optional: Batching configuration
+  flushAt: 20,           // Batch size (default: 20)
+  flushInterval: 10000,  // Flush interval in ms (default: 10000)
+
+  // Optional: Serverless mode (auto-configures smaller batches)
+  serverless: true,      // Sets flushAt=10, flushInterval=2000
+
+  // Optional: User identification
+  defaultDistinctId: "anonymous", // Fallback if no userId in metadata
+
+  // Optional: Privacy mode
+  enablePrivacyMode: false, // Excludes input/output from LLM events
+
+  // Optional: Logging
+  logLevel: "info", // debug | info | warn | error
+});
+```
+
+## Features
+
+### Event-Based Tracing
+
+The PostHog exporter uses PostHog's LLM Analytics API with two primary event types:
+
+- **`$ai_generation`**: LLM model calls with token usage, latency, and costs
+- **`$ai_span`**: Operations like tool calls, workflows, and streaming chunks
+
+All events are linked via `$ai_trace_id` for hierarchical analysis.
+
+### Privacy Mode
+
+Exclude sensitive input/output data while preserving token metrics:
+
+```typescript
+new PosthogExporter({
+  apiKey: process.env.POSTHOG_API_KEY,
+  enablePrivacyMode: true, // Removes $ai_input and $ai_output_choices
+});
+```
+
+Privacy mode only affects `$ai_generation` events. Span events (tool calls, etc.) still include input/output state as they're typically non-sensitive technical data.
+
+### Serverless Optimization
+
+For serverless environments (Lambda, Vercel Functions, etc.):
+
+```typescript
+new PosthogExporter({
+  apiKey: process.env.POSTHOG_API_KEY,
+  serverless: true, // Auto-configures: flushAt=10, flushInterval=2000
+});
+```
+
+## Usage with Agents
+
+Include metadata to enrich PostHog events:
+
+```typescript
+const agent = mastra.agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: {
+    provider: "openai",
+    name: "gpt-4o",
+  },
+});
+
+await agent.generate("Hello!", {
+  metadata: {
+    userId: "user-123",      // → distinctId in PostHog
+    sessionId: "session-abc", // → $ai_session_id for grouping
+    environment: "production", // Custom properties
+    version: "1.0.0",
+  },
+});
+```
+
+
+### Cost Tracking
+
+PostHog automatically calculates costs from:
+- Model name + token counts (using OpenRouter pricing data)
+- View costs in event properties or aggregate in dashboards
+
+## Regional Deployment
+
+### US Region (Default)
+
+```typescript
+new PosthogExporter({
+  apiKey: process.env.POSTHOG_API_KEY,
+  // host defaults to https://us.i.posthog.com
+});
+```
+
+### EU Region
+
+```typescript
+new PosthogExporter({
+  apiKey: process.env.POSTHOG_API_KEY,
+  host: "https://eu.i.posthog.com",
+});
+```
+
+### Self-Hosted
+
+```typescript
+new PosthogExporter({
+  apiKey: process.env.POSTHOG_API_KEY,
+  host: "https://posthog.your-domain.com",
+});
+```
+
+## Best Practices
+
+### User Identification Strategy
+
+The exporter resolves `distinctId` (user identifier) with this priority:
+
+1. `metadata.userId` from individual spans
+2. Cached `distinctId` from the root span
+3. `defaultDistinctId` config option
+4. `"anonymous"` fallback
+
+For best results, include `userId` in your root span metadata.
+
+### Session Grouping
+
+Use `sessionId` to group multiple traces into logical sessions:
+
+```typescript
+{
+  metadata: {
+    sessionId: "chat-session-123", // Groups traces across multiple interactions
+  }
+}
+```
+
+### Batching Configuration
+
+Choose batching based on your deployment:
+
+**Long-Running Applications:**
+```typescript
+flushAt: 20,        // Default: balance efficiency and latency
+flushInterval: 10000 // 10 seconds
+```
+
+**Serverless (High Volume):**
+```typescript
+serverless: true    // Small batches, frequent flushing
+// Equivalent to: flushAt: 10, flushInterval: 2000
+```
+
+**Serverless (Low Volume):**
+```typescript
+flushAt: 1,         // Immediate flush
+flushInterval: 0
+```
