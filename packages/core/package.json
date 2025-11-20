@@ -193,7 +193,7 @@
     "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.12",
     "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.0",
     "@ai-sdk/ui-utils-v5": "npm:@ai-sdk/ui-utils@1.2.11",
-    "@isaacs/ttlcache": "^1.4.1",
+    "@isaacs/ttlcache": "^2.1.1",
     "@lukeed/uuid": "^2.0.1",
     "@mastra/schema-compat": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.17.5",
