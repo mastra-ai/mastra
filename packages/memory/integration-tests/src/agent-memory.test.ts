@@ -601,19 +601,19 @@ describe('Agent with message processors', () => {
     // Should have at minimum: system (instructions) + user + assistant + user
     // Optionally: system (semantic recall) if embeddings completed in time
     expect(secondResponseRequestMessages.length).toBeGreaterThanOrEqual(4);
-    
+
     // Verify message structure
     const systemMessages = secondResponseRequestMessages.filter(m => m.role === 'system');
     const userMessages = secondResponseRequestMessages.filter(m => m.role === 'user');
     const assistantMessages = secondResponseRequestMessages.filter(m => m.role === 'assistant');
-    
+
     // Should have 1-2 system messages (instructions + optional semantic recall)
     expect(systemMessages.length).toBeGreaterThanOrEqual(1);
     expect(systemMessages.length).toBeLessThanOrEqual(2);
-    
+
     // Should have 2 user messages (first question + second question)
     expect(userMessages.length).toBe(2);
-    
+
     // Should have 1 assistant message (response to first question, with tool calls filtered out)
     expect(assistantMessages.length).toBe(1);
   }, 30_000);
