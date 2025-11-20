@@ -424,7 +424,7 @@ export async function getAgentExecutionHandler({
 
 export const GET_AGENT_CARD_ROUTE = createRoute({
   method: 'GET',
-  path: '/a2a/:agentId/card',
+  path: '/.well-known/:agentId/agent-card.json',
   responseType: 'json',
   pathParamSchema: a2aAgentIdPathParams,
   responseSchema: agentCardResponseSchema,
@@ -477,7 +477,7 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
 
 export const AGENT_EXECUTION_ROUTE = createRoute({
   method: 'POST',
-  path: '/a2a/:agentId/execute',
+  path: '/a2a/:agentId',
   responseType: 'json',
   pathParamSchema: a2aAgentIdPathParams,
   bodySchema: agentExecutionBodySchema,

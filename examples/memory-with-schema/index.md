@@ -1,8 +1,3 @@
----
-title: "Example: Working Memory with Schema | Memory"
-description: Example showing how to use Zod schema to structure and validate working memory data.
----
-
 # Working Memory with Schema
 
 Use Zod schema to define the structure of information stored in working memory. Schema provides type safety and validation for the data that agents extract and persist across conversations.
@@ -15,13 +10,13 @@ This example shows how to manage a todo list using a working memory schema.
 
 This example uses the `openai` model. Make sure to add `OPENAI_API_KEY` to your `.env` file.
 
-```bash title=".env" copy
+```bash
 OPENAI_API_KEY=<your-api-key>
 ```
 
 And install the following package:
 
-```bash copy
+```bash
 npm install @mastra/libsql@beta
 ```
 
@@ -37,14 +32,14 @@ Providing a `schema` defines the shape in which the agent should remember inform
 
 Threads group related messages into conversations. When `generateTitle` is enabled, each thread is automatically given a descriptive name based on its content.
 
-```typescript title="src/mastra/agents/example-working-memory-schema-agent.ts" showLineNumbers copy
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { LibSQLStore } from "@mastra/libsql";
-import { z } from "zod";
+```typescript
+import { Memory } from '@mastra/memory';
+import { Agent } from '@mastra/core/agent';
+import { LibSQLStore } from '@mastra/libsql';
+import { z } from 'zod';
 
 export const workingMemorySchemaAgent = new Agent({
-  name: "working-memory-schema-agent",
+  name: 'working-memory-schema-agent',
   instructions: `
     You are a todo list AI agent.
     Always show the current list when starting a conversation.
@@ -53,10 +48,10 @@ export const workingMemorySchemaAgent = new Agent({
     Support subtasks with bullet points.
     Ask for time estimates to help with timeboxing.
   `,
-  model: "openai/gpt-5.1",
+  model: 'openai/gpt-5.1',
   memory: new Memory({
     storage: new LibSQLStore({
-      url: "file:working-memory-schema.db",
+      url: 'file:working-memory-schema.db',
     }),
     options: {
       workingMemory: {
@@ -67,7 +62,7 @@ export const workingMemorySchemaAgent = new Agent({
               title: z.string(),
               due: z.string().optional(),
               description: z.string(),
-              status: z.enum(["active", "completed"]).default("active"),
+              status: z.enum(['active', 'completed']).default('active'),
               estimatedTime: z.string().optional(),
             }),
           ),
@@ -89,18 +84,18 @@ This example shows how to interact with an agent that uses a working memory sche
 
 This example sends a message to the agent with a new task. The response is streamed and includes the updated todo list.
 
-```typescript title="src/test-working-memory-schema-agent.ts" showLineNumbers copy
-import "dotenv/config";
+```typescript
+import 'dotenv/config';
 
-import { mastra } from "./mastra";
+import { mastra } from './mastra';
 
-const threadId = "123";
-const resourceId = "user-456";
+const threadId = '123';
+const resourceId = 'user-456';
 
-const agent = mastra.getAgent("workingMemorySchemaAgent");
+const agent = mastra.getAgent('workingMemorySchemaAgent');
 
 const stream = await agent.stream(
-  "Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.",
+  'Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.',
   {
     memory: {
       thread: threadId,
@@ -118,18 +113,18 @@ for await (const chunk of stream.textStream) {
 
 This example sends a message to the agent with a new task. The response is returned as a single message and includes the updated todo list.
 
-```typescript title="src/test-working-memory-schema-agent.ts" showLineNumbers copy
-import "dotenv/config";
+```typescript
+import 'dotenv/config';
 
-import { mastra } from "./mastra";
+import { mastra } from './mastra';
 
-const threadId = "123";
-const resourceId = "user-456";
+const threadId = '123';
+const resourceId = 'user-456';
 
-const agent = mastra.getAgent("workingMemorySchemaAgent");
+const agent = mastra.getAgent('workingMemorySchemaAgent');
 
 const response = await agent.generate(
-  "Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.",
+  'Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.',
   {
     memory: {
       thread: threadId,
@@ -188,6 +183,6 @@ Working memory stores data in `.json` format, which would look similar to the be
 
 ## Related
 
-- [Calling Agents](/docs/v1/agents/overview#referencing-an-agent)
-- [Agent Memory](/docs/v1/agents/agent-memory)
-- [Serverless Deployment](/reference/v1/storage/libsql)
+- [Calling Agents](https://mastra.ai/docs/v1/agents/overview#referencing-an-agent)
+- [Agent Memory](https://mastra.ai/docs/v1/agents/agent-memory)
+- [Serverless Deployment](https://mastra.ai/reference/v1/storage/libsql)

@@ -594,17 +594,6 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
       const resourceScope =
         typeof config?.semanticRecall === 'object' ? config?.semanticRecall?.scope !== 'thread' : true;
 
-      // Only validate thread ownership if we're in thread scope
-      if (threadId && !resourceScope) {
-        const thread = await memory.getThreadById({ threadId });
-        if (!thread) {
-          throw new HTTPException(404, { message: 'Thread not found' });
-        }
-        if (thread.resourceId !== resourceId) {
-          throw new HTTPException(403, { message: 'Thread does not belong to the specified resource' });
-        }
-      }
-
       const searchResults: SearchResult[] = [];
 
       // If threadId is provided and scope is thread-based, check if the thread exists
@@ -619,6 +608,9 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
             searchScope: resourceScope ? 'resource' : 'thread',
             searchType: hasSemanticRecall ? 'semantic' : 'text',
           };
+        }
+        if (thread.resourceId !== resourceId) {
+          throw new HTTPException(403, { message: 'Thread does not belong to the specified resource' });
         }
       }
 
