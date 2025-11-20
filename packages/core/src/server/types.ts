@@ -95,6 +95,11 @@ export type ServerConfig = {
    */
   timeout?: number;
   /**
+   * Root path for the API endpoints
+   * @default '/api'
+   */
+  apiRootPath?: string;
+  /**
    * Custom API routes for the server
    */
   apiRoutes?: ApiRoute[];
