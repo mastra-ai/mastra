@@ -1,3 +1,5 @@
+import fsSync from 'fs';
+import fs from 'fs/promises';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
 
@@ -309,6 +311,8 @@ async function createFromTemplate(args: {
     llmProvider = providerResponse as LLMProvider;
   }
 
+  let projectPath: string | null = null;
+
   try {
     // Track template usage
     const analytics = args.injectedAnalytics || getAnalytics();
@@ -332,7 +336,7 @@ async function createFromTemplate(args: {
     const branch = isBeta && isMastraTemplate ? 'beta' : undefined;
 
     // Clone the template
-    const projectPath = await cloneTemplate({
+    projectPath = await cloneTemplate({
       template: selectedTemplate,
       projectName,
       branch,
@@ -352,6 +356,19 @@ async function createFromTemplate(args: {
     // Show completion message
     postCreate({ projectName });
   } catch (error) {
+    // Clean up: remove the created directory on failure
+    if (projectPath) {
+      try {
+        if (fsSync.existsSync(projectPath)) {
+          await fs.rm(projectPath, { recursive: true, force: true });
+        }
+      } catch (cleanupError) {
+        // Log but don't throw - we want to exit with the original error
+        console.error(
+          `Warning: Failed to clean up project directory: ${cleanupError instanceof Error ? cleanupError.message : 'Unknown error'}`,
+        );
+      }
+    }
     p.log.error(`Failed to create project from template: ${error instanceof Error ? error.message : 'Unknown error'}`);
     throw error;
   }
