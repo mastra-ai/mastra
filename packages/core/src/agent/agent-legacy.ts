@@ -95,6 +95,7 @@ export interface AgentLegacyCapabilities {
     tracingContext?: TracingContext;
     writableStream?: WritableStream<ChunkType>;
     methodType: AgentMethodType;
+    memoryConfig?: MemoryConfig;
   }): Promise<Record<string, CoreTool>>;
 
   /** Run input processors */
@@ -284,6 +285,7 @@ export class AgentLegacyHandler {
           tracingContext: innerTracingContext,
           writableStream,
           methodType: methodType === 'generate' ? 'generateLegacy' : 'streamLegacy',
+          memoryConfig,
         });
 
         let messageList = new MessageList({

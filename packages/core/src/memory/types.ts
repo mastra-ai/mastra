@@ -315,6 +315,18 @@ export type SemanticRecall = {
  */
 export type MemoryConfig = {
   /**
+   * When true, prevents memory from saving new messages.
+   * Useful for internal agents (like routing agents) that should read memory but not modify it.
+   *
+   * @default false
+   * @example
+   * ```typescript
+   * readOnly: true // Agent can read memory but won't save new messages
+   * ```
+   */
+  readOnly?: boolean;
+
+  /**
    * Number of recent messages from the current thread to include in context.
    * Provides short-term conversational continuity.
    * Set to false to disable conversation history entirely.

@@ -200,6 +200,10 @@ export class Memory extends MastraMemory {
     const runtimeMemoryConfig = memoryContext?.memoryConfig;
     const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
 
+    if (effectiveConfig.readOnly) {
+      return [];
+    }
+
     const lastMessages = effectiveConfig.lastMessages;
     if (lastMessages) {
       if (!this.storage?.stores?.memory)

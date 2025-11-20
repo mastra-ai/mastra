@@ -315,8 +315,8 @@ export async function createNetworkLoop({
           memory: {
             thread: initData?.threadId ?? runId,
             resource: initData?.threadResourceId ?? networkName,
-            readOnly: true,
             options: {
+              readOnly: true,
               workingMemory: {
                 enabled: false,
               },
@@ -500,7 +500,12 @@ export async function createNetworkLoop({
         memory: {
           thread: initData?.threadId ?? runId,
           resource: initData?.threadResourceId ?? networkName,
-          readOnly: true,
+          options: {
+            readOnly: true,
+            workingMemory: {
+              enabled: false,
+            },
+          },
         },
         ...routingAgentOptions,
       };

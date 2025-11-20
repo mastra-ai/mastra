@@ -1275,6 +1275,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext,
     tracingContext,
     mastraProxy,
+    memoryConfig,
   }: {
     runId?: string;
     resourceId?: string;
@@ -1282,6 +1283,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext: RequestContext;
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
+    memoryConfig?: MemoryConfig;
   }) {
     let convertedMemoryTools: Record<string, CoreTool> = {};
 
@@ -1292,7 +1294,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     // Get memory tools if available
     const memory = await this.getMemory({ requestContext });
-    const memoryTools = memory?.listTools?.();
+    const memoryTools = memory?.listTools?.(memoryConfig);
 
     if (memoryTools) {
       this.logger.debug(
@@ -1975,6 +1977,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext,
     writableStream,
     methodType,
+    memoryConfig,
   }: {
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
@@ -1985,6 +1988,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext?: TracingContext;
     writableStream?: WritableStream<ChunkType>;
     methodType: AgentMethodType;
+    memoryConfig?: MemoryConfig;
   }): Promise<Record<string, CoreTool>> {
     let mastraProxy = undefined;
     const logger = this.logger;
@@ -2010,6 +2014,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requestContext,
       tracingContext,
       mastraProxy,
+      memoryConfig,
     });
 
     const toolsetTools = await this.listToolsets({
