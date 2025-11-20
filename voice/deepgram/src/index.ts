@@ -196,7 +196,7 @@ export class DeepgramVoice extends MastraVoice {
       }
     }
     const buffer = Buffer.concat(chunks);
-    const { diarize, ...restOptions } = options ?? {};
+    const { diarize, diarize_speaker_count: _ignored, ...restOptions } = options ?? {};
     const { result, error } = await this.listeningClient.listen.prerecorded.transcribeFile(buffer, {
       ...restOptions,
       model: this.storedListeningModel?.name,
