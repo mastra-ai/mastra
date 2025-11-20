@@ -45,28 +45,6 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Processors",
-      collapsed: true,
-      items: [
-        {
-          type: "doc",
-          id: "processors/message-length-limiter",
-          label: "Message Length Limiter",
-        },
-        {
-          type: "doc",
-          id: "processors/response-length-limiter",
-          label: "Response Length Limiter",
-        },
-        {
-          type: "doc",
-          id: "processors/response-validator",
-          label: "Response Validator",
-        },
-      ],
-    },
-    {
-      type: "category",
       label: "Memory",
       collapsed: true,
       items: [

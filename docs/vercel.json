@@ -84,6 +84,21 @@
       "source": "/examples/v1/agents/system-prompt",
       "destination": "/docs/v1/agents/overview",
       "permanent": true
+    },
+    {
+      "source": "/v1/examples/processors/message-length-limiter",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/processors-message-length-limiter",
+      "permanent": true
+    },
+    {
+      "source": "/v1/examples/processors/response-length-limiter",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-length-limiter",
+      "permanent": true
+    },
+    {
+      "source": "/v1/examples/processors/response-validator",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-validator",
+      "permanent": true
     }
   ]
 }
