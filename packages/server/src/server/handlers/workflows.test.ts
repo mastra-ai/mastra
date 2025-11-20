@@ -5,6 +5,7 @@ import type { Workflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import { getWorkflowInfo } from '../utils';
+import { createTestRuntimeContext } from './test-utils';
 import {
   LIST_WORKFLOWS_ROUTE,
   GET_WORKFLOW_BY_ID_ROUTE,
@@ -110,7 +111,7 @@ describe('vNext Workflow Handlers', () => {
 
   describe('LIST_WORKFLOWS_ROUTE', () => {
     it('should get all workflows successfully', async () => {
-      const result = await LIST_WORKFLOWS_ROUTE.handler({ mastra: mockMastra });
+      const result = await LIST_WORKFLOWS_ROUTE.handler({ ...createTestRuntimeContext({ mastra: mockMastra }) });
       expect(result).toEqual({
         'test-workflow': serializeWorkflow(mockWorkflow),
         'reusable-workflow': serializeWorkflow(reusableWorkflow),
@@ -120,20 +121,26 @@ describe('vNext Workflow Handlers', () => {
 
   describe('GET_WORKFLOW_BY_ID_ROUTE', () => {
     it('should throw error when workflowId is not provided', async () => {
-      await expect(GET_WORKFLOW_BY_ID_ROUTE.handler({ mastra: mockMastra } as any)).rejects.toThrow(
-        new HTTPException(400, { message: 'Workflow ID is required' }),
-      );
+      await expect(
+        GET_WORKFLOW_BY_ID_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra: mockMastra }),
+          workflowId: undefined as any,
+        }),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
     });
 
     it('should throw error when workflow is not found', async () => {
       await expect(
-        GET_WORKFLOW_BY_ID_ROUTE.handler({ mastra: mockMastra, workflowId: 'non-existent' }),
+        GET_WORKFLOW_BY_ID_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra: mockMastra }),
+          workflowId: 'non-existent',
+        }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
     });
 
     it('should get workflow by ID successfully', async () => {
       const result = await GET_WORKFLOW_BY_ID_ROUTE.handler({
-        mastra: mockMastra,
+        ...createTestRuntimeContext({ mastra: mockMastra }),
         workflowId: 'test-workflow',
       });
 
@@ -145,7 +152,7 @@ describe('vNext Workflow Handlers', () => {
     it('should throw error when workflowId is not provided', async () => {
       await expect(
         START_ASYNC_WORKFLOW_ROUTE.handler({
-          mastra: mockMastra,
+          ...createTestRuntimeContext({ mastra: mockMastra }),
           runId: 'test-run',
         } as any),
       ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
@@ -154,32 +161,32 @@ describe('vNext Workflow Handlers', () => {
     it('should throw error when workflow is not found', async () => {
       await expect(
         START_ASYNC_WORKFLOW_ROUTE.handler({
-          mastra: mockMastra,
+          ...createTestRuntimeContext({ mastra: mockMastra }),
           workflowId: 'non-existent',
           runId: 'test-run',
-        }),
+        } as any),
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
     });
 
     it('should start workflow run successfully when runId is not passed', async () => {
       const result = await START_ASYNC_WORKFLOW_ROUTE.handler({
-        mastra: mockMastra,
+        ...createTestRuntimeContext({ mastra: mockMastra }),
         workflowId: 'test-workflow',
         inputData: {},
         tracingOptions,
-      });
+      } as any);
 
       expect(result.steps['test-step'].status).toEqual('success');
     });
 
     it('should start workflow run successfully when runId is passed', async () => {
       const result = await START_ASYNC_WORKFLOW_ROUTE.handler({
-        mastra: mockMastra,
+        ...createTestRuntimeContext({ mastra: mockMastra }),
         workflowId: 'test-workflow',
         runId: 'test-run',
         inputData: {},
         tracingOptions,
-      });
+      } as any);
 
       expect(result.steps['test-step'].status).toEqual('success');
     });
@@ -189,7 +196,7 @@ describe('vNext Workflow Handlers', () => {
     it('should throw error when workflowId is not provided', async () => {
       await expect(
         GET_WORKFLOW_RUN_BY_ID_ROUTE.handler({
-          mastra: mockMastra,
+          ...createTestRuntimeContext({ mastra: mockMastra }),
           runId: 'test-run',
         } as any),
       ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
@@ -198,7 +205,7 @@ describe('vNext Workflow Handlers', () => {
     it('should throw error when runId is not provided', async () => {
       await expect(
         GET_WORKFLOW_RUN_BY_ID_ROUTE.handler({
-          mastra: mockMastra,
+          ...createTestRuntimeContext({ mastra: mockMastra }),
           workflowId: 'test-workflow',
         } as any),
       ).rejects.toThrow(new HTTPException(400, { message: 'Run ID is required' }));
@@ -207,7 +214,7 @@ describe('vNext Workflow Handlers', () => {
     it('should throw error when workflow is not found', async () => {
       await expect(
         GET_WORKFLOW_RUN_BY_ID_ROUTE.handler({
-          mastra: mockMastra,
+          ...createTestRuntimeContext({ mastra: mockMastra }),
           workflowId: 'non-existent',
           runId: 'test-run',
         }),
@@ -217,7 +224,7 @@ describe('vNext Workflow Handlers', () => {
     it('should throw error when workflow run is not found', async () => {
       await expect(
         GET_WORKFLOW_RUN_BY_ID_ROUTE.handler({
-          mastra: mockMastra,
+          ...createTestRuntimeContext({ mastra: mockMastra }),
           workflowId: 'test-workflow',
           runId: 'non-existent',
         }),
@@ -232,7 +239,7 @@ describe('vNext Workflow Handlers', () => {
       await run.start({ inputData: {} });
 
       const result = await GET_WORKFLOW_RUN_BY_ID_ROUTE.handler({
-        mastra: mockMastra,
+        ...createTestRuntimeContext({ mastra: mockMastra }),
         workflowId: 'test-workflow',
         runId: 'test-run',
       });
@@ -244,20 +251,28 @@ describe('vNext Workflow Handlers', () => {
   describe('GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE', () => {
     it('should throw error when workflowId is not provided', async () => {
       await expect(
-        GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({ mastra: mockMastra, runId: 'test-run' } as any),
+        GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra: mockMastra }),
+          runId: 'test-run',
+          workflowId: undefined as any,
+        }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
     });
 
     it('should throw error when runId is not provided', async () => {
       await expect(
-        GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({ mastra: mockMastra, workflowId: 'test-workflow' } as any),
+        GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra: mockMastra }),
+          workflowId: 'test-workflow',
+          runId: undefined as any,
+        }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Run ID is required' }));
     });
 
     it('should throw error when workflow is not found', async () => {
       await expect(
         GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
-          mastra: mockMastra,
+          ...createTestRuntimeContext({ mastra: mockMastra }),
           workflowId: 'non-existent',
           runId: 'test-run',
         }),
@@ -267,7 +282,7 @@ describe('vNext Workflow Handlers', () => {
     it('should throw error when workflow run is not found', async () => {
       await expect(
         GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
-          mastra: mockMastra,
+          ...createTestRuntimeContext({ mastra: mockMastra }),
           workflowId: 'test-workflow',
           runId: 'non-existent',
         }),
@@ -283,7 +298,7 @@ describe('vNext Workflow Handlers', () => {
         mastra: mockMastra,
         workflowId: 'test-workflow',
         runId: 'test-run',
-      });
+      } as any);
 
       expect(result).toEqual({
         activeStepsPath: {},
@@ -309,7 +324,7 @@ describe('vNext Workflow Handlers', () => {
     it('should throw error when workflowId is not provided', async () => {
       await expect(
         CREATE_WORKFLOW_RUN_ROUTE.handler({
-          mastra: mockMastra,
+          ...createTestRuntimeContext({ mastra: mockMastra }),
           runId: 'test-run',
         } as any),
       ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
@@ -321,7 +336,7 @@ describe('vNext Workflow Handlers', () => {
           mastra: mockMastra,
           workflowId: 'non-existent',
           runId: 'test-run',
-        }),
+        } as any),
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
     });
 
@@ -330,7 +345,7 @@ describe('vNext Workflow Handlers', () => {
         mastra: mockMastra,
         workflowId: 'test-workflow',
         runId: 'test-run',
-      });
+      } as any);
 
       expect(result).toEqual({ runId: 'test-run' });
     });
@@ -340,7 +355,7 @@ describe('vNext Workflow Handlers', () => {
     it('should throw error when workflowId is not provided', async () => {
       await expect(
         START_WORKFLOW_RUN_ROUTE.handler({
-          mastra: mockMastra,
+          ...createTestRuntimeContext({ mastra: mockMastra }),
           runId: 'test-run',
         } as any),
       ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
@@ -349,7 +364,7 @@ describe('vNext Workflow Handlers', () => {
     it('should throw error when runId is not provided', async () => {
       await expect(
         START_WORKFLOW_RUN_ROUTE.handler({
-          mastra: mockMastra,
+          ...createTestRuntimeContext({ mastra: mockMastra }),
           workflowId: 'test-workflow',
         } as any),
       ).rejects.toThrow(new HTTPException(400, { message: 'runId required to start run' }));
@@ -358,10 +373,10 @@ describe('vNext Workflow Handlers', () => {
     it('should throw error when workflow run is not found', async () => {
       await expect(
         START_WORKFLOW_RUN_ROUTE.handler({
-          mastra: mockMastra,
+          ...createTestRuntimeContext({ mastra: mockMastra }),
           workflowId: 'test-workflow',
           runId: 'non-existent',
-        }),
+        } as any),
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
     });
 
@@ -378,7 +393,7 @@ describe('vNext Workflow Handlers', () => {
         runId: 'test-run',
         inputData: { test: 'data' },
         tracingOptions,
-      });
+      } as any);
 
       expect(result).toEqual({ message: 'Workflow run started' });
     });
@@ -409,7 +424,7 @@ describe('vNext Workflow Handlers', () => {
         workflowId: 'test-workflow',
         runId: 'test-run-start-resource',
         inputData: { test: 'data' },
-      });
+      } as any);
 
       // Wait for the workflow to complete
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -451,7 +466,7 @@ describe('vNext Workflow Handlers', () => {
           runId: 'non-existent',
           step: 'test-step',
           resumeData: {},
-        }),
+        } as any),
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
     });
 
@@ -471,12 +486,12 @@ describe('vNext Workflow Handlers', () => {
       expect(runBeforeRestart?.resourceId).toBe(resourceId);
 
       const result = await RESUME_ASYNC_WORKFLOW_ROUTE.handler({
-        mastra: mockMastra,
+        ...createTestRuntimeContext({ mastra: mockMastra }),
         workflowId: reusableWorkflow.name,
         runId: 'test-run-async-resume',
         step: 'test-step',
         resumeData: { test: 'data' },
-      });
+      } as any);
 
       // The workflow should have resumed
       expect(result).toBeDefined();
@@ -494,7 +509,7 @@ describe('vNext Workflow Handlers', () => {
     it('should throw error when workflowId is not provided', async () => {
       await expect(
         RESUME_WORKFLOW_ROUTE.handler({
-          mastra: mockMastra,
+          ...createTestRuntimeContext({ mastra: mockMastra }),
           runId: 'test-run',
           step: 'test-step',
           resumeData: {},
@@ -505,7 +520,7 @@ describe('vNext Workflow Handlers', () => {
     it('should throw error when runId is not provided', async () => {
       await expect(
         RESUME_WORKFLOW_ROUTE.handler({
-          mastra: mockMastra,
+          ...createTestRuntimeContext({ mastra: mockMastra }),
           workflowId: 'test-workflow',
           step: 'test-step',
           resumeData: {},
@@ -516,12 +531,12 @@ describe('vNext Workflow Handlers', () => {
     it('should throw error when workflow run is not found', async () => {
       await expect(
         RESUME_WORKFLOW_ROUTE.handler({
-          mastra: mockMastra,
+          ...createTestRuntimeContext({ mastra: mockMastra }),
           workflowId: 'test-workflow',
           runId: 'non-existent',
           step: 'test-step',
           resumeData: {},
-        }),
+        } as any),
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
     });
 
@@ -535,13 +550,13 @@ describe('vNext Workflow Handlers', () => {
       });
 
       const result = await RESUME_WORKFLOW_ROUTE.handler({
-        mastra: mockMastra,
+        ...createTestRuntimeContext({ mastra: mockMastra }),
         workflowId: reusableWorkflow.name,
         runId: 'test-run',
         step: 'test-step',
         resumeData: { test: 'data' },
         tracingOptions,
-      });
+      } as any);
 
       expect(result).toEqual({ message: 'Workflow run resumed' });
     });
@@ -568,12 +583,12 @@ describe('vNext Workflow Handlers', () => {
       });
 
       await RESUME_WORKFLOW_ROUTE.handler({
-        mastra: freshMastra,
+        ...createTestRuntimeContext({ mastra: freshMastra }),
         workflowId: 'reusable-workflow',
         runId: 'test-run-with-resource',
         step: 'test-step',
         resumeData: { test: 'data' },
-      });
+      } as any);
 
       // Wait for async operations to complete
       await new Promise(resolve => setTimeout(resolve, 200));
@@ -607,12 +622,12 @@ describe('vNext Workflow Handlers', () => {
       });
 
       const stream = await RESUME_STREAM_WORKFLOW_ROUTE.handler({
-        mastra: freshMastra,
+        ...createTestRuntimeContext({ mastra: freshMastra }),
         workflowId: 'reusable-workflow',
         runId: 'test-run-stream-resume',
         step: 'test-step',
         resumeData: { test: 'data' },
-      });
+      } as any);
 
       expect(stream).toBeDefined();
 
@@ -627,16 +642,19 @@ describe('vNext Workflow Handlers', () => {
 
   describe('LIST_WORKFLOW_RUNS_ROUTE', () => {
     it('should throw error when workflowId is not provided', async () => {
-      await expect(LIST_WORKFLOW_RUNS_ROUTE.handler({ mastra: mockMastra } as any)).rejects.toThrow(
-        new HTTPException(400, { message: 'Workflow ID is required' }),
-      );
+      await expect(
+        LIST_WORKFLOW_RUNS_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra: mockMastra }),
+          workflowId: undefined,
+        } as any),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
     });
 
     it('should get workflow runs successfully (empty)', async () => {
       const result = await LIST_WORKFLOW_RUNS_ROUTE.handler({
-        mastra: mockMastra,
+        ...createTestRuntimeContext({ mastra: mockMastra }),
         workflowId: 'test-workflow',
-      });
+      } as any);
 
       expect(result).toEqual({
         runs: [],
@@ -650,9 +668,9 @@ describe('vNext Workflow Handlers', () => {
       });
       await run.start({ inputData: {} });
       const result = await LIST_WORKFLOW_RUNS_ROUTE.handler({
-        mastra: mockMastra,
+        ...createTestRuntimeContext({ mastra: mockMastra }),
         workflowId: 'test-workflow',
-      });
+      } as any);
 
       expect(result.total).toEqual(1);
     });
@@ -681,7 +699,7 @@ describe('vNext Workflow Handlers', () => {
       });
 
       const stream = await OBSERVE_STREAM_WORKFLOW_ROUTE.handler({
-        mastra: freshMastra,
+        ...createTestRuntimeContext({ mastra: freshMastra }),
         workflowId: 'test-workflow',
         runId: 'test-run-observe-resource',
       });
@@ -720,7 +738,7 @@ describe('vNext Workflow Handlers', () => {
       });
 
       const result = await CANCEL_WORKFLOW_RUN_ROUTE.handler({
-        mastra: freshMastra,
+        ...createTestRuntimeContext({ mastra: freshMastra }),
         workflowId: 'test-workflow',
         runId: 'test-run-cancel-resource',
       });
