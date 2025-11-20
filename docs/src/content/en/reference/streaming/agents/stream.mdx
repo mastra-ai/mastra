@@ -701,7 +701,7 @@ await agent.stream("message for agent", {
       sentiment: z.enum(["positive", "negative", "neutral"]),
       confidence: z.number(),
     }),
-    model: "openai/gpt-4o-mini",
+    model: "openai/gpt-5.1",
     errorStrategy: "warn",
   },
   // Output processors for streaming response validation

@@ -112,7 +112,7 @@ export const blockingAgent = new Agent({
   id: "blocking-agent",
   name: "Blocking Agent",
   instructions: "You are a helpful assistant with response length limits",
-  model: "openai/gpt-4o",
+  model: "openai/gpt-5.1",
   outputProcessors: [
     new ResponseLengthLimiter({ maxLength: 1000, strategy: "block" }),
   ],
@@ -130,7 +130,7 @@ export const simpleAgent = new Agent({
   id: "simple-agent",
   name: "Simple Agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-4o",
+  model: "openai/gpt-5.1",
   outputProcessors: [new ResponseLengthLimiter(300)],
 });
 ```
@@ -149,7 +149,7 @@ export const agent = new Agent({
   id: "response-limited-agent",
   name: "Response Limited Agent",
   instructions: "You are a helpful assistant. Keep responses concise.",
-  model: "openai/gpt-4o",
+  model: "openai/gpt-5.1",
   outputProcessors: [
     new ResponseLengthLimiter(300), // 300 character limit
   ],
@@ -184,7 +184,7 @@ export const agent = new Agent({
   id: "response-limited-agent",
   name: "Response Limited Agent",
   instructions: "You are a helpful assistant.",
-  model: "openai/gpt-4o",
+  model: "openai/gpt-5.1",
   outputProcessors: [
     new ResponseLengthLimiter(200), // Strict 200 character limit
   ],
@@ -226,7 +226,7 @@ export const agent = new Agent({
   name: "Response Limited Agent",
   instructions:
     "You are a verbose assistant who provides detailed explanations.",
-  model: "openai/gpt-4o",
+  model: "openai/gpt-5.1",
   outputProcessors: [
     new ResponseLengthLimiter(100), // Very strict 100 character limit
   ],

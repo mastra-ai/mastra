@@ -1,27 +1,22 @@
----
-title: "Example: Working Memory with Template | Memory"
-description: Example showing how to use Markdown template to structure working memory data.
----
+# Working Memory with Schema
 
-# Working Memory with Template
-
-Use template to define the structure of information stored in working memory. Template helps agents extract and persist consistent, structured data across conversations.
+Use Zod schema to define the structure of information stored in working memory. Schema provides type safety and validation for the data that agents extract and persist across conversations.
 
 It works with both streamed responses using `.stream()` and generated responses using `.generate()`, and requires a storage provider such as PostgreSQL, LibSQL, or Redis to persist data between sessions.
 
-This example shows how to manage a todo list using a working memory template.
+This example shows how to manage a todo list using a working memory schema.
 
 ## Prerequisites
 
 This example uses the `openai` model. Make sure to add `OPENAI_API_KEY` to your `.env` file.
 
-```bash title=".env" copy
+```bash
 OPENAI_API_KEY=<your-api-key>
 ```
 
 And install the following package:
 
-```bash copy
+```bash
 npm install @mastra/libsql@beta
 ```
 
@@ -29,22 +24,22 @@ npm install @mastra/libsql@beta
 
 To add LibSQL memory to an agent, use the `Memory` class and pass a `storage` instance using `LibSQLStore`. The `url` can point to a remote location or local file.
 
-### Working memory with `template`
+### Working memory with `schema`
 
 Enable working memory by setting `workingMemory.enabled` to `true`. This allows the agent to remember structured information between interactions.
 
-Providing a `template` helps define the structure of what should be remembered. In this example, the template organizes tasks into active and completed items using Markdown formatting.
+Providing a `schema` defines the shape in which the agent should remember information. In this example, it separates tasks into active and completed lists.
 
 Threads group related messages into conversations. When `generateTitle` is enabled, each thread is automatically given a descriptive name based on its content.
 
-```typescript title="src/mastra/agents/example-working-memory-template-agent.ts" showLineNumbers copy
+```typescript
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { LibSQLStore } from "@mastra/libsql";
+import { z } from "zod";
 
-export const workingMemoryTemplateAgent = new Agent({
-  name: "working-memory-template-agent",
+export const workingMemorySchemaAgent = new Agent({
+  name: "working-memory-schema-agent",
   instructions: `
     You are a todo list AI agent.
     Always show the current list when starting a conversation.
@@ -53,25 +48,25 @@ export const workingMemoryTemplateAgent = new Agent({
     Support subtasks with bullet points.
     Ask for time estimates to help with timeboxing.
   `,
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   memory: new Memory({
     storage: new LibSQLStore({
-      url: "file:working-memory-template.db",
+      url: "file:working-memory-schema.db",
     }),
     options: {
       workingMemory: {
         enabled: true,
-        template: `
-          # Todo List
-          ## Active Items
-          - Task 1: Example task
-            - Due: Feb 7 2028
-            - Description: This is an example task
-            - Status: Not Started
-            - Estimated Time: 2 hours
-
-          ## Completed Items
-          - None yet`,
+        schema: z.object({
+          items: z.array(
+            z.object({
+              title: z.string(),
+              due: z.string().optional(),
+              description: z.string(),
+              status: z.enum(["active", "completed"]).default("active"),
+              estimatedTime: z.string().optional(),
+            }),
+          ),
+        }),
       },
       threads: {
         generateTitle: true,
@@ -83,13 +78,13 @@ export const workingMemoryTemplateAgent = new Agent({
 
 ## Usage examples
 
-This example shows how to interact with an agent that uses a working memory template to manage structured information. The agent updates and persists the todo list across multiple interactions within the same thread.
+This example shows how to interact with an agent that uses a working memory schema to manage structured information. The agent updates and persists the todo list across multiple interactions within the same thread.
 
 ### Streaming a response using `.stream()`
 
 This example sends a message to the agent with a new task. The response is streamed and includes the updated todo list.
 
-```typescript title="src/test-working-memory-template-agent.ts" showLineNumbers copy
+```typescript
 import "dotenv/config";
 
 import { mastra } from "./mastra";
@@ -97,7 +92,7 @@ import { mastra } from "./mastra";
 const threadId = "123";
 const resourceId = "user-456";
 
-const agent = mastra.getAgent("workingMemoryTemplateAgent");
+const agent = mastra.getAgent("workingMemorySchemaAgent");
 
 const stream = await agent.stream(
   "Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.",
@@ -118,7 +113,7 @@ for await (const chunk of stream.textStream) {
 
 This example sends a message to the agent with a new task. The response is returned as a single message and includes the updated todo list.
 
-```typescript title="src/test-working-memory-template-agent.ts" showLineNumbers copy
+```typescript
 import "dotenv/config";
 
 import { mastra } from "./mastra";
@@ -126,7 +121,7 @@ import { mastra } from "./mastra";
 const threadId = "123";
 const resourceId = "user-456";
 
-const agent = mastra.getAgent("workingMemoryTemplateAgent");
+const agent = mastra.getAgent("workingMemorySchemaAgent");
 
 const response = await agent.generate(
   "Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.",
@@ -143,7 +138,7 @@ console.log(response.text);
 
 ## Example output
 
-The output demonstrates how the agent formats and returns the updated todo list using the structure defined in the working memory template.
+The output demonstrates how the agent formats and returns the updated todo list using the structure defined by the zod schema.
 
 ```text
 # Todo List
@@ -169,7 +164,17 @@ Working memory stores data in `.json` format, which would look similar to the be
     {
       // ...
       "args": {
-        "memory": "# Todo List\n## Active Items\n- Task 1: Build a new feature for our app\n  - Due: Next Friday\n  - Description: Build a new feature for our app\n  - Status: Not Started\n  - Estimated Time: 2 hours\n\n## Completed Items\n- None yet"
+        "memory": {
+          "items": [
+            {
+              "title": "Build a new feature for our app",
+              "due": "Next Friday",
+              "description": "",
+              "status": "active",
+              "estimatedTime": "2 hours"
+            }
+          ]
+        }
       }
     }
   ]
@@ -178,6 +183,7 @@ Working memory stores data in `.json` format, which would look similar to the be
 
 ## Related
 
-- [Calling Agents](/docs/v1/agents/overview#referencing-an-agent)
-- [Agent Memory](/docs/v1/agents/agent-memory)
-- [Serverless Deployment](/reference/v1/storage/libsql)
+- [Calling Agents](https://mastra.ai/docs/v1/agents/overview#referencing-an-agent)
+- [Agent Memory](https://mastra.ai/docs/v1/agents/agent-memory)
+- [Serverless Deployment](https://mastra.ai/reference/v1/storage/libsql)
+

@@ -97,7 +97,16 @@
     },
     {
       "source": "/v1/examples/processors/response-validator",
-      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-validator",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-validator"
+    },
+    {
+      "source": "/examples/v1/memory/working-memory-schema",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-schema",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/memory/working-memory-template",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-template",
       "permanent": true
     }
   ]
