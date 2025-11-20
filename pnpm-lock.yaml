@@ -1889,6 +1889,9 @@ importers:
       '@babel/preset-typescript':
         specifier: ^7.27.1
         version: 7.27.1(@babel/core@7.28.5)
+      '@mastra/hono':
+        specifier: workspace:*
+        version: link:../../server-adapters/hono
       '@mastra/server':
         specifier: workspace:^
         version: link:../server
@@ -1968,9 +1971,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      '@mastra/hono':
-        specifier: workspace:*
-        version: link:../../server-adapters/hono
       '@mastra/mcp':
         specifier: workspace:^
         version: link:../mcp
