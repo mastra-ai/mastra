@@ -13,7 +13,7 @@ This example demonstrates how to use Mastra's vector query tool to implement a R
 
 The system implements RAG with re-ranking using Mastra and OpenAI. Here's what it does:
 
-1. Sets up a Mastra agent with gpt-4o-mini for response generation
+1. Sets up a Mastra agent with gpt-5.1 for response generation
 2. Creates a vector query tool with re-ranking capabilities
 3. Chunks text documents into smaller segments and creates embeddings from them
 4. Stores them in a PostgreSQL vector database
@@ -36,9 +36,9 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers title="index.ts"
-import { openai } from "@ai-sdk/openai";
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { PgVector } from "@mastra/pg";
 import {
   MDocument,
@@ -56,11 +56,11 @@ Using createVectorQueryTool imported from @mastra/rag, you can create a tool tha
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   reranker: {
     model: new MastraAgentRelevanceScorer(
       "relevance-scorer",
-      openai("gpt-4o-mini"),
+      "openai/gpt-5.1",
     ),
   },
 });
@@ -75,9 +75,9 @@ export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
-    Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
+    Important: When asked to answer a question, please base your answer only on the context provided in the tool.
     If the context doesn't contain enough information to fully answer the question, please state that explicitly.`,
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-5.1",
   tools: {
     vectorQueryTool,
   },
@@ -142,7 +142,7 @@ Generate embeddings for the chunks and store them in the vector database:
 
 ```typescript copy showLineNumbers{66} title="index.ts"
 const { embeddings } = await embedMany({
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   values: chunks.map((chunk) => chunk.text),
 });
 

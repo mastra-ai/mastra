@@ -17,7 +17,6 @@ The `.network()` method enables multi-agent collaboration and routing. This meth
 
 ```typescript copy
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { agent1, agent2 } from "./agents";
 import { workflow1 } from "./workflows";
 import { tool1, tool2 } from "./tools";
@@ -27,7 +26,7 @@ const agent = new Agent({
   name: "Network Agent",
   instructions:
     "You are a network agent that can help users with a variety of tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   agents: {
     agent1,
     agent2,
@@ -42,7 +41,7 @@ const agent = new Agent({
 });
 
 await agent.network(`
-  Find me the weather in Tokyo. 
+  Find me the weather in Tokyo.
   Based on the weather, plan an activity for me.
 `);
 ```
