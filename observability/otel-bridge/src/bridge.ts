@@ -76,7 +76,7 @@ function mapSpanKind(mastraType: string): SpanKind {
 export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   name = 'otel-bridge';
   private tracer = trace.getTracer('@mastra/otel-bridge', '1.0.0');
-  private spanMap = new Map<string, { otelSpan: Span; otelContext: Context }>();
+  private spanMap = new Map<string, { otelSpan: Span; otelContext: Context; spanType: string }>();
 
   constructor(config: OtelBridgeConfig = {}) {
     super(config);
@@ -186,6 +186,10 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
 
     if (shouldRegister) {
       this.registerSpan(span.id, span.getParentSpanId(), span.type, span.name, span.startTime);
+    } else {
+      console.log(
+        `[OtelBridge.onSpanCreated] Skipping registration for span [type=${span.type}] [id=${span.id}] [name=${span.name}]`,
+      );
     }
   }
 
@@ -239,7 +243,7 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
       const spanContext = trace.setSpan(parentContext, otelSpan);
 
       // Store for later retrieval
-      this.spanMap.set(spanId, { otelSpan, otelContext: spanContext });
+      this.spanMap.set(spanId, { otelSpan, otelContext: spanContext, spanType });
 
       console.log(
         `[OtelBridge.registerSpan] Registered span [mastraId=${spanId}] [otelSpanId=${otelSpan.spanContext().spanId}] ` +
@@ -377,8 +381,10 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
 
     // Debug logging
     const activeSpan = trace.getSpan(otelContext.active());
+    const spanType = entry?.spanType || 'unknown';
     console.log(
       `[OtelBridge.executeWithSpanContext] spanId=${spanId}, ` +
+        `type=${spanType}, ` +
         `inMap=${!!entry}, ` +
         `activeOtelSpan=${activeSpan?.spanContext().spanId || 'none'}, ` +
         `storedOtelSpan=${entry?.otelSpan.spanContext().spanId || 'none'}`,
