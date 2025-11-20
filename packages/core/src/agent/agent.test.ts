@@ -23,6 +23,7 @@ import { delay } from '../utils';
 import { MessageList } from './message-list/index';
 import { assertNoDuplicateParts } from './test-utils';
 import { Agent } from './index';
+import { processSchema } from '../llm/process-schema';
 
 config();
 
@@ -229,6 +230,73 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       openaiModel = openai_v5('gpt-4o');
     }
+  });
+
+  describe('test schema compat structured output', async () => {
+    it('should work', async () => {
+      const weatherInfo = createTool({
+        id: 'weather-info',
+        description: 'Fetches the current weather information for a given city',
+        inputSchema: z.object({
+          city: z.string(),
+        }),
+        execute: async inputData => {
+          return {
+            city: inputData.city,
+            weather: 'sunny',
+            temperature_celsius: 19,
+            temperature_fahrenheit: 66,
+            humidity: 50,
+            wind: '10 mph',
+          };
+        },
+      });
+
+      const weatherAgent = new Agent({
+        id: 'weather-agent',
+        name: 'Weather Agent',
+        instructions:
+          'You are a weather agent. When asked about weather in any city, use the weather info tool with the city name as the input.',
+        description: 'An agent that can help you get the weather for a given city.',
+        model: 'openai/gpt-4o',
+        tools: {
+          weatherInfo,
+        },
+      });
+
+      const mastra = new Mastra({
+        agents: { weatherAgent },
+        logger: false,
+      });
+      const agent = mastra.getAgent('weatherAgent');
+
+      const schema = z.object({
+        weather: z.string(),
+        temperature: z.number(),
+        humidity: z.number(),
+        windSpeed: z.string().optional(),
+      });
+
+      const openaiSchema = processSchema.openai(schema);
+
+      const result = await agent.stream('What is the weather in London? You can omit wind speed.', {
+        structuredOutput: {
+          schema: openaiSchema,
+        },
+      });
+
+      for await (const chunk of result.fullStream) {
+        if (chunk.type === 'object-result') {
+          console.log(chunk.object);
+        }
+        console.log(chunk);
+      }
+
+      const res = await result.object;
+      console.log('Final object:', res);
+
+      expect(result.error).toBeUndefined();
+    });
   });
 
   describe(`${version} - agent`, () => {
