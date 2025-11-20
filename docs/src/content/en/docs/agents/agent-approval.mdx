@@ -5,6 +5,58 @@ description: Learn how to require approvals and suspend tool execution while kee
 
 # Agent Approval
 
+Agents sometimes require the same [human-in-the-loop](/docs/v1/workflows/human-in-the-loop) oversight used in workflows when calling tools that handle sensitive operations, like deleting resources or performing running long processes. With agent approval you can suspend a tool call mid execution, or prevent a tool from being called entirely until the agent receives human input.
+
+## Tool call approval
+
+Tool call approval can be enabled at the agent level and apply to every tool the agent uses, or at the tool level providing more specific control over individual tool calls.
+
+## Agent level approval
+
+When calling an agent using `.stream()` set `requireToolApproval` to `true` which will prevent the agent from calling any of the tools defined in it's configuration.
+
+```typescript showLineNumbers
+const stream = await agent.stream("Plan my trip to London", {
+  requireToolApproval: true
+});
+```
+
+### Approving tool calls
+
+To approve a tool call, use `approveToolCall` passing in the `runId` of the stream. This will let the agent know it's now ok to call it's tools.
+
+```typescript showLineNumbers
+const handleApproval = async () => {
+  const approvedStream = await agent.approveToolCall({ runId: stream.runId });
+
+  for await (const chunk of approvedStream.textStream) {
+    process.stdout.write(chunk);
+  }
+  process.stdout.write("\n");
+};
+```
+
+### Declining tool calls
+
+To decline a tool call, use `declineToolCall`. The agent will still respond, but it won't call it's tools.
+
+```typescript showLineNumbers
+const handleDecline = async () => {
+  const declinedStream = await agent.declineToolCall({ runId: stream.runId });
+
+  for await (const chunk of declinedStream.textStream) {
+    process.stdout.write(chunk);
+  }
+  process.stdout.write("\n");
+};
+```
+
+## Storage - TBD
+If storage ins't enabled on the main Mastra instance, the snapshot can't be created.
+
+## ----   OLD
+
+
 Sometimes agents need human oversight before they can run potentially sensitive tools or long-running workflows. Mastra lets you pause tool execution to wait for approval, decline a tool call entirely, or suspend a tool mid-flight until the required data is available.
 
 ## Tool approvals
