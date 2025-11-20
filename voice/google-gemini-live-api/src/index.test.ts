@@ -3,7 +3,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GeminiLiveVoice } from './index';
 
 // Mock WebSocket
-let mockWsInstance: any;
 let currentWsUrl: string | undefined;
 
 vi.mock('ws', () => {
@@ -21,7 +20,6 @@ vi.mock('ws', () => {
 
     constructor(url?: string) {
       currentWsUrl = url;
-      mockWsInstance = this;
       return this;
     }
   }
@@ -54,7 +52,6 @@ describe('GeminiLiveVoice', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockWsInstance = null;
     currentWsUrl = undefined;
 
     // Create voice instance with test config
