@@ -40,7 +40,6 @@ Threads group related messages into conversations. When `generateTitle` is enabl
 ```typescript title="src/mastra/agents/example-working-memory-schema-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { LibSQLStore } from "@mastra/libsql";
 import { z } from "zod";
 
@@ -54,7 +53,7 @@ export const workingMemorySchemaAgent = new Agent({
     Support subtasks with bullet points.
     Ask for time estimates to help with timeboxing.
   `,
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   memory: new Memory({
     storage: new LibSQLStore({
       url: "file:working-memory-schema.db",

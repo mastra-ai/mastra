@@ -140,7 +140,7 @@ In this example, the response is fully aligned with the provided context. All cl
 ```typescript title="src/example-no-hallucination.ts" showLineNumbers copy
 import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createHallucinationScorer({ model: 'openai/gpt-4o-mini', options: {
+const scorer = createHallucinationScorer({ model: 'openai/gpt-5.1', options: {
   context: [
     "The iPhone was first released in 2007.",
     "Steve Jobs unveiled it at Macworld.",
@@ -177,7 +177,7 @@ In this example, the response includes both accurate and inaccurate claims. Some
 ```typescript title="src/example-mixed-hallucination.ts" showLineNumbers copy
 import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createHallucinationScorer({ model: 'openai/gpt-4o-mini', options: {
+const scorer = createHallucinationScorer({ model: 'openai/gpt-5.1', options: {
   context: [
     "The first Star Wars movie was released in 1977.",
     "It was directed by George Lucas.",
@@ -215,7 +215,7 @@ In this example, the response contradicts every key fact in the context. None of
 ```typescript title="src/example-complete-hallucination.ts" showLineNumbers copy
 import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createHallucinationScorer({ model: 'openai/gpt-4o-mini', options: {
+const scorer = createHallucinationScorer({ model: 'openai/gpt-5.1', options: {
   context: [
     "The Wright brothers made their first flight in 1903.",
     "The flight lasted 12 seconds.",
