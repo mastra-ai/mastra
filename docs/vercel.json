@@ -84,6 +84,11 @@
       "source": "/examples/v1/agents/system-prompt",
       "destination": "/docs/v1/agents/overview",
       "permanent": true
+    },
+    {
+      "source": "/docs/v1/logging",
+      "destination": "/docs/v1/observability/logging",
+      "permanent": true
     }
   ]
 }
