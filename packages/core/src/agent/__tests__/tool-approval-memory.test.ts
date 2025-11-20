@@ -1,6 +1,3 @@
-// Tests for issues #9745 & #9906: Tool suspension prevents message persistence
-// Both issues share the same root cause: suspension occurs before debounced save completes
-
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -106,8 +103,6 @@ describe('Tool suspension memory persistence', () => {
     // The debounce is 100ms, so 150ms should be enough
     await delay(150);
 
-    // THESE ASSERTIONS SHOULD PASS BUT CURRENTLY FAIL (reproducing issue #9745)
-
     // Assert 1: Thread should be created in database
     const threadAfterSuspension = await mockMemory.getThreadById({ threadId });
     expect(threadAfterSuspension).not.toBeNull();
@@ -210,8 +205,6 @@ describe('Tool suspension memory persistence', () => {
 
     // Give the debounced save time to fire (if it exists)
     await delay(150);
-
-    // THESE ASSERTIONS SHOULD PASS BUT CURRENTLY FAIL (reproducing issue #9906)
 
     // Assert 1: Thread should be created in database
     const threadAfterSuspension = await mockMemory.getThreadById({ threadId });
