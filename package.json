@@ -93,7 +93,7 @@
   "resolutions": {
     "typescript": "^5.8.3",
     "@types/node": "22.13.17",
-    "cookie": ">=0.7.2",
+    "cookie": ">=1.0.2",
     "tmp": ">=0.2.5",
     "jsondiffpatch": ">=0.7.3"
   },
