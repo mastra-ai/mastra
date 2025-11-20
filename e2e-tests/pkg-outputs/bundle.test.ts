@@ -15,7 +15,7 @@ let allPackages = await globby(
     '!**/node_modules/**',
     '!**/integration-tests/**',
     '!**/integration-tests-v5/**',
-    '!**/server-adapters/test-utils/**',
+    '!**/server-adapters/_test-utils/**',
     '!./packages/_config/**',
     '!./e2e-tests/**',
     '!**/mcp-docs-server/**',
