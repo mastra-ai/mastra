@@ -2674,14 +2674,11 @@ export class MessageList {
     const msgs = messages
       .map(m => {
         if (m.parts.length === 0) return false;
-        // Filter out streaming states and optionally input-available (which isn't supported by convertToModelMessages)
+        // Filter out streaming states and input-available (which isn't supported by convertToModelMessages)
         const safeParts = m.parts.filter(p => {
           if (!AIV5.isToolUIPart(p)) return true;
           // Only keep tool parts with output states for model messages
-          if (filterIncompleteToolCalls) {
-            return p.state === 'output-available' || p.state === 'output-error';
-          }
-          return p.state !== 'input-streaming';
+          return p.state === 'output-available' || p.state === 'output-error';
         });
 
         if (!safeParts.length) return false;
