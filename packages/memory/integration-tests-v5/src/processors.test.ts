@@ -27,6 +27,10 @@ function v2ToCoreMessages(messages: MastraDBMessage[] | UIMessage[]): CoreMessag
   return new MessageList().add(messages, 'memory').get.all.core();
 }
 
+const abort: (reason?: string) => never = reason => {
+  throw new Error(reason || 'Aborted');
+};
+
 let memory: Memory;
 let storage: LibSQLStore;
 let vector: LibSQLVector;
@@ -91,7 +95,7 @@ describe('Memory with Processors', () => {
     const tokenLimiter = new TokenLimiter(250);
     const result = await tokenLimiter.processInput({
       messages: new MessageList({ threadId: thread.id, resourceId }).add(queryResult.messages, 'memory').get.all.db(),
-      abort: new AbortController().signal,
+      abort,
       runtimeContext: new RequestContext(),
     });
 
@@ -185,7 +189,7 @@ describe('Memory with Processors', () => {
 
     const filteredResult = await toolCallFilter.processInput({
       messages: queryResult.messages,
-      abort: new AbortController().signal,
+      abort,
       runtimeContext: new RequestContext(),
       messageList,
     });
@@ -234,7 +238,7 @@ describe('Memory with Processors', () => {
 
     const filteredMessages3 = await toolCallFilter3.processInput({
       messages: queryResult3.messages,
-      abort: new AbortController().signal,
+      abort,
       runtimeContext: new RequestContext(),
       messageList: messageList3,
     });
@@ -262,7 +266,7 @@ describe('Memory with Processors', () => {
     }
     const filteredResult4 = await toolCallFilter4.processInput({
       messages: queryResult4.messages,
-      abort: new AbortController().signal,
+      abort,
       runtimeContext: new RequestContext(),
       messageList: messageList4,
     });
@@ -316,14 +320,13 @@ describe('Memory with Processors', () => {
     const filteredMessages = await toolCallFilter.processInput({
       messages: queryResult.messages,
       messageList: messageList5,
-      abort: new AbortController().signal,
+      abort,
       runtimeContext,
     });
     const filteredArray = Array.isArray(filteredMessages) ? filteredMessages : filteredMessages.get.all.db();
     const limitedMessages = await tokenLimiter.processInput({
       messages: filteredArray,
-      messageList: messageList5,
-      abort: new AbortController().signal,
+      abort,
       runtimeContext,
     });
     const result = v2ToCoreMessages(limitedMessages);
@@ -536,7 +539,7 @@ describe('Memory with Processors', () => {
     const filteredMessages5 = await toolCallFilter5.processInput({
       messages: list2.get.all.db(),
       messageList: list2,
-      abort: new AbortController().signal,
+      abort,
       runtimeContext: new RequestContext(),
     });
     const filteredArray5 = Array.isArray(filteredMessages5) ? filteredMessages5 : filteredMessages5.get.all.db();
