@@ -9,67 +9,6 @@ The CompositeVoice class allows you to combine different voice providers for tex
 
 CompositeVoice supports both Mastra voice providers and AI SDK model providers
 
-## Usage Examples
-
-### Using Mastra Voice Providers
-
-```typescript
-import { CompositeVoice } from "@mastra/core/voice";
-import { OpenAIVoice } from "@mastra/voice-openai";
-import { PlayAIVoice } from "@mastra/voice-playai";
-
-// Create voice providers
-const openai = new OpenAIVoice();
-const playai = new PlayAIVoice();
-
-// Use OpenAI for listening (speech-to-text) and PlayAI for speaking (text-to-speech)
-const voice = new CompositeVoice({
-  input: openai,
-  output: playai,
-});
-
-// Convert speech to text using OpenAI
-const text = await voice.listen(audioStream);
-
-// Convert text to speech using PlayAI
-const audio = await voice.speak("Hello, world!");
-```
-
-### Using AI SDK Model Providers
-
-You can pass AI SDK transcription and speech models directly to CompositeVoice:
-
-```typescript
-import { CompositeVoice } from "@mastra/core/voice";
-import { openai } from "@ai-sdk/openai";
-import { elevenlabs } from "@ai-sdk/elevenlabs";
-
-// Use AI SDK models directly - they will be auto-wrapped
-const voice = new CompositeVoice({
-  input: openai.transcription('whisper-1'),      // AI SDK transcription
-  output: elevenlabs.speech('eleven_turbo_v2'),  // AI SDK speech
-});
-
-// Works the same way as with Mastra providers
-const text = await voice.listen(audioStream);
-const audio = await voice.speak("Hello from AI SDK!");
-```
-
-### Mix and Match
-
-You can combine Mastra providers with AI SDK models:
-
-```typescript
-import { CompositeVoice } from "@mastra/core/voice";
-import { PlayAIVoice } from "@mastra/voice-playai";
-import { groq } from "@ai-sdk/groq";
-
-const voice = new CompositeVoice({
-  input: groq.transcription('whisper-large-v3'),  // AI SDK for STT
-  output: new PlayAIVoice(),                       // Mastra for TTS
-});
-```
-
 ## Constructor Parameters
 
 <PropertiesTable
@@ -185,3 +124,64 @@ Notes:
 - If no speaking provider is configured, returns an empty array
 - Each voice object will have at least a voiceId property
 - Additional voice properties depend on the speaking provider
+
+## Usage Examples
+
+### Using Mastra Voice Providers
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { PlayAIVoice } from "@mastra/voice-playai";
+
+// Create voice providers
+const openai = new OpenAIVoice();
+const playai = new PlayAIVoice();
+
+// Use OpenAI for listening (speech-to-text) and PlayAI for speaking (text-to-speech)
+const voice = new CompositeVoice({
+  input: openai,
+  output: playai,
+});
+
+// Convert speech to text using OpenAI
+const text = await voice.listen(audioStream);
+
+// Convert text to speech using PlayAI
+const audio = await voice.speak("Hello, world!");
+```
+
+### Using AI SDK Model Providers
+
+You can pass AI SDK transcription and speech models directly to CompositeVoice:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { openai } from "@ai-sdk/openai";
+import { elevenlabs } from "@ai-sdk/elevenlabs";
+
+// Use AI SDK models directly - they will be auto-wrapped
+const voice = new CompositeVoice({
+  input: openai.transcription('whisper-1'),      // AI SDK transcription
+  output: elevenlabs.speech('eleven_turbo_v2'),  // AI SDK speech
+});
+
+// Works the same way as with Mastra providers
+const text = await voice.listen(audioStream);
+const audio = await voice.speak("Hello from AI SDK!");
+```
+
+### Mix and Match
+
+You can combine Mastra providers with AI SDK models:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { PlayAIVoice } from "@mastra/voice-playai";
+import { groq } from "@ai-sdk/groq";
+
+const voice = new CompositeVoice({
+  input: groq.transcription('whisper-large-v3'),  // AI SDK for STT
+  output: new PlayAIVoice(),                       // Mastra for TTS
+});
+```
