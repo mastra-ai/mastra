@@ -29,26 +29,15 @@ export function createToolCallStep<
       const flushMessagesBeforeSuspension = async () => {
         const { saveQueueManager, memoryConfig, threadId, resourceId, memory } = _internal || {};
 
-        console.log('[DEBUG] flushMessagesBeforeSuspension called', {
-          hasSaveQueueManager: !!saveQueueManager,
-          hasMemory: !!memory,
-          threadId,
-          resourceId,
-          threadExists: _internal?.threadExists,
-        });
-
         if (!saveQueueManager || !threadId) {
-          console.log('[DEBUG] Early return: missing saveQueueManager or threadId');
           return;
         }
 
         try {
           // Ensure thread exists before flushing messages
           if (memory && !_internal.threadExists && resourceId) {
-            console.log('[DEBUG] Checking if thread exists...');
             const thread = await memory.getThreadById?.({ threadId });
             if (!thread) {
-              console.log('[DEBUG] Thread does not exist, creating it...');
               // Thread doesn't exist yet, create it now
               await memory.createThread?.({
                 threadId,
@@ -56,21 +45,13 @@ export function createToolCallStep<
                 memoryConfig,
               });
               _internal.threadExists = true;
-              console.log('[DEBUG] Thread created successfully');
             } else {
               _internal.threadExists = true;
-              console.log('[DEBUG] Thread already exists');
             }
           }
 
           // Flush all pending messages immediately
-          console.log('[DEBUG] Flushing messages...');
-          console.log('[DEBUG] MessageList state:', {
-            allMessages: messageList.get.all.core().length,
-            unsavedCount: messageList.getEarliestUnsavedMessageTimestamp() ? 'has unsaved' : 'no unsaved',
-          });
           await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
-          console.log('[DEBUG] Messages flushed successfully');
         } catch (error) {
           console.error('Error flushing messages before suspension:', error);
         }
