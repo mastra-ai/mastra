@@ -33,14 +33,14 @@ export interface SemanticRecallOptions {
 
   /**
    * Number of most similar messages to retrieve
-   * @default 5
+   * @default 4
    */
   topK?: number;
 
   /**
    * Number of context messages to include before/after each match
    * Can be a number (same for before/after) or an object with before/after
-   * @default 2
+   * @default 1
    */
   messageRange?: number | { before: number; after: number };
 
