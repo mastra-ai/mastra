@@ -2612,7 +2612,7 @@ export class MessageList {
     const finalResult = result.map((modelMsg, index) => {
       const uiMsg = preprocessed[index];
       let updatedMsg = modelMsg;
-      
+
       // Restore message-level providerOptions
       if (
         uiMsg?.metadata &&
@@ -2625,7 +2625,7 @@ export class MessageList {
           providerOptions: uiMsg.metadata.providerMetadata as AIV5Type.ProviderMetadata,
         } satisfies AIV5Type.ModelMessage;
       }
-      
+
       // Restore part-level providerOptions for tool-call parts
       if (updatedMsg.role === 'assistant' && Array.isArray(updatedMsg.content)) {
         const updatedContent = updatedMsg.content.map((part, partIndex) => {
@@ -2641,16 +2641,16 @@ export class MessageList {
           }
           return part;
         });
-        
+
         return {
           ...updatedMsg,
           content: updatedContent,
         } satisfies AIV5Type.ModelMessage;
       }
-      
+
       return updatedMsg;
     });
-    
+
     return finalResult;
   }
   private addStartStepPartsForAIV5(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
