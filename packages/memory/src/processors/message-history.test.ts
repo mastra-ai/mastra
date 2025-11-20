@@ -346,11 +346,11 @@ describe('MessageHistory', () => {
       const messageList = new MessageList();
       messageList.add(newMessages, 'input');
 
+      // Don't pass runtimeContext to simulate no threadId
       const result = await processor.processInput({
         messages: newMessages,
         messageList,
         abort: mockAbort,
-        runtimeContext: createRuntimeContextWithMemory('thread-1'),
       });
 
       const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
@@ -662,13 +662,6 @@ describe('MessageHistory', () => {
           title: 'Test Thread',
           metadata: { createdAt: new Date('2024-01-01') },
         }),
-        listMessages: vi.fn().mockResolvedValue({
-          messages: [{ role: 'user', content: { format: 2, parts: [{ type: 'text', text: 'existing' }] } }],
-          total: 1,
-          page: 0,
-          perPage: 40,
-          hasMore: false,
-        }),
         updateThread: vi.fn().mockResolvedValue(undefined),
       } as unknown as MemoryStorage;
 
@@ -700,7 +693,6 @@ describe('MessageHistory', () => {
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
           lastMessageAt: expect.any(Date),
-          messageCount: 1,
         }),
       });
     });
@@ -855,42 +847,7 @@ describe('MessageHistory', () => {
       expect(mockStorage.saveMessages).not.toHaveBeenCalled();
     });
 
-    it('should generate message IDs if not provided', async () => {
-      const mockStorage = {
-        saveMessages: vi.fn().mockResolvedValue(undefined),
-        getThreadById: vi.fn().mockResolvedValue({
-          id: 'thread-1',
-          title: 'Test Thread',
-          metadata: {},
-        }),
-        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
-        updateThread: vi.fn().mockResolvedValue(undefined),
-      } as unknown as MemoryStorage;
-
-      const processor = new MessageHistory({
-        storage: mockStorage,
-      });
-
-      const messages: MastraDBMessage[] = [
-        {
-          role: 'user' as const,
-          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
-          createdAt: new Date(),
-        } as MastraDBMessage, // No ID - will be auto-generated
-      ];
-
-      await processor.processOutputResult({
-        messages,
-        abort: ((reason?: string) => {
-          throw new Error(reason || 'Aborted');
-        }) as (reason?: string) => never,
-        runtimeContext: createRuntimeContextWithMemory('thread-1'),
-      });
-
-      const savedMessages = (mockStorage.saveMessages as any).mock.calls[0][0].messages;
-      expect(savedMessages[0].id).toBeDefined();
-      expect(savedMessages[0].id).toMatch(/^msg-/);
-    });
+    
 
     it('should preserve existing message IDs', async () => {
       const mockStorage = {

@@ -119,17 +119,10 @@ export class MessageHistory implements Processor {
       return messages;
     }
 
-    // // 2. Add IDs to messages that don't have them
-    // const messagesWithIds = messagesToSave.map(msg => ({
-    //   ...msg,
-    //   id: msg.id || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    // }));
-
     // 3. Save to storage
     try {
       await this.storage.saveMessages({
-        messages,
-        // messages: messagesWithIds,
+        messages: messagesToSave,
       });
     } catch (error) {
       console.warn('Failed to save messages:', error);
@@ -140,12 +133,6 @@ export class MessageHistory implements Processor {
     try {
       const thread = await this.storage.getThreadById({ threadId });
       if (thread) {
-        // const result = await this.storage.listMessages({
-        //   threadId,
-        //   page: 1,
-        //   perPage: 1000,
-        // });
-
         await this.storage.updateThread({
           id: threadId,
           title: thread.title || '',
@@ -153,7 +140,6 @@ export class MessageHistory implements Processor {
             ...thread.metadata,
             updatedAt: new Date(),
             lastMessageAt: new Date(),
-            // messageCount: result.messages.length || 0,
           },
         });
       }
