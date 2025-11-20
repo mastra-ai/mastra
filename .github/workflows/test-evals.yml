@@ -5,6 +5,7 @@ on:
     branches: [main, 0.x]
     paths:
       - 'packages/evals/**'
+      - 'packages/core/**'
       - '.github/workflows/test-evals.yml'
 
 jobs:
