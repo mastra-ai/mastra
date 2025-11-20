@@ -231,6 +231,8 @@ describe('GraphRAG', () => {
       const results = graph.query({
         query: [1, 2, 3],
         topK: 10,
+        randomWalkSteps: 5,
+        restartProb: 0.2,
         filter: { type: 'nonexistent' },
       });
       
