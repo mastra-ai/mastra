@@ -749,7 +749,7 @@ describe('ToolCallFilter', () => {
 
       // Messages are sorted by createdAt
       expect(resultMessages[0]!.id).toBe('msg-1');
-      
+
       expect(resultMessages[1]!.id).toBe('msg-2');
       expect(resultMessages[1]!.content.parts[0]!.type).toBe('tool-invocation');
     });
