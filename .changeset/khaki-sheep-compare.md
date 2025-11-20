@@ -2,4 +2,4 @@
 "@mastra/client-js": patch
 ---
 
-Add description to type
+Added optional `description` field to `GetAgentResponse` to support richer agent metadata
