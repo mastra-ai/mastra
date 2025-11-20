@@ -186,8 +186,6 @@ export class MessageList {
     if (!messages) return this;
     const messageArray = Array.isArray(messages) ? messages : [messages];
 
-
-
     // Record event if recording is enabled
     if (this.isRecording) {
       this.recordedEvents.push({
@@ -771,17 +769,19 @@ export class MessageList {
    */
   public isNewMessage(messageOrId: MastraDBMessage | string): boolean {
     const id = typeof messageOrId === 'string' ? messageOrId : messageOrId.id;
-    
+
     // Check by object reference first (fast path)
     if (typeof messageOrId !== 'string') {
       if (this.newUserMessages.has(messageOrId) || this.newResponseMessages.has(messageOrId)) {
         return true;
       }
     }
-    
+
     // Check by ID (handles copies)
-    return Array.from(this.newUserMessages).some(m => m.id === id) || 
-           Array.from(this.newResponseMessages).some(m => m.id === id);
+    return (
+      Array.from(this.newUserMessages).some(m => m.id === id) ||
+      Array.from(this.newResponseMessages).some(m => m.id === id)
+    );
   }
 
   public getSystemMessages(tag?: string): CoreMessageV4[] {

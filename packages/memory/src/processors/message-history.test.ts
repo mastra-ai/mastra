@@ -847,8 +847,6 @@ describe('MessageHistory', () => {
       expect(mockStorage.saveMessages).not.toHaveBeenCalled();
     });
 
-    
-
     it('should preserve existing message IDs', async () => {
       const mockStorage = {
         saveMessages: vi.fn().mockResolvedValue(undefined),
