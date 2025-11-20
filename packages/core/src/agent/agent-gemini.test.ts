@@ -17,6 +17,7 @@ describe('Gemini Model Compatibility Tests', () => {
   });
 
   const MODEL = 'google/gemini-2.0-flash-lite';
+  const GEMINI_3_PRO = 'google/gemini-3-pro-preview';
 
   describe('Direct generate() method - Gemini basic functionality', () => {
     it('should handle basic generation with Gemini', async () => {
@@ -603,5 +604,46 @@ describe('Gemini Model Compatibility Tests', () => {
       expect(chunks).toBeDefined();
       expect(chunks.length).toBeGreaterThan(1);
     }, 15000);
+  });
+
+  describe('Gemini 3 Pro with tool calls', () => {
+    it('should handle multi-step tool calls with gemini 3 pro', async () => {
+      const weatherTool = createTool({
+        id: 'get-weather-multi',
+        description: 'Gets the current weather for a location',
+        inputSchema: z.object({
+          location: z.string().describe('The city and state, e.g. San Francisco, CA'),
+        }),
+        outputSchema: z.object({
+          temperature: z.number(),
+          conditions: z.string(),
+        }),
+        execute: async () => {
+          return {
+            temperature: 72,
+            conditions: 'Sunny',
+          };
+        },
+      });
+
+      const agent = new Agent({
+        id: 'weather-multi-gemini3-agent',
+        name: 'Weather Multi Gemini3 Agent',
+        instructions:
+          'You are a helpful weather assistant. Use the get-weather-multi tool to answer weather questions.',
+        model: GEMINI_3_PRO,
+        tools: { weatherTool },
+        memory,
+      });
+
+      // This should trigger a tool call, then process the result
+      const result = await agent.generate('What is the weather in San Francisco and New York?', {
+        maxSteps: 5,
+      });
+
+      expect(result).toBeDefined();
+      expect(result.text).toBeDefined();
+      expect(result.text.length).toBeGreaterThan(0);
+    }, 30000);
   });
 });
