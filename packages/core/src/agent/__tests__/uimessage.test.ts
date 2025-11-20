@@ -38,6 +38,18 @@ function uiMessageTest(version: 'v1' | 'v2') {
         });
       } else {
         dummyModel = new MockLanguageModelV2({
+          doGenerate: async () => ({
+            content: [
+              {
+                type: 'text',
+                text: 'Response acknowledging metadata',
+              },
+            ],
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          }),
           doStream: async () => ({
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },

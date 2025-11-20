@@ -20,6 +20,13 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       });
     } else {
       dummyModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: 'Dummy response' }],
+          warnings: [],
+        }),
         doStream: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',

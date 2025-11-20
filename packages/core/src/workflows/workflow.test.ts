@@ -1746,7 +1746,7 @@ describe('Workflow', () => {
       streamResult = run.resumeStreamVNext({ resumeData, step: promptAgent });
       console.log('created stream');
       for await (const _data of streamResult.fullStream) {
-        console.log('data===', _data);
+        // console.log('data===', _data);
       }
 
       expect(evaluateToneAction).toHaveBeenCalledTimes(1);

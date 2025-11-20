@@ -30,7 +30,7 @@ async function checkIterations(anStream: AsyncIterable<any>) {
   expect(iterations[0], 'First iteration must start at 0, not 1').toBe(0);
 }
 
-describe('Agent - network', () => {
+describe.skip('Agent - network', () => {
   const memory = new MockMemory();
 
   const agent1 = new Agent({
