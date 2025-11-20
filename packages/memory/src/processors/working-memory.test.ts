@@ -1,5 +1,5 @@
-import type { MemoryRuntimeContext } from '@mastra/core/memory';
-import type { MastraMessageV2 } from '@mastra/core/message';
+import { MessageList } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -30,7 +30,7 @@ describe('WorkingMemory', () => {
       const threadId = 'thread-123';
       const workingMemoryData = '# User Info\n- Name: John\n- Preference: Dark mode';
 
-      runtimeContext.set<MemoryRuntimeContext>('MastraMemory', {
+      runtimeContext.set('MastraMemory', {
         thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
         resourceId: 'resource-1',
       });
@@ -39,35 +39,38 @@ describe('WorkingMemory', () => {
         id: threadId,
         resourceId: 'resource-1',
         title: 'Test Thread',
-        metadata: {
-          workingMemory: workingMemoryData,
-        },
+        metadata: { workingMemory: workingMemoryData },
         createdAt: new Date(),
         updatedAt: new Date(),
       });
 
-      const messages: MastraMessageV2[] = [
+      const messages: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'user',
-          content: 'Hello',
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
           createdAt: new Date(),
         },
       ];
 
+      const messageList = new MessageList();
+      messageList.add(messages as any, 'input');
+
       const result = await processor.processInput({
-        messages,
+        messages: messages as any,
+        messageList,
         abort: () => {
           throw new Error('Aborted');
         },
         runtimeContext,
       });
 
-      expect(result).toHaveLength(2);
-      expect(result[0].role).toBe('system');
-      expect(result[0].content.content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
-      expect(result[0].content.content).toContain(workingMemoryData);
-      expect(result[1]).toEqual(messages[0]);
+      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      expect(resultMessages).toHaveLength(2);
+      expect(resultMessages[0].role).toBe('system');
+      expect(resultMessages[0].content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
+      expect(resultMessages[0].content).toContain(workingMemoryData);
+      expect(resultMessages[1].role).toBe('user');
       expect(mockStorage.getThreadById).toHaveBeenCalledWith({ threadId });
     });
 
@@ -80,40 +83,44 @@ describe('WorkingMemory', () => {
       const resourceId = 'resource-456';
       const workingMemoryData = '# Project Context\n- Status: In Progress\n- Deadline: Friday';
 
-      runtimeContext.set<MemoryRuntimeContext>('MastraMemory', {
+      runtimeContext.set('MastraMemory', {
         thread: { id: 'thread-1', resourceId, title: 'Test', createdAt: new Date(), updatedAt: new Date() },
         resourceId,
       });
 
       vi.mocked(mockStorage.getResourceById).mockResolvedValue({
         id: resourceId,
-        name: 'Test Resource',
         workingMemory: workingMemoryData,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
 
-      const messages: MastraMessageV2[] = [
+      const messages: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'user',
-          content: 'What is the status?',
+          content: { format: 2, parts: [{ type: 'text', text: 'What is the status?' }] },
           createdAt: new Date(),
         },
       ];
 
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
       const result = await processor.processInput({
         messages,
+        messageList,
         abort: () => {
           throw new Error('Aborted');
         },
         runtimeContext,
       });
 
-      expect(result).toHaveLength(2);
-      expect(result[0].role).toBe('system');
-      expect(result[0].content.content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
-      expect(result[0].content.content).toContain(workingMemoryData);
+      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      expect(resultMessages).toHaveLength(2);
+      expect(resultMessages[0].role).toBe('system');
+      expect(resultMessages[0].content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
+      expect(resultMessages[0].content).toContain(workingMemoryData);
       expect(mockStorage.getResourceById).toHaveBeenCalledWith({ resourceId });
     });
 
@@ -125,7 +132,7 @@ describe('WorkingMemory', () => {
 
       const threadId = 'thread-123';
 
-      runtimeContext.set<MemoryRuntimeContext>('MastraMemory', {
+      runtimeContext.set('MastraMemory', {
         thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
         resourceId: 'resource-1',
       });
@@ -134,34 +141,36 @@ describe('WorkingMemory', () => {
         id: threadId,
         resourceId: 'resource-1',
         title: 'Test Thread',
-        metadata: {
-          workingMemory: null,
-        },
+        metadata: { workingMemory: null },
         createdAt: new Date(),
         updatedAt: new Date(),
       });
 
-      const messages: MastraMessageV2[] = [
+      const messages: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'user',
-          content: 'Hello',
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
           createdAt: new Date(),
         },
       ];
 
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
       const result = await processor.processInput({
         messages,
+        messageList,
         abort: () => {
           throw new Error('Aborted');
         },
         runtimeContext,
       });
 
-      expect(result).toHaveLength(2);
-      expect(result[0].role).toBe('system');
-      expect(result[0].content.content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
-      expect(result[0].content.content).toContain('# User Information');
+      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      expect(resultMessages).toHaveLength(2);
+      expect(resultMessages[0].role).toBe('system');
+      expect(resultMessages[0].content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
+      expect(resultMessages[0].content).toContain('# User Information');
     });
 
     it('should use custom template when provided', async () => {
@@ -178,7 +187,7 @@ describe('WorkingMemory', () => {
 
       const threadId = 'thread-123';
 
-      runtimeContext.set<MemoryRuntimeContext>('MastraMemory', {
+      runtimeContext.set('MastraMemory', {
         thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
         resourceId: 'resource-1',
       });
@@ -187,32 +196,34 @@ describe('WorkingMemory', () => {
         id: threadId,
         resourceId: 'resource-1',
         title: 'Test Thread',
-        metadata: {
-          workingMemory: null,
-        },
+        metadata: { workingMemory: null },
         createdAt: new Date(),
         updatedAt: new Date(),
       });
 
-      const messages: MastraMessageV2[] = [
+      const messages: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'user',
-          content: 'Hello',
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
           createdAt: new Date(),
         },
       ];
 
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
       const result = await processor.processInput({
         messages,
+        messageList,
         abort: () => {
           throw new Error('Aborted');
         },
         runtimeContext,
       });
 
-      expect(result[0].content.content).toContain('# Custom Template');
-      expect(result[0].content.content).toContain('- Field 1:');
+      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      expect(resultMessages[0].content).toContain('# Custom Template');
+      expect(resultMessages[0].content).toContain('- Field 1:');
     });
 
     it('should use VNext instruction format when useVNext is true', async () => {
@@ -224,7 +235,7 @@ describe('WorkingMemory', () => {
 
       const threadId = 'thread-123';
 
-      runtimeContext.set<MemoryRuntimeContext>('MastraMemory', {
+      runtimeContext.set('MastraMemory', {
         thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
         resourceId: 'resource-1',
       });
@@ -233,32 +244,34 @@ describe('WorkingMemory', () => {
         id: threadId,
         resourceId: 'resource-1',
         title: 'Test Thread',
-        metadata: {
-          workingMemory: 'Some data',
-        },
+        metadata: { workingMemory: 'Some data' },
         createdAt: new Date(),
         updatedAt: new Date(),
       });
 
-      const messages: MastraMessageV2[] = [
+      const messages: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'user',
-          content: 'Hello',
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
           createdAt: new Date(),
         },
       ];
 
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
       const result = await processor.processInput({
         messages,
+        messageList,
         abort: () => {
           throw new Error('Aborted');
         },
         runtimeContext,
       });
 
-      expect(result[0].content.content).toContain('If your memory has not changed');
-      expect(result[0].content.content).toContain('Information not being relevant to the current conversation');
+      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      expect(resultMessages[0].content).toContain('If your memory has not changed');
+      expect(resultMessages[0].content).toContain('Information not being relevant to the current conversation');
     });
 
     it('should return original messages when no threadId or resourceId', async () => {
@@ -267,24 +280,29 @@ describe('WorkingMemory', () => {
         scope: 'thread',
       });
 
-      const messages: MastraMessageV2[] = [
+      const messages: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'user',
-          content: 'Hello',
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
           createdAt: new Date(),
         },
       ];
 
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
       const result = await processor.processInput({
         messages,
+        messageList,
         abort: () => {
           throw new Error('Aborted');
         },
         runtimeContext: new RequestContext(),
       });
 
-      expect(result).toEqual(messages);
+      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      expect(resultMessages).toHaveLength(1);
+      expect(resultMessages[0].role).toBe('user');
       expect(mockStorage.getThreadById).not.toHaveBeenCalled();
       expect(mockStorage.getResourceById).not.toHaveBeenCalled();
     });
@@ -297,24 +315,27 @@ describe('WorkingMemory', () => {
 
       const threadId = 'thread-123';
 
-      runtimeContext.set<MemoryRuntimeContext>('MastraMemory', {
+      runtimeContext.set('MastraMemory', {
         thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
         resourceId: 'resource-1',
       });
 
       vi.mocked(mockStorage.getThreadById).mockRejectedValue(new Error('Storage error'));
 
-      const messages: MastraMessageV2[] = [
+      const messages: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'user',
-          content: 'Hello',
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
           createdAt: new Date(),
         },
       ];
 
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
       const result = await processor.processInput({
         messages,
+        messageList,
         abort: () => {
           throw new Error('Aborted');
         },
@@ -322,7 +343,10 @@ describe('WorkingMemory', () => {
       });
 
       // Should return original messages on error
-      expect(result).toEqual(messages);
+
+      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      expect(resultMessages).toHaveLength(1);
+      expect(resultMessages[0].role).toBe('user');
     });
     it('should default to resource scope when scope not specified', async () => {
       const processor = new WorkingMemory({
@@ -332,7 +356,7 @@ describe('WorkingMemory', () => {
 
       const threadId = 'thread-123';
 
-      runtimeContext.set<MemoryRuntimeContext>('MastraMemory', {
+      runtimeContext.set('MastraMemory', {
         thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
         resourceId: 'resource-1',
       });
@@ -344,24 +368,28 @@ describe('WorkingMemory', () => {
         updatedAt: new Date(),
       });
 
-      const messages: MastraMessageV2[] = [
+      const messages: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'user',
-          content: 'Hello',
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
           createdAt: new Date(),
         },
       ];
 
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
       const result = await processor.processInput({
         messages,
+        messageList,
         abort: () => {
           throw new Error('Aborted');
         },
         runtimeContext,
       });
 
-      expect(result).toHaveLength(2);
+      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      expect(resultMessages).toHaveLength(2);
       expect(mockStorage.getResourceById).toHaveBeenCalledWith({ resourceId: 'resource-1' });
       expect(mockStorage.getThreadById).not.toHaveBeenCalled();
     });
@@ -383,7 +411,7 @@ describe('WorkingMemory', () => {
 
       const threadId = 'thread-123';
 
-      runtimeContext.set<MemoryRuntimeContext>('MastraMemory', {
+      runtimeContext.set('MastraMemory', {
         thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
         resourceId: 'resource-1',
       });
@@ -392,32 +420,34 @@ describe('WorkingMemory', () => {
         id: threadId,
         resourceId: 'resource-1',
         title: 'Test Thread',
-        metadata: {
-          workingMemory: null,
-        },
+        metadata: { workingMemory: null },
         createdAt: new Date(),
         updatedAt: new Date(),
       });
 
-      const messages: MastraMessageV2[] = [
+      const messages: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'user',
-          content: 'Hello',
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
           createdAt: new Date(),
         },
       ];
 
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
       const result = await processor.processInput({
         messages,
+        messageList,
         abort: () => {
           throw new Error('Aborted');
         },
         runtimeContext,
       });
 
-      expect(result[0].content.content).toContain('Use JSON format for all data');
-      expect(result[0].content.content).not.toContain('IMPORTANT: When calling updateWorkingMemory');
+      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      expect(resultMessages[0].content).toContain('Use JSON format for all data');
+      expect(resultMessages[0].content).not.toContain('IMPORTANT: When calling updateWorkingMemory');
     });
 
     it('should prepend working memory before existing messages', async () => {
@@ -428,7 +458,7 @@ describe('WorkingMemory', () => {
 
       const threadId = 'thread-123';
 
-      runtimeContext.set<MemoryRuntimeContext>('MastraMemory', {
+      runtimeContext.set('MastraMemory', {
         thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
         resourceId: 'resource-1',
       });
@@ -437,40 +467,42 @@ describe('WorkingMemory', () => {
         id: threadId,
         resourceId: 'resource-1',
         title: 'Test Thread',
-        metadata: {
-          workingMemory: 'Test data',
-        },
+        metadata: { workingMemory: 'Test data' },
         createdAt: new Date(),
         updatedAt: new Date(),
       });
 
-      const messages: MastraMessageV2[] = [
+      const messages: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'user',
-          content: 'First message',
+          content: { format: 2, parts: [{ type: 'text', text: 'First message' }] },
           createdAt: new Date(),
         },
         {
           id: 'msg-2',
           role: 'assistant',
-          content: 'Second message',
+          content: { format: 2, parts: [{ type: 'text', text: 'Second message' }] },
           createdAt: new Date(),
         },
       ];
 
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
       const result = await processor.processInput({
         messages,
+        messageList,
         abort: () => {
           throw new Error('Aborted');
         },
         runtimeContext,
       });
 
-      expect(result).toHaveLength(3);
-      expect(result[0].role).toBe('system');
-      expect(result[1]).toEqual(messages[0]);
-      expect(result[2]).toEqual(messages[1]);
+      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      expect(resultMessages).toHaveLength(3);
+      expect(resultMessages[0].role).toBe('system');
+      expect(resultMessages[1].role).toBe('user');
+      expect(resultMessages[2].role).toBe('assistant');
     });
 
     it('should handle empty working memory data', async () => {
@@ -481,7 +513,7 @@ describe('WorkingMemory', () => {
 
       const threadId = 'thread-123';
 
-      runtimeContext.set<MemoryRuntimeContext>('MastraMemory', {
+      runtimeContext.set('MastraMemory', {
         thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
         resourceId: 'resource-1',
       });
@@ -490,32 +522,36 @@ describe('WorkingMemory', () => {
         id: threadId,
         resourceId: 'resource-1',
         title: 'Test Thread',
-        workingMemory: '',
+        metadata: { workingMemory: '' },
         createdAt: new Date(),
         updatedAt: new Date(),
       });
 
-      const messages: MastraMessageV2[] = [
+      const messages: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'user',
-          content: 'Hello',
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
           createdAt: new Date(),
         },
       ];
 
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
       const result = await processor.processInput({
         messages,
+        messageList,
         abort: () => {
           throw new Error('Aborted');
         },
         runtimeContext,
       });
 
-      expect(result).toHaveLength(2);
-      expect(result[0].role).toBe('system');
-      expect(result[0].content.content).toContain('<working_memory_data>');
-      expect(result[0].content.content).toContain('</working_memory_data>');
+      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      expect(resultMessages).toHaveLength(2);
+      expect(resultMessages[0].role).toBe('system');
+      expect(resultMessages[0].content).toContain('<working_memory_data>');
+      expect(resultMessages[0].content).toContain('</working_memory_data>');
     });
   });
 });

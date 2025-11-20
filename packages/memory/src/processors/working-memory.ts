@@ -134,9 +134,9 @@ export class WorkingMemory implements InputProcessor {
         ? this.getWorkingMemoryToolInstructionVNext({ template, data: workingMemoryData })
         : this.getWorkingMemoryToolInstruction({ template, data: workingMemoryData });
 
-      // If we have a MessageList, add working memory to it with source: 'context'
+      // If we have a MessageList, add working memory to it with source: 'memory'
       if (instruction) {
-        messageList.addSystem(instruction, 'context');
+        messageList.addSystem(instruction, 'memory');
       }
       return messageList;
     } catch (error) {
