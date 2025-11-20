@@ -30,7 +30,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "mssql": "^11.0.1"
+    "mssql": "^12.1.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
