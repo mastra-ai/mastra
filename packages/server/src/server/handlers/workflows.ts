@@ -669,7 +669,7 @@ export const RESTART_ASYNC_WORKFLOW_ROUTE = createRoute({
   bodySchema: restartBodySchema,
   responseSchema: workflowExecutionResultSchema,
   summary: 'Restart workflow asynchronously',
-  description: 'Restarts an active workflow execution asynchronously without streaming',
+  description: 'Restarts an active workflow execution asynchronously',
   tags: ['Workflows'],
   handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
@@ -779,7 +779,7 @@ export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ASYNC_ROUTE = createRoute({
 
 export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/workflows/:workflowId/restart-all-active-workflow-runs-async',
+  path: '/api/workflows/:workflowId/restart-all-active-workflow-runs',
   responseType: 'json',
   pathParamSchema: workflowIdPathParams,
   responseSchema: workflowControlResponseSchema,
@@ -816,9 +816,9 @@ export const TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE = createRoute({
   bodySchema: timeTravelBodySchema,
   responseSchema: workflowExecutionResultSchema,
   summary: 'Time travel workflow asynchronously',
-  description: 'Time travels an active workflow execution asynchronously without streaming',
+  description: 'Time travels a workflow run asynchronously without streaming',
   tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
+  handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -841,10 +841,7 @@ export const TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE = createRoute({
       }
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      const result = await _run.timeTravel({
-        ...params,
-        requestContext,
-      });
+      const result = await _run.timeTravel(params);
 
       return result;
     } catch (error) {
@@ -862,7 +859,7 @@ export const TIME_TRAVEL_WORKFLOW_ROUTE = createRoute({
   bodySchema: timeTravelBodySchema,
   responseSchema: workflowControlResponseSchema,
   summary: 'Time travel workflow',
-  description: 'Time travels an active workflow execution',
+  description: 'Time travels a workflow run, starting from a specific step',
   tags: ['Workflows'],
   handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
@@ -905,7 +902,7 @@ export const TIME_TRAVEL_STREAM_WORKFLOW_ROUTE = createRoute({
   queryParamSchema: runIdSchema,
   bodySchema: timeTravelBodySchema,
   summary: 'Time travel workflow stream',
-  description: 'Time travels an active workflow execution and streams the results in real-time',
+  description: 'Time travels a workflow run, starting from a specific step, and streams the results in real-time',
   tags: ['Workflows'],
   handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
