@@ -1,5 +1,16 @@
 # @mastra/core
 
+## 0.24.4-alpha.0
+
+### Patch Changes
+
+- Fix providerMetadata preservation for Gemini function calls ([#10365](https://github.com/mastra-ai/mastra/pull/10365))
+  - Convert stream chunks directly to MastraMessageV2 format in loop steps to preserve providerMetadata
+  - Add message-level providerMetadata support to MastraMessageContentV2 and V3 types
+  - Fix sanitizeV5UIMessages filtering to match original 0.x behavior
+  - Hydrate threadId and resourceId from memoryInfo when missing
+  - Update test utilities for 0.x compatibility
+
 ## 0.24.3
 
 ### Patch Changes
