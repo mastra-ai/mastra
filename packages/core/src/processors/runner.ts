@@ -88,9 +88,11 @@ export class ProcessorRunner {
     tracingContext?: TracingContext,
     runtimeContext?: RequestContext,
   ): Promise<MessageList> {
-    const responseMessages = messageList.get.response.db();
+    // Get all new messages (both user input and assistant response) that should be processed
+    // This matches what main does with drainUnsavedMessages()
+    const allNewMessages = messageList.get.all.db().filter(m => messageList.isNewMessage(m));
 
-    let processableMessages: MastraDBMessage[] = [...responseMessages];
+    let processableMessages: MastraDBMessage[] = [...allNewMessages];
 
     const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
       messages: processableMessages,

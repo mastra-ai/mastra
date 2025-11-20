@@ -459,7 +459,7 @@ export class SemanticRecall implements Processor {
    */
   async processOutputResult(args: {
     messages: MastraDBMessage[];
-    messageList: MessageList;
+    messageList?: MessageList;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
     runtimeContext?: RequestContext;
@@ -501,9 +501,8 @@ export class SemanticRecall implements Processor {
         // Only embed new user messages and new response messages
         // Skip context messages and memory messages
         if (messageList) {
-          const isNewUserMessage = (messageList as any).newUserMessages?.has(message);
-          const isNewResponseMessage = (messageList as any).newResponseMessages?.has(message);
-          if (!isNewUserMessage && !isNewResponseMessage) {
+          const isNewMessage = messageList.isNewMessage(message);
+          if (!isNewMessage) {
             continue;
           }
         }
