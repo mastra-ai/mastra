@@ -177,13 +177,44 @@ import { OpenAIVoice } from "@mastra/voice-openai";
 import { PlayAIVoice } from "@mastra/voice-playai";
 
 const voice = new CompositeVoice({
-  listenProvider: new OpenAIVoice(),
-  speakProvider: new PlayAIVoice(),
+  input: new OpenAIVoice(),
+  output: new PlayAIVoice(),
 });
 
 // This will use the OpenAIVoice provider
 const transcript = await voice.listen(audioStream);
 ```
+
+### Using AI SDK Model Providers
+
+You can also use AI SDK transcription models directly with `CompositeVoice`:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { openai } from "@ai-sdk/openai";
+import { groq } from "@ai-sdk/groq";
+
+// Use AI SDK transcription models
+const voice = new CompositeVoice({
+  input: openai.transcription('whisper-1'),  // AI SDK model
+  output: new PlayAIVoice(),                 // Mastra provider
+});
+
+// Works the same way
+const transcript = await voice.listen(audioStream);
+
+// Provider-specific options can be passed through
+const transcriptWithOptions = await voice.listen(audioStream, {
+  providerOptions: {
+    openai: {
+      language: 'en',
+      prompt: 'This is about AI',
+    }
+  }
+});
+```
+
+See the [CompositeVoice reference](/reference/v1/voice/composite-voice) for more details on AI SDK integration.
 
 ## Notes
 
