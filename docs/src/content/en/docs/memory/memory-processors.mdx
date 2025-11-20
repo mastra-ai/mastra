@@ -21,12 +21,11 @@ This processor is used to prevent errors caused by exceeding the LLM's context w
 import { Memory } from "@mastra/memory";
 import { TokenLimiter } from "@mastra/memory/processors";
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
   id: "test-agent",
   name: "Test Agent",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   memory: new Memory({
     processors: [
       // Ensure the total tokens from memory don't exceed ~127k

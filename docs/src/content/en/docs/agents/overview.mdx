@@ -63,7 +63,7 @@ export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
   instructions: "You are a helpful assistant.",
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
 });
 ```
 
@@ -112,7 +112,7 @@ export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
   instructions: "You are a helpful assistant.",
-  model: openai("gpt-4o-mini"),
+  model: openai("gpt-5.1"),
 });
 ```
 
@@ -320,7 +320,7 @@ const response = await testAgentWithTools.generate(
         summary: z.string(),
         keywords: z.array(z.string()),
       }),
-      model: "openai/gpt-4o",
+      model: "openai/gpt-5.1",
     },
   },
 );
@@ -476,8 +476,8 @@ export const testAgent = new Agent({
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
     return userTier === "enterprise"
-      ? openai("gpt-4o-mini")
-      : openai("gpt-4.1-nano");
+      ? "openai/gpt-5"
+      : "openai/gpt-4.1-nano";
   },
 });
 ```

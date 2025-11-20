@@ -72,9 +72,9 @@ export const supportAgent = new Agent({
   }) => {
     const userTier = requestContext.get("user-tier");
 
-    if (userTier === "enterprise") return "openai/gpt-5";
-    if (userTier === "pro") return "openai/gpt-4o";
-    return "openai/gpt-4o-mini";
+    if (userTier === "enterprise") return "openai/gpt-5.1";
+    if (userTier === "pro") return "openai/gpt-4.1";
+    return "openai/gpt-4.1-nano";
   },
 
   tools: ({
