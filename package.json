@@ -4,9 +4,9 @@
   "type": "module",
   "devDependencies": {
     "@changesets/cli": "^2.29.7",
-    "@types/node": "22.13.17",
-    "@vitest/coverage-v8": "^4.0.8",
-    "@vitest/ui": "^4.0.8",
+    "@types/node": "22.19.1",
+    "@vitest/coverage-v8": "^4.0.9",
+    "@vitest/ui": "^4.0.9",
     "changesets-changelog-github-local": "^1.0.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.1.6",
@@ -90,7 +90,7 @@
   },
   "resolutions": {
     "typescript": "^5.8.3",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.1",
     "cookie": ">=0.7.2",
     "tmp": ">=0.2.5",
     "jsondiffpatch": ">=0.7.3"

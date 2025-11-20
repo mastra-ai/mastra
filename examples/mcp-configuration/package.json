@@ -24,7 +24,7 @@
   },
   "devDependencies": {
     "mastra": "latest",
-    "tsx": "^4.19.3"
+    "tsx": "^4.20.6"
   },
   "pnpm": {
     "overrides": {

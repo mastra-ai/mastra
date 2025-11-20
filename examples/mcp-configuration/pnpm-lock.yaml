@@ -43,8 +43,8 @@ importers:
         specifier: link:../../packages/cli
         version: link:../../packages/cli
       tsx:
-        specifier: ^4.19.3
-        version: 4.19.3
+        specifier: ^4.20.6
+        version: 4.20.6
 
 packages:
 
@@ -553,8 +553,8 @@ packages:
     resolution: {integrity: sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA==}
     engines: {node: '>=0.6'}
 
-  tsx@4.19.3:
-    resolution: {integrity: sha512-4H8vUNGNjQ4V2EOoGw005+c+dGuPSnhpPBPHBtsZdGZBk/iJb4kguGlPWaZTZ3q5nMtFOEsY0nRDlh9PJyd6SQ==}
+  tsx@4.20.6:
+    resolution: {integrity: sha512-ytQKuwgmrrkDTFP4LjR0ToE2nqgy886GpvRSpU0JAnrdBYppuY5rLkRUYPU1yCryb24SsKBTL/hlDQAEFVwtZg==}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
@@ -1078,7 +1078,7 @@ snapshots:
 
   toidentifier@1.0.1: {}
 
-  tsx@4.19.3:
+  tsx@4.20.6:
     dependencies:
       esbuild: 0.25.3
       get-tsconfig: 4.10.0
