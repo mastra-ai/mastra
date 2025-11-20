@@ -9,6 +9,7 @@ import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { MastraStorage } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraVector } from '../vector';
+import type { VectorFilter } from '../vector/filter/base';
 import type { MemoryProcessor } from '.';
 
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
@@ -227,6 +228,21 @@ export type SemanticRecall = {
    * ```
    */
   indexConfig?: VectorIndexConfig;
+
+  /**
+   * Metadata filter for semantic search queries.
+   * Allows filtering results by metadata fields using MongoDB-style query syntax.
+   * Works in combination with scope-based filtering (resource_id/thread_id).
+   *
+   * @example
+   * ```typescript
+   * filter: {
+   *   projectId: { $eq: 'project-a' },
+   *   category: { $in: ['work', 'personal'] }
+   * }
+   * ```
+   */
+  filter?: VectorFilter;
 };
 
 /**
