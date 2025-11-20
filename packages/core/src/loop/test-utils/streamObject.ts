@@ -655,7 +655,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 id: expect.any(String),
                 metadata: {
-                  __originalContent: '{"content": "Hello, world!"}',
                   structuredOutput: {
                     content: 'Hello, world!',
                   },
@@ -993,8 +992,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   {
                     "id": "1234",
                     "metadata": {
-                      "__originalContent": "{ "content": "Hello, world!" }",
-                      "createdAt": 2024-01-01T00:00:00.001Z,
+                      "createdAt": 2024-01-01T00:00:00.000Z,
                       "structuredOutput": {
                         "content": "Hello, world!",
                       },
@@ -1057,8 +1055,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       {
                         "id": "1234",
                         "metadata": {
-                          "__originalContent": "{ "content": "Hello, world!" }",
-                          "createdAt": 2024-01-01T00:00:00.001Z,
+                          "createdAt": 2024-01-01T00:00:00.000Z,
                           "structuredOutput": {
                             "content": "Hello, world!",
                           },
@@ -1216,8 +1213,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   {
                     "id": "1234",
                     "metadata": {
-                      "__originalContent": "{ "invalid": "Hello, world!" }",
-                      "createdAt": 2024-01-01T00:00:00.001Z,
+                      "createdAt": 2024-01-01T00:00:00.000Z,
                     },
                     "parts": [
                       {
@@ -1273,8 +1269,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       {
                         "id": "1234",
                         "metadata": {
-                          "__originalContent": "{ "invalid": "Hello, world!" }",
-                          "createdAt": 2024-01-01T00:00:00.001Z,
+                          "createdAt": 2024-01-01T00:00:00.000Z,
                         },
                         "parts": [
                           {
@@ -1429,8 +1424,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   {
                     "id": "1234",
                     "metadata": {
-                      "__originalContent": "{ "invalid": "Hello, world!" }",
-                      "createdAt": 2024-01-01T00:00:00.001Z,
+                      "createdAt": 2024-01-01T00:00:00.000Z,
                     },
                     "parts": [
                       {
@@ -1486,8 +1480,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       {
                         "id": "1234",
                         "metadata": {
-                          "__originalContent": "{ "invalid": "Hello, world!" }",
-                          "createdAt": 2024-01-01T00:00:00.001Z,
+                          "createdAt": 2024-01-01T00:00:00.000Z,
                         },
                         "parts": [
                           {
