@@ -636,7 +636,6 @@ describe('Gemini Model Compatibility Tests', () => {
       });
 
       // This should trigger a tool call, then process the result
-      // The error occurs when Gemini tries to process the tool result without thought_signature
       const stream = await agent.stream('What is the weather in San Francisco?', {
         maxSteps: 5,
         threadId: 'tool-calls',
@@ -655,7 +654,6 @@ describe('Gemini Model Compatibility Tests', () => {
         resourceId: 'gemini-3',
       });
       const result2 = await stream2.getFullOutput();
-      console.log('result2', result2);
       expect(result2).toBeDefined();
       expect(result2.request.body).toContain(`thoughtSignature`);
       expect(result2.text).toBeDefined();
