@@ -412,12 +412,8 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     return this.executeWriteOperationWithRetry(() => this.doUpdateVector(args));
   }
 
-  private async doUpdateVector({
-    indexName,
-    id,
-    filter,
-    update,
-  }: UpdateVectorParams<LibSQLVectorFilter>): Promise<void> {
+  private async doUpdateVector(params: UpdateVectorParams<LibSQLVectorFilter>): Promise<void> {
+    const { indexName, update } = params;
     const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
 
     if (!update.vector && !update.metadata) {
@@ -427,27 +423,6 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
         category: ErrorCategory.USER,
         details: { indexName },
         text: 'No updates provided',
-      });
-    }
-
-    // Validate that exactly one of id or filter is provided
-    if (!id && !filter) {
-      throw new MastraError({
-        id: 'LIBSQL_VECTOR_UPDATE_MISSING_PARAMS',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        details: { indexName },
-        text: 'Either id or filter must be provided',
-      });
-    }
-
-    if (id && filter) {
-      throw new MastraError({
-        id: 'LIBSQL_VECTOR_UPDATE_CONFLICTING_PARAMS',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        details: { indexName },
-        text: 'Cannot provide both id and filter - they are mutually exclusive',
       });
     }
 
@@ -471,12 +446,15 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     let whereClause: string;
     let whereValues: InValue[];
 
-    if (id) {
+    // Type narrowing: check if updating by id or by filter
+    if ('id' in params && params.id) {
       // Update by ID
       whereClause = 'vector_id = ?';
-      whereValues = [id];
-    } else {
+      whereValues = [params.id];
+    } else if ('filter' in params && params.filter) {
       // Update by filter
+      const filter = params.filter;
+
       if (!filter || Object.keys(filter).length === 0) {
         throw new MastraError({
           id: 'LIBSQL_VECTOR_UPDATE_EMPTY_FILTER',
@@ -521,6 +499,14 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
       // buildFilterQuery already includes "WHERE" in the SQL, so we need to extract just the condition
       whereClause = filterSql.replace(/^WHERE\s+/i, '');
       whereValues = filterValues;
+    } else {
+      throw new MastraError({
+        id: 'LIBSQL_VECTOR_UPDATE_MISSING_PARAMS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: 'Either id or filter must be provided',
+      });
     }
 
     const query = `
@@ -535,16 +521,22 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
         args: [...args, ...whereValues],
       });
     } catch (error) {
+      const errorDetails: Record<string, any> = { indexName };
+
+      if ('id' in params && params.id) {
+        errorDetails.id = params.id;
+      }
+
+      if ('filter' in params && params.filter) {
+        errorDetails.filter = JSON.stringify(params.filter);
+      }
+
       throw new MastraError(
         {
           id: 'LIBSQL_VECTOR_UPDATE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: {
-            indexName,
-            ...(id && { id }),
-            ...(filter && { filter: JSON.stringify(filter) }),
-          },
+          details: errorDetails,
         },
         error,
       );

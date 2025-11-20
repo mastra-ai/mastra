@@ -312,35 +312,58 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
   }
 
   /**
-   * Updates a vector by its ID with the provided vector and/or metadata.
-   * @param indexName - The name of the index containing the vector.
-   * @param id - The ID of the vector to update.
-   * @param update - An object containing the vector and/or metadata to update.
-   * @param update.vector - An optional array of numbers representing the new vector.
-   * @param update.metadata - An optional record containing the new metadata.
+   * Updates vectors by ID or filter with the provided vector and/or metadata.
+   * @param params - Parameters containing either id or filter for targeting vectors to update
+   * @param params.indexName - The name of the index containing the vector(s).
+   * @param params.id - The ID of a single vector to update (mutually exclusive with filter).
+   * @param params.filter - A filter to match multiple vectors to update (mutually exclusive with id).
+   * @param params.update - An object containing the vector and/or metadata to update.
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
-    if (!id) {
+  async updateVector(params: UpdateVectorParams<OpenSearchVectorFilter>): Promise<void> {
+    const { indexName, update } = params;
+
+    if (!update.vector && !update.metadata) {
       throw new MastraError({
-        id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_NO_UPDATES',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
-        text: 'id is required for OpenSearch updateVector',
+        text: 'No updates provided',
         details: { indexName },
       });
     }
 
+    // Type-narrowing: check if updating by id or by filter
+    if ('id' in params && params.id) {
+      // Update by ID
+      await this.updateVectorById(indexName, params.id, update);
+    } else if ('filter' in params && params.filter) {
+      // Update by filter
+      await this.updateVectorsByFilter(indexName, params.filter, update);
+    } else {
+      throw new MastraError({
+        id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_MISSING_PARAMS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Either id or filter must be provided',
+        details: { indexName },
+      });
+    }
+  }
+
+  /**
+   * Updates a single vector by its ID.
+   */
+  private async updateVectorById(
+    indexName: string,
+    id: string,
+    update: { vector?: number[]; metadata?: Record<string, any> },
+  ): Promise<void> {
     let existingDoc;
     try {
-      if (!update.vector && !update.metadata) {
-        throw new Error('No updates provided');
-      }
-
       // First get the current document to merge with updates
       const { body } = await this.client
-
         .get({
           index: indexName,
           id: id,
@@ -361,7 +384,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
           category: ErrorCategory.USER,
           details: {
             indexName,
-            ...(id && { id }),
+            id,
           },
         },
         error,
@@ -409,7 +432,62 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             indexName,
-            ...(id && { id }),
+            id,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Updates multiple vectors matching a filter.
+   */
+  private async updateVectorsByFilter(
+    indexName: string,
+    filter: OpenSearchVectorFilter,
+    update: { vector?: number[]; metadata?: Record<string, any> },
+  ): Promise<void> {
+    try {
+      const translator = new OpenSearchFilterTranslator();
+      const translatedFilter = translator.translate(filter);
+
+      // Build the update script
+      const scriptSource: string[] = [];
+      const scriptParams: Record<string, any> = {};
+
+      if (update.vector) {
+        scriptSource.push('ctx._source.embedding = params.embedding');
+        scriptParams.embedding = update.vector;
+      }
+
+      if (update.metadata) {
+        scriptSource.push('ctx._source.metadata = params.metadata');
+        scriptParams.metadata = update.metadata;
+      }
+
+      // Use update_by_query to update all matching documents
+      await this.client.updateByQuery({
+        index: indexName,
+        body: {
+          query: (translatedFilter as any) || { match_all: {} },
+          script: {
+            source: scriptSource.join('; '),
+            params: scriptParams,
+            lang: 'painless',
+          },
+        },
+        refresh: true,
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_BY_FILTER_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            filter: JSON.stringify(filter),
           },
         },
         error,

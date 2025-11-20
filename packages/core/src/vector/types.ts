@@ -80,30 +80,39 @@ export interface DeleteIndexParams {
   indexName: string;
 }
 
-export interface UpdateVectorParams<Filter = VectorFilter> {
-  indexName: string;
-  /**
-   * Update a single vector by ID.
-   * Mutually exclusive with `filter`.
-   */
-  id?: string;
-  /**
-   * Update multiple vectors matching a filter.
-   * Mutually exclusive with `id`.
-   *
-   * @example
-   * ```ts
-   * // Archive all vectors for a user
-   * await vectorStore.updateVector({
-   *   indexName: 'docs',
-   *   filter: { userId: 'user_42' },
-   *   update: { metadata: { status: 'archived' } }
-   * });
-   * ```
-   */
-  filter?: Filter;
-  update: { vector?: number[]; metadata?: Record<string, any> };
-}
+/**
+ * Parameters for updating vectors.
+ * This is a discriminated union that enforces mutually exclusive use of `id` or `filter`.
+ */
+export type UpdateVectorParams<Filter = VectorFilter> =
+  | {
+      indexName: string;
+      /**
+       * Update a single vector by ID.
+       */
+      id: string;
+      filter?: never;
+      update: { vector?: number[]; metadata?: Record<string, any> };
+    }
+  | {
+      indexName: string;
+      id?: never;
+      /**
+       * Update multiple vectors matching a filter.
+       *
+       * @example
+       * ```ts
+       * // Archive all vectors for a user
+       * await vectorStore.updateVector({
+       *   indexName: 'docs',
+       *   filter: { userId: 'user_42' },
+       *   update: { metadata: { status: 'archived' } }
+       * });
+       * ```
+       */
+      filter: Filter;
+      update: { vector?: number[]; metadata?: Record<string, any> };
+    };
 
 export interface DeleteVectorParams {
   indexName: string;

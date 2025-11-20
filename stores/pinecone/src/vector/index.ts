@@ -38,9 +38,9 @@ interface PineconeUpsertVectorParams extends UpsertVectorParams {
   sparseVectors?: RecordSparseValues[];
 }
 
-interface PineconeUpdateVectorParams extends UpdateVectorParams {
+type PineconeUpdateVectorParams = UpdateVectorParams<PineconeVectorFilter> & {
   namespace?: string;
-}
+};
 
 interface PineconeDeleteVectorParams extends DeleteVectorParams {
   namespace?: string;
@@ -303,21 +303,30 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
 
   /**
    * Updates a vector by its ID with the provided vector and/or metadata.
-   * @param indexName - The name of the index containing the vector.
-   * @param id - The ID of the vector to update.
-   * @param update - An object containing the vector and/or metadata to update.
-   * @param update.vector - An optional array of numbers representing the new vector.
-   * @param update.metadata - An optional record containing the new metadata.
-   * @param namespace - The namespace of the index (optional).
+   * Note: Pinecone only supports update by ID, not by filter.
+   * @param params - Parameters containing the id for targeting the vector to update
+   * @param params.indexName - The name of the index containing the vector.
+   * @param params.id - The ID of the vector to update.
+   * @param params.update - An object containing the vector and/or metadata to update.
+   * @param namespace - The namespace of the index (optional, Pinecone-specific).
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector(params: UpdateVectorParams<PineconeVectorFilter>): Promise<void> {
-    const { indexName, id, update } = params;
-    // Extract Pinecone-specific namespace field
-    const namespace = (params as PineconeUpdateVectorParams).namespace;
+    const { indexName, update } = params;
 
-    if (!id) {
+    // Type narrowing: Pinecone only supports update by ID
+    if ('filter' in params && params.filter) {
+      throw new MastraError({
+        id: 'STORAGE_PINECONE_VECTOR_UPDATE_BY_FILTER_NOT_SUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Pinecone does not support updating vectors by filter. Use id instead.',
+        details: { indexName },
+      });
+    }
+
+    if (!('id' in params) || !params.id) {
       throw new MastraError({
         id: 'STORAGE_PINECONE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
         domain: ErrorDomain.STORAGE,
@@ -326,6 +335,10 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
         details: { indexName },
       });
     }
+
+    const id = params.id;
+    // Extract Pinecone-specific namespace field
+    const namespace = (params as PineconeUpdateVectorParams).namespace;
 
     if (!update.vector && !update.metadata) {
       throw new MastraError({
@@ -362,7 +375,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             indexName,
-            ...(id && { id }),
+            id,
           },
         },
         error,

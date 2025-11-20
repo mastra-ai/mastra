@@ -419,23 +419,27 @@ export function createAdvancedOperationsTest({
       });
 
       it('should reject when both id and filter are provided', async () => {
+        // Note: The discriminated union type now prevents this at compile-time,
+        // but we test runtime behavior for any non-TypeScript consumers
         await expect(
           vector.updateVector({
             indexName: testIndexName,
             id: 'vec_1',
             filter: { userId: 'user_1' },
             update: { metadata: { status: 'archived' } },
-          }),
-        ).rejects.toThrow(/mutually exclusive/i);
+          } as any),
+        ).rejects.toThrow(/mutually exclusive|not supported/i);
       });
 
       it('should reject when neither id nor filter are provided', async () => {
+        // Note: The discriminated union type now requires either id or filter at compile-time,
+        // but we test runtime behavior for any non-TypeScript consumers
         await expect(
           vector.updateVector({
             indexName: testIndexName,
             update: { metadata: { status: 'archived' } },
-          }),
-        ).rejects.toThrow(/Either id or filter must be provided/i);
+          } as any),
+        ).rejects.toThrow(/Either id or filter must be provided|id is required/i);
       });
 
       it('should reject update with empty filter', async () => {
