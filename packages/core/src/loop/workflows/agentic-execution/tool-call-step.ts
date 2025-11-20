@@ -18,12 +18,64 @@ export function createToolCallStep<
   runId,
   streamState,
   modelSpanTracker,
+  _internal,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
     execute: async ({ inputData, suspend, resumeData, requestContext }) => {
+      // Helper function to flush messages before suspension
+      const flushMessagesBeforeSuspension = async () => {
+        const { saveQueueManager, memoryConfig, threadId, resourceId, memory } = _internal || {};
+
+        console.log('[DEBUG] flushMessagesBeforeSuspension called', {
+          hasSaveQueueManager: !!saveQueueManager,
+          hasMemory: !!memory,
+          threadId,
+          resourceId,
+          threadExists: _internal?.threadExists,
+        });
+
+        if (!saveQueueManager || !threadId) {
+          console.log('[DEBUG] Early return: missing saveQueueManager or threadId');
+          return;
+        }
+
+        try {
+          // Ensure thread exists before flushing messages
+          if (memory && !_internal.threadExists && resourceId) {
+            console.log('[DEBUG] Checking if thread exists...');
+            const thread = await memory.getThreadById?.({ threadId });
+            if (!thread) {
+              console.log('[DEBUG] Thread does not exist, creating it...');
+              // Thread doesn't exist yet, create it now
+              await memory.createThread?.({
+                threadId,
+                resourceId,
+                memoryConfig,
+              });
+              _internal.threadExists = true;
+              console.log('[DEBUG] Thread created successfully');
+            } else {
+              _internal.threadExists = true;
+              console.log('[DEBUG] Thread already exists');
+            }
+          }
+
+          // Flush all pending messages immediately
+          console.log('[DEBUG] Flushing messages...');
+          console.log('[DEBUG] MessageList state:', {
+            allMessages: messageList.get.all.core().length,
+            unsavedCount: messageList.getEarliestUnsavedMessageTimestamp() ? 'has unsaved' : 'no unsaved',
+          });
+          await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
+          console.log('[DEBUG] Messages flushed successfully');
+        } catch (error) {
+          console.error('Error flushing messages before suspension:', error);
+        }
+      };
+
       // If the tool was already executed by the provider, skip execution
       if (inputData.providerExecuted) {
         return {
@@ -61,6 +113,9 @@ export function createToolCallStep<
         const requireToolApproval = requestContext.get('__mastra_requireToolApproval');
         if (requireToolApproval || (tool as any).requireApproval) {
           if (!resumeData) {
+            // Flush messages before suspension to ensure they are persisted
+            await flushMessagesBeforeSuspension();
+
             controller.enqueue({
               type: 'tool-call-approval',
               runId,
@@ -102,6 +157,9 @@ export function createToolCallStep<
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),
           suspend: async (suspendPayload: any) => {
+            // Flush messages before suspension to ensure they are persisted
+            await flushMessagesBeforeSuspension();
+
             controller.enqueue({
               type: 'tool-call-suspended',
               runId,
