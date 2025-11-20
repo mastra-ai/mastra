@@ -86,6 +86,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/v1/logging",
+      "destination": "/docs/v1/observability/logging",
+      "permanent": true
+    },
+    {
       "source": "/examples/v1/memory/working-memory-schema",
       "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-schema",
       "permanent": true
