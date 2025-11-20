@@ -19,7 +19,7 @@ npm install @mastra/evals
 import { createFaithfulnessScorer, createContentSimilarityScorer } from '@mastra/evals/scorers/prebuilt';
 
 const faithfulness = createFaithfulnessScorer({
-   model: 'openai/gpt-4o-mini')
+   model: 'openai/gpt-5.1')
 });
 
 const similarity = createContentSimilarityScorer({ ignoreCase: true });

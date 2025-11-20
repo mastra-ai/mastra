@@ -3,7 +3,7 @@ import { runEvals } from '@mastra/core/evals';
 import { ycAgent } from '../agents';
 
 const scorer = createAnswerRelevancyScorer({
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.1',
   options: {
     scale: 1,
     uncertaintyWeight: 0.3,

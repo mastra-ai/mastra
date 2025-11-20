@@ -32,8 +32,8 @@ Your primary function is to help users get weather details for specific location
 Use the weatherTool to fetch current weather data.`,
   model: [
     { model: anthropic('claude-3-5-sonnet-20241022') },
-    { model: openai('gpt-4o') },
-    { model: openai('gpt-4o-mini') },
+    { model: openai('gpt-5.1') },
+    { model: openai('gpt-5.1') },
   ],
   maxRetries: 3,
   tools: { weatherTool },
@@ -44,7 +44,7 @@ Use the weatherTool to fetch current weather data.`,
 export const weatherReporterAgent = new Agent({
   id: 'weatherExplainerAgent',
   name: 'Weather Explainer Agent',
-  model: openai('gpt-4o'),
+  model: openai('gpt-5.1'),
   instructions: `
   You are a weather explainer. You have access to input that will help you get weather-specific activities for any city. 
   The tool uses agents to plan the activities, you just need to provide the city. Explain the weather report like a weather reporter.

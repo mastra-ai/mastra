@@ -1024,7 +1024,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * const stream = await agent.stream("Extract data", {
    *   structuredOutput: {
    *     schema: z.object({ name: z.string(), age: z.number() }),
-   *     model: 'gpt-4o-mini' // optional to use a model for structuring json output
+   *     model: 'gpt-5.1' // optional to use a model for structuring json output
    *   }
    * });
    * // partial json chunks
@@ -1099,7 +1099,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * const stream = await agent.stream("Extract data", {
    *   structuredOutput: {
    *     schema: z.object({ name: z.string(), age: z.number() }),
-   *     model: 'gpt-4o-mini' // optionally use a model for structuring json output
+   *     model: 'gpt-5.1' // optionally use a model for structuring json output
    *   }
    * });
    * // final validated json

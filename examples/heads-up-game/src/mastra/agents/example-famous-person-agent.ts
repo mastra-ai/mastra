@@ -19,7 +19,7 @@ IMPORTANT: Use your memory to check what famous people you've already suggested 
 Examples: Albert Einstein, Beyoncé, Leonardo da Vinci, Oprah Winfrey, Michael Jordan
 
 Return only the person's name, nothing else.`,
-  model: openai('gpt-4o'),
+  model: openai('gpt-5.1'),
   memory: new Memory({
     vector: new LibSQLVector({
       connectionUrl: 'file:../mastra.db',

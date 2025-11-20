@@ -1708,8 +1708,8 @@ describe('Input and Output Processors', () => {
     });
   }
 
-  // testStructuredOutput('aisdk', openai_v5('gpt-4o'));
-  testStructuredOutput('mastra', openai_v5('gpt-4o'));
+  // testStructuredOutput('aisdk', openai_v5('gpt-5.1'));
+  testStructuredOutput('mastra', openai_v5('gpt-5.1'));
 });
 
 describe('v1 model - output processors', () => {

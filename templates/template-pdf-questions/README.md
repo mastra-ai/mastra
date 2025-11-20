@@ -61,7 +61,7 @@ This template showcases a crucial architectural pattern for working with large d
 
 This template supports any AI model provider through Mastra's model router. You can use models from:
 
-- **OpenAI**: `openai/gpt-4o-mini`, `openai/gpt-4o`
+- **OpenAI**: `openai/gpt-5.1`, `openai/gpt-5.1`
 - **Anthropic**: `anthropic/claude-sonnet-4-5-20250929`, `anthropic/claude-haiku-4-5-20250929`
 - **Google**: `google/gemini-2.5-pro`, `google/gemini-2.0-flash-exp`
 - **Groq**: `groq/llama-3.3-70b-versatile`, `groq/llama-3.1-8b-instant`
@@ -266,7 +266,7 @@ export const textQuestionAgent = new Agent({
     You are an expert educational content creator...
     // Customize instructions here
   `,
-  model: openai('gpt-4o'),
+  model: openai('gpt-5.1'),
 });
 ```
 

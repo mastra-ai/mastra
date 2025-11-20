@@ -9,7 +9,7 @@ const context1 = [
   'The process requires sunlight and chlorophyll.',
 ];
 
-const metric1 = new ContextPrecisionMetric(openai('gpt-4o-mini'), {
+const metric1 = new ContextPrecisionMetric(openai('gpt-5.1'), {
   context: context1,
 });
 
@@ -36,7 +36,7 @@ const context2 = [
   'The Pacific Ring of Fire has many volcanoes.',
 ];
 
-const metric2 = new ContextPrecisionMetric(openai('gpt-4o-mini'), {
+const metric2 = new ContextPrecisionMetric(openai('gpt-5.1'), {
   context: context2,
 });
 
@@ -62,7 +62,7 @@ const context3 = [
   'The Nile flows north.',
 ];
 
-const metric3 = new ContextPrecisionMetric(openai('gpt-4o-mini'), {
+const metric3 = new ContextPrecisionMetric(openai('gpt-5.1'), {
   context: context3,
 });
 

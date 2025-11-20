@@ -7,7 +7,7 @@ import { Agent } from '../agent';
 config();
 
 export function imagePromptTest({ version }: { version: 'v1' | 'v2' }) {
-  const openaiModel = version === 'v1' ? openai('gpt-4o') : openaiV5('gpt-4o');
+  const openaiModel = version === 'v1' ? openai('gpt-5.1') : openaiV5('gpt-5.1');
 
   describe('image prompt test', () => {
     it('should download assets from messages', async () => {

@@ -34,7 +34,7 @@ async function main() {
       demo: new Agent({
         name: 'Assistant',
         instructions: 'Be concise.',
-        model: 'openai/gpt-4o-mini',
+        model: 'openai/gpt-5.1',
       }),
     },
     observability: new Observability({

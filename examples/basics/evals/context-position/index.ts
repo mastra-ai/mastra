@@ -9,7 +9,7 @@ const context1 = [
   'The capital city hosts the French government.',
 ];
 
-const metric1 = new ContextPositionMetric(openai('gpt-4o-mini'), {
+const metric1 = new ContextPositionMetric(openai('gpt-5.1'), {
   context: context1,
 });
 
@@ -35,7 +35,7 @@ const context2 = [
   'Elephants eat plants and grass.',
 ];
 
-const metric2 = new ContextPositionMetric(openai('gpt-4o-mini'), {
+const metric2 = new ContextPositionMetric(openai('gpt-5.1'), {
   context: context2,
 });
 
@@ -61,7 +61,7 @@ const context3 = [
   'Rainbows form when sunlight hits water droplets.',
 ];
 
-const metric3 = new ContextPositionMetric(openai('gpt-4o-mini'), {
+const metric3 = new ContextPositionMetric(openai('gpt-5.1'), {
   context: context3,
 });
 

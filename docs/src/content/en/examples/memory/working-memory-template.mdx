@@ -52,7 +52,7 @@ export const workingMemoryTemplateAgent = new Agent({
     Support subtasks with bullet points.
     Ask for time estimates to help with timeboxing.
   `,
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   memory: new Memory({
     storage: new LibSQLStore({
       url: "file:working-memory-template.db",

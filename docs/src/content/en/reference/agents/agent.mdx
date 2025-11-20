@@ -19,7 +19,7 @@ export const agent = new Agent({
   id: "test-agent",
   name: "Test Agent",
   instructions: "You are a helpful assistant that provides concise answers.",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
 });
 
 // System message object
@@ -30,7 +30,7 @@ export const agent2 = new Agent({
     role: "system",
     content: "You are an expert programmer",
   },
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
 });
 
 // Array of system messages
@@ -41,7 +41,7 @@ export const agent3 = new Agent({
     { role: "system", content: "You are a helpful assistant" },
     { role: "system", content: "You have expertise in TypeScript" },
   ],
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
 });
 ```
 
@@ -65,7 +65,7 @@ export const agent = new Agent({
       },
     },
   },
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
 });
 ```
 

@@ -74,7 +74,7 @@ export const memoryAgent = new Agent({
     When the user shares personal information such as their name, location, or preferences,
     acknowledge it and update your working memory accordingly.
   `,
-  model: openai("gpt-4o"),
+  model: openai("gpt-5.1"),
   memory: memory,
 });
 ```

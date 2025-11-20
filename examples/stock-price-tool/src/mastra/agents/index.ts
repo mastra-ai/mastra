@@ -8,7 +8,7 @@ export const stockAgent = new Agent({
   name: 'Stock Agent',
   instructions:
     'You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.',
-  model: openai('gpt-4o'),
+  model: openai('gpt-5.1'),
   tools: {
     stockPrices,
   },

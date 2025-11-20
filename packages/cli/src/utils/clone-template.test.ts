@@ -300,7 +300,7 @@ describe('clone-template', () => {
         if (cmd.includes('degit')) {
           vol.fromJSON({
             '/test-project/package.json': JSON.stringify({ name: 'old-name', version: '1.0.0' }),
-            '/test-project/.env.example': 'MODEL=openai/gpt-4o-mini\nOPENAI_API_KEY=\nANTHROPIC_API_KEY=',
+            '/test-project/.env.example': 'MODEL=openai/gpt-5.1\nOPENAI_API_KEY=\nANTHROPIC_API_KEY=',
           });
         }
         return { stdout: '', stderr: '' };
@@ -318,7 +318,7 @@ describe('clone-template', () => {
       const envContent = await fs.readFile('/test-project/.env', 'utf-8');
 
       expect(envContent).toContain('MODEL=anthropic/claude-sonnet-4-5');
-      expect(envContent).not.toContain('MODEL=openai/gpt-4o-mini');
+      expect(envContent).not.toContain('MODEL=openai/gpt-5.1');
     });
 
     it('should not fail when llmProvider is specified but .env.example does not exist', async () => {

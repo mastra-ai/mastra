@@ -10,19 +10,19 @@ export interface Model {
 
 export const models: Array<Model> = [
   {
-    id: 'gpt-4o-mini',
+    id: 'gpt-5.1',
     label: 'GPT 4o mini',
     provider: 'OPEN_AI',
-    apiIdentifier: 'gpt-4o-mini',
+    apiIdentifier: 'gpt-5.1',
     description: 'Small model for fast, lightweight tasks',
   },
   {
-    id: 'gpt-4o',
+    id: 'gpt-5.1',
     label: 'GPT 4o',
     provider: 'OPEN_AI',
-    apiIdentifier: 'gpt-4o',
+    apiIdentifier: 'gpt-5.1',
     description: 'For complex, multi-step tasks',
   },
 ] as const;
 
-export const DEFAULT_MODEL_NAME: string = 'gpt-4o-mini';
+export const DEFAULT_MODEL_NAME: string = 'gpt-5.1';

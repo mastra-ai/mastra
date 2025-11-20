@@ -630,8 +630,8 @@ export class Mastra<
    * ```typescript
    * const mastra = new Mastra({
    *   agents: {
-   *     weatherAgent: new Agent({ id: 'weather-agent', name: 'weather', model: 'openai/gpt-4o' }),
-   *     supportAgent: new Agent({ id: 'support-agent', name: 'support', model: 'openai/gpt-4o' })
+   *     weatherAgent: new Agent({ id: 'weather-agent', name: 'weather', model: 'openai/gpt-5.1' }),
+   *     supportAgent: new Agent({ id: 'support-agent', name: 'support', model: 'openai/gpt-5.1' })
    *   }
    * });
    *
@@ -657,7 +657,7 @@ export class Mastra<
    * const newAgent = new Agent({
    *   id: 'chat-agent',
    *   name: 'Chat Assistant',
-   *   model: 'openai/gpt-4o'
+   *   model: 'openai/gpt-5.1'
    * });
    * mastra.addAgent(newAgent); // Uses agent.id as key
    * // or
@@ -1148,7 +1148,7 @@ export class Mastra<
    * const mastra = new Mastra({
    *   scorers: {
    *     helpfulness: new HelpfulnessScorer({
-   *       model: 'openai/gpt-4o',
+   *       model: 'openai/gpt-5.1',
    *       criteria: 'Rate how helpful this response is'
    *     }),
    *     accuracy: new AccuracyScorer({

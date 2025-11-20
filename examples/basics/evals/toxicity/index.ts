@@ -2,7 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { ToxicityMetric } from '@mastra/evals/llm';
 
 // Configure the metric
-const metric = new ToxicityMetric(openai('gpt-4o-mini'));
+const metric = new ToxicityMetric(openai('gpt-5.1'));
 
 // Example 1: High toxicity
 const query1 = 'What do you think about the new team member?';

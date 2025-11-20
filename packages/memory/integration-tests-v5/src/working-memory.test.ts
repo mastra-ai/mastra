@@ -150,7 +150,7 @@ describe('Working Memory Tests', () => {
         id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
-        model: openai('gpt-4o'),
+        model: openai('gpt-5.1'),
         memory,
       });
 
@@ -274,7 +274,7 @@ describe('Working Memory Tests', () => {
         id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
-        model: openai('gpt-4o'),
+        model: openai('gpt-5.1'),
         memory,
       });
 
@@ -300,7 +300,7 @@ describe('Working Memory Tests', () => {
         id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
-        model: openai('gpt-4o'),
+        model: openai('gpt-5.1'),
         memory,
       });
 
@@ -535,7 +535,7 @@ describe('Working Memory Tests', () => {
         id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
-        model: openai('gpt-4o'),
+        model: openai('gpt-5.1'),
         memory,
       });
     });
@@ -625,7 +625,7 @@ describe('Working Memory Tests', () => {
             Temperature, "temperature" should be reported as a number.
             The location should be labeled "city" and reported as a string.
             `,
-          model: openai('gpt-4o'),
+          model: openai('gpt-5.1'),
           memory,
         });
       });
@@ -798,7 +798,7 @@ describe('Working Memory Tests', () => {
         id: 'jsonschema-memory-test-agent',
         name: 'JSONSchema Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always update working memory with user information.',
-        model: openai('gpt-4o'),
+        model: openai('gpt-5.1'),
         memory,
       });
     });
@@ -1573,7 +1573,7 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
   const mathAgent = new Agent({
     name: 'math-agent',
     instructions: 'You are a helpful math assistant.',
-    model: openai('gpt-4o'),
+    model: openai('gpt-5.1'),
   });
 
   // Create a weather tool
@@ -1639,7 +1639,7 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
       id: 'network-orchestrator',
       name: 'network-orchestrator',
       instructions: 'You help users and can remember things when they ask you to.',
-      model: openai('gpt-4o'),
+      model: openai('gpt-5.1'),
       memory,
     });
 
@@ -1675,7 +1675,7 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
       id: 'network-orchestrator',
       name: 'network-orchestrator',
       instructions: 'You help users with math and remember things.',
-      model: openai('gpt-4o'),
+      model: openai('gpt-5.1'),
       agents: { mathAgent },
       memory,
     });
@@ -1725,7 +1725,7 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
       id: 'network-orchestrator',
       name: 'network-orchestrator',
       instructions: 'You help users with math and remember things.',
-      model: openai('gpt-4o'),
+      model: openai('gpt-5.1'),
       agents: { mathAgent },
       memory,
     });
@@ -1771,7 +1771,7 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
       id: 'network-orchestrator',
       name: 'network-orchestrator',
       instructions: 'You help users with weather and remember their preferences.',
-      model: openai('gpt-4o'),
+      model: openai('gpt-5.1'),
       tools: { getWeather },
       memory,
     });
@@ -1819,7 +1819,7 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
       id: 'network-orchestrator',
       name: 'network-orchestrator',
       instructions: 'You help users with weather and remember their preferences.',
-      model: openai('gpt-4o'),
+      model: openai('gpt-5.1'),
       tools: { getWeather },
       memory,
     });
@@ -1866,7 +1866,7 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
       id: 'network-orchestrator',
       name: 'network-orchestrator',
       instructions: 'You help users and remember things they tell you.',
-      model: openai('gpt-4o'),
+      model: openai('gpt-5.1'),
       memory,
     });
 
@@ -1900,7 +1900,7 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
       id: 'network-orchestrator',
       name: 'network-orchestrator',
       instructions: 'You help users with various tasks efficiently. Complete all parts of multi-step requests.',
-      model: openai('gpt-4o'),
+      model: openai('gpt-5.1'),
       agents: { mathAgent },
       tools: { getWeather },
       memory,

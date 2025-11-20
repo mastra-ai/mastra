@@ -76,7 +76,7 @@ export const exampleAgent = new Agent({
   id: "example-agent",
   name: "Example Agent",
   instructions: "You are a helpful AI assistant.",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   tools: {
     getCurrentTime,
   },
@@ -115,7 +115,7 @@ Example trace hierarchy:
 
 ```
 AGENT_RUN (example-agent)
-├── MODEL_GENERATION (gpt-4.1-mini) - Model input & output
+├── MODEL_GENERATION (gpt-5.1) - Model input & output
 ├── TOOL_CALL (getCurrentTime) - Tool execution
 ```
 

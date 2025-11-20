@@ -34,7 +34,7 @@ export const personalAssistantAgent = new Agent({
     
     Keep your responses concise and friendly.
   `,
-  model: openai("gpt-4o"),
+  model: openai("gpt-5.1"),
   tools: { ...mcpTools },
   memory,
 });

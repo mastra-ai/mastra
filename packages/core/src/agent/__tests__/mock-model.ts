@@ -5,9 +5,9 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 
 export function getOpenAIModel(version: 'v1' | 'v2') {
   if (version === 'v1') {
-    return openai_v4('gpt-4o-mini');
+    return openai_v4('gpt-5.1');
   }
-  return openai_v5('gpt-4o-mini');
+  return openai_v5('gpt-5.1');
 }
 
 export function getSingleDummyResponseModel(version: 'v1' | 'v2') {

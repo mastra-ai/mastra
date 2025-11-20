@@ -5,5 +5,5 @@ export const testAgent = new Agent({
   id: 'test-agent',
   name: 'test-agent',
   instructions: 'test-agent',
-  model: openai('gpt-4o'),
+  model: openai('gpt-5.1'),
 });

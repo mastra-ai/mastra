@@ -40,7 +40,7 @@ export const researchAgent = new Agent({
 
   Use all the tools available to you systematically and stop after the follow-up phase.
   `,
-  model: process.env.MODEL || 'openai/gpt-4o',
+  model: process.env.MODEL || 'openai/gpt-5.1',
   tools: {
     webSearchTool,
     evaluateResultTool,

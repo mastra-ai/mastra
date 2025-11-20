@@ -40,7 +40,7 @@ describe.skip('Agent - network', () => {
       'This agent is used to do research, but not create full responses. Answer in bullet points only and be concise.',
     description:
       'This agent is used to do research, but not create full responses. Answer in bullet points only and be concise.',
-    model: openai('gpt-4o'),
+    model: openai('gpt-5.1'),
   });
 
   const agent2 = new Agent({
@@ -50,7 +50,7 @@ describe.skip('Agent - network', () => {
       'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Do not use bullet points. Write full paragraphs. There should not be a single bullet point in the final report. You write articles.',
     instructions:
       'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Do not use bullet points. Write full paragraphs. There should not be a single bullet point in the final report. You write articles. [IMPORTANT] Make sure to mention information that has been highlighted as relevant in message history.',
-    model: openai('gpt-4o'),
+    model: openai('gpt-5.1'),
   });
 
   const agentStep1 = createStep({
@@ -168,7 +168,7 @@ describe.skip('Agent - network', () => {
     name: 'Test Network',
     instructions:
       'You can research cities. You can also synthesize research material. You can also write a full report based on the researched material.',
-    model: openai('gpt-4o-mini'),
+    model: openai('gpt-5.1'),
     agents: {
       agent1,
       agent2,
@@ -187,7 +187,7 @@ describe.skip('Agent - network', () => {
     name: 'Test Network',
     instructions:
       'You can research anything. You can also synthesize research material. You can also write a full report based on the researched material.',
-    model: openai('gpt-4o-mini'),
+    model: openai('gpt-5.1'),
     agents: {
       agent1,
       agent2,
@@ -370,7 +370,7 @@ describe.skip('Agent - network', () => {
       name: 'Calculator Agent',
       instructions: `You are a calculator agent. You can perform basic arithmetic operations such as addition, subtraction, multiplication, and division.
     When you receive a request, you should respond with the result of the calculation.`,
-      model: openai('gpt-4o-mini'),
+      model: openai('gpt-5.1'),
     });
 
     const orchestratorAgentConfig = {
@@ -386,7 +386,7 @@ describe.skip('Agent - network', () => {
       id: 'orchestrator-agent',
       name: 'Orchestrator Agent',
       instructions: orchestratorAgentConfig.systemInstruction,
-      model: openai('gpt-4o-mini'),
+      model: openai('gpt-5.1'),
       agents: {
         calculatorAgent,
       },
@@ -425,7 +425,7 @@ describe.skip('Agent - network', () => {
       name: 'Test Network With Title',
       instructions:
         'You can research cities. You can also synthesize research material. You can also write a full report based on the researched material.',
-      model: openai('gpt-4o-mini'),
+      model: openai('gpt-5.1'),
       agents: {
         agent1,
         agent2,
@@ -476,7 +476,7 @@ describe.skip('Agent - network', () => {
       name: 'Test Network With Title In Options',
       instructions:
         'You can research cities. You can also synthesize research material. You can also write a full report based on the researched material.',
-      model: openai('gpt-4o-mini'),
+      model: openai('gpt-5.1'),
       agents: {
         agent1,
         agent2,
@@ -536,7 +536,7 @@ describe.skip('Agent - network', () => {
       id: 'test-network-no-title',
       name: 'Test Network No Title',
       instructions: 'You can research topics.',
-      model: openai('gpt-4o-mini'),
+      model: openai('gpt-5.1'),
       agents: {
         agent1,
       },
@@ -573,7 +573,7 @@ describe.skip('Agent - network', () => {
       id: 'test-network-no-title',
       name: 'Test Network No Title',
       instructions: 'You can research topics.',
-      model: openai('gpt-4o-mini'),
+      model: openai('gpt-5.1'),
       agents: {
         agent1,
       },

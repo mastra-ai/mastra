@@ -38,7 +38,7 @@ const DEFAULT_URL = 'wss://api.openai.com/v1/realtime';
  * Default model for real-time voice interactions.
  * This model is optimized for low-latency responses while maintaining high quality output.
  */
-const DEFAULT_MODEL = 'gpt-4o-mini-realtime-preview-2024-12-17';
+const DEFAULT_MODEL = 'gpt-5.1-realtime-preview-2024-12-17';
 
 // /**
 //  * Default Voice Activity Detection (VAD) configuration.
@@ -93,7 +93,7 @@ type RealtimeClientServerEventMap = {
  * ```typescript
  * const voice = new OpenAIRealtimeVoice({
  *   apiKey: process.env.OPENAI_API_KEY,
- *   model: 'gpt-4o-mini-realtime'
+ *   model: 'gpt-5.1-realtime'
  * });
  *
  * await voice.open();
@@ -129,7 +129,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    * ```typescript
    * const voice = new OpenAIRealtimeVoice({
    *   apiKey: 'your-api-key',
-   *   model: 'gpt-4o-mini-realtime',
+   *   model: 'gpt-5.1-realtime',
    *   speaker: 'alloy'
    * });
    * ```

@@ -36,7 +36,7 @@ export const pgAgent = new Agent({
   name: "PG Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   memory: new Memory({
     storage: new PostgresStore({
       id: 'pg-agent-storage',
@@ -72,7 +72,7 @@ export const pgAgent = new Agent({
   name: "PG Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   memory: new Memory({
     storage: new PostgresStore({
       id: 'pg-agent-storage',

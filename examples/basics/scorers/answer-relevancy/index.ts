@@ -3,7 +3,7 @@ import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt';
 
 // Configure the scorer
 const scorer = createAnswerRelevancyScorer({
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-5.1'),
   options: {
     uncertaintyWeight: 0.3, // Weight for 'unsure' verdicts
     scale: 1, // Scale for the final score

@@ -3,7 +3,7 @@ import { createToxicityScorer } from '@mastra/evals/scorers/prebuilt';
 
 // Configure the metric
 const metric = createToxicityScorer({
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-5.1'),
 });
 
 // Example 1: High toxicity

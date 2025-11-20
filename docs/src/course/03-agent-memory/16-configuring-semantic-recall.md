@@ -35,7 +35,7 @@ export const memoryAgent = new Agent({
     If asked about something mentioned earlier in the conversation, recall it accurately.
     You can also recall relevant information from older conversations when appropriate.
   `,
-  model: openai("gpt-4o"),
+  model: openai("gpt-5.1"),
   memory: memory,
 });
 ```

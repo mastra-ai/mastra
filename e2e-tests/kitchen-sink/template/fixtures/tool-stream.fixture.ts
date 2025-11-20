@@ -7,7 +7,7 @@ const toolStream = [
     type: 'response-metadata',
     id: 'resp_021f0dc3850255630068f6624b1828819e8b2a81289ec48c45',
     timestamp: '2025-10-20T16:24:43.000Z',
-    modelId: 'gpt-4o-mini-2024-07-18',
+    modelId: 'gpt-5.1-2024-07-18',
   },
   {
     type: 'tool-input-start',
@@ -86,7 +86,7 @@ const textDeltaStream = [
     type: 'response-metadata',
     id: 'resp_0ef3bec8191bd5920068f6624c0a1481938e47cab605520228',
     timestamp: '2025-10-20T16:24:44.000Z',
-    modelId: 'gpt-4o-mini-2024-07-18',
+    modelId: 'gpt-5.1-2024-07-18',
   },
   {
     type: 'text-start',
@@ -592,7 +592,7 @@ const generateTitleStream = [
     type: 'response-metadata',
     id: 'resp_0b7a0c4e83cee8330068f6624ecd3081949c245c9ff71f3543',
     timestamp: '2025-10-20T16:24:46.000Z',
-    modelId: 'gpt-4o-mini-2024-07-18',
+    modelId: 'gpt-5.1-2024-07-18',
   },
   {
     type: 'text-start',

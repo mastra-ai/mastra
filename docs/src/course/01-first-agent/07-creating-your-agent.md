@@ -43,7 +43,7 @@ SUCCESS CRITERIA
 - Deliver accurate and helpful analysis of transaction data.
 - Achieve high user satisfaction through clear and helpful responses.
 - Maintain user trust by ensuring data privacy and security.`,
-  model: openai("gpt-4o"), // You can use "gpt-3.5-turbo" if you prefer
+  model: openai("gpt-5.1"), // You can use "gpt-3.5-turbo" if you prefer
   tools: {}, // We'll add tools in a later step
 });
 ```

@@ -9,7 +9,7 @@ const instructions1 = [
   'State precipitation chance',
 ];
 
-const metric1 = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+const metric1 = new PromptAlignmentMetric(openai('gpt-5.1'), {
   instructions: instructions1,
 });
 
@@ -32,7 +32,7 @@ console.log('Metric Result:', {
 // Example 2: Mixed alignment (some instructions missed)
 const instructions2 = ['Use bullet points', 'Include prices in USD', 'Show stock status', 'Add product descriptions'];
 
-const metric2 = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+const metric2 = new PromptAlignmentMetric(openai('gpt-5.1'), {
   instructions: instructions2,
 });
 
@@ -54,7 +54,7 @@ console.log('Metric Result:', {
 // Example 3: N/A instructions (all instructions not applicable)
 const instructions3 = ['Show account balance', 'List recent transactions', 'Display payment history'];
 
-const metric3 = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+const metric3 = new PromptAlignmentMetric(openai('gpt-5.1'), {
   instructions: instructions3,
 });
 

@@ -79,7 +79,7 @@ describe.skip('Workflow Builder Integration Tests', () => {
     const questionAnsweringAgent = new Agent({
       id: 'question-answering-agent',
       name: 'Question Answering Agent',
-      model: openai('gpt-4o-mini'),
+      model: openai('gpt-5.1'),
       instructions: `You are an assistant that answers technical questions about workflow creation. 
       
       When asked about email providers, always respond with "sendgrid".

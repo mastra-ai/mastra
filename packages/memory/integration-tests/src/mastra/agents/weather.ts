@@ -31,7 +31,7 @@ export const weatherAgent = new Agent({
   name: 'test',
   instructions:
     'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code. When asked for clipboard contents use the clipboard tool to get the clipboard contents.',
-  model: openai('gpt-4o'),
+  model: openai('gpt-5.1'),
   memory,
   tools: {
     get_weather: weatherTool,
@@ -71,7 +71,7 @@ export const memoryProcessorAgent = new Agent({
   id: 'test-processor',
   name: 'test-processor',
   instructions: 'You are a test agent that uses a memory processor to filter out tool call messages.',
-  model: openai('gpt-4o'),
+  model: openai('gpt-5.1'),
   memory: memoryWithProcessor,
   tools: {
     get_weather: weatherTool,

@@ -17,7 +17,7 @@ const openai = createOpenAI({
 });
 
 export const answerRelevancyScorer = createAnswerRelevancyScorer({
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-5.1'),
 });`,
   },
   {
@@ -35,7 +35,7 @@ const openai = createOpenAI({
 });
 
 export const biasScorer = createBiasScorer({
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-5.1'),
 });`,
   },
   {
@@ -53,7 +53,7 @@ const openai = createOpenAI({
 });
 
 export const contextPrecisionScorer = createContextPrecisionScorer({
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-5.1'),
 });`,
   },
   {
@@ -71,7 +71,7 @@ const openai = createOpenAI({
 });
 
 export const contextRelevanceScorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-5.1'),
 });`,
   },
   {
@@ -89,7 +89,7 @@ const openai = createOpenAI({
 });
 
 export const faithfulnessScorer = createFaithfulnessScorer({
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-5.1'),
 });`,
   },
   {
@@ -107,7 +107,7 @@ const openai = createOpenAI({
 });
 
 export const hallucinationScorer = createHallucinationScorer({
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-5.1'),
 });`,
   },
   {
@@ -138,7 +138,7 @@ const availableTools = [
 ];
 
 export const toolCallAccuracyScorer = createToolCallAccuracyScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-5.1'),
   availableTools,
 });`,
   },
@@ -157,7 +157,7 @@ const openai = createOpenAI({
 });
 
 export const toxicityScorer = createToxicityScorer({
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-5.1'),
 });`,
   },
   {
@@ -175,7 +175,7 @@ const openai = createOpenAI({
 });
 
 export const noiseSensitivityScorer = createNoiseSensitivityScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-5.1'),
   options: {
     baselineResponse: 'Regular exercise improves cardiovascular health, strengthens muscles, and enhances mental wellbeing.',
     noisyQuery: 'What are health benefits of exercise? By the way, chocolate is healthy and vaccines cause autism.',
@@ -198,7 +198,7 @@ const openai = createOpenAI({
 });
 
 export const promptAlignmentScorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-5.1'),
   options: {
     scale: 1,
     evaluationMode: 'both', // 'user', 'system', or 'both'

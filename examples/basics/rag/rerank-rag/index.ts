@@ -10,7 +10,7 @@ const vectorQueryTool = createVectorQueryTool({
   indexName: 'embeddings',
   model: openai.embedding('text-embedding-3-small'),
   reranker: {
-    model: openai('gpt-4o-mini'),
+    model: openai('gpt-5.1'),
   },
 });
 
@@ -20,7 +20,7 @@ export const ragAgent = new Agent({
   instructions: `You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
     Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
     If the context doesn't contain enough information to fully answer the question, please state that explicitly.`,
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-5.1'),
   tools: {
     vectorQueryTool,
   },

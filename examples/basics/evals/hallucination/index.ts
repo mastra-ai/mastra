@@ -8,7 +8,7 @@ const context1 = [
   'The original model had a 3.5-inch screen.',
 ];
 
-const metric1 = new HallucinationMetric(openai('gpt-4o-mini'), {
+const metric1 = new HallucinationMetric(openai('gpt-5.1'), {
   context: context1,
 });
 
@@ -35,7 +35,7 @@ const context2 = [
   'The movie was filmed in Tunisia and England.',
 ];
 
-const metric2 = new HallucinationMetric(openai('gpt-4o-mini'), {
+const metric2 = new HallucinationMetric(openai('gpt-5.1'), {
   context: context2,
 });
 
@@ -61,7 +61,7 @@ const context3 = [
   'It covered a distance of 120 feet.',
 ];
 
-const metric3 = new HallucinationMetric(openai('gpt-4o-mini'), {
+const metric3 = new HallucinationMetric(openai('gpt-5.1'), {
   context: context3,
 });
 

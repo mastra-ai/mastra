@@ -11,7 +11,7 @@ import type { Processor } from '../index';
 export interface TokenLimiterOptions {
   /** Maximum number of tokens to allow in the response */
   limit: number;
-  /** Optional encoding to use (defaults to o200k_base which is used by gpt-4o) */
+  /** Optional encoding to use (defaults to o200k_base which is used by gpt-5.1) */
   encoding?: TiktokenBPE;
   /**
    * Strategy when token limit is reached:

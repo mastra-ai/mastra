@@ -14,7 +14,7 @@ The system uses an agent to clean the initial chunks to optimize information den
 
 The system implements RAG using Mastra and OpenAI, this time optimizing information density through LLM-based processing. Here's what it does:
 
-1. Sets up a Mastra agent with gpt-4o-mini that can handle both querying and cleaning documents
+1. Sets up a Mastra agent with gpt-5.1 that can handle both querying and cleaning documents
 2. Creates vector query and document chunking tools for the agent to use
 3. Processes the initial document:
    - Chunks text documents into smaller segments
@@ -101,7 +101,7 @@ const ragAgent = new Agent({
 
     Important: When asked to answer a question, please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
     `,
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   tools: {
     vectorQueryTool,
     documentChunkerTool,

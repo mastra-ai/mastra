@@ -62,7 +62,7 @@ pnpm vitest run ./src/template-workflow.test.ts
 export OPENAI_API_KEY="your-openai-api-key"
 
 # Optional: Use a different OpenAI model
-export OPENAI_MODEL="gpt-4o-mini"
+export OPENAI_MODEL="gpt-5.1"
 ```
 
 ## Test Scenarios

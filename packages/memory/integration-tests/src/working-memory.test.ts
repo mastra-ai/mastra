@@ -197,7 +197,7 @@ describe('Working Memory Tests', () => {
         id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
-        model: openai('gpt-4o'),
+        model: openai('gpt-5.1'),
         memory,
       });
 
@@ -322,7 +322,7 @@ describe('Working Memory Tests', () => {
         id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
-        model: openai('gpt-4o'),
+        model: openai('gpt-5.1'),
         memory,
       });
 
@@ -348,7 +348,7 @@ describe('Working Memory Tests', () => {
         id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
-        model: openai('gpt-4o'),
+        model: openai('gpt-5.1'),
         memory,
       });
 
@@ -522,7 +522,7 @@ describe('Working Memory Tests', () => {
         id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
-        model: openai('gpt-4o'),
+        model: openai('gpt-5.1'),
         memory,
       });
     });
@@ -611,7 +611,7 @@ describe('Working Memory Tests', () => {
           Temperature, "temperature" should be reported as a number, not a string.
           The location should be labeled "city" and reported as a string.
           `,
-          model: openai('gpt-4o'),
+          model: openai('gpt-5.1'),
           memory,
         });
       });
@@ -786,7 +786,7 @@ describe('Working Memory Tests', () => {
         id: 'jsonschema-memory-test-agent',
         name: 'JSONSchema Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always update working memory with user information.',
-        model: openai('gpt-4o'),
+        model: openai('gpt-5.1'),
         memory,
       });
     });

@@ -24,7 +24,7 @@ export const ragAgent = new Agent({
   id: 'rag-agent',
   name: 'RAG Agent',
   instructions: `You are a helpful assistant that answers questions based on the provided context.`,
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-5.1'),
   tools: {
     vectorQueryTool,
   },

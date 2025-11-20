@@ -277,7 +277,7 @@ import { PGVECTOR_PROMPT } from "@mastra/pg";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${PGVECTOR_PROMPT}
@@ -296,7 +296,7 @@ import { PINECONE_PROMPT } from "@mastra/pinecone";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${PINECONE_PROMPT}
@@ -315,7 +315,7 @@ import { QDRANT_PROMPT } from "@mastra/qdrant";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${QDRANT_PROMPT}
@@ -334,7 +334,7 @@ import { CHROMA_PROMPT } from "@mastra/chroma";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${CHROMA_PROMPT}
@@ -353,7 +353,7 @@ import { ASTRA_PROMPT } from "@mastra/astra";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${ASTRA_PROMPT}
@@ -372,7 +372,7 @@ import { LIBSQL_PROMPT } from "@mastra/libsql";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${LIBSQL_PROMPT}
@@ -391,7 +391,7 @@ import { UPSTASH_PROMPT } from "@mastra/upstash";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${UPSTASH_PROMPT}
@@ -410,7 +410,7 @@ import { VECTORIZE_PROMPT } from "@mastra/vectorize";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${VECTORIZE_PROMPT}
@@ -429,7 +429,7 @@ import { MONGODB_PROMPT } from "@mastra/mongodb";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${MONGODB_PROMPT}
@@ -448,7 +448,7 @@ import { OPENSEARCH_PROMPT } from "@mastra/opensearch";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${OPENSEARCH_PROMPT}
@@ -467,7 +467,7 @@ import { S3VECTORS_PROMPT } from "@mastra/s3vectors";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${S3VECTORS_PROMPT}
@@ -504,7 +504,7 @@ const initialResults = await pgVector.query({
 });
 
 // Create a relevance scorer
-const relevanceProvider = new MastraAgentRelevanceScorer('relevance-scorer', "openai/gpt-4o-mini");
+const relevanceProvider = new MastraAgentRelevanceScorer('relevance-scorer', "openai/gpt-5.1");
 
 // Re-rank the results
 const rerankedResults = await rerank({

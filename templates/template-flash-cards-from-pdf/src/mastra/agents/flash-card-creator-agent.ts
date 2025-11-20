@@ -36,7 +36,7 @@ Keep flash cards:
 
 Use the available tools to process PDFs and generate flash cards efficiently.
   `,
-  model: process.env.MODEL || 'openai/gpt-4o',
+  model: process.env.MODEL || 'openai/gpt-5.1',
   tools: {
     pdfContentExtractorTool,
     contentAnalyzerTool,

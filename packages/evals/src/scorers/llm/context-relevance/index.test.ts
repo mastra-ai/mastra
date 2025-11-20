@@ -5,7 +5,7 @@ import { createAgentTestRun, createTestMessage, getTextContentFromMastraDBMessag
 import { createContextRelevanceScorerLLM } from '.';
 
 describe('Context Relevance Scorer', () => {
-  const mockModel = openai('gpt-4o-mini');
+  const mockModel = openai('gpt-5.1');
 
   describe('Basic Configuration', () => {
     it('should create scorer with context provided', () => {

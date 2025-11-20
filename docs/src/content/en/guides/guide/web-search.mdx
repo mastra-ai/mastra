@@ -61,7 +61,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
-        model: "openai/gpt-4.1-mini",
+        model: "openai/gpt-5.1",
     });
     ```
 
@@ -102,7 +102,7 @@ Setup the tool:
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
-        model: "openai/gpt-4.1-mini",
+        model: "openai/gpt-5.1",
         tools: {
             webSearch: openai.tools.webSearch()
         }
@@ -193,7 +193,7 @@ export const searchAgent = new Agent({
   name: "Search Agent",
   instructions:
     "You are a search agent that can search the web for information.",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
 });
 ```
 
@@ -254,7 +254,7 @@ export const searchAgent = new Agent({
   name: "Search Agent",
   instructions:
     "You are a search agent that can search the web for information.",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   tools: {
     webSearch,
   },

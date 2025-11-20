@@ -190,10 +190,10 @@ describe('Custom Gateway Integration', () => {
 
     it('should fall back to default gateways when custom gateways array is empty', () => {
       // This should use default gateways (netlify, models.dev)
-      const model = new ModelRouterLanguageModel('openai/gpt-4o', []);
+      const model = new ModelRouterLanguageModel('openai/gpt-5.1', []);
 
       expect(model).toBeDefined();
-      expect(model.modelId).toBe('gpt-4o');
+      expect(model.modelId).toBe('gpt-5.1');
       expect(model.provider).toBe('openai');
     });
 

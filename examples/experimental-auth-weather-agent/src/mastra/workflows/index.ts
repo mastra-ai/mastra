@@ -6,7 +6,7 @@ import { openai } from '@ai-sdk/openai';
 const agent = new Agent({
   id: 'weather-agent',
   name: 'Weather Agent',
-  model: openai('gpt-4o'),
+  model: openai('gpt-5.1'),
   instructions: `
         You are a local activities and travel expert who excels at weather-based planning. Analyze the weather data and provide practical activity recommendations.
 

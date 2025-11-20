@@ -48,7 +48,7 @@ export abstract class MastraModelGateway {
 
   /**
    * Build the URL for a specific model/provider combination
-   * @param modelId Full model ID (e.g., "openai/gpt-4o" or "netlify/openai/gpt-4o")
+   * @param modelId Full model ID (e.g., "openai/gpt-5.1" or "netlify/openai/gpt-5.1")
    * @param envVars Environment variables available
    * @returns URL string if this gateway can handle the model, false otherwise
    */

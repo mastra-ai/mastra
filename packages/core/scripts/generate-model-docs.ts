@@ -721,7 +721,7 @@ const documentProcessor = new Agent({
   id: "document-processor",
   name: "Document Processor",
   instructions: "Extract and summarize key information from documents",
-  model: "openai/gpt-4o-mini"
+  model: "openai/gpt-5.1"
 })
 
 // Use a powerful reasoning model for complex analysis

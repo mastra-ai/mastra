@@ -47,7 +47,7 @@ const makeMockAgent = (config?: Partial<AgentConfig>) =>
     name: 'test-agent',
     description: 'A test agent for unit testing',
     instructions: 'test instructions',
-    model: openai('gpt-4o'),
+    model: openai('gpt-5.1'),
     ...(config || {}),
   });
 
@@ -79,7 +79,7 @@ describe('Agent Handlers', () => {
     mockMultiModelAgent = makeMockAgent({
       name: 'test-multi-model-agent',
       description: 'A test agent with multiple model configurations',
-      model: [{ model: openaiV5('gpt-4o-mini') }, { model: openaiV5('gpt-4o') }, { model: openaiV5('gpt-4.1') }],
+      model: [{ model: openaiV5('gpt-5.1') }, { model: openaiV5('gpt-5.1') }, { model: openaiV5('gpt-4.1') }],
     });
 
     mockMastra = makeMastraMock({
@@ -106,7 +106,7 @@ describe('Agent Handlers', () => {
           inputProcessors: [],
           outputProcessors: [],
           provider: 'openai.chat',
-          modelId: 'gpt-4o',
+          modelId: 'gpt-5.1',
           modelVersion: 'v1',
           defaultOptions: {},
           defaultGenerateOptionsLegacy: {},
@@ -124,7 +124,7 @@ describe('Agent Handlers', () => {
           inputProcessors: [],
           outputProcessors: [],
           provider: 'openai.responses',
-          modelId: 'gpt-4o-mini',
+          modelId: 'gpt-5.1',
           modelVersion: 'v2',
           defaultOptions: {},
           defaultGenerateOptionsLegacy: {},
@@ -134,13 +134,13 @@ describe('Agent Handlers', () => {
               id: expect.any(String),
               enabled: true,
               maxRetries: 0,
-              model: { modelId: 'gpt-4o-mini', provider: 'openai.responses', modelVersion: 'v2' },
+              model: { modelId: 'gpt-5.1', provider: 'openai.responses', modelVersion: 'v2' },
             },
             {
               id: expect.any(String),
               enabled: true,
               maxRetries: 0,
-              model: { modelId: 'gpt-4o', provider: 'openai.responses', modelVersion: 'v2' },
+              model: { modelId: 'gpt-5.1', provider: 'openai.responses', modelVersion: 'v2' },
             },
             {
               id: expect.any(String),
@@ -253,7 +253,7 @@ describe('Agent Handlers', () => {
         inputProcessors: [],
         outputProcessors: [],
         provider: 'openai.chat',
-        modelId: 'gpt-4o',
+        modelId: 'gpt-5.1',
         modelVersion: 'v1',
         defaultOptions: {},
         defaultGenerateOptionsLegacy: {},
@@ -276,13 +276,13 @@ describe('Agent Handlers', () => {
           id: expect.any(String),
           enabled: true,
           maxRetries: 0,
-          model: { modelId: 'gpt-4o-mini', provider: 'openai.responses', modelVersion: 'v2' },
+          model: { modelId: 'gpt-5.1', provider: 'openai.responses', modelVersion: 'v2' },
         },
         {
           id: expect.any(String),
           enabled: true,
           maxRetries: 0,
-          model: { modelId: 'gpt-4o', provider: 'openai.responses', modelVersion: 'v2' },
+          model: { modelId: 'gpt-5.1', provider: 'openai.responses', modelVersion: 'v2' },
         },
         {
           id: expect.any(String),
@@ -416,7 +416,7 @@ describe('Agent Handlers', () => {
         mastra: mockMastra,
         agentId: 'test-agent',
         body: {
-          modelId: 'gpt-4o-mini',
+          modelId: 'gpt-5.1',
           provider: 'openai',
         },
       });
@@ -425,7 +425,7 @@ describe('Agent Handlers', () => {
       const llm = await agent.getLLM();
       const modelId = llm.getModelId();
       expect(updateResult).toEqual({ message: 'Agent model updated' });
-      expect(modelId).toEqual('gpt-4o-mini');
+      expect(modelId).toEqual('gpt-5.1');
       //confirm that stream works fine after the model update
 
       const result = await streamGenerateHandler({
@@ -473,8 +473,8 @@ describe('Agent Handlers', () => {
       const reorderedModelList = await agent.getModelList();
       expect(reorderedModelList?.length).toBe(3);
       expect(reorderedModelList?.[0].model.modelId).toBe('gpt-4.1');
-      expect(reorderedModelList?.[1].model.modelId).toBe('gpt-4o');
-      expect(reorderedModelList?.[2].model.modelId).toBe('gpt-4o-mini');
+      expect(reorderedModelList?.[1].model.modelId).toBe('gpt-5.1');
+      expect(reorderedModelList?.[2].model.modelId).toBe('gpt-5.1');
     });
   });
 
@@ -497,7 +497,7 @@ describe('Agent Handlers', () => {
         },
       });
       const updatedModelList = await agent.getModelList();
-      expect(updatedModelList?.[0].model.modelId).toBe('gpt-4o-mini');
+      expect(updatedModelList?.[0].model.modelId).toBe('gpt-5.1');
       expect(updatedModelList?.[1].model.modelId).toBe('gpt-5');
       expect(updatedModelList?.[1].maxRetries).toBe(4);
       expect(updatedModelList?.[2].model.modelId).toBe('gpt-4.1');

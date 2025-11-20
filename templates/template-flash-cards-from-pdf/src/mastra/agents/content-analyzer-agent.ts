@@ -104,6 +104,6 @@ Always format your analysis as valid JSON with the exact structure requested, in
 
 Your analysis will directly feed into flash card generation, so ensure every element you identify is suitable for educational question-answer pairs.
   `,
-  model: process.env.MODEL || 'openai/gpt-4o',
+  model: process.env.MODEL || 'openai/gpt-5.1',
   memory,
 });

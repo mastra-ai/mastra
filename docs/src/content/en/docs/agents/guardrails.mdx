@@ -30,7 +30,7 @@ export const moderatedAgent = new Agent({
   id: "moderated-agent",
   name: "Moderated Agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   inputProcessors: [
     new ModerationProcessor({
       model: "openai/gpt-4.1-nano",

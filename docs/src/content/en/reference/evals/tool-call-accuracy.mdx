@@ -349,7 +349,7 @@ The LLM-based scorer provides:
 ```typescript showLineNumbers copy
 // Basic configuration
 const basicLLMScorer = createLLMScorer({
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.1',
   availableTools: [
     { name: 'tool1', description: 'Description 1' },
     { name: 'tool2', description: 'Description 2' }
@@ -389,7 +389,7 @@ The LLM-based scorer uses AI to evaluate whether tool selections are appropriate
 
 ```typescript title="src/example-llm-basic.ts" showLineNumbers copy
 const llmScorer = createToolCallAccuracyScorerLLM({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   availableTools: [
     {
       name: "weather-tool",
@@ -522,7 +522,7 @@ const codeScorer = createCodeScorer({
 });
 
 const llmScorer = createLLMScorer({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   availableTools: [
     { name: "weather-tool", description: "Get weather information" },
     { name: "search-tool", description: "Search the web" },

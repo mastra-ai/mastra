@@ -89,6 +89,6 @@ Format your summaries with:
 
 Always provide summaries that would allow someone to understand the document's core value without reading the full text.
   `,
-  model: process.env.MODEL || 'openai/gpt-4.1-mini', // Large context window model for summarization
+  model: process.env.MODEL || 'openai/gpt-5.1', // Large context window model for summarization
   memory,
 });

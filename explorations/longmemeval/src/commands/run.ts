@@ -37,7 +37,7 @@ interface PreparedQuestionMeta {
   questionDate?: string;
 }
 
-const retry4o = makeRetryModel(openai('gpt-4o'));
+const retry4o = makeRetryModel(openai('gpt-5.1'));
 
 export class RunCommand {
   private preparedDataDir: string;

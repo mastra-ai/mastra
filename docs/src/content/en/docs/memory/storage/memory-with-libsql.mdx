@@ -35,7 +35,7 @@ export const libsqlAgent = new Agent({
   name: "LibSQL Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'libsql-agent-storage',
@@ -71,7 +71,7 @@ export const libsqlAgent = new Agent({
   name: "LibSQL Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'libsql-agent-storage',

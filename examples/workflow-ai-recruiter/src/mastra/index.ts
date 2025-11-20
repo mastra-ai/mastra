@@ -8,7 +8,7 @@ const recruiter = new Agent({
   id: 'recruiter-agent',
   name: 'Recruiter Agent',
   instructions: `You are a recruiter.`,
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-5.1'),
 });
 
 const gatherCandidateInfo = new Step({

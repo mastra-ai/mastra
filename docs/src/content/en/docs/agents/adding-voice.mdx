@@ -24,7 +24,7 @@ export const agent = new Agent({
   id: "voice-agent",
   name: "Voice Agent",
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   voice,
 });
 
@@ -104,7 +104,7 @@ import { search, calculate } from "../tools";
 // Initialize the realtime voice provider
 const voice = new OpenAIRealtimeVoice({
   apiKey: process.env.OPENAI_API_KEY,
-  model: "gpt-4o-mini-realtime",
+  model: "gpt-5.1-realtime",
   speaker: "alloy",
 });
 
@@ -113,7 +113,7 @@ export const agent = new Agent({
   id: "speech-to-speech-agent",
   name: "Speech-to-Speech Agent",
   instructions: `You are a helpful assistant with speech-to-speech capabilities.`,
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   tools: {
     // Tools configured on Agent are passed to voice provider
     search,
@@ -215,7 +215,7 @@ export const convertToText = async (
 export const hybridVoiceAgent = new Agent({
   id: "hybrid-voice-agent",
   name: "Hybrid Voice Agent",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   instructions: "You can speak and listen using different providers.",
   voice: new CompositeVoice({
     input: new OpenAIVoice(),
@@ -227,7 +227,7 @@ export const unifiedVoiceAgent = new Agent({
   id: "unified-voice-agent",
   name: "Unified Voice Agent",
   instructions: "You are an agent with both STT and TTS capabilities.",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   voice: new OpenAIVoice(),
 });
 
@@ -272,7 +272,7 @@ export const agent = new Agent({
   id: "voice-agent",
   name: "Voice Agent",
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
 
   // Create a composite voice using OpenAI for listening and PlayAI for speaking
   voice: new CompositeVoice({
@@ -297,7 +297,7 @@ export const agent = new Agent({
   id: "aisdk-voice-agent",
   name: "AI SDK Voice Agent",
   instructions: `You are a helpful assistant with voice capabilities.`,
-  model: openai("gpt-4o"),
+  model: openai("gpt-5.1"),
 
   // Pass AI SDK models directly to CompositeVoice
   voice: new CompositeVoice({

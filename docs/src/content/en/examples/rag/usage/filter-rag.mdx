@@ -14,7 +14,7 @@ This system uses an agent to construct metadata filters from a user's query to s
 
 The system implements metadata filtering using Mastra and OpenAI. Here's what it does:
 
-1. Sets up a Mastra agent with gpt-4o-mini to understand queries and identify filter requirements
+1. Sets up a Mastra agent with gpt-5.1 to understand queries and identify filter requirements
 2. Creates a vector query tool to handle metadata filtering and semantic search
 3. Processes documents into chunks with metadata and embeddings
 4. Stores both vectors and metadata in PGVector for efficient retrieval
@@ -123,7 +123,7 @@ The agent requires both the vector query tool and a system prompt containing:
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   instructions: `
   You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
 

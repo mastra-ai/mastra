@@ -13,7 +13,7 @@ This example demonstrates how to use Mastra's vector query tool to implement a R
 
 The system implements RAG with re-ranking using Mastra and OpenAI. Here's what it does:
 
-1. Sets up a Mastra agent with gpt-4o-mini for response generation
+1. Sets up a Mastra agent with gpt-5.1 for response generation
 2. Creates a vector query tool with re-ranking capabilities
 3. Chunks text documents into smaller segments and creates embeddings from them
 4. Stores them in a PostgreSQL vector database
@@ -60,7 +60,7 @@ const vectorQueryTool = createVectorQueryTool({
   reranker: {
     model: new MastraAgentRelevanceScorer(
       "relevance-scorer",
-      "openai/gpt-4.1-mini",
+      "openai/gpt-5.1",
     ),
   },
 });
@@ -77,7 +77,7 @@ export const ragAgent = new Agent({
   instructions: `You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
     Important: When asked to answer a question, please base your answer only on the context provided in the tool.
     If the context doesn't contain enough information to fully answer the question, please state that explicitly.`,
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   tools: {
     vectorQueryTool,
   },

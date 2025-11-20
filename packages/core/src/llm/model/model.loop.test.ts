@@ -8,7 +8,7 @@ import { MastraLLMVNext } from './model.loop';
 import type { MastraLanguageModelV2 } from './shared.types';
 
 const model = new MastraLLMVNext({
-  models: [{ model: openai('gpt-4o-mini') as unknown as MastraLanguageModelV2, maxRetries: 0, id: 'test-model' }],
+  models: [{ model: openai('gpt-5.1') as unknown as MastraLanguageModelV2, maxRetries: 0, id: 'test-model' }],
 });
 
 describe.concurrent('MastraLLMVNext', () => {

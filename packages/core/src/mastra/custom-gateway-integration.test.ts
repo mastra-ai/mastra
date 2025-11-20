@@ -337,7 +337,7 @@ describe('Mastra Custom Gateway Integration', () => {
 
     it('should work without Mastra instance (use default gateways)', async () => {
       const requestContext = new RequestContext();
-      const model = await resolveModelConfig('openai/gpt-4o', requestContext);
+      const model = await resolveModelConfig('openai/gpt-5.1', requestContext);
 
       expect(model).toBeDefined();
       expect(model.specificationVersion).toBe('v2');
@@ -346,7 +346,7 @@ describe('Mastra Custom Gateway Integration', () => {
     it('should work when Mastra instance has no custom gateways', async () => {
       const mastra = new Mastra();
       const requestContext = new RequestContext();
-      const model = await resolveModelConfig('openai/gpt-4o', requestContext, mastra);
+      const model = await resolveModelConfig('openai/gpt-5.1', requestContext, mastra);
 
       expect(model).toBeDefined();
       expect(model.specificationVersion).toBe('v2');

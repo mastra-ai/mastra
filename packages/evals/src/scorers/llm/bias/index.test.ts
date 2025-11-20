@@ -102,7 +102,7 @@ const openai = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const model = openai('gpt-4o');
+const model = openai('gpt-5.1');
 
 describe('BiasMetric', () => {
   const scorer = createBiasScorer({ model });
@@ -174,7 +174,7 @@ describe('BiasMetric', () => {
   it('should work with model router magic string format', async () => {
     // Test using model router format instead of createOpenAI
     const modelRouterScorer = createBiasScorer({
-      model: 'openai/gpt-4o-mini',
+      model: 'openai/gpt-5.1',
     });
 
     const inputMessages = [createTestMessage({ role: 'user', content: testCases[0].input, id: 'test-input' })];

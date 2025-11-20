@@ -41,7 +41,7 @@ export const upstashAgent = new Agent({
   name: "Upstash Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   memory: new Memory({
     storage: new UpstashStore({
       id: 'upstash-agent-storage',
@@ -78,7 +78,7 @@ export const upstashAgent = new Agent({
   name: "Upstash Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   memory: new Memory({
     storage: new UpstashStore({
       id: 'upstash-agent-storage',

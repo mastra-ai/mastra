@@ -6,7 +6,7 @@ export const POST = async (request: Request) => {
 
   // return getExternalStoreRuntimeResponse({
   //   // options: {
-  //   //   model: openai('gpt-4o'),
+  //   //   model: openai('gpt-5.1'),
   //   // },
   //   requestData,
   //   abortSignal: request.signal,

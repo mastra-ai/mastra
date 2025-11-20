@@ -167,7 +167,7 @@ describe('Tools Handlers', () => {
       name: 'test-agent',
       instructions: 'You are a helpful assistant',
       tools: mockTools,
-      model: 'gpt-4o' as any,
+      model: 'gpt-5.1' as any,
     });
 
     it('should throw 404 when agent is not found', async () => {
@@ -204,7 +204,7 @@ describe('Tools Handlers', () => {
         name: 'test-agent',
         instructions: `You're a helpful assistant`,
         tools: { [nonExecutableTool.id]: nonExecutableTool },
-        model: 'gpt-4o' as any,
+        model: 'gpt-5.1' as any,
       });
 
       await expect(
@@ -287,7 +287,7 @@ describe('Tools Handlers', () => {
       name: 'test-agent',
       instructions: 'You are a helpful assistant',
       tools: mockTools,
-      model: 'gpt-4o' as any,
+      model: 'gpt-5.1' as any,
     });
 
     it('should throw 404 when agent is not found', async () => {

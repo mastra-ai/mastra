@@ -19,10 +19,10 @@ function modelListTests(version: 'v1' | 'v2') {
           instructions: 'test agent instructions',
           model: [
             {
-              model: openai('gpt-4o'),
+              model: openai('gpt-5.1'),
             },
             {
-              model: openai('gpt-4o-mini'),
+              model: openai('gpt-5.1'),
             },
             {
               model: openai('gpt-4.1'),
@@ -36,9 +36,9 @@ function modelListTests(version: 'v1' | 'v2') {
         }
         expect(modelList.length).toBe(3);
         const model0 = modelList[0]?.model as LanguageModelV2;
-        expect(model0.modelId).toBe('gpt-4o');
+        expect(model0.modelId).toBe('gpt-5.1');
         const model1 = modelList[1]?.model as LanguageModelV2;
-        expect(model1.modelId).toBe('gpt-4o-mini');
+        expect(model1.modelId).toBe('gpt-5.1');
         const model2 = modelList[2]?.model as LanguageModelV2;
         expect(model2.modelId).toBe('gpt-4.1');
       });
@@ -50,10 +50,10 @@ function modelListTests(version: 'v1' | 'v2') {
           instructions: 'test agent instructions',
           model: [
             {
-              model: openai('gpt-4o'),
+              model: openai('gpt-5.1'),
             },
             {
-              model: openai('gpt-4o-mini'),
+              model: openai('gpt-5.1'),
             },
             {
               model: openai('gpt-4.1'),
@@ -81,7 +81,7 @@ function modelListTests(version: 'v1' | 'v2') {
         const model0 = reorderedModelList[0]?.model as LanguageModelV2;
         expect(model0.modelId).toBe('gpt-4.1');
         const model1 = reorderedModelList[1]?.model as LanguageModelV2;
-        expect(model1.modelId).toBe('gpt-4o-mini');
+        expect(model1.modelId).toBe('gpt-5.1');
       });
 
       it(`should update model list`, async () => {
@@ -91,10 +91,10 @@ function modelListTests(version: 'v1' | 'v2') {
           instructions: 'test agent instructions',
           model: [
             {
-              model: openai('gpt-4o'),
+              model: openai('gpt-5.1'),
             },
             {
-              model: openai('gpt-4o-mini'),
+              model: openai('gpt-5.1'),
             },
             {
               model: openai('gpt-4.1'),

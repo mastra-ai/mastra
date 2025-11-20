@@ -49,7 +49,7 @@ describe('Memory Streaming Tests', () => {
       name: 'test',
       instructions:
         'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code. Respond in a pirate accent and dont use the degrees symbol, print the word degrees when needed.',
-      model: openai('gpt-4o'),
+      model: openai('gpt-5.1'),
       memory,
       tools: { get_weather: weatherTool },
     });
@@ -104,7 +104,7 @@ describe('Memory Streaming Tests', () => {
       id: 'test-msg-id-agent',
       name: 'test-msg-id',
       instructions: 'you are a helpful assistant.',
-      model: openai('gpt-4o'),
+      model: openai('gpt-5.1'),
       memory,
     });
 

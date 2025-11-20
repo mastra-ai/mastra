@@ -130,7 +130,7 @@ import { BatchPartsProcessor, SystemPromptScrubber } from "@mastra/core/processo
 export const agent = new Agent({
   name: "scrubbed-agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   outputProcessors: [
     // Batch stream parts first to reduce LLM calls
     new BatchPartsProcessor({

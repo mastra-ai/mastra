@@ -12,7 +12,7 @@ import o200k_base from 'js-tiktoken/ranks/o200k_base';
 interface TokenLimiterOptions {
   /** Maximum number of tokens to allow */
   limit: number;
-  /** Optional encoding to use (defaults to o200k_base which is used by gpt-4o) */
+  /** Optional encoding to use (defaults to o200k_base which is used by gpt-5.1) */
   encoding?: TiktokenBPE;
 }
 

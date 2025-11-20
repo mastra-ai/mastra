@@ -9,6 +9,6 @@ export const innerAgent = new Agent({
   id: 'inner-agent',
   name: 'Inner Agent',
   instructions: 'You are a helpful assistant.',
-  model: openai('gpt-4o'),
+  model: openai('gpt-5.1'),
   tools: { helloWorldTool, lodashTool, toolUsingNativeBindings, toolWithNativeBindingPackageDep, calculatorTool },
 });

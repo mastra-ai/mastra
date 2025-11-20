@@ -28,6 +28,6 @@ export const noteTakerAgent = new Agent({
   id: 'note-taker-agent',
   name: 'Note Taker Agent',
   instructions: instructions,
-  model: openai('gpt-4o'),
+  model: openai('gpt-5.1'),
   voice: new OpenAIVoice(),
 });

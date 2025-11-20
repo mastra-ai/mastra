@@ -34,7 +34,7 @@ export const copywriterAgent = new Agent({
   id: "copywriter-agent",
   name: "Copywriter Agent",
   instructions: "You are a copywriter agent that writes blog post copy.",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
 });
 ```
 
@@ -79,7 +79,7 @@ export const editorAgent = new Agent({
   id: "editor-agent",
   name: "Editor Agent",
   instructions: "You are an editor agent that edits blog post copy.",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
 });
 ```
 
@@ -130,7 +130,7 @@ export const publisherAgent = new Agent({
   name: "Publisher Agent",
   instructions:
     "You are a publisher agent that first calls the copywriter agent to write blog post copy about a specific topic and then calls the editor agent to edit the copy. Just return the final edited copy.",
-  model: "openai/gpt-4.1-mini",
+  model: "openai/gpt-5.1",
   tools: { copywriterTool, editorTool },
 });
 ```
