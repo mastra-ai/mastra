@@ -1,27 +1,32 @@
+import type { MastraDBMessage } from '../agent/message-list';
 import { MessageList } from '../agent/message-list';
-import { MastraMemory } from '../memory';
-import type { StorageThreadType, MastraDBMessage, MemoryConfig, MessageDeleteInput } from '../memory';
-import { InMemoryStore } from '../storage';
 import type {
   StorageListMessagesInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
 } from '../storage';
+import { InMemoryStore } from '../storage';
+import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
+import type { JSONSchema7 } from 'json-schema';
+import { ZodObject } from 'zod';
+import type { ZodTypeAny } from 'zod';
+import { MastraMemory } from './memory';
+import type { StorageThreadType, MemoryConfig, MessageDeleteInput, WorkingMemoryTemplate } from './types';
+
+const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
 
 export class MockMemory extends MastraMemory {
-  threads: Record<string, StorageThreadType> = {};
-
   constructor({ storage }: { storage?: InMemoryStore } = {}) {
     super({ name: 'mock', storage: storage || new InMemoryStore() });
     this._hasOwnStorage = true;
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.storage.getThreadById({ threadId });
+    return this.storage.stores!.memory.getThreadById({ threadId });
   }
 
   async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {
-    return this.storage.saveThread({ thread });
+    return this.storage.stores!.memory.saveThread({ thread });
   }
 
   async saveMessages({
@@ -37,20 +42,20 @@ export class MockMemory extends MastraMemory {
       .add(messages, 'memory')
       .get.all.db();
 
-    return this.storage.saveMessages({ messages: dbMessages });
+    return this.storage.stores!.memory.saveMessages({ messages: dbMessages });
   }
 
   async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    return this.storage.listThreadsByResourceId(args);
+    return this.storage.stores!.memory.listThreadsByResourceId(args);
   }
 
   async recall(args: StorageListMessagesInput & { threadConfig?: MemoryConfig; vectorSearchString?: string }): Promise<{
     messages: MastraDBMessage[];
   }> {
     // Get raw messages from storage
-    const result = await this.storage.listMessages({
+    const result = await this.storage.stores!.memory.listMessages({
       threadId: args.threadId,
       resourceId: args.resourceId,
       perPage: args.perPage,
@@ -62,63 +67,129 @@ export class MockMemory extends MastraMemory {
 
     return result;
   }
+
   async deleteThread(threadId: string) {
-    return this.storage.deleteThread({ threadId });
+    return this.storage.stores!.memory.deleteThread({ threadId });
   }
 
   async deleteMessages(messageIds: MessageDeleteInput): Promise<void> {
     const ids = Array.isArray(messageIds)
       ? messageIds?.map(item => (typeof item === 'string' ? item : item.id))
       : [messageIds];
-    return this.storage.deleteMessages(ids);
+    return this.storage.stores!.memory.deleteMessages(ids);
   }
 
-  // Add missing method implementations
   async getWorkingMemory({
-    threadId: _threadId,
-    resourceId: _resourceId,
-    memoryConfig: _memoryConfig,
+    threadId,
+    resourceId,
+    memoryConfig,
   }: {
     threadId: string;
     resourceId?: string;
     memoryConfig?: MemoryConfig;
   }): Promise<string | null> {
-    return null;
+    const mergedConfig = this.getMergedThreadConfig(memoryConfig);
+    const workingMemoryConfig = mergedConfig.workingMemory;
+
+    if (!workingMemoryConfig?.enabled) {
+      return null;
+    }
+
+    const scope = workingMemoryConfig.scope || 'resource';
+    const id = scope === 'resource' ? resourceId : threadId;
+
+    if (!id) {
+      return null;
+    }
+
+    const resource = await this.storage.stores!.memory.getResourceById({ resourceId: id });
+    return resource?.workingMemory || null;
   }
 
   async getWorkingMemoryTemplate({
-    memoryConfig: _memoryConfig,
+    memoryConfig,
   }: {
     memoryConfig?: MemoryConfig;
-  } = {}): Promise<any | null> {
+  } = {}): Promise<WorkingMemoryTemplate | null> {
+    const mergedConfig = this.getMergedThreadConfig(memoryConfig);
+    const workingMemoryConfig = mergedConfig.workingMemory;
+
+    if (!workingMemoryConfig?.enabled) {
+      return null;
+    }
+
+    if (workingMemoryConfig.template) {
+      return {
+        format: 'markdown' as const,
+        content: workingMemoryConfig.template,
+      };
+    }
+
+    if (workingMemoryConfig.schema) {
+      try {
+        const schema = workingMemoryConfig.schema;
+        let convertedSchema: JSONSchema7;
+
+        if (isZodObject(schema as ZodTypeAny)) {
+          // Check if Zod v4 with built-in toJsonSchema method
+          if (typeof (schema as any).toJsonSchema === 'function') {
+            convertedSchema = (schema as any).toJsonSchema() as JSONSchema7;
+          } else {
+            // Fall back to zodToJsonSchema for Zod v3
+            convertedSchema = zodToJsonSchema(schema as ZodTypeAny);
+          }
+        } else {
+          // Already a JSON Schema
+          convertedSchema = schema as any as JSONSchema7;
+        }
+
+        return { format: 'json', content: JSON.stringify(convertedSchema) };
+      } catch (error) {
+        this.logger?.error?.('Error converting schema', error);
+        throw error;
+      }
+    }
+
     return null;
   }
 
-  getMergedThreadConfig(config?: MemoryConfig) {
-    return config || {};
-  }
-
   async updateWorkingMemory({
-    threadId: _threadId,
-    resourceId: _resourceId,
-    workingMemory: _workingMemory,
-    memoryConfig: _memoryConfig,
+    threadId,
+    resourceId,
+    workingMemory,
+    memoryConfig,
   }: {
     threadId: string;
     resourceId?: string;
     workingMemory: string;
     memoryConfig?: MemoryConfig;
   }) {
-    // Mock implementation - just return void
-    return;
+    const mergedConfig = this.getMergedThreadConfig(memoryConfig);
+    const workingMemoryConfig = mergedConfig.workingMemory;
+
+    if (!workingMemoryConfig?.enabled) {
+      return;
+    }
+
+    const scope = workingMemoryConfig.scope || 'resource';
+    const id = scope === 'resource' ? resourceId : threadId;
+
+    if (!id) {
+      throw new Error(`Cannot update working memory: ${scope} ID is required`);
+    }
+
+    await this.storage.stores!.memory.updateResource({
+      resourceId: id,
+      workingMemory,
+    });
   }
 
   async __experimental_updateWorkingMemoryVNext({
-    threadId: _threadId,
-    resourceId: _resourceId,
-    workingMemory: _workingMemory,
+    threadId,
+    resourceId,
+    workingMemory,
     searchString: _searchString,
-    memoryConfig: _memoryConfig,
+    memoryConfig,
   }: {
     threadId: string;
     resourceId?: string;
@@ -126,12 +197,19 @@ export class MockMemory extends MastraMemory {
     searchString?: string;
     memoryConfig?: MemoryConfig;
   }) {
-    // Mock implementation for abstract method
-    return { success: true, reason: 'Mock implementation' };
-  }
-
-  async updateMessages({ messages }: { messages: MastraDBMessage[] }): Promise<MastraDBMessage[]> {
-    const result = await this.saveMessages({ messages });
-    return result.messages;
+    try {
+      await this.updateWorkingMemory({
+        threadId,
+        resourceId,
+        workingMemory,
+        memoryConfig,
+      });
+      return { success: true, reason: 'Working memory updated successfully' };
+    } catch (error) {
+      return {
+        success: false,
+        reason: error instanceof Error ? error.message : 'Failed to update working memory',
+      };
+    }
   }
 }
