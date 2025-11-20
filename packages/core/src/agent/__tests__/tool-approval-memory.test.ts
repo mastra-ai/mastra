@@ -198,7 +198,7 @@ describe('Tool suspension memory persistence', () => {
         thread: threadId,
         resource: resourceId,
       },
-      savePerStep: true, // Explicitly enable savePerStep as mentioned in issue #9906
+      savePerStep: true,
     });
 
     // Consume stream until completion (tool will suspend internally)
