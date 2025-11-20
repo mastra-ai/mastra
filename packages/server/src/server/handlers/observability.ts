@@ -201,7 +201,20 @@ export const GET_TRACES_PAGINATED_ROUTE = createRoute({
       }
 
       const { page, perPage, name, spanType, dateRange, entityId, entityType } = params;
-      const pagination = { page, perPage, dateRange: dateRange ? JSON.parse(dateRange) : undefined };
+
+      // Parse and convert dateRange to Date objects
+      const rawDateRange = dateRange ? JSON.parse(dateRange) : undefined;
+      const pagination = {
+        page,
+        perPage,
+        dateRange: rawDateRange
+          ? {
+              start: rawDateRange.start ? new Date(rawDateRange.start) : undefined,
+              end: rawDateRange.end ? new Date(rawDateRange.end) : undefined,
+            }
+          : undefined,
+      };
+
       const filters = Object.fromEntries(
         Object.entries({ name, spanType, entityId, entityType }).filter(([_, v]) => v !== undefined),
       );

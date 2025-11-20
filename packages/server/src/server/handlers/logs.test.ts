@@ -94,24 +94,25 @@ describe('Logs Handlers', () => {
       });
     });
 
-    // it('should handle filters with colons in values correctly', async () => {
-    //   const mockLogs: BaseLogMessage[] = [createLog({})];
+    it('should handle filters with colons in values correctly', async () => {
+      const mockLogs: BaseLogMessage[] = [createLog({})];
 
-    //   mockLogger.listLogs.mockResolvedValue({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
-    //   const result = await LIST_LOGS_ROUTE.handler({
-    //     mastra,
-    //     transportId: 'test-transport',
-    //     filters: ['timestamp:2024-01-01T10:30:00', 'url:https://example.com'],
-    //   });
+      mockLogger.listLogs.mockResolvedValue({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
+      const result = await LIST_LOGS_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra }),
+        transportId: 'test-transport',
+        filters: ['timestamp:2024-01-01T10:30:00', 'url:https://example.com'],
+        page: 0,
+      });
 
-    //   expect(result).toEqual({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
-    //   expect(mockLogger.listLogs).toHaveBeenCalledWith('test-transport', {
-    //     filters: {
-    //       timestamp: '2024-01-01T10:30:00',
-    //       url: 'https://example.com',
-    //     },
-    //   });
-    // });
+      expect(result).toEqual({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
+      expect(mockLogger.listLogs).toHaveBeenCalledWith('test-transport', {
+        filters: {
+          timestamp: '2024-01-01T10:30:00',
+          url: 'https://example.com',
+        },
+      });
+    });
   });
 
   describe('listLogsByRunIdHandler', () => {
