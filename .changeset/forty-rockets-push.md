@@ -22,7 +22,7 @@ export const chefModelV2Agent = new Agent({
       },
     },
   },
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o-mini'),
   tools: {
     cookingTool,
   },
