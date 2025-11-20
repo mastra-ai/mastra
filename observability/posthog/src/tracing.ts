@@ -5,7 +5,6 @@ import { PostHog } from 'posthog-node';
 
 /**
  * PostHog message format (from PostHog LLM Analytics API spec)
- * https://posthog.com/docs/ai-engineering/llm-observability
  */
 interface PostHogMessage {
   role: 'user' | 'assistant' | 'system' | 'tool';
@@ -15,7 +14,6 @@ interface PostHogMessage {
 interface PostHogContent {
   type: string;
   text?: string;
-  image_url?: string;
   [key: string]: unknown;
 }
 
@@ -68,6 +66,12 @@ export class PosthogExporter extends BaseExporter {
   private config: PosthogExporterConfig;
   private traceMap = new Map<string, TraceMetadata>();
 
+  // PostHog flush configuration constants
+  private static readonly SERVERLESS_FLUSH_AT = 10;
+  private static readonly SERVERLESS_FLUSH_INTERVAL = 2000; // 2 seconds
+  private static readonly DEFAULT_FLUSH_AT = 20;
+  private static readonly DEFAULT_FLUSH_INTERVAL = 10000; // 10 seconds
+
   constructor(config: PosthogExporterConfig) {
     super(config);
     this.config = config;
@@ -79,15 +83,28 @@ export class PosthogExporter extends BaseExporter {
       return;
     }
 
-    // Handle serverless auto-configuration
-    // Serverless: flushAt=10, flushInterval=2000 (small batches, frequent flushing)
-    // Normal: flushAt=20, flushInterval=10000 (PostHog SDK defaults)
+    const clientConfig = this.buildClientConfig(config);
+    this.client = new PostHog(config.apiKey, clientConfig);
+    this.logInitialization(config.serverless ?? false, clientConfig);
+  }
+
+  /**
+   * Build PostHog client configuration with serverless auto-configuration
+   * Serverless: flushAt=10, flushInterval=2000 (small batches, frequent flushing)
+   * Normal: flushAt=20, flushInterval=10000 (PostHog SDK defaults)
+   */
+  private buildClientConfig(config: PosthogExporterConfig): {
+    host: string;
+    flushAt: number;
+    flushInterval: number;
+  } {
     const isServerless = config.serverless ?? false;
+    const flushAt =
+      config.flushAt ?? (isServerless ? PosthogExporter.SERVERLESS_FLUSH_AT : PosthogExporter.DEFAULT_FLUSH_AT);
+    const flushInterval =
+      config.flushInterval ??
+      (isServerless ? PosthogExporter.SERVERLESS_FLUSH_INTERVAL : PosthogExporter.DEFAULT_FLUSH_INTERVAL);
 
-    const flushAt = config.flushAt ?? (isServerless ? 10 : 20);
-    const flushInterval = config.flushInterval ?? (isServerless ? 2000 : 10000);
-
-    // Determine host with environment variable support and warning
     const host = config.host || process.env.POSTHOG_HOST || 'https://us.i.posthog.com';
 
     if (!config.host && !process.env.POSTHOG_HOST) {
@@ -98,28 +115,25 @@ export class PosthogExporter extends BaseExporter {
       );
     }
 
-    this.client = new PostHog(config.apiKey, {
-      host,
-      flushAt,
-      flushInterval,
-    });
+    return { host, flushAt, flushInterval };
+  }
 
-    if (isServerless) {
-      this.logger.info('PostHog exporter initialized in serverless mode', {
-        host,
-        flushAt,
-        flushInterval,
-      });
-    } else {
-      this.logger.info('PostHog exporter initialized', {
-        host,
-        flushAt,
-        flushInterval,
-      });
-    }
+  /**
+   * Log initialization details based on serverless mode
+   */
+  private logInitialization(
+    isServerless: boolean,
+    config: { host: string; flushAt: number; flushInterval: number },
+  ): void {
+    const message = isServerless ? 'PostHog exporter initialized in serverless mode' : 'PostHog exporter initialized';
+
+    this.logger.info(message, config);
   }
 
   protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
+    // Early return if client is not initialized (disabled exporter)
+    if (!this.client) return;
+
     try {
       if (event.exportedSpan.isEvent) {
         await this.captureEventSpan(event.exportedSpan);
@@ -131,7 +145,7 @@ export class PosthogExporter extends BaseExporter {
           await this.handleSpanStarted(event.exportedSpan);
           break;
         case 'span_updated':
-          await this.handleSpanUpdated(event.exportedSpan);
+          // PostHog events are atomic (captured at end), no action needed for updates
           break;
         case 'span_ended':
           await this.handleSpanEnded(event.exportedSpan);
@@ -155,7 +169,7 @@ export class PosthogExporter extends BaseExporter {
 
     // Cache the span start time and type
     traceData.spans.set(span.id, {
-      startTime: new Date(span.startTime),
+      startTime: this.toDate(span.startTime),
       type: span.type,
     });
 
@@ -167,12 +181,6 @@ export class PosthogExporter extends BaseExporter {
         traceData.distinctId = String(userId);
       }
     }
-  }
-
-  private async handleSpanUpdated(span: AnyExportedSpan): Promise<void> {
-    // PostHog events are atomic (captured at end), so updates are less critical
-    // unless we need to update the cache for some reason.
-    // For now, we don't need to do anything here.
   }
 
   private async handleSpanEnded(span: AnyExportedSpan): Promise<void> {
@@ -192,7 +200,7 @@ export class PosthogExporter extends BaseExporter {
 
     // Calculate latency in seconds
     const startTime = cachedSpan.startTime.getTime();
-    const endTime = span.endTime ? new Date(span.endTime).getTime() : Date.now();
+    const endTime = span.endTime ? this.toDate(span.endTime).getTime() : Date.now();
     const latency = (endTime - startTime) / 1000;
 
     // Build event
@@ -208,12 +216,22 @@ export class PosthogExporter extends BaseExporter {
       timestamp: new Date(endTime),
     });
 
-    // Cleanup span
-    traceData.spans.delete(span.id);
+    // Cleanup
+    this.cleanupSpan(span.traceId, span.id);
+  }
+
+  /**
+   * Remove span from cache and cleanup trace if empty
+   */
+  private cleanupSpan(traceId: string, spanId: string): void {
+    const traceData = this.traceMap.get(traceId);
+    if (!traceData) return;
+
+    traceData.spans.delete(spanId);
 
     // Cleanup trace if no more spans
     if (traceData.spans.size === 0) {
-      this.traceMap.delete(span.traceId);
+      this.traceMap.delete(traceId);
     }
   }
 
@@ -248,6 +266,13 @@ export class PosthogExporter extends BaseExporter {
   }
 
   // -- Helpers --
+
+  /**
+   * Convert timestamp to Date object (handles both Date and number types)
+   */
+  private toDate(timestamp: Date | number): Date {
+    return timestamp instanceof Date ? timestamp : new Date(timestamp);
+  }
 
   private mapToPostHogEvent(spanType: SpanType): string {
     switch (spanType) {
@@ -314,6 +339,37 @@ export class PosthogExporter extends BaseExporter {
     }
   }
 
+  /**
+   * Extract error information from span into properties
+   */
+  private extractErrorProperties(span: AnyExportedSpan): Record<string, any> {
+    if (!span.errorInfo) {
+      return {};
+    }
+
+    const props: Record<string, any> = {
+      error_message: span.errorInfo.message,
+    };
+
+    if (span.errorInfo.id) {
+      props.error_id = span.errorInfo.id;
+    }
+
+    if (span.errorInfo.category) {
+      props.error_category = span.errorInfo.category;
+    }
+
+    return props;
+  }
+
+  /**
+   * Extract custom metadata, excluding userId and sessionId (handled separately)
+   */
+  private extractCustomMetadata(span: AnyExportedSpan): Record<string, any> {
+    const { userId, sessionId, ...customMetadata } = span.metadata ?? {};
+    return customMetadata;
+  }
+
   private buildGenerationProperties(span: AnyExportedSpan): Record<string, any> {
     const props: Record<string, any> = {};
     const attrs = (span.attributes ?? {}) as ModelGenerationAttributes;
@@ -352,17 +408,8 @@ export class PosthogExporter extends BaseExporter {
     }
     if (attrs.streaming !== undefined) props.$ai_stream = attrs.streaming;
 
-    // Error details
-    if (span.errorInfo) {
-      props.error_message = span.errorInfo.message;
-      if (span.errorInfo.id) props.error_id = span.errorInfo.id;
-      if (span.errorInfo.category) props.error_category = span.errorInfo.category;
-    }
-
-    // Custom metadata
-    // Extract all metadata except userId and sessionId (already handled)
-    const { userId, sessionId, ...customMetadata } = span.metadata ?? {};
-    return { ...props, ...customMetadata };
+    // Error details and custom metadata
+    return { ...props, ...this.extractErrorProperties(span), ...this.extractCustomMetadata(span) };
   }
 
   private buildSpanProperties(span: AnyExportedSpan): Record<string, any> {
@@ -379,13 +426,6 @@ export class PosthogExporter extends BaseExporter {
       if (attrs?.sequenceNumber !== undefined) props.chunk_sequence_number = attrs.sequenceNumber;
     }
 
-    // Error details
-    if (span.errorInfo) {
-      props.error_message = span.errorInfo.message;
-      if (span.errorInfo.id) props.error_id = span.errorInfo.id;
-      if (span.errorInfo.category) props.error_category = span.errorInfo.category;
-    }
-
     // Type-specific attributes (merge directly)
     if (span.attributes) {
       // Omit model attributes if they were accidentally included in non-generation span
@@ -393,9 +433,8 @@ export class PosthogExporter extends BaseExporter {
       Object.assign(props, span.attributes);
     }
 
-    // Custom metadata
-    const { userId, sessionId, ...customMetadata } = span.metadata ?? {};
-    return { ...props, ...customMetadata };
+    // Error details and custom metadata
+    return { ...props, ...this.extractErrorProperties(span), ...this.extractCustomMetadata(span) };
   }
 
   /**
@@ -426,14 +465,12 @@ export class PosthogExporter extends BaseExporter {
    * @returns true if data is an array of message objects
    */
   private isMessageArray(data: unknown): data is MastraMessage[] {
-    return (
-      Array.isArray(data) &&
-      data.length > 0 &&
-      typeof data[0] === 'object' &&
-      data[0] !== null &&
-      'role' in data[0] &&
-      'content' in data[0]
-    );
+    if (!Array.isArray(data) || data.length === 0) {
+      return false;
+    }
+
+    // Check all elements to ensure they're message objects
+    return data.every(item => typeof item === 'object' && item !== null && 'role' in item && 'content' in item);
   }
 
   /**
@@ -461,6 +498,7 @@ export class PosthogExporter extends BaseExporter {
 
   /**
    * Safe stringify with fallback for non-JSON-serializable objects
+   * Handles circular references and other JSON.stringify errors gracefully
    *
    * @param data - Data to stringify
    * @returns String representation
@@ -468,8 +506,11 @@ export class PosthogExporter extends BaseExporter {
   private safeStringify(data: unknown): string {
     try {
       return JSON.stringify(data);
-    } catch {
-      // Fallback for objects with circular references, etc.
+    } catch (error) {
+      // Fallback for circular references, functions, etc.
+      if (typeof data === 'object' && data !== null) {
+        return `[Non-serializable ${data.constructor?.name || 'Object'}]`;
+      }
       return String(data);
     }
   }
