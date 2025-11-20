@@ -23,7 +23,7 @@
     "@changesets/write": "^0.4.0",
     "@clack/prompts": "1.0.0-alpha.6",
     "@inquirer/editor": "^4.2.23",
-    "@manypkg/get-packages": "^2.2.2",
+    "@manypkg/get-packages": "^3.1.0",
     "@manypkg/tools": "^2.1.0",
     "@octokit/rest": "^22.0.1",
     "citty": "^0.1.6",
