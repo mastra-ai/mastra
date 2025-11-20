@@ -176,6 +176,17 @@ export class DeepgramVoice extends MastraVoice {
     return { enabled: true };
   }
 
+  /**
+   * Transcribes audio with optional speaker diarization.
+   *
+   * @param audioStream - Audio input stream
+   * @param options - Transcription options (diarize, language, etc.)
+   * @returns Promise resolving to:
+   *   - transcript: Full transcript string
+   *   - words: Array of word objects with timing and confidence
+   *   - raw: Complete Deepgram API response
+   *   - speakerSegments: (when diarize=true) Array of {word, speaker, start, end}
+   */
   async listen(
     audioStream: NodeJS.ReadableStream,
     options?: {
@@ -196,7 +207,7 @@ export class DeepgramVoice extends MastraVoice {
       }
     }
     const buffer = Buffer.concat(chunks);
-    const { diarize, diarize_speaker_count: _ignored, ...restOptions } = options ?? {};
+    const { diarize, diarize_speaker_count: _, ...restOptions } = options ?? {};
     const { result, error } = await this.listeningClient.listen.prerecorded.transcribeFile(buffer, {
       ...restOptions,
       model: this.storedListeningModel?.name,
