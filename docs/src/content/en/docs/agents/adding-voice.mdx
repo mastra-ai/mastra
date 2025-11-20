@@ -285,6 +285,55 @@ export const agent = new Agent({
 });
 ```
 
+### Using AI SDK
+
+Mastra supports using AI SDK's transcription and speech models directly in `CompositeVoice`, giving you access to a wide range of providers through the AI SDK ecosystem:
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { CompositeVoice } from "@mastra/core/voice";
+import { openai } from "@ai-sdk/openai";
+import { elevenlabs } from "@ai-sdk/elevenlabs";
+import { groq } from "@ai-sdk/groq";
+
+export const agent = new Agent({
+  id: "aisdk-voice-agent",
+  name: "AI SDK Voice Agent",
+  instructions: `You are a helpful assistant with voice capabilities.`,
+  model: openai("gpt-4o"),
+
+  // Pass AI SDK models directly to CompositeVoice
+  voice: new CompositeVoice({
+    input: openai.transcription('whisper-1'),      // AI SDK transcription model
+    output: elevenlabs.speech('eleven_turbo_v2'),  // AI SDK speech model
+  }),
+});
+
+// Use voice capabilities as usual
+const audioStream = await agent.voice.speak("Hello!");
+const transcribedText = await agent.voice.listen(audioStream);
+```
+
+#### Mix and Match Providers
+
+You can mix AI SDK models with Mastra voice providers:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { PlayAIVoice } from "@mastra/voice-playai";
+import { openai } from "@ai-sdk/openai";
+
+// Use AI SDK for transcription and Mastra provider for speech
+const voice = new CompositeVoice({
+  input: openai.transcription('whisper-1'),  // AI SDK
+  output: new PlayAIVoice(),                  // Mastra provider
+});
+```
+
+For the complete list of supported AI SDK providers and their capabilities:
+* [Transcription](https://ai-sdk.dev/docs/providers/openai/transcription)
+* [Speech](https://ai-sdk.dev/docs/providers/elevenlabs/speech)
+
 ## Supported Voice Providers
 
 Mastra supports multiple voice providers for text-to-speech (TTS) and speech-to-text (STT) capabilities:
