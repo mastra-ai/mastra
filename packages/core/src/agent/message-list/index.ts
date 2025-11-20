@@ -2598,11 +2598,8 @@ export class MessageList {
     return v3Msg;
   }
 
-  private aiV5UIMessagesToAIV5ModelMessages(
-    messages: AIV5Type.UIMessage[],
-    filterIncompleteToolCalls = false,
-  ): AIV5Type.ModelMessage[] {
-    const sanitized = this.sanitizeV5UIMessages(messages, filterIncompleteToolCalls);
+  private aiV5UIMessagesToAIV5ModelMessages(messages: AIV5Type.UIMessage[]): AIV5Type.ModelMessage[] {
+    const sanitized = this.sanitizeV5UIMessages(messages);
     const preprocessed = this.addStartStepPartsForAIV5(sanitized);
     const result = AIV5.convertToModelMessages(preprocessed);
 
