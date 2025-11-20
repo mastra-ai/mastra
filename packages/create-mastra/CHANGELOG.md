@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.18.3
+
+### Patch Changes
+
+- fix: detect bun runtime and cleanup on failure ([#10307](https://github.com/mastra-ai/mastra/pull/10307))
+
 ## 0.18.3-alpha.0
 
 ### Patch Changes

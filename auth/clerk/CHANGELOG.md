@@ -1,5 +1,14 @@
 # @mastra/auth-clerk
 
+## 0.10.8
+
+### Patch Changes
+
+- Allow provider to pass through options to the auth config ([#10290](https://github.com/mastra-ai/mastra/pull/10290))
+
+- Updated dependencies [[`7491cc0`](https://github.com/mastra-ai/mastra/commit/7491cc0350b2ba067f98c4915bf607119bd0150f)]:
+  - @mastra/auth@0.1.6
+
 ## 0.10.8-alpha.0
 
 ### Patch Changes

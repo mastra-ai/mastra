@@ -1,5 +1,11 @@
 # @mastra/auth-auth0
 
+## 0.10.8
+
+### Patch Changes
+
+- Allow provider to pass through options to the auth config ([#10290](https://github.com/mastra-ai/mastra/pull/10290))
+
 ## 0.10.8-alpha.0
 
 ### Patch Changes

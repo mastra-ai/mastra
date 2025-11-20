@@ -1,5 +1,11 @@
 # @mastra/auth-supabase
 
+## 0.10.9
+
+### Patch Changes
+
+- Allow provider to pass through options to the auth config ([#10290](https://github.com/mastra-ai/mastra/pull/10290))
+
 ## 0.10.9-alpha.0
 
 ### Patch Changes
