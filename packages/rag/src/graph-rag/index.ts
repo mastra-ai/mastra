@@ -272,7 +272,7 @@ export class GraphRAG {
       nodesToSearch = nodesToSearch.filter(node => {
         if (!node.metadata) return false;
         return Object.entries(filter).every(([key, value]) => node.metadata?.[key] === value);
-      })
+      });
     }
 
     // Retrieve nodes and calculate similarity

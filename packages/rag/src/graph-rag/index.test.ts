@@ -218,6 +218,82 @@ describe('GraphRAG', () => {
       expect(results[0]?.id).toBe('1');
     });
 
+    it('should return empty array when no nodes match the filter', () => {
+      const graph = new GraphRAG(3);
+      
+      graph.addNode({
+        id: '1',
+        content: 'Node 1',
+        embedding: [1, 2, 3],
+        metadata: { type: 'a' },
+      });
+      
+      const results = graph.query({
+        query: [1, 2, 3],
+        topK: 10,
+        filter: { type: 'nonexistent' },
+      });
+      
+      expect(results.length).toBe(0);
+    });
+
+    it('should apply multiple metadata filter keys correctly', () => {
+      const graph = new GraphRAG(3);
+
+      graph.addNode({
+        id: '1',
+        content: 'Node 1',
+        embedding: [1, 2, 3],
+        metadata: { type: 'a', source: 'x' },
+      });
+
+      graph.addNode({
+        id: '2',
+        content: 'Node 2',
+        embedding: [4, 5, 6],
+        metadata: { type: 'a', source: 'y' },
+      });
+
+      const results = graph.query({
+        query: [1, 2, 3],
+        topK: 10,
+        randomWalkSteps: 5,
+        restartProb: 0.2,
+        filter: { type: 'a', source: 'x' },
+      });
+
+      expect(results.length).toBe(1);
+      expect(results[0]?.id).toBe('1');
+    });
+
+    it('should return all nodes when filter is an empty object', () => {
+      const graph = new GraphRAG(3);
+
+      graph.addNode({
+        id: '1',
+        content: 'Node 1',
+        embedding: [1, 2, 3],
+        metadata: { type: 'a' },
+      });
+
+      graph.addNode({
+        id: '2',
+        content: 'Node 2',
+        embedding: [4, 5, 6],
+        metadata: { type: 'b' },
+      });
+
+      const results = graph.query({
+        query: [1, 2, 3],
+        topK: 10,
+        randomWalkSteps: 5,
+        restartProb: 0.2,
+        filter: {}, // no filters → return all
+      });
+
+      expect(results.length).toBe(2);
+    });
+
     it('should return the top ranked nodes', () => {
       const graph = new GraphRAG(3);
       const node1: GraphNode = {
