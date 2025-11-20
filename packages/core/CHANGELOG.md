@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 0.24.3-alpha.0
+
+### Patch Changes
+
+- Allow provider to pass through options to the auth config ([#10290](https://github.com/mastra-ai/mastra/pull/10290))
+
+- Fix deprecation warning when agent network executes workflows by using `.fullStream` instead of iterating `WorkflowRunOutput` directly ([#10306](https://github.com/mastra-ai/mastra/pull/10306))
+
+- Fix generate toolResults and mismatch in provider tool names ([#10297](https://github.com/mastra-ai/mastra/pull/10297))
+
 ## 0.24.2
 
 ### Patch Changes
