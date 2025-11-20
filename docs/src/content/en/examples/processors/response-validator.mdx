@@ -59,7 +59,6 @@ export class ResponseValidator implements Processor {
 
 ```typescript title="src/mastra/agents/example-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { ResponseValidator } from "../processors/response-validator";
 
 export const validatedAgent = new Agent({
@@ -67,7 +66,7 @@ export const validatedAgent = new Agent({
   name: "Validated Agent",
   instructions:
     "You are a helpful assistant. Always mention the key concepts in your responses.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   outputProcessors: [
     new ResponseValidator(["artificial intelligence", "machine learning"]), // Require both keywords
   ],
@@ -80,7 +79,6 @@ This example shows a response that contains all required keywords and passes val
 
 ```typescript title="src/example-high-response-validation.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { ResponseValidator } from "./mastra/processors/response-validator";
 
 // Create agent that requires AI-related keywords
@@ -89,7 +87,7 @@ export const agent = new Agent({
   name: "Validated Agent",
   instructions:
     "You are an AI expert. Always mention artificial intelligence and machine learning when discussing AI topics.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   outputProcessors: [
     new ResponseValidator(["artificial intelligence", "machine learning"]),
   ],
@@ -115,7 +113,6 @@ This example shows what happens when a response is missing one or more required 
 
 ```typescript title="src/example-partial-response-validation.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { ResponseValidator } from "./mastra/processors/response-validator";
 
 // Reuse same agent but require security-related keywords
@@ -123,7 +120,7 @@ export const agent = new Agent({
   id: "validated-agent",
   name: "Validated Agent",
   instructions: "You are a helpful assistant.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   outputProcessors: [
     new ResponseValidator(["security", "privacy", "encryption"]), // Require all three
   ],
@@ -157,7 +154,6 @@ This example demonstrates validation failure when none of the required keywords 
 
 ```typescript title="src/example-low-response-validation.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { ResponseValidator } from "./mastra/processors/response-validator";
 
 // Reuse same agent but require financial keywords
@@ -165,7 +161,7 @@ export const agent = new Agent({
   id: "validated-agent",
   name: "Validated Agent",
   instructions: "You are a general assistant.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   outputProcessors: [
     new ResponseValidator(["blockchain", "cryptocurrency", "bitcoin"]),
   ],
@@ -285,7 +281,7 @@ export const advancedAgent = new Agent({
   id: "advanced-validated-agent",
   name: "Advanced Validated Agent",
   instructions: "You are a technical writer.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   outputProcessors: [
     new AdvancedResponseValidator({
       requiredKeywords: ["technical", "implementation"],

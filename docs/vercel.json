@@ -69,6 +69,36 @@
       "source": "/docs/v1/getting-started/installation",
       "destination": "/guides/v1/quickstarts/standalone-server",
       "permanent": true
+    },
+    {
+      "source": "/examples/v1/agents/ai-sdk-v5-integration",
+      "destination": "/guides/v1/quickstarts/nextjs",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/agents/calling-agents",
+      "destination": "/docs/v1/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/agents/system-prompt",
+      "destination": "/docs/v1/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/logging",
+      "destination": "/docs/v1/observability/logging",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/memory/working-memory-schema",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-schema",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/memory/working-memory-template",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-template",
+      "permanent": true
     }
   ]
 }
