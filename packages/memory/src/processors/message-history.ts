@@ -92,13 +92,14 @@ export class MessageHistory implements Processor {
     tracingContext?: TracingContext;
     runtimeContext?: RequestContext;
   }): Promise<MastraDBMessage[]> {
-    const { messages, messageList } = args;
+    const { messages } = args;
 
     // Get memory context from RequestContext
     const memoryContext = parseMemoryRuntimeContext(args.runtimeContext);
     const threadId = memoryContext?.thread?.id;
 
     if (!threadId) {
+      console.error(`no thread id`);
       return messages;
     }
 
@@ -107,11 +108,9 @@ export class MessageHistory implements Processor {
     const messagesToSave = messages.filter(m => {
       if (m.role === 'system') return false;
       // If messageList is available, only save messages that are in newUserMessages or newResponseMessages
-      if (messageList) {
-        const isNewUserMessage = (messageList as any).newUserMessages?.has(m);
-        const isNewResponseMessage = (messageList as any).newResponseMessages?.has(m);
-        return isNewUserMessage || isNewResponseMessage;
-      }
+      // if (messageList) {
+      //   return messageList.isNewMessage(m);
+      // }
       // Fallback: if no messageList, save all non-system messages (backward compatibility)
       return true;
     });
@@ -120,16 +119,17 @@ export class MessageHistory implements Processor {
       return messages;
     }
 
-    // 2. Add IDs to messages that don't have them
-    const messagesWithIds = messagesToSave.map(msg => ({
-      ...msg,
-      id: msg.id || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    }));
+    // // 2. Add IDs to messages that don't have them
+    // const messagesWithIds = messagesToSave.map(msg => ({
+    //   ...msg,
+    //   id: msg.id || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    // }));
 
     // 3. Save to storage
     try {
       await this.storage.saveMessages({
-        messages: messagesWithIds,
+        messages,
+        // messages: messagesWithIds,
       });
     } catch (error) {
       console.warn('Failed to save messages:', error);
@@ -140,11 +140,11 @@ export class MessageHistory implements Processor {
     try {
       const thread = await this.storage.getThreadById({ threadId });
       if (thread) {
-        const result = await this.storage.listMessages({
-          threadId,
-          page: 1,
-          perPage: 1000,
-        });
+        // const result = await this.storage.listMessages({
+        //   threadId,
+        //   page: 1,
+        //   perPage: 1000,
+        // });
 
         await this.storage.updateThread({
           id: threadId,
@@ -153,7 +153,7 @@ export class MessageHistory implements Processor {
             ...thread.metadata,
             updatedAt: new Date(),
             lastMessageAt: new Date(),
-            messageCount: result.messages.length || 0,
+            // messageCount: result.messages.length || 0,
           },
         });
       }
