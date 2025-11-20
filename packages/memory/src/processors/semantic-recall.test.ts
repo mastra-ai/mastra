@@ -402,8 +402,10 @@ describe('SemanticRecall', () => {
         runtimeContext,
       });
 
-      // Should return original messages unchanged
-      expect(result).toEqual(inputMessages);
+      // Should return MessageList with original messages unchanged
+      expect(result).toBeInstanceOf(MessageList);
+      const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
+      expect(resultMessages).toEqual(inputMessages);
 
       // Storage should not be called
       expect(mockStorage.listMessages).not.toHaveBeenCalled();
@@ -473,8 +475,10 @@ describe('SemanticRecall', () => {
         runtimeContext,
       });
 
-      // Should return original messages unchanged
-      expect(result).toEqual(inputMessages);
+      // Should return MessageList with original messages unchanged
+      expect(result).toBeInstanceOf(MessageList);
+      const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
+      expect(resultMessages).toEqual(inputMessages);
 
       // No embedder or vector calls should be made
       expect(mockEmbedder.doEmbed).not.toHaveBeenCalled();
@@ -503,8 +507,10 @@ describe('SemanticRecall', () => {
         runtimeContext: emptyContext,
       });
 
-      // Should return original messages unchanged
-      expect(result).toEqual(inputMessages);
+      // Should return MessageList with original messages unchanged
+      expect(result).toBeInstanceOf(MessageList);
+      const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
+      expect(resultMessages).toEqual(inputMessages);
 
       // No embedder or vector calls should be made
       expect(mockEmbedder.doEmbed).not.toHaveBeenCalled();
@@ -872,7 +878,7 @@ describe('SemanticRecall', () => {
       expect(msg2Content).toContain(inputMessages[0]!.content.content);
     });
 
-    it('should not format cross-thread messages when scope is thread', async () => {
+    it('should not add cross-thread messages when scope is thread', async () => {
       const processor = new SemanticRecall({
         storage: mockStorage,
         vector: mockVector,
@@ -922,11 +928,10 @@ describe('SemanticRecall', () => {
         runtimeContext,
       });
 
-      // Should just prepend the similar message, no special formatting
-      const resultMessages = Array.isArray(result) ? result : result.get.all.aiV4.ui();
-      expect(resultMessages).toHaveLength(2);
-      expect(resultMessages[0]!.id).toBe(similarMessage.id);
-      expect(resultMessages[1]!.id).toBe(inputMessages[0]!.id);
+      // Should NOT add cross-thread messages when scope is 'thread'
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      expect(resultMessages).toHaveLength(1);
+      expect(resultMessages[0]!.id).toBe(inputMessages[0]!.id);
 
       // No system message with cross-thread formatting
       expect(
