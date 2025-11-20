@@ -8,6 +8,9 @@ export function getPackageManager(): PackageManager {
   const execPath = process.env.npm_execpath || '';
 
   // Check user agent first
+  if (userAgent.includes('bun')) {
+    return 'bun';
+  }
   if (userAgent.includes('yarn')) {
     return 'yarn';
   }
@@ -19,6 +22,9 @@ export function getPackageManager(): PackageManager {
   }
 
   // Fallback to execpath check
+  if (execPath.includes('bun')) {
+    return 'bun';
+  }
   if (execPath.includes('yarn')) {
     return 'yarn';
   }
