@@ -2078,6 +2078,25 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
             id: 'test-model',
             maxRetries: 0,
             model: new MockLanguageModelV2({
+              doGenerate: async ({}) => ({
+                ...dummyResponseValues,
+                content: [
+                  {
+                    type: 'tool-call',
+                    toolCallType: 'function',
+                    toolCallId: 'call-1',
+                    toolName: 'tool1',
+                    input: `{ "value": "value" }`,
+                  },
+                ],
+                finishReason: 'stop',
+                usage: testUsage,
+                response: {
+                  id: 'test-id',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+              }),
               doStream: async ({}) => ({
                 ...dummyResponseValues,
                 stream: convertArrayToReadableStream([
