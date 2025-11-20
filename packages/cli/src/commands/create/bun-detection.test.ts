@@ -149,7 +149,11 @@ describe('Bun Runtime Detection', () => {
     expect(mocks.mockExec).toHaveBeenCalledWith('npm init -y');
 
     // Check if npm install was used for dependencies
-    expect(mocks.mockExec).toHaveBeenCalledWith(expect.stringContaining('npm install --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false zod@^4'));
+    expect(mocks.mockExec).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'npm install --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false zod@^4',
+      ),
+    );
   });
 
   it('should clean up directory on failure', async () => {
@@ -167,7 +171,10 @@ describe('Bun Runtime Detection', () => {
     });
 
     // Check if cleanup was attempted
-    expect(mocks.mockRm).toHaveBeenCalledWith(expect.stringContaining('test-cleanup-project'), { recursive: true, force: true });
+    expect(mocks.mockRm).toHaveBeenCalledWith(expect.stringContaining('test-cleanup-project'), {
+      recursive: true,
+      force: true,
+    });
     expect(mockExit).toHaveBeenCalledWith(1);
   });
 });

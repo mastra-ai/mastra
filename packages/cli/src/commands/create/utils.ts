@@ -67,7 +67,7 @@ async function initializePackageJson(pm: PackageManager): Promise<void> {
   // Read and update package.json directly (more reliable than pkg set)
   const packageJsonPath = path.join(process.cwd(), 'package.json');
   const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf-8'));
-  
+
   packageJson.type = 'module';
   packageJson.engines = {
     ...packageJson.engines,
@@ -279,7 +279,9 @@ export const createMastraProject = async ({
         await fs.rm(projectPath, { recursive: true, force: true });
       } catch (cleanupError) {
         // Log but don't throw - we want to exit with the original error
-        console.error(`Warning: Failed to clean up project directory: ${cleanupError instanceof Error ? cleanupError.message : 'Unknown error'}`);
+        console.error(
+          `Warning: Failed to clean up project directory: ${cleanupError instanceof Error ? cleanupError.message : 'Unknown error'}`,
+        );
       }
     }
 

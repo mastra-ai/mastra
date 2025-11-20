@@ -364,7 +364,9 @@ async function createFromTemplate(args: {
         }
       } catch (cleanupError) {
         // Log but don't throw - we want to exit with the original error
-        console.error(`Warning: Failed to clean up project directory: ${cleanupError instanceof Error ? cleanupError.message : 'Unknown error'}`);
+        console.error(
+          `Warning: Failed to clean up project directory: ${cleanupError instanceof Error ? cleanupError.message : 'Unknown error'}`,
+        );
       }
     }
     p.log.error(`Failed to create project from template: ${error instanceof Error ? error.message : 'Unknown error'}`);
