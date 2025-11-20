@@ -2,7 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { SummarizationMetric } from '@mastra/evals/llm';
 
 // Configure the metric
-const metric = new SummarizationMetric(openai('gpt-5.1'));
+const metric = new SummarizationMetric(openai('gpt-4o-mini'));
 
 // Example 1: High-quality summary
 const input1 = `The electric car company Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning. 

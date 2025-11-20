@@ -115,7 +115,7 @@ export interface ProviderModels {
 /**
  * OpenAI-compatible model ID type
  * Dynamically derived from ProviderModelsMap
- * Full provider/model paths (e.g., "openai/gpt-5.1", "anthropic/claude-3-5-sonnet-20241022")
+ * Full provider/model paths (e.g., "openai/gpt-4o", "anthropic/claude-3-5-sonnet-20241022")
  */
 export type ModelRouterModelId =
   | {
@@ -126,7 +126,7 @@ export type ModelRouterModelId =
 /**
  * Extract the model part from a ModelRouterModelId for a specific provider
  * Dynamically derived from ProviderModelsMap
- * Example: ModelForProvider<'openai'> = 'gpt-5.1' | 'gpt-4-turbo' | ...
+ * Example: ModelForProvider<'openai'> = 'gpt-4o' | 'gpt-4-turbo' | ...
  */
 export type ModelForProvider<P extends Provider> = ProviderModelsMap[P][number];
 `;

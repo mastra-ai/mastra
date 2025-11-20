@@ -241,9 +241,9 @@ export const PROVIDER_MODELS = new Proxy({} as ProviderModels, {
 /**
  * Parse a model string to extract provider and model ID
  * Examples:
- *   "openai/gpt-5.1" -> { provider: "openai", modelId: "gpt-5.1" }
+ *   "openai/gpt-4o" -> { provider: "openai", modelId: "gpt-4o" }
  *   "fireworks/accounts/etc/model" -> { provider: "fireworks", modelId: "accounts/etc/model" }
- *   "gpt-5.1" -> { provider: null, modelId: "gpt-5.1" }
+ *   "gpt-4o" -> { provider: null, modelId: "gpt-4o" }
  */
 export function parseModelString(modelString: string): { provider: string | null; modelId: string } {
   const firstSlashIndex = modelString.indexOf('/');

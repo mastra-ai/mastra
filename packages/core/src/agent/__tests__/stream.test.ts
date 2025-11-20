@@ -24,9 +24,9 @@ function runStreamTest(version: 'v1' | 'v2') {
   let openaiModel: LanguageModelV1 | LanguageModelV2;
 
   if (version === 'v1') {
-    openaiModel = openai('gpt-5.1');
+    openaiModel = openai('gpt-4o-mini');
   } else {
-    openaiModel = openai_v5('gpt-5.1');
+    openaiModel = openai_v5('gpt-4o-mini');
   }
 
   const dummyResponseModel = getDummyResponseModel(version);

@@ -87,7 +87,7 @@ const tokenTestAgent = new Agent({
   id: 'token-test-agent',
   name: 'Token Test Agent',
   instructions: 'You help test token limiting by calling tools that return large amounts of data.',
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o-mini'),
   memory,
   tools: { testTool },
 });

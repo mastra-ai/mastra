@@ -67,7 +67,7 @@ const initialResults = await pgVector.query({
 });
 
 // Re-rank results
-const rerankedResults = await rerank(initialResults, query, openai('gpt-5.1'), {
+const rerankedResults = await rerank(initialResults, query, openai('gpt-4o-mini'), {
   weights: {
     semantic: 0.5,
     vector: 0.3,

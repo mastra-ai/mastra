@@ -79,7 +79,7 @@ const ragAgent = new Agent({
     
     Important: When asked to answer a question, please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
     `,
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o-mini'),
   tools: {
     vectorQueryTool,
     documentChunkerTool,

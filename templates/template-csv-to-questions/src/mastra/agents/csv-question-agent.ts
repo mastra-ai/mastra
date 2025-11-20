@@ -74,7 +74,7 @@ Generate questions that cover:
 
 Always be helpful and provide clear feedback about the process and results, with emphasis on the analytical aspects of the CSV data.
   `,
-  model: process.env.MODEL || 'openai/gpt-5.1',
+  model: process.env.MODEL || 'openai/gpt-4o',
   tools: {
     csvFetcherTool,
     generateQuestionsFromTextTool,

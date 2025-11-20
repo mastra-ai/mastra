@@ -23,7 +23,7 @@ describe('Agent Memory Tests', () => {
       id: 'test-agent',
       name: 'test',
       instructions: '',
-      model: openai('gpt-5.1'),
+      model: openai('gpt-4o-mini'),
       memory: new Memory({
         options: {
           lastMessages: 10,
@@ -56,7 +56,7 @@ describe('Agent Memory Tests', () => {
           id: 'test-agent',
           name: 'Test Agent',
           instructions: 'You are a test agent',
-          model: openai('gpt-5.1'),
+          model: openai('gpt-4o-mini'),
           memory: new Memory({
             options: {
               workingMemory: {
@@ -108,7 +108,7 @@ describe('Agent Memory Tests', () => {
           id: 'test-agent',
           name: 'Test Agent',
           instructions: 'You are a test agent',
-          model: openai('gpt-5.1'),
+          model: openai('gpt-4o-mini'),
           memory: new Memory({
             options: {
               workingMemory: {
@@ -165,7 +165,7 @@ describe('Agent Memory Tests', () => {
           id: 'test-agent',
           name: 'Test Agent',
           instructions: 'You are a helpful assistant',
-          model: openai('gpt-5.1'),
+          model: openai('gpt-4o-mini'),
           memory: new Memory({
             options: {
               lastMessages: 5,
@@ -264,7 +264,7 @@ describe('Agent Memory Tests', () => {
       name: 'test',
       instructions:
         'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code.',
-      model: openai('gpt-5.1'),
+      model: openai('gpt-4o'),
       memory,
       tools: { get_weather: weatherTool },
     });
@@ -475,7 +475,7 @@ describe('Agent Memory Tests', () => {
       id: 'title-on',
       name: 'title-on',
       instructions: 'Test agent with generateTitle on.',
-      model: openai('gpt-5.1'),
+      model: openai('gpt-4o'),
       memory: memoryWithTitle,
       tools: { get_weather: weatherTool },
     });
@@ -504,7 +504,7 @@ describe('Agent Memory Tests', () => {
       id: 'title-off',
       name: 'title-off',
       instructions: 'Test agent with generateTitle off.',
-      model: openai('gpt-5.1'),
+      model: openai('gpt-4o'),
       memory: memoryNoTitle,
       tools: { get_weather: weatherTool },
     });
@@ -546,7 +546,7 @@ describe('Agent Memory Tests', () => {
       expect(thread?.metadata).toMatchObject(metadata);
 
       const requestContext = new RequestContext();
-      requestContext.set('model', 'gpt-5.1');
+      requestContext.set('model', 'gpt-4o-mini');
       await agentWithDynamicModelTitle.generateLegacy([{ role: 'user', content: 'Hello, world!' }], {
         threadId,
         resourceId,

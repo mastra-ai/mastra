@@ -40,7 +40,7 @@ const agent = new Agent({
         - Keep descriptions concise but informative
         Maintain this exact formatting for consistency, using the emoji and section headers as shown.
       `,
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o'),
 });
 
 const fetchWeather = createStep({

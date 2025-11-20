@@ -97,10 +97,10 @@
   - Relevance Scorers (`MastraAgentRelevanceScorer`)
 
   **Supported formats:**
-  - Magic strings: `'openai/gpt-5.1'`
-  - Config objects: `{ id: 'openai/gpt-5.1' }` or `{ providerId: 'openai', modelId: 'gpt-5.1' }`
+  - Magic strings: `'openai/gpt-4o-mini'`
+  - Config objects: `{ id: 'openai/gpt-4o-mini' }` or `{ providerId: 'openai', modelId: 'gpt-4o-mini' }`
   - Custom endpoints: `{ id: 'custom/model', url: 'https://...', apiKey: '...' }`
-  - Dynamic resolution: `(ctx) => 'openai/gpt-5.1'`
+  - Dynamic resolution: `(ctx) => 'openai/gpt-4o-mini'`
 
   This change provides a unified model configuration experience matching the `Agent` class, making it easier to switch models and use custom providers across all Mastra components.
 
@@ -129,10 +129,10 @@
   - Relevance Scorers (`MastraAgentRelevanceScorer`)
 
   **Supported formats:**
-  - Magic strings: `'openai/gpt-5.1'`
-  - Config objects: `{ id: 'openai/gpt-5.1' }` or `{ providerId: 'openai', modelId: 'gpt-5.1' }`
+  - Magic strings: `'openai/gpt-4o-mini'`
+  - Config objects: `{ id: 'openai/gpt-4o-mini' }` or `{ providerId: 'openai', modelId: 'gpt-4o-mini' }`
   - Custom endpoints: `{ id: 'custom/model', url: 'https://...', apiKey: '...' }`
-  - Dynamic resolution: `(ctx) => 'openai/gpt-5.1'`
+  - Dynamic resolution: `(ctx) => 'openai/gpt-4o-mini'`
 
   This change provides a unified model configuration experience matching the `Agent` class, making it easier to switch models and use custom providers across all Mastra components.
 

@@ -158,7 +158,7 @@ Your primary function is to help users get weather details for specific location
 Use the startWeatherTool to start the weather workflow. This will start and then suspend the workflow and return a runId.
 Use the resumeWeatherTool to resume the weather workflow. This takes the runId returned from the startWeatherTool and the city entered by the user. It will resume the workflow and return the result.
 The result will be the weather forecast for the city.`,
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o'),
   tools: { startWeatherTool, resumeWeatherTool },
 });
 

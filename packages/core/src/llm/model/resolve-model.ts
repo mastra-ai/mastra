@@ -34,8 +34,8 @@ export function isOpenAICompatibleObjectConfig(
 /**
  * Resolves a model configuration to a LanguageModel instance.
  * Supports:
- * - Magic strings like "openai/gpt-5.1"
- * - Config objects like { id: "openai/gpt-5.1", apiKey: "..." }
+ * - Magic strings like "openai/gpt-4o"
+ * - Config objects like { id: "openai/gpt-4o", apiKey: "..." }
  * - Direct LanguageModel instances
  * - Dynamic functions that return any of the above
  *
@@ -47,11 +47,11 @@ export function isOpenAICompatibleObjectConfig(
  * @example
  * ```typescript
  * // String resolution
- * const model = await resolveModelConfig("openai/gpt-5.1");
+ * const model = await resolveModelConfig("openai/gpt-4o");
  *
  * // Config object resolution
  * const model = await resolveModelConfig({
- *   id: "openai/gpt-5.1",
+ *   id: "openai/gpt-4o",
  *   apiKey: "sk-..."
  * });
  *
@@ -97,7 +97,7 @@ export async function resolveModelConfig(
   const gatewayRecord = mastra?.listGateways();
   const customGateways = gatewayRecord ? Object.values(gatewayRecord) : undefined;
 
-  // If it's a string (magic string like "openai/gpt-5.1") or OpenAICompatibleConfig, create ModelRouterLanguageModel
+  // If it's a string (magic string like "openai/gpt-4o") or OpenAICompatibleConfig, create ModelRouterLanguageModel
   if (typeof modelConfig === 'string' || isOpenAICompatibleObjectConfig(modelConfig)) {
     return new ModelRouterLanguageModel(modelConfig, customGateways);
   }

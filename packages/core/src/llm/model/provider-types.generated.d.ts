@@ -209,10 +209,10 @@ export type ProviderModelsMap = {
     'morph/morph-v3-large',
     'openai/gpt-4-turbo',
     'openai/gpt-4.1',
-    'openai/gpt-5.1',
+    'openai/gpt-4.1-mini',
     'openai/gpt-4.1-nano',
-    'openai/gpt-5.1',
-    'openai/gpt-5.1',
+    'openai/gpt-4o',
+    'openai/gpt-4o-mini',
     'openai/gpt-5',
     'openai/gpt-5-codex',
     'openai/gpt-5-mini',
@@ -452,10 +452,10 @@ export type ProviderModelsMap = {
     'mistral-ai/mistral-nemo',
     'mistral-ai/mistral-small-2503',
     'openai/gpt-4.1',
-    'openai/gpt-5.1',
+    'openai/gpt-4.1-mini',
     'openai/gpt-4.1-nano',
-    'openai/gpt-5.1',
-    'openai/gpt-5.1',
+    'openai/gpt-4o',
+    'openai/gpt-4o-mini',
     'openai/o1',
     'openai/o1-mini',
     'openai/o1-preview',
@@ -579,13 +579,13 @@ export type ProviderModelsMap = {
     'gpt-4',
     'gpt-4-turbo',
     'gpt-4.1',
-    'gpt-5.1',
+    'gpt-4.1-mini',
     'gpt-4.1-nano',
-    'gpt-5.1',
-    'gpt-5.1-2024-05-13',
-    'gpt-5.1-2024-08-06',
-    'gpt-5.1-2024-11-20',
-    'gpt-5.1',
+    'gpt-4o',
+    'gpt-4o-2024-05-13',
+    'gpt-4o-2024-08-06',
+    'gpt-4o-2024-11-20',
+    'gpt-4o-mini',
     'gpt-5',
     'gpt-5-chat-latest',
     'gpt-5-codex',
@@ -678,8 +678,8 @@ export type ProviderModelsMap = {
     'nousresearch/hermes-4-70b',
     'nvidia/nemotron-nano-9b-v2',
     'openai/gpt-4.1',
-    'openai/gpt-5.1',
-    'openai/gpt-5.1',
+    'openai/gpt-4.1-mini',
+    'openai/gpt-4o-mini',
     'openai/gpt-5',
     'openai/gpt-5-chat',
     'openai/gpt-5-codex',
@@ -869,8 +869,8 @@ export type ProviderModelsMap = {
     'google/gemini-2.5-flash',
     'google/gemini-2.5-pro',
     'openai/gpt-4.1',
-    'openai/gpt-5.1',
-    'openai/gpt-5.1',
+    'openai/gpt-4.1-mini',
+    'openai/gpt-4o-mini',
     'openai/gpt-5',
     'openai/gpt-5-mini',
     'openai/gpt-5-nano',
@@ -971,10 +971,10 @@ export type ProviderModelsMap = {
     'gemini/gemini-flash-lite-latest',
     'openai/codex-mini-latest',
     'openai/gpt-4.1',
-    'openai/gpt-5.1',
+    'openai/gpt-4.1-mini',
     'openai/gpt-4.1-nano',
-    'openai/gpt-5.1',
-    'openai/gpt-5.1',
+    'openai/gpt-4o',
+    'openai/gpt-4o-mini',
     'openai/gpt-5',
     'openai/gpt-5-2025-08-07',
     'openai/gpt-5-codex',
@@ -1006,7 +1006,7 @@ export interface ProviderModels {
 /**
  * OpenAI-compatible model ID type
  * Dynamically derived from ProviderModelsMap
- * Full provider/model paths (e.g., "openai/gpt-5.1", "anthropic/claude-3-5-sonnet-20241022")
+ * Full provider/model paths (e.g., "openai/gpt-4o", "anthropic/claude-3-5-sonnet-20241022")
  */
 export type ModelRouterModelId =
   | {
@@ -1017,6 +1017,6 @@ export type ModelRouterModelId =
 /**
  * Extract the model part from a ModelRouterModelId for a specific provider
  * Dynamically derived from ProviderModelsMap
- * Example: ModelForProvider<'openai'> = 'gpt-5.1' | 'gpt-4-turbo' | ...
+ * Example: ModelForProvider<'openai'> = 'gpt-4o' | 'gpt-4-turbo' | ...
  */
 export type ModelForProvider<P extends Provider> = ProviderModelsMap[P][number];

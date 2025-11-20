@@ -302,7 +302,7 @@ export class LangSmithExporter extends BaseExporter {
       // See: https://docs.langchain.com/langsmith/log-llm-trace
       if (modelAttr.model !== undefined) {
         // Note - this should map to a model name recognized by LangSmith
-        // eg “gpt-5.1”, “claude-3-opus-20240307”, etc.
+        // eg “gpt-4o-mini”, “claude-3-opus-20240307”, etc.
         payload.metadata.ls_model_name = modelAttr.model;
       }
 

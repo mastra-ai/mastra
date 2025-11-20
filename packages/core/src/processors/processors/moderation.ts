@@ -31,7 +31,7 @@ export interface ModerationResult {
 export interface ModerationOptions {
   /**
    * Model configuration for the moderation agent
-   * Supports magic strings like "openai/gpt-5.1", config objects, or direct LanguageModel instances
+   * Supports magic strings like "openai/gpt-4o", config objects, or direct LanguageModel instances
    */
   model: MastraModelConfig;
 

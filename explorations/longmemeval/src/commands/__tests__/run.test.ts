@@ -239,7 +239,7 @@ describe('RunCommand', () => {
       const metrics = await command.run({
         dataset: 'longmemeval_s',
         memoryConfig: 'full-history',
-        model: 'gpt-5.1',
+        model: 'gpt-4o',
         preparedDataDir,
         outputDir,
       });
@@ -263,7 +263,7 @@ describe('RunCommand', () => {
       const metrics = await command.run({
         dataset: 'longmemeval_s',
         memoryConfig: 'full-history',
-        model: 'gpt-5.1',
+        model: 'gpt-4o',
         preparedDataDir,
         outputDir,
         subset: 1,
@@ -356,7 +356,7 @@ describe('RunCommand', () => {
       const metrics = await command.run({
         dataset: 'longmemeval_s',
         memoryConfig: 'semantic-recall',
-        model: 'gpt-5.1',
+        model: 'gpt-4o',
         preparedDataDir,
         outputDir,
         subset: 1,
@@ -370,7 +370,7 @@ describe('RunCommand', () => {
         command.run({
           dataset: 'longmemeval_s',
           memoryConfig: 'working-memory',
-          model: 'gpt-5.1',
+          model: 'gpt-4o',
           preparedDataDir,
           outputDir,
         }),

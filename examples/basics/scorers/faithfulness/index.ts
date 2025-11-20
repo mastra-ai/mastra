@@ -9,7 +9,7 @@ const context1 = [
 ];
 
 const scorer1 = createFaithfulnessScorer({
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o-mini'),
   options: {
     context: context1,
   },
@@ -42,7 +42,7 @@ const context2 = [
 ];
 
 const scorer2 = createFaithfulnessScorer({
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o-mini'),
   options: {
     context: context2,
   },
@@ -75,7 +75,7 @@ const context3 = [
 ];
 
 const scorer3 = createFaithfulnessScorer({
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o-mini'),
   options: {
     context: context3,
   },

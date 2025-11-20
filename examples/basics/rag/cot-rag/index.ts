@@ -36,7 +36,7 @@ Important: When asked to answer a question, please base your answer only on the 
 If the context doesn't contain enough information to fully answer the question, please state that explicitly.
 Remember: Explain how you're using the retrieved information to reach your conclusions.
 `,
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o-mini'),
   tools: { vectorQueryTool },
 });
 

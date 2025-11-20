@@ -65,7 +65,7 @@ export interface PIIDetectionResult {
 export interface PIIDetectorOptions {
   /**
    * Model configuration for the detection agent
-   * Supports magic strings like "openai/gpt-5.1", config objects, or direct LanguageModel instances
+   * Supports magic strings like "openai/gpt-4o", config objects, or direct LanguageModel instances
    */
   model: MastraModelConfig;
 

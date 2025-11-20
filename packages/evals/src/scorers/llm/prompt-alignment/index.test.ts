@@ -4,7 +4,7 @@ import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createPromptAlignmentScorerLLM } from '.';
 
 describe('Prompt Alignment Scorer', () => {
-  const mockModel = openai('gpt-5.1');
+  const mockModel = openai('gpt-4o-mini');
 
   describe('Basic Configuration', () => {
     it('should create scorer with default options', () => {

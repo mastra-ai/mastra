@@ -26,7 +26,7 @@ export const agent = new Agent({
   id: "voice-agent",
   name: "Voice Agent",
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice,
 });
 
@@ -106,7 +106,7 @@ import { search, calculate } from "../tools";
 // Initialize the realtime voice provider
 const voice = new OpenAIRealtimeVoice({
   apiKey: process.env.OPENAI_API_KEY,
-  model: "gpt-5.1-realtime",
+  model: "gpt-4o-mini-realtime",
   speaker: "alloy",
 });
 
@@ -115,7 +115,7 @@ export const agent = new Agent({
   id: "speech-to-speech-agent",
   name: "Speech-to-Speech Agent",
   instructions: `You are a helpful assistant with speech-to-speech capabilities.`,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   tools: {
     // Tools configured on Agent are passed to voice provider
     search,
@@ -218,7 +218,7 @@ export const convertToText = async (
 export const hybridVoiceAgent = new Agent({
   id: "hybrid-voice-agent",
   name: "Hybrid Voice Agent",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   instructions: "You can speak and listen using different providers.",
   voice: new CompositeVoice({
     input: new OpenAIVoice(),
@@ -230,7 +230,7 @@ export const unifiedVoiceAgent = new Agent({
   id: "unified-voice-agent",
   name: "Unified Voice Agent",
   instructions: "You are an agent with both STT and TTS capabilities.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new OpenAIVoice(),
 });
 
@@ -276,7 +276,7 @@ export const agent = new Agent({
   id: "voice-agent",
   name: "Voice Agent",
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
 
   // Create a composite voice using OpenAI for listening and PlayAI for speaking
   voice: new CompositeVoice({
@@ -526,7 +526,7 @@ export const moderatedAgent = new Agent({
   id: "moderated-agent",
   name: "Moderated Agent",
   instructions: "You are a helpful assistant",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   inputProcessors: [
     new ModerationProcessor({
       model: openai("gpt-4.1-nano"),
@@ -1006,7 +1006,7 @@ export const routingAgent = new Agent({
       Always respond with a complete report—no bullet points.
       Write in full paragraphs, like a blog post.
       Do not answer with incomplete or uncertain information.`,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   agents: {
     researchAgent,
     writingAgent,
@@ -1271,7 +1271,7 @@ export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
   instructions: "You are a helpful assistant.",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
 });
 ```
 
@@ -1320,7 +1320,7 @@ export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
   instructions: "You are a helpful assistant.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
 });
 ```
 
@@ -1530,7 +1530,7 @@ const response = await testAgentWithTools.generate(
         summary: z.string(),
         keywords: z.array(z.string()),
       }),
-      model: "openai/gpt-5.1",
+      model: "openai/gpt-4o",
     },
   },
 );
@@ -1654,7 +1654,7 @@ export const testAgent = new Agent({
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
     return userTier === "enterprise"
-      ? openai("gpt-5.1")
+      ? openai("gpt-4o-mini")
       : openai("gpt-4.1-nano");
   },
 });
@@ -1734,7 +1734,7 @@ export const weatherAgent = new Agent({
   instructions: `
       You are a helpful weather assistant.
       Use the weatherTool to fetch current weather data.`,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   tools: { weatherTool },
 });
 ```
@@ -5158,7 +5158,7 @@ const glutenCheckerScorer = createScorer({
   name: 'Gluten Checker',
   description: 'Check if recipes contain gluten ingredients',
   judge: {                    // Optional: for prompt object steps
-    model: openai('gpt-5.1'),
+    model: openai('gpt-4o'),
     instructions: 'You are a Chef that identifies if recipes contain gluten.'
   }
 })
@@ -5414,7 +5414,7 @@ export const glutenCheckerScorer = createScorer({
   name: "Gluten Checker",
   description: "Check if the output contains any gluten",
   judge: {
-    model: openai("gpt-5.1"),
+    model: openai("gpt-4o"),
     instructions: GLUTEN_INSTRUCTIONS,
   },
 })
@@ -5449,7 +5449,7 @@ Sets up the LLM model and defines its role as a domain expert.
 
 ```typescript
 judge: {
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o'),
   instructions: GLUTEN_INSTRUCTIONS,
 }
 ```
@@ -5644,11 +5644,11 @@ export const evaluatedAgent = new Agent({
   // ...
   scorers: {
     relevancy: {
-      scorer: createAnswerRelevancyScorer({ model: openai("gpt-5.1") }),
+      scorer: createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") }),
       sampling: { type: "ratio", rate: 0.5 },
     },
     safety: {
-      scorer: createToxicityScorer({ model: openai("gpt-5.1") }),
+      scorer: createToxicityScorer({ model: openai("gpt-4o-mini") }),
       sampling: { type: "ratio", rate: 1 },
     },
   },
@@ -7337,7 +7337,7 @@ export const weatherAgent = new Agent({
 
       Use the weatherTool to fetch current weather data.
 `,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   tools: { weatherTool },
 });
 ```
@@ -10282,7 +10282,7 @@ export const testAgent = new Agent({
       - US National Weather Service
 
       Answer questions using the information you find using the MCP Servers.`,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   tools: await testMcpClient.getTools(),
 });
 ```
@@ -10771,7 +10771,7 @@ import { openai } from "@ai-sdk/openai";
 const agent = new Agent({
   id: "test-agent",
   name: "Test Agent",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   memory: new Memory({
     processors: [
       // Ensure the total tokens from memory don't exceed ~127k
@@ -11048,7 +11048,7 @@ const agent = new Agent({
   id: "support-agent",
   name: "SupportAgent",
   instructions: "You are a helpful support agent.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   memory: new Memory(),
 });
 ```
@@ -11279,7 +11279,7 @@ export const libsqlAgent = new Agent({
   name: "LibSQL Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'libsql-agent-storage',
@@ -11316,7 +11316,7 @@ export const libsqlAgent = new Agent({
   name: "LibSQL Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'libsql-agent-storage',
@@ -11429,7 +11429,7 @@ export const mongodbAgent = new Agent({
   name: "mongodb-agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   memory: new Memory({
     storage: new MongoDBStore({
       url: process.env.MONGODB_URI!,
@@ -11471,7 +11471,7 @@ export const mongodbAgent = new Agent({
   name: "mongodb-agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   memory: new Memory({
     storage: new MongoDBStore({
       url: process.env.MONGODB_URI!,
@@ -11583,7 +11583,7 @@ export const pgAgent = new Agent({
   name: "PG Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   memory: new Memory({
     storage: new PostgresStore({
       id: 'pg-agent-storage',
@@ -11620,7 +11620,7 @@ export const pgAgent = new Agent({
   name: "PG Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   memory: new Memory({
     storage: new PostgresStore({
       id: 'pg-agent-storage',
@@ -11734,7 +11734,7 @@ export const upstashAgent = new Agent({
   name: "Upstash Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   memory: new Memory({
     storage: new UpstashStore({
       id: 'upstash-agent-storage',
@@ -11772,7 +11772,7 @@ export const upstashAgent = new Agent({
   name: "Upstash Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   memory: new Memory({
     storage: new UpstashStore({
       id: 'upstash-agent-storage',
@@ -11978,7 +11978,7 @@ const agent = new Agent({
   id: "personal-assistant",
   name: "PersonalAssistant",
   instructions: "You are a helpful personal assistant.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   memory: new Memory({
     options: {
       workingMemory: {
@@ -15046,7 +15046,7 @@ import { PGVECTOR_PROMPT } from "@mastra/pg";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${PGVECTOR_PROMPT}
@@ -15066,7 +15066,7 @@ import { PINECONE_PROMPT } from "@mastra/pinecone";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${PINECONE_PROMPT}
@@ -15086,7 +15086,7 @@ import { QDRANT_PROMPT } from "@mastra/qdrant";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${QDRANT_PROMPT}
@@ -15106,7 +15106,7 @@ import { CHROMA_PROMPT } from "@mastra/chroma";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${CHROMA_PROMPT}
@@ -15126,7 +15126,7 @@ import { ASTRA_PROMPT } from "@mastra/astra";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${ASTRA_PROMPT}
@@ -15146,7 +15146,7 @@ import { LIBSQL_PROMPT } from "@mastra/libsql";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${LIBSQL_PROMPT}
@@ -15166,7 +15166,7 @@ import { UPSTASH_PROMPT } from "@mastra/upstash";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${UPSTASH_PROMPT}
@@ -15186,7 +15186,7 @@ import { VECTORIZE_PROMPT } from "@mastra/vectorize";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${VECTORIZE_PROMPT}
@@ -15206,7 +15206,7 @@ import { MONGODB_PROMPT } from "@mastra/mongodb";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${MONGODB_PROMPT}
@@ -15226,7 +15226,7 @@ import { OPENSEARCH_PROMPT } from "@mastra/opensearch";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${OPENSEARCH_PROMPT}
@@ -15246,7 +15246,7 @@ import { S3VECTORS_PROMPT } from "@mastra/s3vectors";
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${S3VECTORS_PROMPT}
@@ -15284,7 +15284,7 @@ const initialResults = await pgVector.query({
 });
 
 // Create a relevance scorer
-const relevanceProvider = new MastraAgentRelevanceScorer('relevance-scorer', openai("gpt-5.1"));
+const relevanceProvider = new MastraAgentRelevanceScorer('relevance-scorer', openai("gpt-4o-mini"));
 
 // Re-rank the results
 const rerankedResults = await rerank({
@@ -16210,7 +16210,7 @@ export const colorAgent = new Agent({
   instructions: `You are a helpful CSS assistant.
   You can change the background color of web pages.
   Respond with a hex reference for the color requested by the user`,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
 });
 ```
 
@@ -17672,7 +17672,7 @@ export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
   instructions: "You are a weather agent.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   tools: { testTool },
 });
 ```
@@ -18037,7 +18037,7 @@ export const mixedToolsAgent = new Agent({
   id: "mixed-tools-agent",
   name: "Mixed Tools Agent",
   instructions: "You can use tools defined in different formats.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   tools: {
     weatherVercel: vercelWeatherTool,
     someMastraTool: mastraTool,
@@ -18121,7 +18121,7 @@ export const testAgent = new Agent({
       - US National Weather Service
 
       Answer questions using the information you find using the MCP Servers.`,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   tools: await testMcpClient.listTools(),
 });
 ```
@@ -18545,7 +18545,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new OpenAIVoice(),
 });
 ```
@@ -18573,7 +18573,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new OpenAIVoice(),
 });
 
@@ -18604,7 +18604,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new AzureVoice(),
 });
 
@@ -18634,7 +18634,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new ElevenLabsVoice(),
 });
 
@@ -18664,7 +18664,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new PlayAIVoice(),
 });
 
@@ -18694,7 +18694,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new GoogleVoice(),
 });
 
@@ -18724,7 +18724,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new CloudflareVoice(),
 });
 
@@ -18754,7 +18754,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new DeepgramVoice(),
 });
 
@@ -18784,7 +18784,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new SpeechifyVoice(),
 });
 
@@ -18814,7 +18814,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new SarvamVoice(),
 });
 
@@ -18844,7 +18844,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new MurfVoice(),
 });
 
@@ -18886,7 +18886,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new OpenAIVoice(),
 });
 
@@ -18918,7 +18918,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new AzureVoice(),
 });
 
@@ -18949,7 +18949,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new ElevenLabsVoice(),
 });
 
@@ -18980,7 +18980,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new GoogleVoice(),
 });
 
@@ -19011,7 +19011,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new CloudflareVoice(),
 });
 
@@ -19042,7 +19042,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new DeepgramVoice(),
 });
 
@@ -19073,7 +19073,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new SarvamVoice(),
 });
 
@@ -19112,7 +19112,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new OpenAIRealtimeVoice(),
 });
 
@@ -19145,7 +19145,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new GeminiLiveVoice({
     // Live API mode
     apiKey: process.env.GOOGLE_API_KEY,
@@ -19521,13 +19521,13 @@ STS enables continuous bidirectional audio communication through listening to ev
 ## Configuration
 
 - **`apiKey`**: Your OpenAI API key. Falls back to the `OPENAI_API_KEY` environment variable.
-- **`model`**: The model ID to use for real-time voice interactions (e.g., `gpt-5.1-realtime`).
+- **`model`**: The model ID to use for real-time voice interactions (e.g., `gpt-4o-mini-realtime`).
 - **`speaker`**: The default voice ID for speech synthesis. This allows you to specify which voice to use for the speech output.
 
 ```typescript
 const voice = new OpenAIRealtimeVoice({
   apiKey: "your-openai-api-key",
-  model: "gpt-5.1-realtime",
+  model: "gpt-4o-mini-realtime",
   speaker: "alloy", // Default voice
 });
 
@@ -19546,7 +19546,7 @@ const agent = new Agent({
   id: "agent",
   name: "OpenAI Realtime Agent",
   instructions: `You are a helpful assistant with real-time voice capabilities.`,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new OpenAIRealtimeVoice(),
 });
 
@@ -19581,7 +19581,7 @@ const agent = new Agent({
   instructions:
     "You are a helpful assistant with real-time voice capabilities.",
   // Model used for text generation; voice provider handles realtime audio
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new GeminiLiveVoice({
     apiKey: process.env.GOOGLE_API_KEY,
     model: "gemini-2.0-flash-exp",
@@ -19685,7 +19685,7 @@ const agent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that provides recommendations based on user input.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice,
 });
 
@@ -19782,7 +19782,7 @@ const agent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice,
 });
 
@@ -21989,7 +21989,7 @@ export const weatherAgent = new Agent({
 
     Use the weatherTool to fetch current weather data.
   `,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   tools: {
     weatherTool,
   },
@@ -22399,7 +22399,7 @@ export const imageAnalysisAgent = new Agent({
     You can view an image and identify objects, describe scenes, and answer questions about the content.
     You can also determine species of animals and describe locations in the image.
    `,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
 });
 ```
 
@@ -22567,8 +22567,8 @@ export const supportAgent = new Agent({
     const userTier = requestContext.get("user-tier");
 
     if (userTier === "enterprise") return "openai/gpt-5";
-    if (userTier === "pro") return "openai/gpt-5.1";
-    return "openai/gpt-5.1";
+    if (userTier === "pro") return "openai/gpt-4o";
+    return "openai/gpt-4o-mini";
   },
 
   tools: ({
@@ -22824,7 +22824,7 @@ export const copywriterAgent = new Agent({
   id: "copywriter-agent",
   name: "Copywriter Agent",
   instructions: "You are a copywriter agent that writes blog post copy.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
 });
 ```
 
@@ -22870,7 +22870,7 @@ export const editorAgent = new Agent({
   id: "editor-agent",
   name: "Editor Agent",
   instructions: "You are an editor agent that edits blog post copy.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
 });
 ```
 
@@ -22922,7 +22922,7 @@ export const publisherAgent = new Agent({
   name: "Publisher Agent",
   instructions:
     "You are a publisher agent that first calls the copywriter agent to write blog post copy about a specific topic and then calls the editor agent to edit the copy. Just return the final edited copy.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   tools: { copywriterTool, editorTool },
 });
 ```
@@ -23010,7 +23010,7 @@ export const harryPotterAgent = new Agent({
   instructions: `You are a character-voice assistant for the Harry Potter universe.
     Reply in the speaking style of the requested character (e.g., Harry, Hermione, Ron, Dumbledore, Snape, Hagrid).
     If no character is specified, default to Harry Potter.`,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
 });
 ```
 
@@ -23696,7 +23696,7 @@ export const weatherAgent = new Agent({
   id: 'weather-agent',
   name: 'Weather Agent',
   instructions: 'You are a helpful weather assistant that provides accurate weather information.',
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o-mini'),
   tools: {
     weatherTool,
   },
@@ -24079,7 +24079,7 @@ export const workingMemorySchemaAgent = new Agent({
     Support subtasks with bullet points.
     Ask for time estimates to help with timeboxing.
   `,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
       url: "file:working-memory-schema.db",
@@ -24275,7 +24275,7 @@ export const workingMemoryTemplateAgent = new Agent({
     Support subtasks with bullet points.
     Ask for time estimates to help with timeboxing.
   `,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
       url: "file:working-memory-template.db",
@@ -24718,7 +24718,7 @@ export const blockingAgent = new Agent({
   id: "blocking-agent",
   name: "Blocking Agent",
   instructions: "You are a helpful assistant with input length limits",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o",
   inputProcessors: [
     new MessageLengthLimiter({ maxLength: 2000, strategy: "block" }),
   ],
@@ -24735,7 +24735,7 @@ export const simpleAgent = new Agent({
   id: "simple-agent",
   name: "Simple Agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o",
   inputProcessors: [new MessageLengthLimiter(500)],
 });
 ```
@@ -24753,7 +24753,7 @@ export const agent = new Agent({
   id: "length-limited-agent",
   name: "Length Limited Agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o",
   inputProcessors: [
     new MessageLengthLimiter(500), // 500 character limit
   ],
@@ -24786,7 +24786,7 @@ export const agent = new Agent({
   id: "length-limited-agent",
   name: "Length Limited Agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o",
   inputProcessors: [
     new MessageLengthLimiter(300), // 300 character limit
   ],
@@ -24820,7 +24820,7 @@ export const agent = new Agent({
   id: "length-limited-agent",
   name: "Length Limited Agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o",
   inputProcessors: [
     new MessageLengthLimiter(100), // Very strict 100 character limit
   ],
@@ -25002,7 +25002,7 @@ export const blockingAgent = new Agent({
   id: "blocking-agent",
   name: "Blocking Agent",
   instructions: "You are a helpful assistant with response length limits",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o",
   outputProcessors: [
     new ResponseLengthLimiter({ maxLength: 1000, strategy: "block" }),
   ],
@@ -25019,7 +25019,7 @@ export const simpleAgent = new Agent({
   id: "simple-agent",
   name: "Simple Agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o",
   outputProcessors: [new ResponseLengthLimiter(300)],
 });
 ```
@@ -25037,7 +25037,7 @@ export const agent = new Agent({
   id: "response-limited-agent",
   name: "Response Limited Agent",
   instructions: "You are a helpful assistant. Keep responses concise.",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o",
   outputProcessors: [
     new ResponseLengthLimiter(300), // 300 character limit
   ],
@@ -25071,7 +25071,7 @@ export const agent = new Agent({
   id: "response-limited-agent",
   name: "Response Limited Agent",
   instructions: "You are a helpful assistant.",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o",
   outputProcessors: [
     new ResponseLengthLimiter(200), // Strict 200 character limit
   ],
@@ -25112,7 +25112,7 @@ export const agent = new Agent({
   name: "Response Limited Agent",
   instructions:
     "You are a verbose assistant who provides detailed explanations.",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o",
   outputProcessors: [
     new ResponseLengthLimiter(100), // Very strict 100 character limit
   ],
@@ -25274,7 +25274,7 @@ export const validatedAgent = new Agent({
   name: "Validated Agent",
   instructions:
     "You are a helpful assistant. Always mention the key concepts in your responses.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   outputProcessors: [
     new ResponseValidator(["artificial intelligence", "machine learning"]), // Require both keywords
   ],
@@ -25296,7 +25296,7 @@ export const agent = new Agent({
   name: "Validated Agent",
   instructions:
     "You are an AI expert. Always mention artificial intelligence and machine learning when discussing AI topics.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   outputProcessors: [
     new ResponseValidator(["artificial intelligence", "machine learning"]),
   ],
@@ -25330,7 +25330,7 @@ export const agent = new Agent({
   id: "validated-agent",
   name: "Validated Agent",
   instructions: "You are a helpful assistant.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   outputProcessors: [
     new ResponseValidator(["security", "privacy", "encryption"]), // Require all three
   ],
@@ -25372,7 +25372,7 @@ export const agent = new Agent({
   id: "validated-agent",
   name: "Validated Agent",
   instructions: "You are a general assistant.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   outputProcessors: [
     new ResponseValidator(["blockchain", "cryptocurrency", "bitcoin"]),
   ],
@@ -25492,7 +25492,7 @@ export const advancedAgent = new Agent({
   id: "advanced-validated-agent",
   name: "Advanced Validated Agent",
   instructions: "You are a technical writer.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   outputProcessors: [
     new AdvancedResponseValidator({
       requiredKeywords: ["technical", "implementation"],
@@ -26200,7 +26200,7 @@ This example demonstrates how to use Mastra's vector query tool to implement a R
 
 The system implements RAG with re-ranking using Mastra and OpenAI. Here's what it does:
 
-1. Sets up a Mastra agent with gpt-5.1 for response generation
+1. Sets up a Mastra agent with gpt-4o-mini for response generation
 2. Creates a vector query tool with re-ranking capabilities
 3. Chunks text documents into smaller segments and creates embeddings from them
 4. Stores them in a PostgreSQL vector database
@@ -26247,7 +26247,7 @@ const vectorQueryTool = createVectorQueryTool({
   reranker: {
     model: new MastraAgentRelevanceScorer(
       "relevance-scorer",
-      openai("gpt-5.1"),
+      openai("gpt-4o-mini"),
     ),
   },
 });
@@ -26264,7 +26264,7 @@ export const ragAgent = new Agent({
   instructions: `You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
     Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
     If the context doesn't contain enough information to fully answer the question, please state that explicitly.`,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   tools: {
     vectorQueryTool,
   },
@@ -26501,7 +26501,7 @@ const rerankedResults = await rerank({
   query,
   scorer: new MastraAgentRelevanceScorer(
     "relevance-scorer",
-    openai("gpt-5.1"),
+    openai("gpt-4o-mini"),
   ),
   options: {
     weights: {
@@ -27175,7 +27175,7 @@ This example demonstrates how to implement and use `createVectorQueryTool` for s
 
 The system implements RAG using Mastra and OpenAI. Here's what it does:
 
-1. Sets up a Mastra agent with gpt-5.1 for response generation
+1. Sets up a Mastra agent with gpt-4o-mini for response generation
 2. Creates a vector query tool to manage vector store interactions
 3. Uses existing embeddings to retrieve relevant context
 4. Generates context-aware responses using the Mastra agent
@@ -27227,7 +27227,7 @@ export const ragAgent = new Agent({
   name: "RAG Agent",
   instructions:
     "You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   tools: {
     vectorQueryTool,
   },
@@ -27294,7 +27294,7 @@ The system uses an agent to clean the initial chunks to optimize information den
 
 The system implements RAG using Mastra and OpenAI, this time optimizing information density through LLM-based processing. Here's what it does:
 
-1. Sets up a Mastra agent with gpt-5.1 that can handle both querying and cleaning documents
+1. Sets up a Mastra agent with gpt-4o-mini that can handle both querying and cleaning documents
 2. Creates vector query and document chunking tools for the agent to use
 3. Processes the initial document:
    - Chunks text documents into smaller segments
@@ -27381,7 +27381,7 @@ const ragAgent = new Agent({
     
     Important: When asked to answer a question, please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
     `,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   tools: {
     vectorQueryTool,
     documentChunkerTool,
@@ -27523,7 +27523,7 @@ This example demonstrates how to implement a Retrieval-Augmented Generation (RAG
 
 The system implements RAG using Mastra and OpenAI with chain-of-thought prompting. Here's what it does:
 
-1. Sets up a Mastra agent with gpt-5.1 for response generation
+1. Sets up a Mastra agent with gpt-4o-mini for response generation
 2. Creates a vector query tool to manage vector store interactions
 3. Chunks text documents into smaller segments
 4. Creates embeddings for these chunks
@@ -27597,7 +27597,7 @@ Important: When asked to answer a question, please base your answer only on the 
 If the context doesn't contain enough information to fully answer the question, please state that explicitly.
 Remember: Explain how you're using the retrieved information to reach your conclusions.
 `,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   tools: { vectorQueryTool },
 });
 ```
@@ -27713,7 +27713,7 @@ This example demonstrates how to implement a Retrieval-Augmented Generation (RAG
 
 The system implements RAG using Mastra and OpenAI with chain-of-thought prompting through a defined workflow. Here's what it does:
 
-1. Sets up a Mastra agent with gpt-5.1 for response generation
+1. Sets up a Mastra agent with gpt-4o-mini for response generation
 2. Creates a vector query tool to manage vector store interactions
 3. Defines a workflow with multiple steps for chain-of-thought reasoning
 4. Processes and chunks text documents
@@ -27780,7 +27780,7 @@ export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context.`,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   tools: {
     vectorQueryTool,
   },
@@ -28536,7 +28536,7 @@ This system uses an agent to construct metadata filters from a user's query to s
 
 The system implements metadata filtering using Mastra and OpenAI. Here's what it does:
 
-1. Sets up a Mastra agent with gpt-5.1 to understand queries and identify filter requirements
+1. Sets up a Mastra agent with gpt-4o-mini to understand queries and identify filter requirements
 2. Creates a vector query tool to handle metadata filtering and semantic search
 3. Processes documents into chunks with metadata and embeddings
 4. Stores both vectors and metadata in PGVector for efficient retrieval
@@ -28645,7 +28645,7 @@ The agent requires both the vector query tool and a system prompt containing:
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   instructions: `
   You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
 
@@ -28774,7 +28774,7 @@ This example demonstrates how to implement a Retrieval-Augmented Generation (RAG
 
 The system implements Graph RAG using Mastra and OpenAI. Here's what it does:
 
-1. Sets up a Mastra agent with gpt-5.1 for response generation
+1. Sets up a Mastra agent with gpt-4o-mini for response generation
 2. Creates a GraphRAG tool to manage vector store interactions and knowledge graph creation/traversal
 3. Chunks text documents into smaller segments
 4. Creates embeddings for these chunks
@@ -28842,7 +28842,7 @@ Keep each section brief and focus on the most important points.
 
 Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
 If the context doesn't contain enough information to fully answer the question, please state that explicitly.`,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   tools: {
     graphRagTool,
   },
@@ -29011,7 +29011,7 @@ export const speechToSpeechServer = new Agent({
   name: "mastra",
   instructions: "You are a helpful assistant.",
   voice: new OpenAIRealtimeVoice(),
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   tools: {
     salutationTool: createTool({
       id: "salutationTool",
@@ -29213,7 +29213,7 @@ export const noteTakerAgent = new Agent({
   id: "note-taker-agent",
   name: "Note Taker Agent",
   instructions: instructions,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new OpenAIVoice(), // Add OpenAI voice provider with default configuration
 });
 ```
@@ -29310,7 +29310,7 @@ export const storyTellerAgent = new Agent({
   id: "story-teller-agent",
   name: "Story Teller Agent",
   instructions: instructions,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new OpenAIVoice(),
 });
 ```
@@ -29468,7 +29468,7 @@ export const optimistAgent = new Agent({
   name: "Optimist",
   instructions:
     "You are an optimistic debater who sees the positive side of every topic. Keep your responses concise and engaging, about 2-3 sentences.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new OpenAIVoice({
     speaker: "alloy",
   }),
@@ -29479,7 +29479,7 @@ export const skepticAgent = new Agent({
   name: "Skeptic",
   instructions:
     "You are a RUDE skeptical debater who questions assumptions and points out potential issues. Keep your responses concise and engaging, about 2-3 sentences.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice: new OpenAIVoice({
     speaker: "echo",
   }),
@@ -29953,7 +29953,7 @@ import { openai } from "@ai-sdk/openai";
 const planningAgent = new Agent({
   id: "planning-agent",
   name: "planningAgent",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   instructions: `
         You are a local activities and travel expert who excels at weather-based planning. Analyze the weather data and provide practical activity recommendations.
 
@@ -30519,7 +30519,7 @@ const recruiter = new Agent({
   id: "recruiter-agent",
   name: "Recruiter Agent",
   instructions: `You are a recruiter.`,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
 });
 
 const gatherCandidateInfo = createStep({
@@ -30763,7 +30763,7 @@ export const chefAgent = new Agent({
   instructions:
     "You are Michel, a practical and experienced home chef" +
     "You help people cook with whatever ingredients they have available.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
 });
 ```
 
@@ -31543,7 +31543,7 @@ export const researchAgent = new Agent({
     and provide accurate, well-supported answers based on the retrieved content.
     Focus on the specific content available in the tool and acknowledge if you cannot find sufficient information to answer a question.
     Base your responses only on the content provided, not on general knowledge.`,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   tools: {
     vectorQueryTool,
   },
@@ -31870,7 +31870,7 @@ export const stockAgent = new Agent({
   name: "Stock Agent",
   instructions:
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
 });
 ```
 
@@ -31946,7 +31946,7 @@ export const stockAgent = new Agent({
   name: "Stock Agent",
   instructions:
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
   tools: {
     stockPrices,
   },
@@ -32081,7 +32081,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
-        model: 'openai/gpt-5.1',
+        model: 'openai/gpt-4o-mini',
     });
     ```
 
@@ -32122,7 +32122,7 @@ Setup the tool:
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
-        model: 'openai/gpt-5.1',
+        model: 'openai/gpt-4o-mini',
         tools: {
             webSearch: openai.tools.webSearch()
         }
@@ -32211,7 +32211,7 @@ export const searchAgent = new Agent({
   name: "Search Agent",
   instructions:
     "You are a search agent that can search the web for information.",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
 });
 ```
 
@@ -32272,7 +32272,7 @@ export const searchAgent = new Agent({
   name: "Search Agent",
   instructions:
     "You are a search agent that can search the web for information.",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   tools: {
     webSearch,
   },
@@ -32400,7 +32400,7 @@ const agent = new AgentNetwork({
   name: "agent-network",
   agents: [agent1, agent2],
   tools: { tool1, tool2 },
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   instructions:
     "You are a network agent that can help users with a variety of tasks.",
 });
@@ -32421,7 +32421,7 @@ const agent = new Agent({
   name: "agent-network",
   agents: { agent1, agent2 },
   tools: { tool1, tool2 },
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   instructions:
     "You are a network agent that can help users with a variety of tasks.",
   memory,
@@ -32443,7 +32443,7 @@ const agent = new NewAgentNetwork({
   agents: { agent1, agent2 },
   workflows: { workflow1 },
   tools: { tool1, tool2 },
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   instructions:
     "You are a network agent that can help users with a variety of tasks.",
 });
@@ -32464,7 +32464,7 @@ const agent = new Agent({
   agents: { agent1, agent2 },
   workflows: { workflow1 },
   tools: { tool1, tool2 },
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   instructions:
     "You are a network agent that can help users with a variety of tasks.",
   memory,
@@ -35366,7 +35366,7 @@ The following options are available in the standard `.stream()` and `generate()`
           name: z.string(),
           age: z.number(),
         }),
-        model: "openai/gpt-5.1", // Optional model override for structuring
+        model: "openai/gpt-4o-mini", // Optional model override for structuring
         errorStrategy: "fallback",
         fallbackValue: { name: "unknown", age: 0 },
         instructions: "Extract user information", // Override default structuring instructions
@@ -35506,7 +35506,7 @@ The following options are available in the standard `.stream()` and `generate()`
       schema: z.object({
         summary: z.string(),
       }),
-      model: "openai/gpt-5.1",
+      model: "openai/gpt-4o",
     },
   });
   ```
@@ -35940,7 +35940,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o",
   memory: new Memory({
     embedder: "openai/text-embedding-3-small", // String with autocomplete
   }),
@@ -36140,10 +36140,10 @@ ANTHROPIC_API_KEY=ant-...
 | `gemini/gemini-flash-lite-latest` |
 | `openai/codex-mini-latest` |
 | `openai/gpt-4.1` |
-| `openai/gpt-5.1` |
+| `openai/gpt-4.1-mini` |
 | `openai/gpt-4.1-nano` |
-| `openai/gpt-5.1` |
-| `openai/gpt-5.1` |
+| `openai/gpt-4o` |
+| `openai/gpt-4o-mini` |
 | `openai/gpt-5` |
 | `openai/gpt-5-2025-08-07` |
 | `openai/gpt-5-codex` |
@@ -36276,8 +36276,8 @@ ANTHROPIC_API_KEY=ant-...
 | `nousresearch/hermes-4-70b` |
 | `nvidia/nemotron-nano-9b-v2` |
 | `openai/gpt-4.1` |
-| `openai/gpt-5.1` |
-| `openai/gpt-5.1` |
+| `openai/gpt-4.1-mini` |
+| `openai/gpt-4o-mini` |
 | `openai/gpt-5` |
 | `openai/gpt-5-chat` |
 | `openai/gpt-5-codex` |
@@ -36444,10 +36444,10 @@ ANTHROPIC_API_KEY=ant-...
 | `morph/morph-v3-large` |
 | `openai/gpt-4-turbo` |
 | `openai/gpt-4.1` |
-| `openai/gpt-5.1` |
+| `openai/gpt-4.1-mini` |
 | `openai/gpt-4.1-nano` |
-| `openai/gpt-5.1` |
-| `openai/gpt-5.1` |
+| `openai/gpt-4o` |
+| `openai/gpt-4o-mini` |
 | `openai/gpt-5` |
 | `openai/gpt-5-codex` |
 | `openai/gpt-5-mini` |
@@ -36652,7 +36652,7 @@ const documentProcessor = new Agent({
   id: "document-processor",
   name: "Document Processor",
   instructions: "Extract and summarize key information from documents",
-  model: "openai/gpt-5.1"
+  model: "openai/gpt-4o-mini"
 })
 
 // Use a powerful reasoning model for complex analysis
@@ -41195,7 +41195,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "github-models/openai/gpt-5.1",
+    "model": "github-models/openai/gpt-4.1-mini",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -41219,7 +41219,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "github-models/openai/gpt-5.1",
+    "model": "github-models/openai/gpt-4o",
     "imageInput": true,
     "audioInput": true,
     "videoInput": false,
@@ -41231,7 +41231,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "github-models/openai/gpt-5.1",
+    "model": "github-models/openai/gpt-4o-mini",
     "imageInput": true,
     "audioInput": true,
     "videoInput": false,
@@ -45493,7 +45493,7 @@ for await (const chunk of stream) {
     "outputCost": 8
   },
   {
-    "model": "openai/gpt-5.1",
+    "model": "openai/gpt-4.1-mini",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -45517,7 +45517,7 @@ for await (const chunk of stream) {
     "outputCost": 0.4
   },
   {
-    "model": "openai/gpt-5.1",
+    "model": "openai/gpt-4o",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -45529,7 +45529,7 @@ for await (const chunk of stream) {
     "outputCost": 10
   },
   {
-    "model": "openai/gpt-5.1-2024-05-13",
+    "model": "openai/gpt-4o-2024-05-13",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -45541,7 +45541,7 @@ for await (const chunk of stream) {
     "outputCost": 15
   },
   {
-    "model": "openai/gpt-5.1-2024-08-06",
+    "model": "openai/gpt-4o-2024-08-06",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -45553,7 +45553,7 @@ for await (const chunk of stream) {
     "outputCost": 10
   },
   {
-    "model": "openai/gpt-5.1-2024-11-20",
+    "model": "openai/gpt-4o-2024-11-20",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -45565,7 +45565,7 @@ for await (const chunk of stream) {
     "outputCost": 10
   },
   {
-    "model": "openai/gpt-5.1",
+    "model": "openai/gpt-4o-mini",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -46920,7 +46920,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 8
   },
   {
-    "model": "requesty/openai/gpt-5.1",
+    "model": "requesty/openai/gpt-4.1-mini",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -46932,7 +46932,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.6
   },
   {
-    "model": "requesty/openai/gpt-5.1",
+    "model": "requesty/openai/gpt-4o-mini",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50102,7 +50102,7 @@ export const agent = new Agent({
   id: "test-agent",
   name: "Test Agent",
   instructions: "You are a helpful assistant that provides concise answers.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
 });
 
 // System message object
@@ -50113,7 +50113,7 @@ export const agent2 = new Agent({
     role: "system",
     content: "You are an expert programmer",
   },
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
 });
 
 // Array of system messages
@@ -50124,7 +50124,7 @@ export const agent3 = new Agent({
     { role: "system", content: "You are a helpful assistant" },
     { role: "system", content: "You have expertise in TypeScript" },
   ],
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
 });
 ```
 
@@ -51609,7 +51609,7 @@ await agent.generateLegacy(
         sentiment: z.enum(["positive", "negative", "neutral"]),
         confidence: z.number(),
       }),
-      model: openai("gpt-5.1"),
+      model: openai("gpt-4o-mini"),
       errorStrategy: "warn",
     },
     // Output processors for response validation
@@ -52653,7 +52653,7 @@ const agent = new Agent({
   name: "Network Agent",
   instructions:
     "You are a network agent that can help users with a variety of tasks.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   agents: {
     agent1,
     agent2,
@@ -56886,7 +56886,7 @@ In this example, the response accurately addresses the input query with specific
 ```typescript title="src/example-high-answer-relevancy.ts" showLineNumbers copy
 import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-5.1" });
+const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-4o-mini" });
 
 const inputMessages = [
   {
@@ -56924,7 +56924,7 @@ In this example, the response addresses the query in part but includes additiona
 ```typescript title="src/example-partial-answer-relevancy.ts" showLineNumbers copy
 import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-5.1" });
+const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-4o-mini" });
 
 const inputMessages = [
   { role: "user", content: "What should a healthy breakfast include?" },
@@ -56959,7 +56959,7 @@ In this example, the response does not address the query and contains informatio
 ```typescript title="src/example-low-answer-relevancy.ts" showLineNumbers copy
 import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-5.1" });
+const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-4o-mini" });
 
 const inputMessages = [
   { role: "user", content: "What are the benefits of meditation?" },
@@ -57183,7 +57183,7 @@ import { runEvals } from "@mastra/core/evals";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
-const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-5.1" });
+const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o-mini" });
 
 const result = await runEvals({
   data: [
@@ -57221,7 +57221,7 @@ import { runEvals } from "@mastra/core/evals";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
-const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-5.1" });
+const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o-mini" });
 
 const result = await runEvals({
   data: [
@@ -57259,7 +57259,7 @@ import { runEvals } from "@mastra/core/evals";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
-const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-5.1" });
+const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o-mini" });
 
 const result = await runEvals({
   data: [
@@ -57297,7 +57297,7 @@ import { runEvals } from "@mastra/core/evals";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
-const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-5.1" });
+const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o-mini" });
 
 const result = await runEvals({
   data: [
@@ -57337,7 +57337,7 @@ import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
 describe("Agent Consistency Tests", () => {
-  const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-5.1" });
+  const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o-mini" });
 
   it("should provide accurate factual answers", async () => {
     const result = await runEvals({
@@ -57397,7 +57397,7 @@ import { myAgent } from "./agent";
 
 // Configure for strict exact matching with high scale
 const strictScorer = createAnswerSimilarityScorer({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     exactMatchBonus: 0.5, // Higher bonus for exact matches
     contradictionPenalty: 2.0, // Very strict on contradictions
@@ -57408,7 +57408,7 @@ const strictScorer = createAnswerSimilarityScorer({
 
 // Configure for lenient semantic matching
 const lenientScorer = createAnswerSimilarityScorer({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     semanticThreshold: 0.6, // Lower threshold for semantic matches
     contradictionPenalty: 0.5, // More forgiving on minor contradictions
@@ -57569,7 +57569,7 @@ In this example, the response contains overtly biased language and generalizatio
 ```typescript title="src/example-high-bias.ts" showLineNumbers copy
 import { createBiasScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createBiasScorer({ model: "openai/gpt-5.1" });
+const scorer = createBiasScorer({ model: "openai/gpt-4o-mini" });
 
 const query = "What makes someone a good leader?";
 const response =
@@ -57601,7 +57601,7 @@ In this example, the response contains a mix of reasonable points with subtle bi
 ```typescript title="src/example-mixed-bias.ts" showLineNumbers copy
 import { createBiasScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createBiasScorer({ model: "openai/gpt-5.1" });
+const scorer = createBiasScorer({ model: "openai/gpt-4o-mini" });
 
 const query = "How do different age groups perform at work?";
 const response =
@@ -57633,7 +57633,7 @@ In this example, the response focuses on objective and neutral criteria without 
 ```typescript title="src/example-low-bias.ts" showLineNumbers copy
 import { createBiasScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createBiasScorer({ model: "openai/gpt-5.1" });
+const scorer = createBiasScorer({ model: "openai/gpt-4o-mini" });
 
 const query = "What is the best hiring practice?";
 const response =
@@ -57782,7 +57782,7 @@ In this example, the response comprehensively addresses all aspects of the query
 ```typescript title="src/example-high-completeness.ts" showLineNumbers copy
 import { createCompletenessScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createCompletenessScorer({ model: "openai/gpt-5.1" });
+const scorer = createCompletenessScorer({ model: "openai/gpt-4o-mini" });
 
 const query =
   "Explain the process of photosynthesis, including the inputs, outputs, and stages involved.";
@@ -57815,7 +57815,7 @@ In this example, the response addresses some key points but misses important asp
 ```typescript title="src/example-partial-completeness.ts" showLineNumbers copy
 import { createCompletenessScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createCompletenessScorer({ model: "openai/gpt-5.1" });
+const scorer = createCompletenessScorer({ model: "openai/gpt-4o-mini" });
 
 const query =
   "What are the benefits and drawbacks of remote work for both employees and employers?";
@@ -57848,7 +57848,7 @@ In this example, the response only partially addresses the query and misses seve
 ```typescript title="src/example-low-completeness.ts" showLineNumbers copy
 import { createCompletenessScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createCompletenessScorer({ model: "openai/gpt-5.1" });
+const scorer = createCompletenessScorer({ model: "openai/gpt-4o-mini" });
 
 const query =
   "Compare renewable and non-renewable energy sources in terms of cost, environmental impact, and sustainability.";
@@ -58237,7 +58237,7 @@ MAP = (1.0 + 0.67) / 2 = 0.835 ≈ **0.83**
 
 ```typescript
 const scorer = createContextPrecisionScorer({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     contextExtractor: (input, output) => {
       // Extract context dynamically based on the query
@@ -58256,7 +58256,7 @@ const scorer = createContextPrecisionScorer({
 
 ```typescript
 const scorer = createContextPrecisionScorer({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     context: [
       // Simulate retrieved documents from vector database
@@ -58281,7 +58281,7 @@ This example shows perfect context precision where all relevant context appears 
 import { createContextPrecisionScorer } from "@mastra/evals";
 
 const scorer = createContextPrecisionScorer({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     context: [
       "Photosynthesis is the process by which plants convert sunlight, carbon dioxide, and water into glucose and oxygen.",
@@ -58328,7 +58328,7 @@ This example shows moderate precision with both relevant and irrelevant context:
 import { createContextPrecisionScorer } from "@mastra/evals";
 
 const scorer = createContextPrecisionScorer({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     context: [
       "Regular exercise improves cardiovascular health by strengthening the heart muscle.",
@@ -58377,7 +58377,7 @@ This example shows poor context precision with mostly irrelevant context:
 import { createContextPrecisionScorer } from "@mastra/evals";
 
 const scorer = createContextPrecisionScorer({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     context: [
       "The weather forecast shows sunny skies this weekend.",
@@ -58638,7 +58638,7 @@ import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 // Stricter penalty configuration
 const strictScorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     context: [
       "Einstein won the Nobel Prize for photoelectric effect",
@@ -58656,7 +58656,7 @@ const strictScorer = createContextRelevanceScorerLLM({
 
 // Lenient penalty configuration
 const lenientScorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     context: [
       "Einstein won the Nobel Prize for photoelectric effect",
@@ -58703,7 +58703,7 @@ console.log("Lenient penalties:", lenientResult.score); // Higher score, less pe
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o",
   options: {
     contextExtractor: (input, output) => {
       // Extract context based on the query
@@ -58727,7 +58727,7 @@ const scorer = createContextRelevanceScorerLLM({
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     context: ["Relevant information...", "Supporting details..."],
     scale: 100, // Scale scores from 0-100 instead of 0-1
@@ -58741,7 +58741,7 @@ const scorer = createContextRelevanceScorerLLM({
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     contextExtractor: (input, output) => {
       const query = input?.inputMessages?.[0]?.content || "";
@@ -58768,7 +58768,7 @@ This example shows excellent context relevance where all context directly suppor
 import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 const scorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     context: [
       "Einstein won the Nobel Prize for his discovery of the photoelectric effect in 1921.",
@@ -58815,7 +58815,7 @@ This example shows moderate relevance with some context being irrelevant or unus
 import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 const scorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     context: [
       "Solar eclipses occur when the Moon blocks the Sun.",
@@ -58857,7 +58857,7 @@ console.log(result);
 
 // With custom penalty configuration
 const customScorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     context: [
       "Solar eclipses occur when the Moon blocks the Sun.",
@@ -58906,7 +58906,7 @@ This example shows poor context relevance with mostly irrelevant information:
 import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 const scorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     context: [
       "The Great Barrier Reef is located in Australia.",
@@ -58954,7 +58954,7 @@ Extract context dynamically based on the run input:
 import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 const scorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     contextExtractor: (input, output) => {
       // Extract query from input
@@ -58997,7 +58997,7 @@ Integrate with RAG pipelines to evaluate retrieved context:
 import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 const scorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     contextExtractor: (input, output) => {
       // Extract from RAG retrieval results
@@ -59728,7 +59728,7 @@ In this example, the response closely aligns with the context. Each statement in
 ```typescript title="src/example-high-faithfulness.ts" showLineNumbers copy
 import { createFaithfulnessScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createFaithfulnessScorer({ model: 'openai/gpt-5.1', options: {
+const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {
   context: [
     "The Tesla Model 3 was launched in 2017.",
     "It has a range of up to 358 miles.",
@@ -59765,7 +59765,7 @@ In this example, there are a mix of supported and unsupported claims. Some parts
 ```typescript title="src/example-mixed-faithfulness.ts" showLineNumbers copy
 import { createFaithfulnessScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createFaithfulnessScorer({ model: 'openai/gpt-5.1', options: {
+const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {
   context: [
     "Python was created by Guido van Rossum.",
     "The first version was released in 1991.",
@@ -59802,7 +59802,7 @@ In this example, the response directly contradicts the context. None of the clai
 ```typescript title="src/example-low-faithfulness.ts" showLineNumbers copy
 import { createFaithfulnessScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createFaithfulnessScorer({ model: 'openai/gpt-5.1', options: {
+const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {
   context: [
     "Mars is the fourth planet from the Sun.",
     "It has a thin atmosphere of mostly carbon dioxide.",
@@ -59981,7 +59981,7 @@ In this example, the response is fully aligned with the provided context. All cl
 ```typescript title="src/example-no-hallucination.ts" showLineNumbers copy
 import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createHallucinationScorer({ model: 'openai/gpt-5.1', options: {
+const scorer = createHallucinationScorer({ model: 'openai/gpt-4o-mini', options: {
   context: [
     "The iPhone was first released in 2007.",
     "Steve Jobs unveiled it at Macworld.",
@@ -60018,7 +60018,7 @@ In this example, the response includes both accurate and inaccurate claims. Some
 ```typescript title="src/example-mixed-hallucination.ts" showLineNumbers copy
 import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createHallucinationScorer({ model: 'openai/gpt-5.1', options: {
+const scorer = createHallucinationScorer({ model: 'openai/gpt-4o-mini', options: {
   context: [
     "The first Star Wars movie was released in 1977.",
     "It was directed by George Lucas.",
@@ -60056,7 +60056,7 @@ In this example, the response contradicts every key fact in the context. None of
 ```typescript title="src/example-complete-hallucination.ts" showLineNumbers copy
 import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createHallucinationScorer({ model: 'openai/gpt-5.1', options: {
+const scorer = createHallucinationScorer({ model: 'openai/gpt-4o-mini', options: {
   context: [
     "The Wright brothers made their first flight in 1903.",
     "The flight lasted 12 seconds.",
@@ -60701,7 +60701,7 @@ describe("Agent Noise Resistance Tests", () => {
 
     // Step 4: Evaluate using noise sensitivity scorer
     const scorer = createNoiseSensitivityScorerLLM({
-      model: "openai/gpt-5.1",
+      model: "openai/gpt-4o-mini",
       options: {
         baselineResponse,
         noisyQuery,
@@ -60910,7 +60910,7 @@ describe("Agent Noise Resistance CI Tests", () => {
 
       // Evaluate using noise sensitivity scorer
       const scorer = createNoiseSensitivityScorerLLM({
-        model: "openai/gpt-5.1",
+        model: "openai/gpt-4o-mini",
         options: {
           baselineResponse: testCase.baselineResponse,
           noisyQuery: testCase.noisyQuery,
@@ -60945,7 +60945,7 @@ This example shows an agent that completely resists misinformation in a test sce
 import { createNoiseSensitivityScorerLLM } from "@mastra/evals";
 
 const scorer = createNoiseSensitivityScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     baselineResponse:
       "Regular exercise improves cardiovascular health, strengthens muscles, and enhances mental wellbeing.",
@@ -60991,7 +60991,7 @@ This example shows an agent partially distracted by irrelevant requests:
 import { createNoiseSensitivityScorerLLM } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createNoiseSensitivityScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     baselineResponse:
       "To bake a cake: Mix flour, sugar, eggs, and butter. Bake at 350°F for 30 minutes.",
@@ -61037,7 +61037,7 @@ This example shows an agent that incorporates misinformation:
 import { createNoiseSensitivityScorerLLM } from "@mastra/evals";
 
 const scorer = createNoiseSensitivityScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     baselineResponse:
       "Climate change is caused by greenhouse gas emissions from human activities.",
@@ -61084,7 +61084,7 @@ import { createNoiseSensitivityScorerLLM } from "@mastra/evals";
 
 // Lenient scoring - more forgiving of minor issues
 const lenientScorer = createNoiseSensitivityScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     baselineResponse: "Python is a high-level programming language.",
     noisyQuery: "What is Python? Also, snakes are dangerous!",
@@ -61104,7 +61104,7 @@ const lenientScorer = createNoiseSensitivityScorerLLM({
 
 // Strict scoring - harsh on any deviation
 const strictScorer = createNoiseSensitivityScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     baselineResponse: "Python is a high-level programming language.",
     noisyQuery: "What is Python? Also, snakes are dangerous!",
@@ -61160,7 +61160,7 @@ async function evaluateNoiseResistance(testCases) {
 
   for (const testCase of testCases) {
     const scorer = createNoiseSensitivityScorerLLM({
-      model: "openai/gpt-5.1",
+      model: "openai/gpt-4o-mini",
       options: {
         baselineResponse: testCase.baseline,
         noisyQuery: testCase.noisyQuery,
@@ -61259,7 +61259,7 @@ Include noise sensitivity tests in your security test suite to validate prompt i
 import { createNoiseSensitivityScorerLLM } from "@mastra/evals";
 
 const scorer = createNoiseSensitivityScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     baselineResponse: "I can help you with programming questions.",
     noisyQuery:
@@ -61450,7 +61450,7 @@ You can customize the Prompt Alignment Scorer by adjusting the scale parameter a
 
 ```typescript showLineNumbers copy
 const scorer = createPromptAlignmentScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: {
     scale: 10, // Score from 0-10 instead of 0-1
     evaluationMode: "both", // 'user', 'system', or 'both' (default)
@@ -61613,24 +61613,24 @@ const agent = new Agent({
   name: "CodingAssistant",
   instructions:
     "You are a helpful coding assistant. Always provide working code examples.",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o",
 });
 
 // Evaluate comprehensive alignment (default)
 const scorer = createPromptAlignmentScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: { evaluationMode: "both" }, // Evaluates both user intent and system guidelines
 });
 
 // Evaluate just user satisfaction
 const userScorer = createPromptAlignmentScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: { evaluationMode: "user" }, // Focus only on user request fulfillment
 });
 
 // Evaluate system compliance
 const systemScorer = createPromptAlignmentScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: { evaluationMode: "system" }, // Check adherence to system instructions
 });
 
@@ -61682,7 +61682,7 @@ for (const agent of agents) {
 import { createPromptAlignmentScorerLLM } from "@mastra/evals";
 
 const scorer = createPromptAlignmentScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o",
 });
 
 // Evaluate a code generation task
@@ -61712,7 +61712,7 @@ const result = await scorer.run({
 ```typescript
 // Configure scale and evaluation mode
 const scorer = createPromptAlignmentScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o",
   options: {
     scale: 10, // Score from 0-10 instead of 0-1
     evaluationMode: "both", // 'user', 'system', or 'both' (default)
@@ -61721,13 +61721,13 @@ const scorer = createPromptAlignmentScorerLLM({
 
 // User-only evaluation - focus on user satisfaction
 const userScorer = createPromptAlignmentScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o",
   options: { evaluationMode: "user" },
 });
 
 // System-only evaluation - focus on compliance
 const systemScorer = createPromptAlignmentScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o",
   options: { evaluationMode: "system" },
 });
 
@@ -61762,7 +61762,7 @@ In this example, the response fully addresses the user's prompt with all require
 import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createPromptAlignmentScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
 });
 
 const inputMessages = [
@@ -61810,7 +61810,7 @@ In this example, the response addresses the core intent but misses some requirem
 import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createPromptAlignmentScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
 });
 
 const inputMessages = [
@@ -61851,7 +61851,7 @@ In this example, the response fails to address the user's specific requirements.
 import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createPromptAlignmentScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
 });
 
 const inputMessages = [
@@ -61895,7 +61895,7 @@ Evaluates how well the response addresses the user's request, ignoring system in
 
 ```typescript title="src/example-user-mode.ts" showLineNumbers copy
 const scorer = createPromptAlignmentScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: { evaluationMode: "user" },
 });
 
@@ -61927,7 +61927,7 @@ Evaluates compliance with system behavioral guidelines and constraints:
 
 ```typescript title="src/example-system-mode.ts" showLineNumbers copy
 const scorer = createPromptAlignmentScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: { evaluationMode: "system" },
 });
 
@@ -61960,7 +61960,7 @@ Evaluates both user intent fulfillment and system compliance with weighted scori
 
 ```typescript title="src/example-both-mode.ts" showLineNumbers copy
 const scorer = createPromptAlignmentScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   options: { evaluationMode: "both" }, // This is the default
 });
 
@@ -63008,7 +63008,7 @@ The LLM-based scorer provides:
 ```typescript showLineNumbers copy
 // Basic configuration
 const basicLLMScorer = createLLMScorer({
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-4o-mini',
   availableTools: [
     { name: 'tool1', description: 'Description 1' },
     { name: 'tool2', description: 'Description 2' }
@@ -63048,7 +63048,7 @@ The LLM-based scorer uses AI to evaluate whether tool selections are appropriate
 
 ```typescript title="src/example-llm-basic.ts" showLineNumbers copy
 const llmScorer = createToolCallAccuracyScorerLLM({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   availableTools: [
     {
       name: "weather-tool",
@@ -63181,7 +63181,7 @@ const codeScorer = createCodeScorer({
 });
 
 const llmScorer = createLLMScorer({
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   availableTools: [
     { name: "weather-tool", description: "Get weather information" },
     { name: "search-tool", description: "Search the web" },
@@ -63363,7 +63363,7 @@ In this example, the response contains explicit personal attacks and harmful lan
 ```typescript title="src/example-high-toxicity.ts" showLineNumbers copy
 import { createToxicityScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createToxicityScorer({ model: "openai/gpt-5.1" });
+const scorer = createToxicityScorer({ model: "openai/gpt-4o-mini" });
 
 const query = "What do you think about the new team member?";
 const response =
@@ -63396,7 +63396,7 @@ In this example, the response combines toxic and professional elements. The scor
 ```typescript title="src/example-mixed-toxicity.ts" showLineNumbers copy
 import { createToxicityScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createToxicityScorer({ model: "openai/gpt-5.1" });
+const scorer = createToxicityScorer({ model: "openai/gpt-4o-mini" });
 
 const query = "How was the meeting discussion?";
 const response = [
@@ -63431,7 +63431,7 @@ In this example, the response is professional and constructive, with no toxic or
 ```typescript title="src/example-no-toxicity.ts" showLineNumbers copy
 import { createToxicityScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createToxicityScorer({ model: "openai/gpt-5.1" });
+const scorer = createToxicityScorer({ model: "openai/gpt-4o-mini" });
 
 const query = "Can you provide feedback on the project proposal?";
 const response =
@@ -63997,7 +63997,7 @@ import { openai } from "@ai-sdk/openai";
 export const agent = new Agent({
   name: "test-agent",
   instructions: "You are an agent with memory.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   memory: new Memory({
     options: {
       workingMemory: {
@@ -64114,7 +64114,7 @@ import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 export const agent = new Agent({
   name: "test-agent",
   instructions: "You are an agent with memory.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'test-agent-storage',
@@ -64153,7 +64153,7 @@ import { PgStore, PgVector } from "@mastra/pg";
 export const agent = new Agent({
   name: "pg-agent",
   instructions: "You are an agent with optimized PostgreSQL memory.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   memory: new Memory({
     storage: new PgStore({
       id: 'pg-agent-storage',
@@ -67875,7 +67875,7 @@ import { BatchPartsProcessor } from "@mastra/core/processors";
 export const agent = new Agent({
   name: "batched-agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   outputProcessors: [
     new BatchPartsProcessor({
       batchSize: 5,
@@ -68030,7 +68030,7 @@ import { LanguageDetector } from "@mastra/core/processors";
 export const agent = new Agent({
   name: "multilingual-agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new LanguageDetector({
       model: "openai/gpt-4.1-nano",
@@ -68185,7 +68185,7 @@ import { ModerationProcessor } from "@mastra/core/processors";
 export const agent = new Agent({
   name: "moderated-agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new ModerationProcessor({
       model: "openai/gpt-4.1-nano",
@@ -68210,7 +68210,7 @@ import { BatchPartsProcessor, ModerationProcessor } from "@mastra/core/processor
 export const agent = new Agent({
   name: "output-moderated-agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   outputProcessors: [
     // Batch stream parts first to reduce LLM calls
     new BatchPartsProcessor({
@@ -68371,7 +68371,7 @@ import { PIIDetector } from "@mastra/core/processors";
 export const agent = new Agent({
   name: "private-agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new PIIDetector({
       model: "openai/gpt-4.1-nano",
@@ -68398,7 +68398,7 @@ import { BatchPartsProcessor, PIIDetector } from "@mastra/core/processors";
 export const agent = new Agent({
   name: "output-pii-agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   outputProcessors: [
     // Batch stream parts first to reduce LLM calls
     new BatchPartsProcessor({
@@ -68536,7 +68536,7 @@ import { PromptInjectionDetector } from "@mastra/core/processors";
 export const agent = new Agent({
   name: "secure-agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new PromptInjectionDetector({
       model: "openai/gpt-4.1-nano",
@@ -68689,7 +68689,7 @@ import { BatchPartsProcessor, SystemPromptScrubber } from "@mastra/core/processo
 export const agent = new Agent({
   name: "scrubbed-agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   outputProcessors: [
     // Batch stream parts first to reduce LLM calls
     new BatchPartsProcessor({
@@ -68761,7 +68761,7 @@ const processor = new TokenLimiterProcessor({
     {
       name: "encoding",
       type: "TiktokenBPE",
-      description: "Optional encoding to use. Defaults to o200k_base which is used by gpt-5.1",
+      description: "Optional encoding to use. Defaults to o200k_base which is used by gpt-4o",
       isOptional: true,
       default: "o200k_base",
     },
@@ -68840,7 +68840,7 @@ import { TokenLimiterProcessor } from "@mastra/core/processors";
 export const agent = new Agent({
   name: "limited-agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   outputProcessors: [
     new TokenLimiterProcessor({
       limit: 1000,
@@ -68960,7 +68960,7 @@ import { UnicodeNormalizer } from "@mastra/core/processors";
 export const agent = new Agent({
   name: "normalized-agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new UnicodeNormalizer({
       stripControlChars: true,
@@ -70918,7 +70918,7 @@ function rerank(
 import { openai } from "@ai-sdk/openai";
 import { rerank } from "@mastra/rag";
 
-const model = openai("gpt-5.1");
+const model = openai("gpt-4o-mini");
 
 const rerankedResults = await rerank(
   vectorSearchResults,
@@ -75197,7 +75197,7 @@ await agent.stream("message for agent", {
       sentiment: z.enum(["positive", "negative", "neutral"]),
       confidence: z.number(),
     }),
-    model: "openai/gpt-5.1",
+    model: "openai/gpt-4o-mini",
     errorStrategy: "warn",
   },
   // Output processors for streaming response validation
@@ -76784,7 +76784,7 @@ const agent = new Agent({
   name: "Fetch agent",
   instructions:
     "You are able to fetch data from URLs on demand and discuss the response data with the user.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
 });
 
 try {
@@ -78308,7 +78308,7 @@ const myAgent = new Agent({
   name: "MyExampleAgent",
   description: "A generalist to help with basic questions."
   instructions: "You are a helpful assistant.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o-mini"),
 });
 
 const weatherTool = createTool({
@@ -79844,7 +79844,7 @@ const queryTool = createVectorQueryTool({
   indexName: "documentation",
   model: openai.embedding("text-embedding-3-small"),
   reranker: {
-    model: openai("gpt-5.1"),
+    model: openai("gpt-4o-mini"),
     options: {
       weights: {
         semantic: 0.5, // Semantic relevance weight
@@ -87457,7 +87457,7 @@ const voice = new OpenAIRealtimeVoice();
 // Or initialize with specific configuration
 const voiceWithConfig = new OpenAIRealtimeVoice({
   apiKey: "your-openai-api-key",
-  model: "gpt-5.1-realtime-preview-2024-12-17",
+  model: "gpt-4o-mini-realtime-preview-2024-12-17",
   speaker: "alloy", // Default voice
 });
 
@@ -87507,7 +87507,7 @@ voice.connect();
       type: "string",
       description: "The model ID to use for real-time voice interactions.",
       isOptional: true,
-      defaultValue: "'gpt-5.1-realtime-preview-2024-12-17'",
+      defaultValue: "'gpt-4o-mini-realtime-preview-2024-12-17'",
     },
     {
       name: "apiKey",
@@ -88585,7 +88585,7 @@ import { openai } from "@ai-sdk/openai";
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-5.1-realtime",
+    model: "gpt-4o-mini-realtime",
     apiKey: process.env.OPENAI_API_KEY,
   },
 });
@@ -88595,7 +88595,7 @@ const agent = new Agent({
   name: "Customer Support Agent",
   instructions:
     "You are a helpful customer support agent for a software company.",
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   voice,
 });
 
@@ -88682,7 +88682,7 @@ const weatherTool = createTool({
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-5.1-realtime",
+    model: "gpt-4o-mini-realtime",
     apiKey: process.env.OPENAI_API_KEY,
   },
 });
@@ -88752,7 +88752,7 @@ const speaker = new Speaker({
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-5.1",
+    model: "gpt-4o",
     apiKey: process.env.OPENAI_API_KEY,
   },
   speaker: "alloy", // Default voice
@@ -88817,7 +88817,7 @@ import { getMicrophoneStream } from "@mastra/node-audio";
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-5.1-realtime",
+    model: "gpt-4o-mini-realtime",
     apiKey: process.env.OPENAI_API_KEY,
   },
 });
@@ -88882,7 +88882,7 @@ const speaker = new Speaker({
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-5.1-realtime",
+    model: "gpt-4o-mini-realtime",
     apiKey: process.env.OPENAI_API_KEY,
     options: {
       sessionConfig: {
@@ -89588,7 +89588,7 @@ import chalk from "chalk";
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-5.1-realtime",
+    model: "gpt-4o-mini-realtime",
     apiKey: process.env.OPENAI_API_KEY,
   },
 });
@@ -89666,7 +89666,7 @@ import chalk from "chalk";
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-5.1-realtime",
+    model: "gpt-4o-mini-realtime",
     apiKey: process.env.OPENAI_API_KEY,
   },
 });
@@ -89807,7 +89807,7 @@ const speaker = new Speaker({
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-5.1-realtime",
+    model: "gpt-4o-mini-realtime",
     apiKey: process.env.OPENAI_API_KEY,
   },
 });
@@ -90092,7 +90092,7 @@ import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-5.1-realtime",
+    model: "gpt-4o-mini-realtime",
     apiKey: process.env.OPENAI_API_KEY,
   },
   speaker: "alloy",

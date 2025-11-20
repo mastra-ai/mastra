@@ -8,7 +8,7 @@ import { weatherReporterAgent } from '../agents';
 const agent = new Agent({
   id: 'weather-agent',
   name: 'Weather Agent',
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o'),
   instructions: `
         You are a local activities and travel expert who excels at weather-based planning. Analyze the weather data and provide practical activity recommendations.
 

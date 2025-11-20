@@ -127,7 +127,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         }),
       });
 
-      openaiModel = openai('gpt-5.1');
+      openaiModel = openai('gpt-4o');
     } else {
       dummyModel = new MockLanguageModelV2({
         doGenerate: async () => ({
@@ -227,7 +227,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         }),
       });
 
-      openaiModel = openai_v5('gpt-5.1');
+      openaiModel = openai_v5('gpt-4o');
     }
   });
 

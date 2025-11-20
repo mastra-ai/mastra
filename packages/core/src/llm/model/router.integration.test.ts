@@ -6,7 +6,7 @@ import { Agent } from '../../agent/index.js';
 const testConfigs = [
   {
     provider: 'openai',
-    model: 'gpt-5.1',
+    model: 'gpt-4o-mini',
     envVar: 'OPENAI_API_KEY',
   },
   {
@@ -21,7 +21,7 @@ const testConfigs = [
   },
   {
     provider: 'openrouter',
-    model: 'openai/gpt-5.1',
+    model: 'openai/gpt-4o-mini',
     envVar: 'OPENROUTER_API_KEY',
   },
 ];
@@ -94,7 +94,7 @@ describe('ModelRouter Integration Tests', () => {
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: {
-          id: 'custom-openai/gpt-5.1',
+          id: 'custom-openai/gpt-4o-mini',
           url: 'https://api.openai.com/v1',
           apiKey: process.env.OPENAI_API_KEY,
         },
@@ -211,7 +211,7 @@ describe('ModelRouter Integration Tests', () => {
   describe('Model ID Validation', () => {
     it('should accept valid model IDs at construction time', () => {
       const validIds = [
-        'openai/gpt-5.1',
+        'openai/gpt-4o',
         'anthropic/claude-3-5-sonnet-20241022',
         'google/gemini-2.0-flash-exp',
       ] as const;

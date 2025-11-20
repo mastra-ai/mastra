@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createNoiseSensitivityScorerLLM } from './index';
 
-const mockModel = openai('gpt-5.1');
+const mockModel = openai('gpt-4o-mini');
 
 describe('NoiseSensitivityScorerLLM', () => {
   const baselineResponse =

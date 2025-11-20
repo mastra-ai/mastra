@@ -43,7 +43,7 @@ Your Mastra server and the Playground will be running on `http://localhost:4111`
 
 This template supports any AI model provider through Mastra's model router. You can use models from:
 
-- **OpenAI**: `openai/gpt-5.1`, `openai/gpt-5.1`
+- **OpenAI**: `openai/gpt-4o-mini`, `openai/gpt-4o`
 - **Anthropic**: `anthropic/claude-sonnet-4-5-20250929`, `anthropic/claude-haiku-4-5-20250929`
 - **Google**: `google/gemini-2.5-pro`, `google/gemini-2.0-flash-exp`
 - **Groq**: `groq/llama-3.3-70b-versatile`, `groq/llama-3.1-8b-instant`

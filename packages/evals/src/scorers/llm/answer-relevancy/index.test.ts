@@ -97,7 +97,7 @@ const openai = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const model = openai('gpt-5.1');
+const model = openai('gpt-4o');
 
 // const scorer = new AnswerRelevancyScorer({ model });
 const scorer = createAnswerRelevancyScorer({ model });
@@ -217,7 +217,7 @@ describe('AnswerRelevancyScorer', () => {
     async () => {
       // Test using model router format instead of createOpenAI
       const modelRouterScorer = createAnswerRelevancyScorer({
-        model: 'openai/gpt-5.1',
+        model: 'openai/gpt-4o-mini',
       });
 
       const inputMessages = [createTestMessage({ role: 'user', content: testCases[0].input })];

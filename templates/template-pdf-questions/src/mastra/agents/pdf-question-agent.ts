@@ -63,7 +63,7 @@ When successful, provide:
 
 Always be helpful and provide clear feedback about the process and results.
   `,
-  model: process.env.MODEL || 'openai/gpt-5.1',
+  model: process.env.MODEL || 'openai/gpt-4o',
   tools: {
     pdfFetcherTool,
     generateQuestionsFromTextTool,

@@ -28,7 +28,7 @@ describe('voice capabilities', () => {
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are an agent with voice capabilities',
-      model: openai('gpt-5.1'),
+      model: openai('gpt-4o-mini'),
       voice: new CompositeVoice({
         output: new MockVoice({
           speaker: 'mock-voice',
@@ -114,7 +114,7 @@ describe('voice capabilities', () => {
         id: 'no-voice-agent',
         name: 'No Voice Agent',
         instructions: 'You are an agent without voice capabilities',
-        model: openai('gpt-5.1'),
+        model: openai('gpt-4o-mini'),
       });
 
       await expect(agentWithoutVoice.voice.getSpeakers()).rejects.toThrow('No voice provider configured');

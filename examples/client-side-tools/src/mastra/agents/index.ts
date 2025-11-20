@@ -5,5 +5,5 @@ export const agent = new Agent({
   id: 'test-agent',
   name: 'Test Agent',
   instructions: 'You are a browser client agent. You execute tools in the browser.',
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o'),
 });

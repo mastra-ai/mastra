@@ -4,7 +4,7 @@ import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createContextPrecisionScorer } from './index';
 
 // Mock model for testing
-const mockModel = openai('gpt-5.1');
+const mockModel = openai('gpt-4o-mini');
 
 describe('createContextPrecisionScorer', () => {
   it('should throw error when no context is provided', () => {

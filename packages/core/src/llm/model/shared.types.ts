@@ -24,14 +24,14 @@ export type ScoringProperties = {
 
 export type OpenAICompatibleConfig =
   | {
-      id: `${string}/${string}`; // Model ID like "openai/gpt-5.1" or "custom-provider/my-model"
+      id: `${string}/${string}`; // Model ID like "openai/gpt-4o" or "custom-provider/my-model"
       url?: string; // Optional custom URL endpoint
       apiKey?: string; // Optional API key (falls back to env vars)
       headers?: Record<string, string>; // Additional headers
     }
   | {
       providerId: string; // Provider ID like "openai" or "custom-provider"
-      modelId: string; // Model ID like "gpt-5.1" or "my-model"
+      modelId: string; // Model ID like "gpt-4o" or "my-model"
       url?: string; // Optional custom URL endpoint
       apiKey?: string; // Optional API key (falls back to env vars)
       headers?: Record<string, string>; // Additional headers
@@ -46,8 +46,8 @@ export type MastraLanguageModelV1 = LanguageModelV1;
 export type MastraLanguageModel = MastraLanguageModelV1 | MastraLanguageModelV2;
 
 // Support for:
-// - "openai/gpt-5.1" (magic string with autocomplete)
-// - { id: "openai/gpt-5.1", apiKey: "..." } (config object)
+// - "openai/gpt-4o" (magic string with autocomplete)
+// - { id: "openai/gpt-4o", apiKey: "..." } (config object)
 // - { id: "custom", url: "...", apiKey: "..." } (custom endpoint)
 // - LanguageModelV1/V2 (existing AI SDK models)
 export type MastraModelConfig =

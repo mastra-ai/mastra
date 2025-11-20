@@ -38,7 +38,7 @@ export function areValidComponents(values: string[]): values is Component[] {
 }
 
 export const getModelIdentifier = (llmProvider: LLMProvider): ModelRouterModelId => {
-  let model: ModelRouterModelId = 'openai/gpt-5.1';
+  let model: ModelRouterModelId = 'openai/gpt-4o';
 
   if (llmProvider === 'anthropic') {
     model = 'anthropic/claude-sonnet-4-5';

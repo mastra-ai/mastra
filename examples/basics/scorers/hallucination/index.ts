@@ -9,7 +9,7 @@ const context1 = [
 ];
 
 const metric1 = createHallucinationScorer({
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o-mini'),
 });
 
 const query1 = 'When was the first iPhone released?';
@@ -40,7 +40,7 @@ const context2 = [
 ];
 
 const metric2 = createHallucinationScorer({
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o-mini'),
 });
 
 const query2 = 'Tell me about the first Star Wars movie.';
@@ -70,7 +70,7 @@ const context3 = [
 ];
 
 const metric3 = createHallucinationScorer({
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o-mini'),
 });
 
 const query3 = 'When did the Wright brothers first fly?';

@@ -49,7 +49,7 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
       const model = this.getModel();
       const checks = ['emoji'] as const;
 
-      if (model.modelId.includes('gpt-5.1')) {
+      if (model.modelId.includes('gpt-4o-mini')) {
         return this.defaultZodStringHandler(value, ['emoji', 'regex']);
       }
 

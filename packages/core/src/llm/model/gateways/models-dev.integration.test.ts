@@ -39,7 +39,7 @@ describe('ModelsDevGateway - Real API Integration', () => {
     // Validate specific provider configurations
     if (providers.openai) {
       expect(providers.openai.apiKeyEnvVar).toBe('OPENAI_API_KEY');
-      expect(providers.openai.models).toContain('gpt-5.1');
+      expect(providers.openai.models).toContain('gpt-4o');
     }
 
     if (providers.anthropic) {

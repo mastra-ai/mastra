@@ -117,7 +117,7 @@ const missingGroundTruthCase = {
 };
 
 describe('Answer Similarity Scorer', () => {
-  const model = createOpenAI({ apiKey: process.env.OPENAI_API_KEY || '' })('gpt-5.1');
+  const model = createOpenAI({ apiKey: process.env.OPENAI_API_KEY || '' })('gpt-4o-mini');
   const scorer = createAnswerSimilarityScorer({ model });
 
   it.each(testCases)(

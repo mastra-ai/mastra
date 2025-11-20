@@ -4,7 +4,7 @@ const textDeltaStream = [
     type: 'response-metadata',
     id: 'resp_053d3fcf4e188feb0068edfccd4a10819383adea8006620148',
     timestamp: '2025-10-14T07:33:33.000Z',
-    modelId: 'gpt-5.1-2024-07-18',
+    modelId: 'gpt-4o-mini-2024-07-18',
   },
   {
     type: 'text-start',

@@ -305,7 +305,7 @@ export type MemoryConfig = {
    * ```typescript
    * generateTitle: true // Use agent's model for title generation
    * generateTitle: {
-   *   model: openai("gpt-5.1"),
+   *   model: openai("gpt-4o-mini"),
    *   instructions: "Generate a concise title (max 5 words)"
    * }
    * ```

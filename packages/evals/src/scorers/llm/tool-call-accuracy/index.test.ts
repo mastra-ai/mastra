@@ -5,7 +5,7 @@ import { createAgentTestRun, createTestMessage, extractToolCalls } from '../../u
 import { createToolCallAccuracyScorerLLM } from './index';
 
 describe('createToolCallAccuracyScorerLLM', () => {
-  const mockModel = openai('gpt-5.1');
+  const mockModel = openai('gpt-4o-mini');
 
   const availableTools = [
     createTool({ id: 'calculator-tool', description: 'Perform mathematical calculations' }),

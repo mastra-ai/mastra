@@ -312,8 +312,8 @@ const modelsToTestV1 = [
   // openrouter('anthropic/claude-3.7-sonnet'),
   // openrouter('anthropic/claude-sonnet-4.5'),
   openrouter('anthropic/claude-haiku-4.5'),
-  // openrouter('openai/gpt-5.1'),
-  // openrouter('openai/gpt-5.1'),
+  // openrouter('openai/gpt-4o-mini'),
+  // openrouter('openai/gpt-4.1-mini'),
   // openrouter_v5('openai/o3-mini'),
   // openai('o3-mini'),
   openai('o4-mini'),
@@ -325,8 +325,8 @@ const modelsToTestV2 = [
   // openrouter_v5('anthropic/claude-3.7-sonnet'),
   // openrouter_v5('anthropic/claude-sonnet-4.5'),
   openrouter_v5('anthropic/claude-haiku-4.5'),
-  // openrouter_v5('openai/gpt-5.1'),
-  // openrouter_v5('openai/gpt-5.1'),
+  // openrouter_v5('openai/gpt-4o-mini'),
+  // openrouter_v5('openai/gpt-4.1-mini'),
   // openrouter_v5('openai/o3-mini'),
   // openai_v5('o3-mini'),
   openai_v5('o4-mini'),
@@ -953,7 +953,7 @@ describe('Tool Input Validation', () => {
 describe('CoreToolBuilder Output Schema', () => {
   it('should allow ZodTuple in outputSchema', () => {
     const mockModel = {
-      modelId: 'openai/gpt-5.1',
+      modelId: 'openai/gpt-4.1-mini',
       provider: 'openrouter',
       specificationVersion: 'v1',
       supportsStructuredOutputs: false,

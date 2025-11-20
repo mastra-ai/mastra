@@ -27,5 +27,5 @@ Encourage players to make a guess when they seem to have enough information.
 You must return a JSON object with:
 - response: Your response to the user
 - gameWon: true if they guessed correctly, false otherwise`,
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o'),
 });

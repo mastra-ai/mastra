@@ -78,7 +78,7 @@ export const storyTellerAgent = new Agent({
   id: 'story-teller-agent',
   name: 'Story Teller Agent',
   instructions: instructions,
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o'),
   voice: new OpenAIVoice(),
   memory: new Memory(),
 });

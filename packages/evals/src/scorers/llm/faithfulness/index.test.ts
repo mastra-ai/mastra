@@ -146,7 +146,7 @@ const testCases = [
 
 const SECONDS = 10000;
 
-const model = openai('gpt-5.1');
+const model = openai('gpt-4o');
 
 describe(
   'FaithfulnessMetric',

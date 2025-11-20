@@ -45,7 +45,7 @@ describe('agent.stopWhen', () => {
     name: 'Test Step Boundaries',
     instructions:
       'You are a helpful assistant. Figure out the weather and then using that weather plan some activities. Always use the weather tool first, and then the plan activities tool with the result of the weather tool',
-    model: openai('gpt-5.1'),
+    model: openai('gpt-4o-mini'),
     tools: {
       weatherTool,
       planActivities,
@@ -177,7 +177,7 @@ describe('agent.stopWhen', () => {
       name: 'Test Step Boundaries',
       instructions:
         'You are a helpful assistant. Figure out the weather and then using that weather plan some activities. Always use the weather tool first, and then the plan activities tool with the result of the weather tool. Every tool call you make IMMEDIATELY explain the tool results after executing the tool, before moving on to other steps or tool calls',
-      model: openai('gpt-5.1'),
+      model: openai('gpt-4o-mini'),
       tools: {
         weatherTool,
         planActivities,

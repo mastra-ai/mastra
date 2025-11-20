@@ -18,7 +18,7 @@ import type { CoreMessage } from 'ai';
 import { getMemoryOptions } from '../config';
 import { makeRetryModel } from '../retry-model';
 
-const retry4o = makeRetryModel(openai('gpt-5.1'));
+const retry4o = makeRetryModel(openai('gpt-4o'));
 
 export interface PrepareOptions {
   dataset: 'longmemeval_s' | 'longmemeval_m' | 'longmemeval_oracle';

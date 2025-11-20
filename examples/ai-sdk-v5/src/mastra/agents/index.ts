@@ -34,7 +34,7 @@ export const weatherAgent = new Agent({
       Use the weatherTool to fetch current weather data.
 
 `,
-  model: openai("gpt-5.1"),
+  model: openai("gpt-4o"),
   tools: {
     weatherTool,
   },

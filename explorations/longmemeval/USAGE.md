@@ -50,7 +50,7 @@ pnpm cli prepare \
 ```bash
 pnpm cli run \
   -d <dataset>              # longmemeval_s, longmemeval_m, longmemeval_oracle
-  -m <model>                # Model name (e.g., gpt-5.1)
+  -m <model>                # Model name (e.g., gpt-4o)
   -c <memory-config>        # full-history, last-k, semantic-recall, working-memory, combined
   [--subset <n>]            # Run only n questions
   [--concurrency <n>]       # Parallel requests (default: 5)

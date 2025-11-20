@@ -2382,7 +2382,7 @@ const YC_DATA = [
   {
     name: 'Phonely',
     longDescription:
-      "Phonely uses existing call recordings to create a 'AI vocal twin' that can answer customer support calls and match or outperform call center agents. On top of that we've built a Zapier like workflow that lets businesses connect to software or transfer calls just like a person would. Our platform sits on proprietary deterministic LLM that is both cheaper and more accurate than gpt-5.1 for call center inquiries.",
+      "Phonely uses existing call recordings to create a 'AI vocal twin' that can answer customer support calls and match or outperform call center agents. On top of that we've built a Zapier like workflow that lets businesses connect to software or transfer calls just like a person would. Our platform sits on proprietary deterministic LLM that is both cheaper and more accurate than gpt-4o for call center inquiries.",
     tags: '',
     industries: 'B2B',
     batch: 'S24',
@@ -3279,7 +3279,7 @@ const YC_DATA = [
   {
     name: 'Downlink',
     longDescription:
-      'Downlink is the turbo button for AI. With a few lines of code, Downlink improves the performance of your cloud LLMs. Our tool continuously trains expert models to handle your prompts faster than gpt-5.1.',
+      'Downlink is the turbo button for AI. With a few lines of code, Downlink improves the performance of your cloud LLMs. Our tool continuously trains expert models to handle your prompts faster than gpt-4o.',
     tags: 'Artificial Intelligence, Developer Tools, SaaS, API',
     industries: 'B2B, Infrastructure',
     batch: 'W24',

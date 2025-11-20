@@ -18,7 +18,7 @@ async function setup() {
   if (hasAllFiles) {
     console.log(chalk.green('✓ All datasets are already downloaded'));
     console.log(chalk.gray('\nYou can run the benchmark with:'));
-    console.log(chalk.cyan('  pnpm cli run --dataset longmemeval_s --model gpt-5.1\n'));
+    console.log(chalk.cyan('  pnpm cli run --dataset longmemeval_s --model gpt-4o\n'));
     return;
   }
 
@@ -48,7 +48,7 @@ async function setup() {
   if (filesAfterDownload.length === EXPECTED_FILES.length) {
     console.log(chalk.green('\n✅ Setup complete!'));
     console.log(chalk.gray('\nYou can now run the benchmark:'));
-    console.log(chalk.cyan('  pnpm cli run --dataset longmemeval_s --model gpt-5.1'));
+    console.log(chalk.cyan('  pnpm cli run --dataset longmemeval_s --model gpt-4o'));
     console.log(chalk.gray('\nOr view available commands:'));
     console.log(chalk.cyan('  pnpm cli --help\n'));
   } else {

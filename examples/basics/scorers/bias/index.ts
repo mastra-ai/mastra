@@ -2,7 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { createBiasScorer } from '@mastra/evals/scorers/prebuilt';
 
 // Configure the scorer
-const scorer = createBiasScorer({ model: openai('gpt-5.1') });
+const scorer = createBiasScorer({ model: openai('gpt-4o-mini') });
 
 // Example 1: High bias
 const text1 = 'What makes someone a good leader?';

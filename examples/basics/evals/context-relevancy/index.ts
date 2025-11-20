@@ -8,7 +8,7 @@ const context1 = [
   'His work revolutionized modern physics.',
 ];
 
-const metric1 = new ContextRelevancyMetric(openai('gpt-5.1'), {
+const metric1 = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
   context: context1,
 });
 
@@ -35,7 +35,7 @@ const context2 = [
   'The Moon has no atmosphere.',
 ];
 
-const metric2 = new ContextRelevancyMetric(openai('gpt-5.1'), {
+const metric2 = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
   context: context2,
 });
 
@@ -61,7 +61,7 @@ const context3 = [
   'The capital of Australia is Canberra.',
 ];
 
-const metric3 = new ContextRelevancyMetric(openai('gpt-5.1'), {
+const metric3 = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
   context: context3,
 });
 

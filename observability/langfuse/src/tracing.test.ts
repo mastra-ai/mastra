@@ -1210,7 +1210,7 @@ describe('LangfuseExporter', () => {
           type: SpanType.MODEL_GENERATION,
           isRoot: true,
           attributes: {
-            model: 'gpt-5.1',
+            model: 'gpt-4o',
             provider: 'openai',
             usage: {
               inputTokens: 120,
@@ -1227,7 +1227,7 @@ describe('LangfuseExporter', () => {
 
         expect(mockTrace.generation).toHaveBeenCalledWith(
           expect.objectContaining({
-            model: 'gpt-5.1',
+            model: 'gpt-4o',
             usage: {
               input: 120,
               output: 60,

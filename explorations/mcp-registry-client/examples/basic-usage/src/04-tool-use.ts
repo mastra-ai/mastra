@@ -23,7 +23,7 @@ const MCPClient = new MCPClient({
 const agent = new Agent({
 	id: "example-tool-use",
 	name: "Example tool use",
-	model: openai(`gpt-5.1`),
+	model: openai(`gpt-4o`),
 	instructions: `You are a helpful agent`,
 })
 

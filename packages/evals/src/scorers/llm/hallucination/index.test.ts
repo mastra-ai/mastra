@@ -194,7 +194,7 @@ const testCases: TestCaseWithContext[] = [
   },
 ];
 
-const model = openai('gpt-5.1');
+const model = openai('gpt-4o');
 describe('HallucinationMetric', () => {
   it('should handle perfect alignment', async () => {
     const testCase = testCases[0]!;

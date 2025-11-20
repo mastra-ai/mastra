@@ -8,7 +8,7 @@ export const glutenCheckerScorer = createScorer({
   name: 'Gluten Checker',
   description: 'Check if the output contains any gluten',
   judge: {
-    model: openai('gpt-5.1'),
+    model: openai('gpt-4o'),
     instructions: GLUTEN_INSTRUCTIONS,
   },
 })

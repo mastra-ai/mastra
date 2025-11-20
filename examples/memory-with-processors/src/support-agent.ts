@@ -20,7 +20,7 @@ const techSupport = new Agent({
   name: 'Technical Support',
   instructions:
     'You are a technical support agent who helps users solve software problems. You provide concise, short, instructions and ask clarifying questions when needed. You remember details from earlier in the conversation. Your goal is to efficiently resolve user issues. Make sure you provide concise responses without tons of text',
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o-mini'),
   memory,
   tools: { searchTool },
 });

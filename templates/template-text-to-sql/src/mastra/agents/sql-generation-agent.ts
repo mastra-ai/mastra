@@ -102,5 +102,5 @@ export const sqlGenerationAgent = new Agent({
     const databaseSchema = requestContext.get('databaseSchema');
     return generateSystemPrompt(databaseSchema);
   },
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-4o',
 });

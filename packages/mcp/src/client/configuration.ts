@@ -57,7 +57,7 @@ export interface MCPClientOptions {
  *   id: 'multi-tool-agent',
  *   name: 'Multi-tool Agent',
  *   instructions: 'You have access to multiple tools.',
- *   model: 'openai/gpt-5.1',
+ *   model: 'openai/gpt-4o',
  *   tools: await mcp.listTools(),
  * });
  * ```

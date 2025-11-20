@@ -69,7 +69,7 @@ describe('provider-defined tools', () => {
       id: 'test-openai-web-search-agent',
       name: 'test-openai-web-search-agent',
       instructions: 'You are a search assistant. When asked to search for something, always use the search tool.',
-      model: 'openai/gpt-5.1',
+      model: 'openai/gpt-4o-mini',
       tools: { search: tool },
     });
 
@@ -113,7 +113,7 @@ describe('provider-defined tools', () => {
       id: 'test-openai-web-search-agent',
       name: 'test-openai-web-search-agent',
       instructions: 'You are a search assistant. When asked to search for something, always use the search tool.',
-      model: 'openai/gpt-5.1',
+      model: 'openai/gpt-4o-mini',
       tools: { search: tool },
     });
 

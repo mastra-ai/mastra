@@ -75,7 +75,7 @@ async function main() {
   if (existingCount === FILES.length) {
     console.log(chalk.green('\n✅ All datasets already downloaded!\n'));
     console.log(chalk.gray('You can now run the benchmark:'));
-    console.log(chalk.cyan('  pnpm cli run --dataset longmemeval_s --model gpt-5.1'));
+    console.log(chalk.cyan('  pnpm cli run --dataset longmemeval_s --model gpt-4o'));
     return;
   }
 
@@ -167,7 +167,7 @@ async function main() {
   if (successCount === FILES.length) {
     console.log(chalk.green('✅ All datasets downloaded successfully!\n'));
     console.log(chalk.gray('You can now run the benchmark:'));
-    console.log(chalk.cyan('  pnpm cli run --dataset longmemeval_s --model gpt-5.1'));
+    console.log(chalk.cyan('  pnpm cli run --dataset longmemeval_s --model gpt-4o'));
   } else {
     console.log(chalk.yellow(`⚠️  Downloaded ${successCount}/${FILES.length} files\n`));
     console.log(chalk.blue('If downloads failed, please check:'));

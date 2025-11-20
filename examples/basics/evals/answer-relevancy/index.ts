@@ -2,7 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { AnswerRelevancyMetric } from '@mastra/evals/llm';
 
 // Configure the metric
-const metric = new AnswerRelevancyMetric(openai('gpt-5.1'), {
+const metric = new AnswerRelevancyMetric(openai('gpt-4o-mini'), {
   uncertaintyWeight: 0.3, // Weight for 'unsure' verdicts
   scale: 1, // Scale for the final score
 });

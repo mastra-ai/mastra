@@ -68,7 +68,7 @@ describe.skip('agent-builder merge template via agent prompt (real template)', (
     const agent = new AgentBuilder({
       instructions:
         'You are an expert at merging Mastra templates into projects. Always use the merge-template tool for template operations.',
-      model: openai('gpt-5.1'),
+      model: openai('gpt-4o-mini'),
       projectPath: targetRepo,
     });
 

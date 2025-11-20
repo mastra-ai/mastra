@@ -63,7 +63,7 @@ describe('A2A Handler', () => {
       const mockAgent = new MockAgent({
         name: 'test-agent',
         instructions: 'test instructions',
-        model: openai('gpt-5.1'),
+        model: openai('gpt-4o'),
       });
 
       mockMastra = createMockMastra({
@@ -149,7 +149,7 @@ describe('A2A Handler', () => {
       const mockAgent = new MockAgent({
         name: 'test-agent',
         instructions: 'test instructions',
-        model: openai('gpt-5.1'),
+        model: openai('gpt-4o'),
       });
 
       mockMastra = createMockMastra({
@@ -393,7 +393,7 @@ describe('A2A Handler', () => {
       const mockAgent = new MockAgent({
         name: 'test-agent',
         instructions: 'test instructions',
-        model: openai('gpt-5.1'),
+        model: openai('gpt-4o'),
       });
       mockMastra = createMockMastra({ 'test-agent': mockAgent });
       mockTaskStore = new InMemoryTaskStore();

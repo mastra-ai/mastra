@@ -19,5 +19,5 @@ export const createMastra = ({
 
 export const mastra = createMastra({
   modelProvider: 'OPEN_AI',
-  modelName: 'gpt-5.1',
+  modelName: 'gpt-4o-mini',
 });

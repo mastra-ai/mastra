@@ -12,7 +12,7 @@ const agent1 = new Agent({
   id: 'agent-1',
   name: 'Agent 1',
   instructions: `You are an agent with both STT and TTS capabilities.`,
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o'),
   voice: new CompositeVoice({
     input: new OpenAIVoice(), // For converting speech to text
     output: new PlayAIVoice(), // For converting text to speech
@@ -24,7 +24,7 @@ const agent2 = new Agent({
   id: 'agent-2',
   name: 'Agent 2',
   instructions: `You are an agent with both STT and TTS capabilities.`,
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o'),
   voice: new OpenAIVoice(),
 });
 

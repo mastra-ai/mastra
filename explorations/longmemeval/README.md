@@ -86,20 +86,20 @@ pnpm bench:m:quick    # Medium dataset (quick test)
 pnpm bench:oracle:quick # Oracle dataset (quick test)
 
 # Advanced: Use full CLI with custom options
-pnpm cli run --dataset longmemeval_s --model gpt-5.1
+pnpm cli run --dataset longmemeval_s --model gpt-4o
 
 # Adjust parallelization (default: 5)
-pnpm cli run --dataset longmemeval_s --model gpt-5.1 --concurrency 20
+pnpm cli run --dataset longmemeval_s --model gpt-4o --concurrency 20
 
 # Graceful shutdown: Press Ctrl+C to stop and save progress
 
 # Run with specific memory configuration
-pnpm cli run --dataset longmemeval_s --memory-config last-k --model gpt-5.1
-pnpm cli run --dataset longmemeval_s --memory-config semantic-recall --model gpt-5.1
-pnpm cli run --dataset longmemeval_s --memory-config working-memory --model gpt-5.1
+pnpm cli run --dataset longmemeval_s --memory-config last-k --model gpt-4o
+pnpm cli run --dataset longmemeval_s --memory-config semantic-recall --model gpt-4o
+pnpm cli run --dataset longmemeval_s --memory-config working-memory --model gpt-4o
 
 # Custom subset size
-pnpm cli run --dataset longmemeval_oracle --model gpt-5.1 --subset 25
+pnpm cli run --dataset longmemeval_oracle --model gpt-4o --subset 25
 ```
 
 ### View Dataset Statistics

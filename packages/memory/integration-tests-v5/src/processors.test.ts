@@ -283,7 +283,7 @@ describe('Memory with Processors', () => {
       id: 'processor-test-agent',
       name: 'processor-test-agent',
       instructions,
-      model: openai('gpt-5.1'),
+      model: openai('gpt-4o'),
       memory,
     });
 
@@ -398,7 +398,7 @@ describe('Memory with Processors', () => {
       id: 'processor-test-agent',
       name: 'processor-test-agent',
       instructions,
-      model: openai('gpt-5.1'),
+      model: openai('gpt-4o'),
       memory,
       tools: {
         get_weather: weatherTool,

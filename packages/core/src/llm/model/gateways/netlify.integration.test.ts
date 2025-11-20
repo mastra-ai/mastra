@@ -47,7 +47,7 @@ describe('NetlifyGateway - Real API Integration', () => {
     expect(netlifyProvider.models.length, 'Provider netlify has no models').toBeGreaterThan(0);
 
     // Check that models from all three upstream providers are included
-    // Models are prefixed with provider ID (e.g., 'openai/gpt-5.1')
+    // Models are prefixed with provider ID (e.g., 'openai/gpt-4o')
     const hasOpenAIModels = netlifyProvider.models.some(m => m.startsWith('openai/'));
     const hasAnthropicModels = netlifyProvider.models.some(m => m.startsWith('anthropic/'));
     const hasGeminiModels = netlifyProvider.models.some(m => m.startsWith('gemini/'));
@@ -79,7 +79,7 @@ describe('NetlifyGateway - Real API Integration', () => {
     };
 
     if (providers['openai']) {
-      const url = await gateway.buildUrl('netlify/openai/gpt-5.1', insufficientEnvVars);
+      const url = await gateway.buildUrl('netlify/openai/gpt-4o', insufficientEnvVars);
       expect(url).toBe(false); // Should return false without site ID and token
     }
   });

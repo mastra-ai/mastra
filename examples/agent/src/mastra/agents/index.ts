@@ -48,7 +48,7 @@ export const chefAgent = new Agent({
     ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
     You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
     `,
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o-mini'),
   tools: {
     cookingTool,
     weatherInfo,
@@ -71,9 +71,9 @@ export const dynamicAgent = new Agent({
   },
   model: ({ requestContext }) => {
     if (requestContext.get('foo')) {
-      return openai('gpt-5.1');
+      return openai('gpt-4o');
     }
-    return openai('gpt-5.1');
+    return openai('gpt-4o-mini');
   },
   tools: ({ requestContext }) => {
     const tools = {
@@ -90,7 +90,7 @@ export const dynamicAgent = new Agent({
 
 const piiDetector = new PIIDetector({
   // model: google('gemini-2.0-flash-001'),
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o'),
   redactionMethod: 'mask',
   preserveFormat: true,
   includeDetections: true,
@@ -121,7 +121,7 @@ export const chefAgentResponses = new Agent({
     ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
     You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
     `,
-  model: openai.responses('gpt-5.1'),
+  model: openai.responses('gpt-4o'),
   // model: cerebras('qwen-3-coder-480b'),
   tools: async () => {
     return {
@@ -180,12 +180,12 @@ export const agentThatHarassesYou = new Agent({
   instructions: `
     You are a agent that harasses you. You are a jerk. You are a meanie. You are a bully. You are a asshole.
     `,
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o'),
   outputProcessors: [moderationDetector],
 });
 
 const answerRelevance = createAnswerRelevancyScorer({
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o'),
 });
 
 console.log(`answerRelevance`, answerRelevance);
@@ -196,7 +196,7 @@ export const evalAgent = new Agent({
   instructions: `
     You are a helpful assistant with a weather tool.
     `,
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o'),
   tools: {
     weatherInfo,
   },

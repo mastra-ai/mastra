@@ -35,7 +35,7 @@ const editorAgent = new Agent({
   id: 'editor',
   name: 'Editor',
   instructions: 'You are an editor agent that edits blog post copy.',
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o-mini'),
 });
 
 const editorStep = createStep({

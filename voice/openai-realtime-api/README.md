@@ -28,7 +28,7 @@ const voice = new OpenAIRealtimeVoice();
 // Create a voice instance with configuration
 const voice = new OpenAIRealtimeVoice({
   apiKey: 'your-api-key', // Optional, can use OPENAI_API_KEY env var
-  model: 'gpt-5.1-realtime', // Optional, uses latest model by default
+  model: 'gpt-4o-mini-realtime', // Optional, uses latest model by default
 });
 
 voice.updateSession({

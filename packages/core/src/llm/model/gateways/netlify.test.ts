@@ -23,7 +23,7 @@ describe('NetlifyGateway', () => {
       providers: {
         netlify: {
           token_env_var: 'NETLIFY_TOKEN',
-          models: ['openai/gpt-5.1', 'openai/gpt-5.1', 'openai/gpt-3.5-turbo', 'openai/o1', 'openai/o1-mini'],
+          models: ['openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/gpt-3.5-turbo', 'openai/o1', 'openai/o1-mini'],
         },
       },
     };
@@ -52,7 +52,7 @@ describe('NetlifyGateway', () => {
 
       // Should have a single 'netlify' provider
       expect(providers['netlify']).toBeDefined();
-      expect(providers['netlify'].models).toContain('netlify/openai/gpt-5.1');
+      expect(providers['netlify'].models).toContain('netlify/openai/gpt-4o');
     });
 
     it('should convert Netlify format to standard ProviderConfig format', async () => {
@@ -107,7 +107,7 @@ describe('NetlifyGateway', () => {
         json: async () => mockTokenResponse,
       });
 
-      const url = await gateway.buildUrl('netlify/openai/gpt-5.1', {
+      const url = await gateway.buildUrl('netlify/openai/gpt-4o', {
         NETLIFY_SITE_ID: 'site-id-123',
         NETLIFY_TOKEN: 'nfp_token',
       });
@@ -123,7 +123,7 @@ describe('NetlifyGateway', () => {
 
     it('should throw error when no site ID is available', async () => {
       await expect(
-        gateway.buildUrl('netlify/openai/gpt-5.1', {
+        gateway.buildUrl('netlify/openai/gpt-4o', {
           NETLIFY_TOKEN: 'nfp_token',
         }),
       ).rejects.toThrow('Missing NETLIFY_SITE_ID');
@@ -131,10 +131,10 @@ describe('NetlifyGateway', () => {
 
     it('should throw error when only provider API key is available (token required)', async () => {
       await expect(
-        gateway.buildUrl('netlify/openai/gpt-5.1', {
+        gateway.buildUrl('netlify/openai/gpt-4o', {
           OPENAI_API_KEY: 'sk-test',
         }),
-      ).rejects.toThrow('Missing NETLIFY_SITE_ID environment variable required for model: netlify/openai/gpt-5.1');
+      ).rejects.toThrow('Missing NETLIFY_SITE_ID environment variable required for model: netlify/openai/gpt-4o');
     });
 
     it('should handle token exchange with custom domain in response', async () => {
@@ -149,7 +149,7 @@ describe('NetlifyGateway', () => {
         json: async () => mockTokenResponse,
       });
 
-      const url = await gateway.buildUrl('netlify/openai/gpt-5.1', {
+      const url = await gateway.buildUrl('netlify/openai/gpt-4o', {
         NETLIFY_SITE_ID: 'site-id-custom',
         NETLIFY_TOKEN: 'nfp_token',
       });
@@ -168,7 +168,7 @@ describe('NetlifyGateway', () => {
         json: async () => mockTokenResponse,
       });
 
-      const url = await gateway.buildUrl('netlify/openai/gpt-5.1', {
+      const url = await gateway.buildUrl('netlify/openai/gpt-4o', {
         NETLIFY_SITE_ID: 'site-id-slash',
         NETLIFY_TOKEN: 'nfp_token',
       });
@@ -183,7 +183,7 @@ describe('NetlifyGateway', () => {
       });
 
       await expect(
-        gateway.buildUrl('netlify/openai/gpt-5.1', {
+        gateway.buildUrl('netlify/openai/gpt-4o', {
           NETLIFY_SITE_ID: 'site-id-fail',
           NETLIFY_TOKEN: 'invalid-token',
         }),
@@ -211,7 +211,7 @@ describe('NetlifyGateway', () => {
           providers: {
             netlify: {
               token_env_var: 'NETLIFY_TOKEN',
-              models: ['openai/gpt-5.1', 'openai/gpt-5.1', 'openai/gpt-3.5-turbo', 'openai/o1', 'openai/o1-mini'],
+              models: ['openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/gpt-3.5-turbo', 'openai/o1', 'openai/o1-mini'],
             },
           },
         }),
@@ -219,7 +219,7 @@ describe('NetlifyGateway', () => {
 
       const providers = await gateway.fetchProviders();
       expect(providers['netlify']).toBeDefined();
-      expect(providers['netlify'].models).toContain('netlify/openai/gpt-5.1');
+      expect(providers['netlify'].models).toContain('netlify/openai/gpt-4o');
 
       // Mock token exchange for buildUrl
       const mockTokenResponse = {
@@ -238,7 +238,7 @@ describe('NetlifyGateway', () => {
         NETLIFY_TOKEN: 'nfp_test',
       };
 
-      const url = await gateway.buildUrl('netlify/openai/gpt-5.1', envVars);
+      const url = await gateway.buildUrl('netlify/openai/gpt-4o', envVars);
       expect(url).toBe('https://my-site.netlify.app/.netlify/ai');
 
       // Should only have fetched once (cached for second call)

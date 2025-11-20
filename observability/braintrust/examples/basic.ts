@@ -26,7 +26,7 @@ async function exampleStandardApproach() {
       demo: new Agent({
         name: 'Assistant',
         instructions: 'Be helpful and concise.',
-        model: 'openai/gpt-5.1',
+        model: 'openai/gpt-4o',
       }),
     },
     observability: new Observability({
@@ -64,7 +64,7 @@ async function exampleContextAwareApproach() {
       demo: new Agent({
         name: 'Assistant',
         instructions: 'Be helpful and concise.',
-        model: 'openai/gpt-5.1',
+        model: 'openai/gpt-4o',
       }),
     },
     observability: new Observability({

@@ -97,5 +97,5 @@ Always respond with valid JSON matching this exact structure:
 
 Create compelling, conversion-focused ad copy that drives results!
   `,
-  model: process.env.MODEL || 'openai/gpt-5.1',
+  model: process.env.MODEL || 'openai/gpt-4o',
 });

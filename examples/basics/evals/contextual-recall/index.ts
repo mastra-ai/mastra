@@ -4,7 +4,7 @@ import { ContextualRecallMetric } from '@mastra/evals/llm';
 // Example 1: High recall (response includes all context)
 const context1 = ['Product features include cloud sync.', 'Offline mode is available.', 'Supports multiple devices.'];
 
-const metric1 = new ContextualRecallMetric(openai('gpt-5.1'), {
+const metric1 = new ContextualRecallMetric(openai('gpt-4o-mini'), {
   context: context1,
 });
 
@@ -31,7 +31,7 @@ const context2 = [
   'Python is widely used in data science.',
 ];
 
-const metric2 = new ContextualRecallMetric(openai('gpt-5.1'), {
+const metric2 = new ContextualRecallMetric(openai('gpt-4o-mini'), {
   context: context2,
 });
 
@@ -57,7 +57,7 @@ const context3 = [
   'Mars is called the Red Planet.',
 ];
 
-const metric3 = new ContextualRecallMetric(openai('gpt-5.1'), {
+const metric3 = new ContextualRecallMetric(openai('gpt-4o-mini'), {
   context: context3,
 });
 

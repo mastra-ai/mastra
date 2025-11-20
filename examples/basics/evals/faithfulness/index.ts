@@ -8,7 +8,7 @@ const context1 = [
   'The base model accelerates 0-60 mph in 5.8 seconds.',
 ];
 
-const metric1 = new FaithfulnessMetric(openai('gpt-5.1'), {
+const metric1 = new FaithfulnessMetric(openai('gpt-4o-mini'), {
   context: context1,
 });
 
@@ -34,7 +34,7 @@ const context2 = [
   'Python emphasizes code readability.',
 ];
 
-const metric2 = new FaithfulnessMetric(openai('gpt-5.1'), {
+const metric2 = new FaithfulnessMetric(openai('gpt-4o-mini'), {
   context: context2,
 });
 
@@ -60,7 +60,7 @@ const context3 = [
   'Two small moons orbit Mars: Phobos and Deimos.',
 ];
 
-const metric3 = new FaithfulnessMetric(openai('gpt-5.1'), {
+const metric3 = new FaithfulnessMetric(openai('gpt-4o-mini'), {
   context: context3,
 });
 

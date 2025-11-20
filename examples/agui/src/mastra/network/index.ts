@@ -5,7 +5,7 @@ import { openai } from '@ai-sdk/openai';
 export const myNetwork = new AgentNetwork({
   name: 'myNetwork',
   agents: [weatherAgent],
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o'),
   instructions: `
         You are a helpful supervisor agent that can help users with a variety of tasks.
     `,

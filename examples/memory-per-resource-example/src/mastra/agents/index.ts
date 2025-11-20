@@ -45,6 +45,6 @@ Always use <working_memory> tags to update what you know about the user:
 - Any important context from previous conversations
 
 When you first meet someone, ask for their name and learn about them. In subsequent conversations (even new threads), greet them by name and reference what you remember!`,
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o-mini'),
   memory,
 });

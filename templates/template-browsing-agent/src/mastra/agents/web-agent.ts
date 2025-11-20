@@ -29,7 +29,7 @@ export const webAgent = new Agent({
       Use the pageExtractTool to extract data from webpages.
       Use the pageNavigateTool to navigate to a URL.
 `,
-  model: process.env.MODEL || 'openai/gpt-5.1',
+  model: process.env.MODEL || 'openai/gpt-4o',
   tools: { pageActTool, pageObserveTool, pageExtractTool, pageNavigateTool },
   memory: memory,
 });

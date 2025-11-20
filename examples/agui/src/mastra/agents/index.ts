@@ -16,7 +16,7 @@ export const weatherAgent = new Agent({
       - Include relevant details like humidity, wind conditions, and precipitation
       - Keep responses concise but informative
 `,
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o'),
 
   memory: new Memory({
     storage: new LibSQLStore({

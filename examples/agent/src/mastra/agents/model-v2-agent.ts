@@ -58,7 +58,7 @@ export const chefModelV2Agent = new Agent({
     role: 'system',
   },
   model: wrapLanguageModel({
-    model: openai_v5('gpt-5.1'),
+    model: openai_v5('gpt-4o-mini'),
     middleware: logDataMiddleware,
   }),
 
@@ -97,7 +97,7 @@ const weatherAgent = new Agent({
   name: 'Weather Agent',
   instructions: `Your goal is to execute the recipe-maker workflow with the given ingredient`,
   description: `An agent that can help you get a recipe for a given ingredient`,
-  model: openai_v5('gpt-5.1'),
+  model: openai_v5('gpt-4o-mini'),
   tools: {
     weatherInfo,
   },
@@ -112,7 +112,7 @@ export const networkAgent = new Agent({
   description:
     'A chef agent that can help you cook great meals with whatever ingredients you have available based on your location and current weather.',
   instructions: `You are a the manager of several agent, tools, and workflows. Use the best primitives based on what the user wants to accomplish your task.`,
-  model: openai_v5('gpt-5.1'),
+  model: openai_v5('gpt-4o-mini'),
   agents: {
     weatherAgent,
   },

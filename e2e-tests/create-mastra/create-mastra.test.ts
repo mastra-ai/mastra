@@ -125,7 +125,7 @@ describe('create mastra', () => {
 
                 Use the weatherTool to fetch current weather data.
           ",
-              "modelId": "gpt-5.1",
+              "modelId": "gpt-4o",
               "modelVersion": "v2",
               "name": "Weather Agent",
               "outputProcessors": [],

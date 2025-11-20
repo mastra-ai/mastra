@@ -7,29 +7,29 @@ import { ModelRouterLanguageModel } from './router';
 
 describe('resolveModelConfig', () => {
   it('should resolve a magic string to ModelRouterLanguageModel', async () => {
-    const result = await resolveModelConfig('openai/gpt-5.1');
+    const result = await resolveModelConfig('openai/gpt-4o');
     expect(result).toBeInstanceOf(ModelRouterLanguageModel);
   });
 
   it('should resolve a config object to ModelRouterLanguageModel', async () => {
     const result = await resolveModelConfig({
-      id: 'openai/gpt-5.1',
+      id: 'openai/gpt-4o',
       apiKey: 'test-key',
     });
     expect(result).toBeInstanceOf(ModelRouterLanguageModel);
   });
 
   it('should return a LanguageModel instance as-is', async () => {
-    const model = openai('gpt-5.1');
+    const model = openai('gpt-4o');
     const result = await resolveModelConfig(model);
     expect(result).toBeInstanceOf(AISDKV5LanguageModel);
-    expect(result.modelId).toBe('gpt-5.1');
+    expect(result.modelId).toBe('gpt-4o');
     expect(result.provider).toBe('openai.responses');
     expect(result.specificationVersion).toBe('v2');
   });
 
   it('should resolve a dynamic function returning a string', async () => {
-    const dynamicFn = () => 'openai/gpt-5.1';
+    const dynamicFn = () => 'openai/gpt-4o';
     const result = await resolveModelConfig(dynamicFn);
     expect(result).toBeInstanceOf(ModelRouterLanguageModel);
   });
@@ -37,7 +37,7 @@ describe('resolveModelConfig', () => {
   it('should resolve a dynamic function returning a config object', async () => {
     const dynamicFn = () =>
       ({
-        id: 'openai/gpt-5.1',
+        id: 'openai/gpt-4o',
         apiKey: 'test-key',
       }) as const;
     const result = await resolveModelConfig(dynamicFn);
@@ -45,11 +45,11 @@ describe('resolveModelConfig', () => {
   });
 
   it('should resolve a dynamic function returning a LanguageModel', async () => {
-    const model = openai('gpt-5.1');
+    const model = openai('gpt-4o');
     const dynamicFn = () => model;
     const result = await resolveModelConfig(dynamicFn);
     expect(result).toBeInstanceOf(AISDKV5LanguageModel);
-    expect(result.modelId).toBe('gpt-5.1');
+    expect(result.modelId).toBe('gpt-4o');
     expect(result.provider).toBe('openai.responses');
     expect(result.specificationVersion).toBe('v2');
   });

@@ -16,6 +16,6 @@ Your primary function is to help users get weather details for specific location
 - Keep responses concise but informative
 
 Use the weatherTool to fetch current weather data.`,
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o'),
   tools: { weatherTool },
 });

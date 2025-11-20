@@ -558,7 +558,7 @@ describe('Structured Output with Tool Execution', () => {
       maxSteps: 5,
       structuredOutput: {
         schema: responseSchema,
-        model: openai('gpt-5.1'), // Use real model for structured output processor
+        model: openai('gpt-4o-mini'), // Use real model for structured output processor
       },
     });
 
@@ -654,7 +654,7 @@ describe('Structured Output with Tool Execution', () => {
       name: 'test-agent',
       instructions:
         'You are a helpful assistant. Figure out the weather and then using that weather plan some activities. Always use the weather tool first, and then the plan activities tool with the result of the weather tool. Every tool call you make IMMEDIATELY explain the tool results after executing the tool, before moving on to other steps or tool calls',
-      model: openai('gpt-5.1'),
+      model: openai('gpt-4o-mini'),
       tools: {
         weatherTool,
         planActivities,
@@ -665,7 +665,7 @@ describe('Structured Output with Tool Execution', () => {
       maxSteps: 10,
       structuredOutput: {
         schema: responseSchema,
-        model: openai('gpt-5.1'), // Use real model for structured output processor
+        model: openai('gpt-4o-mini'), // Use real model for structured output processor
       },
     });
 
@@ -691,7 +691,7 @@ describe('Structured Output with Tool Execution', () => {
       id: 'test-agent',
       name: 'test-agent',
       instructions: 'You are a helpful assistant. Respond with JSON matching the required schema.',
-      model: openai('gpt-5.1'),
+      model: openai('gpt-4o-mini'),
     });
 
     const result = await agent.generate('What is 2+2?', {
@@ -718,13 +718,13 @@ describe('Structured Output with Tool Execution', () => {
       id: 'test-agent',
       name: 'test-agent',
       instructions: 'You are a helpful assistant. Answer the question.',
-      model: openai('gpt-5.1'),
+      model: openai('gpt-4o-mini'),
     });
 
     const stream = await agent.stream('What is 2+2?', {
       structuredOutput: {
         schema: responseSchema,
-        model: openai('gpt-5.1'),
+        model: openai('gpt-4o-mini'),
       },
     });
 

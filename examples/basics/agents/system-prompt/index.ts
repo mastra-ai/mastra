@@ -36,7 +36,7 @@ const catOne = new Agent({
   id: 'cat-one',
   name: 'Cat Expert',
   instructions: instructions,
-  model: openai('gpt-5.1'),
+  model: openai('gpt-4o-mini'),
   tools: {
     catFact,
   },
