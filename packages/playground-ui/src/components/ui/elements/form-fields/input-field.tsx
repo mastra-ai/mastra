@@ -68,7 +68,6 @@ export function InputField({
           },
         )}
         data-testid={testId}
-        required={required}
         {...props}
       />
       {helpMsg && <p className="text-icon3 text-[0.75rem]">{helpMsg}</p>}
