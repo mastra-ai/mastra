@@ -7,6 +7,8 @@ import {
   createWorkflowRunResponseSchema,
   listWorkflowRunsQuerySchema,
   listWorkflowsResponseSchema,
+  restartBodySchema,
+  timeTravelBodySchema,
   resumeBodySchema,
   startAsyncWorkflowBodySchema,
   streamWorkflowBodySchema,
@@ -134,7 +136,7 @@ export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({
   summary: 'List workflow runs',
   description: 'Returns a paginated list of execution runs for the specified workflow',
   tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, fromDate, toDate, limit, offset, resourceId }) => {
+  handler: async ({ mastra, workflowId, fromDate, toDate, limit, offset, resourceId, status }) => {
     try {
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -157,6 +159,7 @@ export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({
         perPage,
         page,
         resourceId,
+        status,
       })) || {
         runs: [],
         total: 0,
@@ -653,6 +656,286 @@ export const RESUME_WORKFLOW_ROUTE = createRoute({
       return { message: 'Workflow run resumed' };
     } catch (error) {
       return handleError(error, 'Error resuming workflow');
+    }
+  },
+});
+
+export const RESTART_ASYNC_WORKFLOW_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/restart-async',
+  responseType: 'json',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: restartBodySchema,
+  responseSchema: workflowExecutionResultSchema,
+  summary: 'Restart workflow asynchronously',
+  description: 'Restarts an active workflow execution asynchronously',
+  tags: ['Workflows'],
+  handler: async ({ mastra, workflowId, runId, ...params }) => {
+    try {
+      if (!workflowId) {
+        throw new HTTPException(400, { message: 'Workflow ID is required' });
+      }
+
+      if (!runId) {
+        throw new HTTPException(400, { message: 'runId required to restart workflow' });
+      }
+
+      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+
+      if (!workflow) {
+        throw new HTTPException(404, { message: 'Workflow not found' });
+      }
+
+      const run = await workflow.getWorkflowRunById(runId);
+
+      if (!run) {
+        throw new HTTPException(404, { message: 'Workflow run not found' });
+      }
+
+      const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
+      const result = await _run.restart(params);
+
+      return result;
+    } catch (error) {
+      return handleError(error, 'Error restarting workflow');
+    }
+  },
+});
+
+export const RESTART_WORKFLOW_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/restart',
+  responseType: 'json',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: restartBodySchema,
+  responseSchema: workflowControlResponseSchema,
+  summary: 'Restart workflow',
+  description: 'Restarts an active workflow execution',
+  tags: ['Workflows'],
+  handler: async ({ mastra, workflowId, runId, ...params }) => {
+    try {
+      if (!workflowId) {
+        throw new HTTPException(400, { message: 'Workflow ID is required' });
+      }
+
+      if (!runId) {
+        throw new HTTPException(400, { message: 'runId required to restart workflow' });
+      }
+
+      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+
+      if (!workflow) {
+        throw new HTTPException(404, { message: 'Workflow not found' });
+      }
+
+      const run = await workflow.getWorkflowRunById(runId);
+
+      if (!run) {
+        throw new HTTPException(404, { message: 'Workflow run not found' });
+      }
+
+      const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
+
+      void _run.restart(params);
+
+      return { message: 'Workflow run restarted' };
+    } catch (error) {
+      return handleError(error, 'Error restarting workflow');
+    }
+  },
+});
+
+export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ASYNC_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/restart-all-active-workflow-runs-async',
+  responseType: 'json',
+  pathParamSchema: workflowIdPathParams,
+  responseSchema: workflowControlResponseSchema,
+  summary: 'Restart all active workflow runs asynchronously',
+  description: 'Restarts all active workflow runs asynchronously without streaming',
+  tags: ['Workflows'],
+  handler: async ({ mastra, workflowId }) => {
+    try {
+      if (!workflowId) {
+        throw new HTTPException(400, { message: 'Workflow ID is required' });
+      }
+
+      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+
+      if (!workflow) {
+        throw new HTTPException(404, { message: 'Workflow not found' });
+      }
+
+      await workflow.restartAllActiveWorkflowRuns();
+
+      return { message: 'All active workflow runs restarted' };
+    } catch (error) {
+      return handleError(error, 'Error restarting workflow');
+    }
+  },
+});
+
+export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/restart-all-active-workflow-runs',
+  responseType: 'json',
+  pathParamSchema: workflowIdPathParams,
+  responseSchema: workflowControlResponseSchema,
+  summary: 'Restart all active workflow runs asynchronously',
+  description: 'Restarts all active workflow runs asynchronously without streaming',
+  tags: ['Workflows'],
+  handler: async ({ mastra, workflowId }) => {
+    try {
+      if (!workflowId) {
+        throw new HTTPException(400, { message: 'Workflow ID is required' });
+      }
+
+      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+
+      if (!workflow) {
+        throw new HTTPException(404, { message: 'Workflow not found' });
+      }
+
+      void workflow.restartAllActiveWorkflowRuns();
+
+      return { message: 'All active workflow runs restarted' };
+    } catch (error) {
+      return handleError(error, 'Error restarting workflow');
+    }
+  },
+});
+
+export const TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/time-travel-async',
+  responseType: 'json',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: timeTravelBodySchema,
+  responseSchema: workflowExecutionResultSchema,
+  summary: 'Time travel workflow asynchronously',
+  description: 'Time travels a workflow run asynchronously without streaming',
+  tags: ['Workflows'],
+  handler: async ({ mastra, workflowId, runId, ...params }) => {
+    try {
+      if (!workflowId) {
+        throw new HTTPException(400, { message: 'Workflow ID is required' });
+      }
+
+      if (!runId) {
+        throw new HTTPException(400, { message: 'runId required to restart workflow' });
+      }
+
+      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+
+      if (!workflow) {
+        throw new HTTPException(404, { message: 'Workflow not found' });
+      }
+
+      const run = await workflow.getWorkflowRunById(runId);
+
+      if (!run) {
+        throw new HTTPException(404, { message: 'Workflow run not found' });
+      }
+
+      const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
+      const result = await _run.timeTravel(params);
+
+      return result;
+    } catch (error) {
+      return handleError(error, 'Error restarting workflow');
+    }
+  },
+});
+
+export const TIME_TRAVEL_WORKFLOW_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/time-travel',
+  responseType: 'json',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: timeTravelBodySchema,
+  responseSchema: workflowControlResponseSchema,
+  summary: 'Time travel workflow',
+  description: 'Time travels a workflow run, starting from a specific step',
+  tags: ['Workflows'],
+  handler: async ({ mastra, workflowId, runId, ...params }) => {
+    try {
+      if (!workflowId) {
+        throw new HTTPException(400, { message: 'Workflow ID is required' });
+      }
+
+      if (!runId) {
+        throw new HTTPException(400, { message: 'runId required to time travel workflow' });
+      }
+
+      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+
+      if (!workflow) {
+        throw new HTTPException(404, { message: 'Workflow not found' });
+      }
+
+      const run = await workflow.getWorkflowRunById(runId);
+
+      if (!run) {
+        throw new HTTPException(404, { message: 'Workflow run not found' });
+      }
+
+      const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
+
+      void _run.timeTravel(params);
+
+      return { message: 'Workflow run time travel started' };
+    } catch (error) {
+      return handleError(error, 'Error time traveling workflow');
+    }
+  },
+});
+
+export const TIME_TRAVEL_STREAM_WORKFLOW_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/time-travel-stream',
+  responseType: 'stream',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: timeTravelBodySchema,
+  summary: 'Time travel workflow stream',
+  description: 'Time travels a workflow run, starting from a specific step, and streams the results in real-time',
+  tags: ['Workflows'],
+  handler: async ({ mastra, workflowId, runId, ...params }) => {
+    try {
+      if (!workflowId) {
+        throw new HTTPException(400, { message: 'Workflow ID is required' });
+      }
+
+      if (!runId) {
+        throw new HTTPException(400, { message: 'runId required to time travel workflow stream' });
+      }
+
+      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+
+      if (!workflow) {
+        throw new HTTPException(404, { message: 'Workflow not found' });
+      }
+      const serverCache = mastra.getServerCache();
+
+      const run = await workflow.createRun({ runId });
+      const result = run.timeTravelStream(params);
+      return result.fullStream.pipeThrough(
+        new TransformStream<ChunkType, ChunkType>({
+          transform(chunk, controller) {
+            if (serverCache) {
+              const cacheKey = runId;
+              serverCache.listPush(cacheKey, chunk).catch(() => {});
+            }
+            controller.enqueue(chunk);
+          },
+        }),
+      );
+    } catch (error) {
+      return handleError(error, 'Error time traveling workflow stream');
     }
   },
 });
