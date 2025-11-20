@@ -361,6 +361,32 @@ const response = await testAgentThatDoesntSupportStructuredOutput.generate(
 console.log(response.object);
 ```
 
+### Schema compatibility
+
+Some model providers have specific schema requirements. For example, OpenAI's strict mode requires all properties to be in the `required` array. Use `applySchemaCompatTransformation` to automatically transform your Zod schema to meet these requirements.
+
+```typescript showLineNumbers copy
+import { z } from "zod";
+
+const response = await testAgent.generate(
+  "Extract user information",
+  {
+    structuredOutput: {
+      model: "openai/gpt-5"
+      schema: z.object({
+        name: z.string(),
+        age: z.number().optional(), // Would cause issues with OpenAI strict mode
+      }),
+      applySchemaCompatTransformation: true, // Automatically fixes compatibility issues
+    },
+  },
+);
+
+console.log(response.object);
+```
+
+This is particularly useful when working with optional fields (`.optional()`), which get transformed to just `.nullable()` for OpenAI models, ensuring the field is in the required array but can accept null values.
+
 ## Working with images
 
 Agents can analyze and describe images by processing both the visual content and any text within them. To enable image analysis, pass an object with `type: 'image'` and the image URL in the `content` array. You can combine image content with text prompts to guide the agent's analysis.
