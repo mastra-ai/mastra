@@ -185,6 +185,8 @@ export class MessageList {
     if (!messages) return this;
     const messageArray = Array.isArray(messages) ? messages : [messages];
 
+
+
     // Record event if recording is enabled
     if (this.isRecording) {
       this.recordedEvents.push({
@@ -760,6 +762,25 @@ export class MessageList {
     if (unsavedMessages.length === 0) return undefined;
     // Find the earliest createdAt among unsaved messages
     return Math.min(...unsavedMessages.map(m => new Date(m.createdAt).getTime()));
+  }
+
+  /**
+   * Check if a message is a new user or response message that should be saved.
+   * Checks by message ID to handle cases where the message object may be a copy.
+   */
+  public isNewMessage(messageOrId: MastraDBMessage | string): boolean {
+    const id = typeof messageOrId === 'string' ? messageOrId : messageOrId.id;
+    
+    // Check by object reference first (fast path)
+    if (typeof messageOrId !== 'string') {
+      if (this.newUserMessages.has(messageOrId) || this.newResponseMessages.has(messageOrId)) {
+        return true;
+      }
+    }
+    
+    // Check by ID (handles copies)
+    return Array.from(this.newUserMessages).some(m => m.id === id) || 
+           Array.from(this.newResponseMessages).some(m => m.id === id);
   }
 
   public getSystemMessages(tag?: string): CoreMessageV4[] {
