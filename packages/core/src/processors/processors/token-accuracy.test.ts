@@ -218,18 +218,23 @@ describe('TokenLimiterProcessor', () => {
 });
 
 describe.concurrent('ToolCallFilter', () => {
+  const abort: (reason?: string) => never = reason => {
+    throw new Error(reason || 'abort should not be called in this test');
+  };
+
   it('should exclude all tool calls when created with no arguments', async () => {
     const { messagesV2 } = generateConversationHistory({
       threadId: '3',
       toolNames: ['weather', 'calculator', 'search'],
       messageCount: 1,
+      toolFrequency: 1,
     });
     const filter = new ToolCallFilter();
     const messageList = new MessageList().add(messagesV2, 'memory');
     const result = (await filter.processInput({
       messages: messagesV2,
       messageList,
-      abort: () => {},
+      abort,
     })) as MastraDBMessage[];
 
     // Should only keep the text message and assistant res
@@ -241,22 +246,43 @@ describe.concurrent('ToolCallFilter', () => {
     const { messagesV2 } = generateConversationHistory({
       threadId: '4',
       toolNames: ['weather', 'calculator'],
-      messageCount: 2,
+      messageCount: 3,
+      toolFrequency: 1,
     });
     const filter = new ToolCallFilter({ exclude: ['weather'] });
     const messageList = new MessageList().add(messagesV2, 'memory');
     const result = (await filter.processInput({
       messages: messagesV2,
       messageList,
-      abort: () => {},
+      abort,
     })) as MastraDBMessage[];
 
-    // Should keep text message, assistant reply, calculator tool call, and calculator result
-    expect(result.length).toBe(4);
-    expect(result[0].id).toBe('message-0');
-    expect(result[1].id).toBe('message-1');
-    expect(result[2].id).toBe('message-2');
-    expect(result[3].id).toBe('message-3');
+    // With messageCount: 3 and toolFrequency: 1:
+    // i=0: user (message-0), assistant without tool (message-1)
+    // i=1: user (message-2), assistant with weather tool (removed)
+    // i=2: user (message-4), assistant with calculator tool (kept)
+    // Result: 6 messages (weather tool message removed entirely since it has no other parts)
+    expect(result.length).toBe(6);
+
+    // Check that weather tool invocations are removed
+    const weatherToolInvocations = result.flatMap(m => {
+      if (typeof m.content === 'string') return [];
+      if (!m.content?.parts) return [];
+      return m.content.parts.filter(
+        (p: any) => p.type === 'tool-invocation' && p.toolInvocation?.toolName === 'weather',
+      );
+    });
+    expect(weatherToolInvocations.length).toBe(0);
+
+    // Check that calculator tool invocations are kept
+    const calculatorToolInvocations = result.flatMap(m => {
+      if (typeof m.content === 'string') return [];
+      if (!m.content?.parts) return [];
+      return m.content.parts.filter(
+        (p: any) => p.type === 'tool-invocation' && p.toolInvocation?.toolName === 'calculator',
+      );
+    });
+    expect(calculatorToolInvocations.length).toBeGreaterThan(0);
   });
 
   it('should keep all messages when exclude list is empty', async () => {
@@ -270,7 +296,7 @@ describe.concurrent('ToolCallFilter', () => {
     const result = (await filter.processInput({
       messages: messagesV2,
       messageList,
-      abort: () => {},
+      abort,
     })) as MastraDBMessage[];
 
     // Should keep all messages
