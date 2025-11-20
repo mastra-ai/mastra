@@ -29,9 +29,6 @@ import Observability from './pages/observability';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
-import { MastraInstanceUrlForm } from './domains/setup/MastraInstanceUrlForm';
-import { useUrlState } from './domains/setup/useUrlState';
-import { MastraInstanceUrlProvider, useMastraInstanceUrl } from './domains/setup/MastraInstanceUrlContext';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
@@ -65,17 +62,9 @@ const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-function AppInner() {
-  const { url, isLoading, setUrl } = useMastraInstanceUrl();
-
-  if (isLoading) return null;
-
-  if (!url) {
-    return <MastraInstanceUrlForm onSetUrl={setUrl} />;
-  }
-
+function App() {
   return (
-    <MastraReactProvider baseUrl={url}>
+    <MastraReactProvider>
       <PlaygroundQueryClient>
         <PostHogProvider>
           <BrowserRouter>
@@ -133,27 +122,6 @@ function AppInner() {
                   </Route>
                   <Route path="/tools" element={<Tools />} />
 
-                  <Route path="/tools/all/:toolId" element={<Tool />} />
-                  <Route path="/mcps" element={<MCPs />} />
-
-                  <Route path="/mcps/:serverId" element={<McpServerPage />} />
-                  <Route path="/mcps/:serverId/tools/:toolId" element={<MCPServerToolExecutor />} />
-
-                  <Route path="/workflows" element={<Workflows />} />
-                  <Route path="/workflows/:workflowId" element={<NavigateTo to="/workflows/:workflowId/graph" />} />
-
-                  <Route
-                    path="/workflows/:workflowId"
-                    element={
-                      <WorkflowLayout>
-                        <Outlet />
-                      </WorkflowLayout>
-                    }
-                  >
-                    <Route path="/workflows/:workflowId/graph" element={<Workflow />} />
-                    <Route path="/workflows/:workflowId/graph/:runId" element={<Workflow />} />
-                  </Route>
-
                   <Route path="/tools/:toolId" element={<Tool />} />
                   <Route path="/mcps" element={<MCPs />} />
 
@@ -186,15 +154,5 @@ function AppInner() {
     </MastraReactProvider>
   );
 }
-
-export const App = () => {
-  return (
-    <PlaygroundQueryClient>
-      <MastraInstanceUrlProvider>
-        <AppInner />
-      </MastraInstanceUrlProvider>
-    </PlaygroundQueryClient>
-  );
-};
 
 export default App;
