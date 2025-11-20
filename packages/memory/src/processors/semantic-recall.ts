@@ -192,8 +192,9 @@ export class SemanticRecall implements Processor {
       }
 
       // Filter out messages that are already in the input
+      // Note: MessageList always assigns IDs, so m.id should never be undefined in practice
       const existingIds = new Set(messages.map(m => m.id).filter(Boolean));
-      const newMessages = similarMessages.filter(m => !existingIds.has(m.id));
+      const newMessages = similarMessages.filter(m => m.id && !existingIds.has(m.id));
 
       if (newMessages.length === 0) {
         // All similar messages are already in input, return original messageList
