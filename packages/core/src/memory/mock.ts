@@ -1,3 +1,7 @@
+import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
+import type { JSONSchema7 } from 'json-schema';
+import type { ZodTypeAny } from 'zod';
+import { ZodObject } from 'zod';
 import type { MastraDBMessage } from '../agent/message-list';
 import { MessageList } from '../agent/message-list';
 import type {
@@ -6,10 +10,6 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '../storage';
 import { InMemoryStore } from '../storage';
-import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
-import type { JSONSchema7 } from 'json-schema';
-import { ZodObject } from 'zod';
-import type { ZodTypeAny } from 'zod';
 import { MastraMemory } from './memory';
 import type { StorageThreadType, MemoryConfig, MessageDeleteInput, WorkingMemoryTemplate } from './types';
 
