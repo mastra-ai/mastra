@@ -13,11 +13,11 @@ import {
   createTestModels,
   defaultSettings,
   modelWithDocumentSources,
+  modelWithReasoning,
   testUsage,
   createMessageListWithUserMessage,
-  modelWithSources,
-  modelWithReasoning,
   modelWithFiles,
+  modelWithSources,
 } from './utils';
 
 export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {

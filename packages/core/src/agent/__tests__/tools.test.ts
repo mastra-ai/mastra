@@ -68,15 +68,15 @@ function toolsTest(version: 'v1' | 'v2') {
       mockModel = new MockLanguageModelV2({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'tool-calls',
+          finishReason: 'stop',
           usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          content: [],
-          toolCalls: [
+          content: [
             {
+              type: 'tool-call',
               toolCallType: 'function',
               toolCallId: 'call-test-1',
               toolName: 'testTool',
-              args: {},
+              input: '{}',
             },
           ],
           warnings: [],
@@ -186,15 +186,15 @@ function toolsTest(version: 'v1' | 'v2') {
         findUserToolModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'tool-calls',
+            finishReason: 'stop',
             usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            content: [],
-            toolCalls: [
+            content: [
               {
+                type: 'tool-call',
                 toolCallType: 'function',
                 toolCallId: 'call-finduser-1',
                 toolName: 'findUserTool',
-                args: { name: 'Dero Israel' },
+                input: '{"name":"Dero Israel"}',
               },
             ],
             warnings: [],
@@ -212,7 +212,7 @@ function toolsTest(version: 'v1' | 'v2') {
               },
               {
                 type: 'finish',
-                finishReason: 'tool-calls',
+                finishReason: 'stop',
                 usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
               },
             ]),
@@ -313,13 +313,13 @@ function toolsTest(version: 'v1' | 'v2') {
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'tool-calls',
             usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            content: [],
-            toolCalls: [
+            content: [
               {
+                type: 'tool-call',
                 toolCallType: 'function',
                 toolCallId: 'call-color-1',
                 toolName: 'changeColor',
-                args: { color: 'green' },
+                input: '{"color":"green"}',
               },
             ],
             warnings: [],
@@ -337,7 +337,7 @@ function toolsTest(version: 'v1' | 'v2') {
               },
               {
                 type: 'finish',
-                finishReason: 'tool-calls',
+                finishReason: 'stop',
                 usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
               },
             ]),
@@ -558,13 +558,13 @@ function toolsTest(version: 'v1' | 'v2') {
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'tool-calls',
             usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            content: [],
-            toolCalls: [
+            content: [
               {
+                type: 'tool-call',
                 toolCallType: 'function',
                 toolCallId: 'call-runtime-1',
                 toolName: 'testTool',
-                args: { query: 'test' },
+                input: '{"query":"test"}',
               },
             ],
             warnings: [],
@@ -582,7 +582,7 @@ function toolsTest(version: 'v1' | 'v2') {
               },
               {
                 type: 'finish',
-                finishReason: 'tool-calls',
+                finishReason: 'stop',
                 usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
               },
             ]),
@@ -718,7 +718,7 @@ function toolsTest(version: 'v1' | 'v2') {
               },
               {
                 type: 'finish',
-                finishReason: 'tool-calls',
+                finishReason: 'stop',
                 usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
               },
             ]),
