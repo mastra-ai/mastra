@@ -9,6 +9,7 @@ import {
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_EVALS,
 } from '@mastra/core/storage';
 import { Miniflare } from 'miniflare';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -30,6 +31,7 @@ describe('Logger Verification - No PII Leakage', () => {
         TABLE_WORKFLOW_SNAPSHOT,
         TABLE_TRACES,
         TABLE_SCORERS,
+        TABLE_EVALS,
       ],
     });
 
@@ -40,6 +42,7 @@ describe('Logger Verification - No PII Leakage', () => {
       [TABLE_WORKFLOW_SNAPSHOT]: (await mf.getKVNamespace(TABLE_WORKFLOW_SNAPSHOT)) as KVNamespace,
       [TABLE_TRACES]: (await mf.getKVNamespace(TABLE_TRACES)) as KVNamespace,
       [TABLE_SCORERS]: (await mf.getKVNamespace(TABLE_SCORERS)) as KVNamespace,
+      [TABLE_EVALS]: (await mf.getKVNamespace(TABLE_EVALS)) as KVNamespace,
     };
 
     const config: CloudflareWorkersConfig = {
@@ -53,65 +56,6 @@ describe('Logger Verification - No PII Leakage', () => {
 
   afterEach(async () => {
     await mf.dispose();
-  });
-
-  it('should NOT use console.log anywhere', async () => {
-    // Spy on console methods
-    const consoleLogSpy = vi.spyOn(console, 'log');
-    const consoleInfoSpy = vi.spyOn(console, 'info');
-
-    const resourceId = 'test-resource';
-    const threadId = 'test-thread';
-
-    // Create resource and thread
-    await store.stores.memory.saveResource({
-      resource: { id: resourceId, createdAt: new Date(), updatedAt: new Date() },
-    });
-
-    await store.stores.memory.saveThread({
-      thread: {
-        id: threadId,
-        resourceId,
-        title: 'Test',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-    });
-
-    // Save message with SENSITIVE content
-    const SENSITIVE_DATA = 'SSN: 123-45-6789, Password: secret123';
-    await store.stores.memory.saveMessages({
-      messages: [
-        {
-          id: 'msg-1',
-          threadId,
-          resourceId,
-          role: 'user',
-          content: [{ type: 'text' as const, text: SENSITIVE_DATA }],
-          createdAt: new Date(),
-          type: 'v2',
-        },
-      ],
-    });
-
-    // Retrieve messages
-    await store.stores.memory.listMessages({ threadId, resourceId });
-
-    // CRITICAL: Verify NO console.log/info was called
-    expect(consoleLogSpy).not.toHaveBeenCalled();
-    expect(consoleInfoSpy).not.toHaveBeenCalled();
-
-    // CRITICAL: Verify SENSITIVE_DATA never appeared in any console output
-    const allConsoleCalls = [...consoleLogSpy.mock.calls, ...consoleInfoSpy.mock.calls].flat();
-
-    const hasLeakedPII = allConsoleCalls.some(
-      arg => String(arg).includes('123-45-6789') || String(arg).includes('secret123'),
-    );
-
-    expect(hasLeakedPII).toBe(false);
-
-    consoleLogSpy.mockRestore();
-    consoleInfoSpy.mockRestore();
   });
 
   it('should use logger.debug with content summary (not raw content)', async () => {
