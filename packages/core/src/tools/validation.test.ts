@@ -503,7 +503,7 @@ describe('Tool Input Validation Integration Tests', () => {
       });
     });
 
-    it('should fail validation when all schema fields in a object are optional and undefined is sent by the user', async () => {
+    +it('should accept undefined input when all schema fields are optional', async () => {
       const testTool = createTool({
         id: 'fetch_data',
         description: 'Fetches data with optional filters',
@@ -517,8 +517,9 @@ describe('Tool Input Validation Integration Tests', () => {
         },
       });
       const result = await testTool.execute?.(undefined as any);
-      expect(result.error).toBe(true);
-      expect(result.message).toContain('root: Required');
+      expect(result.error).toBeUndefined();
+      +expect(result.message).toBe('Success');
+      +expect(result.args).toEqual({});
     });
   });
 });
