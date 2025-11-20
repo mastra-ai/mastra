@@ -119,15 +119,15 @@ export class DeepgramVoice extends MastraVoice {
       throw new Error('Input text is empty');
     }
 
-   const baseModel = this.storedSpeechModel?.name;
-   const speakerId = options?.speaker || this.storedSpeaker;
+    const baseModel = this.storedSpeechModel?.name;
+    const speakerId = options?.speaker || this.storedSpeaker;
 
-   const modelName =
-    baseModel && speakerId
-      ? speakerId.startsWith(`${baseModel}-`)
-        ? speakerId
-        : `${baseModel}-${speakerId}`
-      : baseModel || speakerId;
+    const modelName =
+      baseModel && speakerId
+        ? speakerId.startsWith(`${baseModel}-`)
+          ? speakerId
+          : `${baseModel}-${speakerId}`
+        : baseModel || speakerId;
 
     const speakClient = this.speechClient.speak;
     const response = await speakClient.request(
@@ -207,23 +207,25 @@ export class DeepgramVoice extends MastraVoice {
     }
 
     const channel = result.results?.channels?.[0];
-    const alt: {
-      transcript?: string;
-      words?: DeepgramWord[];
-    } | undefined = channel?.alternatives?.[0];
+    const alt:
+      | {
+          transcript?: string;
+          words?: DeepgramWord[];
+        }
+      | undefined = channel?.alternatives?.[0];
 
     if (!alt) {
       return {
-       transcript: '',
-       words: [],
-       raw: result,
+        transcript: '',
+        words: [],
+        raw: result,
       };
     }
 
     const response: any = {
       transcript: alt.transcript,
       words: alt.words,
-      raw: result
+      raw: result,
     };
 
     if (diarize && alt.words) {
@@ -236,7 +238,6 @@ export class DeepgramVoice extends MastraVoice {
     }
 
     return response;
-
   }
 }
 
