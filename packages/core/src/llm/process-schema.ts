@@ -5,86 +5,138 @@ import {
   GoogleSchemaCompatLayer,
   DeepSeekSchemaCompatLayer,
   MetaSchemaCompatLayer,
-  type ModelInformation,
 } from '@mastra/schema-compat';
-import { RequestContext } from '../request-context';
+import type { ModelInformation } from '@mastra/schema-compat';
 import type { OutputSchema } from '../stream/base/schema';
-import { resolveModelConfig } from './model/resolve-model';
-import type { MastraModelConfig } from './model/shared.types';
 
 /**
- * Process a Zod schema for compatibility with a specific model.
+ * Schema compatibility utilities for transforming Zod schemas to work with specific model providers.
  *
- * This utility automatically applies the appropriate schema transformations
- * for the specified model to ensure compatibility with its structured output requirements.
- *
- * Particularly useful for OpenAI models with strict mode, which require all properties
- * to be in the `required` array. This function converts `.optional().nullable()`
- * to just `.nullable()` to satisfy that requirement.
- *
- * @param modelConfig - The model configuration (string like 'openai/gpt-4o-mini', or config object)
- * @param schema - The Zod schema to process
- * @returns The processed Zod schema with compatibility transformations applied
+ * Use these utilities to transform your schemas before passing them to agent methods.
+ * This ensures the same schema can be used for both backend generation and frontend validation.
  *
  * @example
  * ```typescript
  * import { z } from 'zod';
- * import { Agent, processSchema } from '@mastra/core';
+ * import { processSchema } from '@mastra/core';
  *
- * const schema = z.object({
+ * // Define your schema once
+ * const userSchema = z.object({
  *   name: z.string(),
- *   age: z.number().optional().nullable() // Would cause issues with OpenAI strict mode
+ *   age: z.number().optional(), // Would cause issues with OpenAI strict mode
  * });
  *
- * const agent = new Agent({
- *   name: 'Assistant',
- *   model: 'openai/gpt-4o-mini'
- * });
+ * // Transform it for OpenAI
+ * const openaiSchema = processSchema.openai(userSchema);
  *
- * // Use processSchema to fix compatibility issues
+ * // Use in agent
  * const result = await agent.generate("Extract user info", {
- *   structuredOutput: {
- *     schema: processSchema('openai/gpt-4o-mini', schema)
- *   }
+ *   structuredOutput: { schema: openaiSchema }
  * });
- * ```
  *
- * @example
- * ```typescript
- * // Using with config object
- * const result = await agent.generate("Extract info", {
- *   structuredOutput: {
- *     schema: processSchema({ id: 'openai/gpt-4o-mini', apiKey: '...' }, schema)
- *   }
- * });
+ * // Use the same transformed schema on frontend for validation
+ * const validatedData = openaiSchema.parse(result.object);
  * ```
  */
-export async function processSchema<T extends OutputSchema>(modelConfig: MastraModelConfig, schema: T): Promise<T> {
-  const resolvedModel = await resolveModelConfig(modelConfig, new RequestContext());
+export const processSchema = {
+  /**
+   * Transform schema for OpenAI models with strict mode.
+   *
+   * Converts `.optional()` fields to `.nullable()` to ensure all properties
+   * are in the required array, which is required by OpenAI's strict mode.
+   *
+   * @param schema - The Zod schema to transform
+   * @returns Transformed schema compatible with OpenAI strict mode
+   */
+  openai: <T extends OutputSchema>(schema: T): T => {
+    const modelInfo: ModelInformation = {
+      provider: 'openai',
+      modelId: 'gpt-4o',
+      supportsStructuredOutputs: false,
+    };
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    return layer.processZodType(schema as any) as T;
+  },
 
-  const modelInfo: ModelInformation = {
-    provider: resolvedModel.provider,
-    modelId: resolvedModel.modelId,
-    supportsStructuredOutputs: false,
-  };
+  /**
+   * Transform schema for OpenAI reasoning models (o1, o3, o4).
+   *
+   * Applies the same transformations as `openai()` but for reasoning models.
+   *
+   * @param schema - The Zod schema to transform
+   * @returns Transformed schema compatible with OpenAI reasoning models
+   */
+  openaiReasoning: <T extends OutputSchema>(schema: T): T => {
+    const modelInfo: ModelInformation = {
+      provider: 'openai',
+      modelId: 'o1',
+      supportsStructuredOutputs: false,
+    };
+    const layer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
+    return layer.processZodType(schema as any) as T;
+  },
 
-  // Create all compat layers and find the first one that applies
-  const compatLayers = [
-    new OpenAIReasoningSchemaCompatLayer(modelInfo),
-    new OpenAISchemaCompatLayer(modelInfo),
-    new AnthropicSchemaCompatLayer(modelInfo),
-    new GoogleSchemaCompatLayer(modelInfo),
-    new DeepSeekSchemaCompatLayer(modelInfo),
-    new MetaSchemaCompatLayer(modelInfo),
-  ];
+  /**
+   * Transform schema for Anthropic models.
+   *
+   * @param schema - The Zod schema to transform
+   * @returns Transformed schema compatible with Anthropic models
+   */
+  anthropic: <T extends OutputSchema>(schema: T): T => {
+    const modelInfo: ModelInformation = {
+      provider: 'anthropic',
+      modelId: 'claude-3-5-sonnet-20241022',
+      supportsStructuredOutputs: false,
+    };
+    const layer = new AnthropicSchemaCompatLayer(modelInfo);
+    return layer.processZodType(schema as any) as T;
+  },
 
-  // Find the first compat layer that should apply
-  for (const layer of compatLayers) {
-    if (layer.shouldApply()) {
-      return layer.processZodType(schema as any) as T;
-    }
-  }
+  /**
+   * Transform schema for Google models.
+   *
+   * @param schema - The Zod schema to transform
+   * @returns Transformed schema compatible with Google models
+   */
+  google: <T extends OutputSchema>(schema: T): T => {
+    const modelInfo: ModelInformation = {
+      provider: 'google',
+      modelId: 'gemini-2.0-flash-exp',
+      supportsStructuredOutputs: false,
+    };
+    const layer = new GoogleSchemaCompatLayer(modelInfo);
+    return layer.processZodType(schema as any) as T;
+  },
 
-  // No compat layer needed, return original schema
-  return schema;
-}
+  /**
+   * Transform schema for DeepSeek models.
+   *
+   * @param schema - The Zod schema to transform
+   * @returns Transformed schema compatible with DeepSeek models
+   */
+  deepseek: <T extends OutputSchema>(schema: T): T => {
+    const modelInfo: ModelInformation = {
+      provider: 'deepseek',
+      modelId: 'deepseek-chat',
+      supportsStructuredOutputs: false,
+    };
+    const layer = new DeepSeekSchemaCompatLayer(modelInfo);
+    return layer.processZodType(schema as any) as T;
+  },
+
+  /**
+   * Transform schema for Meta models.
+   *
+   * @param schema - The Zod schema to transform
+   * @returns Transformed schema compatible with Meta models
+   */
+  meta: <T extends OutputSchema>(schema: T): T => {
+    const modelInfo: ModelInformation = {
+      provider: 'meta',
+      modelId: 'llama-3.3-70b-instruct',
+      supportsStructuredOutputs: false,
+    };
+    const layer = new MetaSchemaCompatLayer(modelInfo);
+    return layer.processZodType(schema as any) as T;
+  },
+};

@@ -243,17 +243,6 @@ const aiSdkResult = await agent.generate("message for agent", {
             },
           ],
         },
-        {
-          parameters: [
-            {
-              name: "applySchemaCompatTransformation",
-              type: "boolean",
-              isOptional: true,
-              description:
-                "Automatically applies schema compatibility transformations for the model's requirements. For OpenAI strict mode, this converts .optional() fields to .nullable() to ensure all properties are in the required array.",
-            },
-          ],
-        },
       ],
     },
     {

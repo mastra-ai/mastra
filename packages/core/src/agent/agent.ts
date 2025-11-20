@@ -21,7 +21,6 @@ import type { GenerateObjectResult, GenerateTextResult, StreamTextResult } from 
 import { isV2Model } from '../llm/model/is-v2-model';
 import { MastraLLMVNext } from '../llm/model/model.loop';
 import type { MastraLanguageModel, MastraLanguageModelV2, MastraModelConfig } from '../llm/model/shared.types';
-import { processSchema } from '../llm/process-schema';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
@@ -2402,19 +2401,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       this.logger.debug(`[Agents:${this.name}] - Starting generation`, { runId });
     }
 
-    // Apply schema compatibility transformation if requested
-    let processedOptions = options;
-    if (options.structuredOutput?.applySchemaCompatTransformation && options.structuredOutput?.schema) {
-      const transformedSchema = await processSchema(llm.getModel(), options.structuredOutput.schema);
-      processedOptions = {
-        ...options,
-        structuredOutput: {
-          ...options.structuredOutput,
-          schema: transformedSchema,
-        },
-      };
-    }
-
     // Create a capabilities object with bound methods
     const capabilities = {
       agentName: this.name,
@@ -2438,7 +2424,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     // Create the workflow with all necessary context
     const executionWorkflow = createPrepareStreamWorkflow({
       capabilities,
-      options: { ...processedOptions, methodType },
+      options: { ...options, methodType },
       threadFromArgs,
       resourceId,
       runId,

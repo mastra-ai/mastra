@@ -7,7 +7,7 @@ Added `applySchemaCompatTransformation` option to automatically fix provider-spe
 
 - **New option in `structuredOutput`**: Set `applySchemaCompatTransformation: true` to automatically transform schemas
 - **Fixes OpenAI strict mode**: Converts `.optional()` fields to `.nullable()` so all properties are in the required array
-- **Fixes nested zod properties under nullable**: Previously `z.optional().nullable()` would not catch the `optional()` for openai schema compatbility layer.
+- **Fixes nested zod properties under nullable**: Previously `z.optional().nullable()` would not catch the `optional()` for openai schema compatibility layer.
 
 ```typescript
 await agent.generate('Extract user info', {
