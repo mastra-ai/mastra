@@ -123,4 +123,40 @@ describe('MastraAuthClerk', () => {
     const noPermissionsUser = { sub: 'user789' };
     expect(await clerk.authorizeUser(noPermissionsUser)).toBe(false);
   });
+
+  describe('route configuration options', () => {
+    it('should store public routes configuration when provided', () => {
+      const publicRoutes = ['/health', '/api/status'];
+      const clerk = new MastraAuthClerk({
+        ...mockOptions,
+        public: publicRoutes,
+      });
+
+      expect(clerk.public).toEqual(publicRoutes);
+    });
+
+    it('should store protected routes configuration when provided', () => {
+      const protectedRoutes = ['/api/*', '/admin/*'];
+      const clerk = new MastraAuthClerk({
+        ...mockOptions,
+        protected: protectedRoutes,
+      });
+
+      expect(clerk.protected).toEqual(protectedRoutes);
+    });
+
+    it('should handle both public and protected routes together', () => {
+      const publicRoutes = ['/health', '/api/status'];
+      const protectedRoutes = ['/api/*', '/admin/*'];
+
+      const clerk = new MastraAuthClerk({
+        ...mockOptions,
+        public: publicRoutes,
+        protected: protectedRoutes,
+      });
+
+      expect(clerk.public).toEqual(publicRoutes);
+      expect(clerk.protected).toEqual(protectedRoutes);
+    });
+  });
 });

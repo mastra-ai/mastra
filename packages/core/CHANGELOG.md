@@ -1,5 +1,165 @@
 # @mastra/core
 
+## 1.0.0-beta.3
+
+### Major Changes
+
+- Use tool's outputSchema to validate results and return an error object if schema does not match output results. ([#9664](https://github.com/mastra-ai/mastra/pull/9664))
+
+  ```typescript
+  const getUserTool = createTool({
+    id: 'get-user',
+    outputSchema: z.object({
+      id: z.string(),
+      name: z.string(),
+      email: z.string().email(),
+    }),
+    execute: async inputData => {
+      return { id: '123', name: 'John' };
+    },
+  });
+  ```
+
+  When validation fails, the tool returns a `ValidationError`:
+
+  ```typescript
+  // Before v1 - invalid output would silently pass through
+  await getUserTool.execute({});
+  // { id: "123", name: "John" } - missing email
+
+  // After v1 - validation error is returned
+  await getUserTool.execute({});
+  // {
+  //   error: true,
+  //   message: "Tool output validation failed for get-user. The tool returned invalid output:\n- email: Required\n\nReturned output: {...}",
+  //   validationErrors: { ... }
+  // }
+  ```
+
+### Patch Changes
+
+- dependencies updates: ([#10131](https://github.com/mastra-ai/mastra/pull/10131))
+  - Updated dependency [`hono@^4.10.5` ↗︎](https://www.npmjs.com/package/hono/v/4.10.5) (from `^4.9.7`, in `dependencies`)
+
+- Only handle download image asset transformation if needed ([#10122](https://github.com/mastra-ai/mastra/pull/10122))
+
+- Add serializedStepGraph to runExecutionResult response ([#10004](https://github.com/mastra-ai/mastra/pull/10004))
+
+- Fix tool outputSchema validation to allow unsupported Zod types like ZodTuple. The outputSchema is only used for internal validation and never sent to the LLM, so model compatibility checks are not needed. ([#9409](https://github.com/mastra-ai/mastra/pull/9409))
+
+- Fix vector definition to fix pinecone ([#10150](https://github.com/mastra-ai/mastra/pull/10150))
+
+- fix resumeStream type to use resumeSchema ([#10202](https://github.com/mastra-ai/mastra/pull/10202))
+
+- Add type bailed to workflowRunStatus ([#10091](https://github.com/mastra-ai/mastra/pull/10091))
+
+- default validate inputs to true in Workflow execute ([#10222](https://github.com/mastra-ai/mastra/pull/10222))
+
+- Add support for doGenerate in LanguageModelV2. This change fixes issues with OpenAI stream permissions. ([#10239](https://github.com/mastra-ai/mastra/pull/10239))
+  - Added new abstraction over LanguageModelV2
+
+- Fix input tool validation when no inputSchema is provided ([#9941](https://github.com/mastra-ai/mastra/pull/9941))
+
+- Adds ability to create custom `MastraModelGateway`'s that can be added to the `Mastra` class instance under the `gateways` property. Giving you typescript autocompletion in any model picker string. ([#10180](https://github.com/mastra-ai/mastra/pull/10180))
+
+  ```typescript
+  import { MastraModelGateway, type ProviderConfig } from '@mastra/core/llm';
+  import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
+  import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+
+  class MyCustomGateway extends MastraModelGateway {
+    readonly id = 'my-custom-gateway';
+    readonly name = 'My Custom Gateway';
+    readonly prefix = 'custom';
+
+    async fetchProviders(): Promise<Record<string, ProviderConfig>> {
+      return {
+        'my-provider': {
+          name: 'My Provider',
+          models: ['model-1', 'model-2'],
+          apiKeyEnvVar: 'MY_API_KEY',
+          gateway: this.id,
+        },
+      };
+    }
+
+    buildUrl(modelId: string, envVars?: Record<string, string>): string {
+      return 'https://api.my-provider.com/v1';
+    }
+
+    async getApiKey(modelId: string): Promise<string> {
+      const apiKey = process.env.MY_API_KEY;
+      if (!apiKey) throw new Error('MY_API_KEY not set');
+      return apiKey;
+    }
+
+    async resolveLanguageModel({
+      modelId,
+      providerId,
+      apiKey,
+    }: {
+      modelId: string;
+      providerId: string;
+      apiKey: string;
+    }): Promise<LanguageModelV2> {
+      const baseURL = this.buildUrl(`${providerId}/${modelId}`);
+      return createOpenAICompatible({
+        name: providerId,
+        apiKey,
+        baseURL,
+      }).chatModel(modelId);
+    }
+  }
+
+  new Mastra({
+    gateways: {
+      myGateway: new MyCustomGateway(),
+    },
+  });
+  ```
+
+- Add an additional check to determine whether the model natively supports specific file types. Only download the file if the model does not support it natively. ([#9790](https://github.com/mastra-ai/mastra/pull/9790))
+
+- Add restart method to workflow run that allows restarting an active workflow run ([#9750](https://github.com/mastra-ai/mastra/pull/9750))
+  Add status filter to `listWorkflowRuns`
+  Add automatic restart to restart active workflow runs when server starts
+
+- Validate schemas by default in workflow. Previously, if you want schemas in the workflow to be validated, you'd have to add `validateInputs` option, now, this will be done by default but can be disabled. ([#10186](https://github.com/mastra-ai/mastra/pull/10186))
+
+  For workflows whose schemas and step schemas you don't want validated, do this
+
+  ```diff
+  createWorkflow({
+  +  options: {
+  +    validateInputs: false
+  +  }
+  })
+  ```
+
+- Fix inngest parallel workflow ([#10169](https://github.com/mastra-ai/mastra/pull/10169))
+  Fix tool as step in inngest
+  Fix inngest nested workflow
+
+- Add timeTravel to workflows. This makes it possible to start a workflow run from a particular step in the workflow ([#9994](https://github.com/mastra-ai/mastra/pull/9994))
+
+  Example code:
+
+  ```ts
+  const result = await run.timeTravel({
+    step: 'step2',
+    inputData: {
+      value: 'input',
+    },
+  });
+  ```
+
+- Fixes assets not being downloaded when available ([#10079](https://github.com/mastra-ai/mastra/pull/10079))
+
+- Remove unused dependencies ([#10019](https://github.com/mastra-ai/mastra/pull/10019))
+
+- Updated dependencies [[`a64d16a`](https://github.com/mastra-ai/mastra/commit/a64d16aedafe57ee5707bdcc25f96e07fa1a0233)]:
+  - @mastra/observability@1.0.0-beta.1
+
 ## 1.0.0-beta.2
 
 ### Patch Changes

@@ -7,10 +7,9 @@ import {
 import type { LanguageModelV2CallWarning, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { jsonSchema, NoObjectGeneratedError, pipeTextStreamToResponse } from 'ai-v5';
 import type { FinishReason, LanguageModelResponseMetadata, LanguageModelUsage } from 'ai-v5';
-import { MockLanguageModelV2 } from 'ai-v5/test';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 import { assert, beforeEach, describe, expect, it, vi } from 'vitest';
 import z from 'zod';
-import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import { createMockServerResponse } from './mock-server-response';
 import { createMessageListWithUserMessage, mockDate, testUsage } from './utils';
