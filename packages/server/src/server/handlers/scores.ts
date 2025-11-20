@@ -1,5 +1,5 @@
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
-import { RequestContext } from '@mastra/core/request-context';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { StoragePagination } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import { runIdSchema } from '../schemas/common';

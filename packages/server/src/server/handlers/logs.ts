@@ -1,4 +1,3 @@
-import type { LogLevel } from '@mastra/core/logger';
 import { runIdSchema } from '../schemas/common';
 import { listLogsQuerySchema, listLogsResponseSchema, listLogTransportsResponseSchema } from '../schemas/logs';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -57,18 +56,14 @@ export const LIST_LOGS_ROUTE = createRoute({
           )
         : undefined;
 
-      const options = Object.fromEntries(
-        Object.entries({
-          fromDate,
-          toDate,
-          logLevel,
-          filters,
-          page: page ? Number(page) : undefined,
-          perPage: perPage ? Number(perPage) : undefined,
-        }).filter(([_, v]) => v !== undefined),
-      );
-
-      const logs = await mastra.listLogs(transportId!, options);
+      const logs = await mastra.listLogs(transportId!, {
+        fromDate,
+        toDate,
+        logLevel,
+        filters,
+        page: page ? Number(page) : undefined,
+        perPage: perPage ? Number(perPage) : undefined,
+      });
       return logs;
     } catch (error) {
       return handleError(error, 'Error getting logs');
@@ -102,29 +97,16 @@ export const LIST_LOGS_BY_RUN_ID_ROUTE = createRoute({
           )
         : undefined;
 
-      const options = Object.fromEntries(
-        Object.entries({
-          runId: runId!,
-          transportId: transportId!,
-          fromDate,
-          toDate,
-          logLevel,
-          filters,
-          page: page ? Number(page) : undefined,
-          perPage: perPage ? Number(perPage) : undefined,
-        }).filter(([_, v]) => v !== undefined),
-      ) as {
-        runId: string;
-        transportId: string;
-        fromDate?: Date;
-        toDate?: Date;
-        logLevel?: LogLevel;
-        filters?: Record<string, any>;
-        page?: number;
-        perPage?: number;
-      };
-
-      const logs = await mastra.listLogsByRunId(options);
+      const logs = await mastra.listLogsByRunId({
+        runId: runId!,
+        transportId: transportId!,
+        fromDate,
+        toDate,
+        logLevel,
+        filters,
+        page: page ? Number(page) : undefined,
+        perPage: perPage ? Number(perPage) : undefined,
+      });
       return logs;
     } catch (error) {
       return handleError(error, 'Error getting logs by run ID');
