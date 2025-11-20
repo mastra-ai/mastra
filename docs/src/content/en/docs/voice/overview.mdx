@@ -918,6 +918,30 @@ const voice = new GeminiLiveVoice({
 Visit the [Google Gemini Live Reference](/reference/v1/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
 
   </TabItem>
+  <TabItem value="aisdk" label="AI SDK">
+
+```typescript
+// AI SDK Voice Configuration
+import { CompositeVoice } from "@mastra/core/voice";
+import { openai } from "@ai-sdk/openai";
+import { elevenlabs } from "@ai-sdk/elevenlabs";
+
+// Use AI SDK models directly - no need to install separate packages
+const voice = new CompositeVoice({
+  input: openai.transcription('whisper-1'),      // AI SDK transcription
+  output: elevenlabs.speech('eleven_turbo_v2'),  // AI SDK speech
+});
+
+// Works seamlessly with your agent
+const voiceAgent = new Agent({
+  id: "aisdk-voice-agent",
+  name: "AI SDK Voice Agent",
+  instructions: "You are a helpful assistant with voice capabilities.",
+  model: openai("gpt-4o"),
+  voice,
+});
+```
+  </TabItem>
 </Tabs>
 
 ### Using Multiple Voice Providers
@@ -969,6 +993,49 @@ const responseAudio = await voice.speak(`You said: ${transcript}`, {
 
 // Play the audio response
 playAudio(responseAudio);
+```
+
+### Using AI SDK Model Providers
+
+You can also use AI SDK models directly with `CompositeVoice`:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { openai } from "@ai-sdk/openai";
+import { elevenlabs } from "@ai-sdk/elevenlabs";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+
+// Use AI SDK models directly - no provider setup needed
+const voice = new CompositeVoice({
+  input: openai.transcription('whisper-1'),      // AI SDK transcription
+  output: elevenlabs.speech('eleven_turbo_v2'),  // AI SDK speech
+});
+
+// Works the same way as Mastra providers
+const audioStream = getMicrophoneStream();
+const transcript = await voice.listen(audioStream);
+
+console.log("Transcribed text:", transcript);
+
+// Convert text to speech
+const responseAudio = await voice.speak(`You said: ${transcript}`, {
+  speaker: "Rachel", // ElevenLabs voice
+});
+
+playAudio(responseAudio);
+```
+
+You can also mix AI SDK models with Mastra providers:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { PlayAIVoice } from "@mastra/voice-playai";
+import { groq } from "@ai-sdk/groq";
+
+const voice = new CompositeVoice({
+  input: groq.transcription('whisper-large-v3'),  // AI SDK for STT
+  output: new PlayAIVoice(),                       // Mastra provider for TTS
+});
 ```
 
 For more information on the CompositeVoice, refer to the [CompositeVoice Reference](/reference/v1/voice/composite-voice).

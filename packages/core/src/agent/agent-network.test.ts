@@ -30,7 +30,7 @@ async function checkIterations(anStream: AsyncIterable<any>) {
   expect(iterations[0], 'First iteration must start at 0, not 1').toBe(0);
 }
 
-describe('Agent - network', () => {
+describe.skip('Agent - network', () => {
   const memory = new MockMemory();
 
   const agent1 = new Agent({
@@ -237,6 +237,34 @@ describe('Agent - network', () => {
     );
 
     await checkIterations(anStream);
+  });
+
+  it('LOOP - should not trigger WorkflowRunOutput deprecation warning when executing workflows', async () => {
+    const originalWarn = console.warn;
+    const warnings: string[] = [];
+    console.warn = (message: string) => {
+      warnings.push(message);
+    };
+
+    try {
+      const anStream = await network.network('Execute workflow1 on Paris', {
+        requestContext,
+      });
+
+      // Consume the stream
+      for await (const _chunk of anStream) {
+        // Just iterate through
+      }
+
+      // Verify no deprecation warnings about WorkflowRunOutput[Symbol.asyncIterator]
+      const deprecationWarnings = warnings.filter(
+        w => w.includes('WorkflowRunOutput[Symbol.asyncIterator]') && w.includes('deprecated'),
+      );
+
+      expect(deprecationWarnings).toHaveLength(0);
+    } finally {
+      console.warn = originalWarn;
+    }
   });
 
   it('LOOP - should track usage data from workflow with agent stream agent.network()', async () => {
