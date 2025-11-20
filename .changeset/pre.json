@@ -82,5 +82,14 @@
     "@mastra/voice-speechify": "0.11.12",
     "@mastra/inngest": "0.18.4"
   },
-  "changesets": []
+  "changesets": [
+    "cuddly-tires-hope",
+    "fix-create-runtime-detection",
+    "khaki-sheep-compare",
+    "metal-masks-divide",
+    "pretty-ghosts-doubt",
+    "quiet-dragons-win",
+    "red-gifts-kick",
+    "tidy-suns-slide"
+  ]
 }
