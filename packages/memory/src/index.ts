@@ -797,7 +797,7 @@ ${workingMemory}`;
             convertedSchema = (schema as any).toJsonSchema() as JSONSchema7;
           } else {
             // Fall back to zodToJsonSchema for Zod v3
-            convertedSchema = zodToJsonSchema(schema as ZodTypeAny) as JSONSchema7;
+            convertedSchema = zodToJsonSchema(schema as ZodTypeAny);
           }
         } else {
           // Already a JSON Schema
