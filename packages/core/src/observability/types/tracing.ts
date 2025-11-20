@@ -390,6 +390,44 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
 
   /** Returns the traceId on span, unless NoOpSpan, then undefined */
   get externalTraceId(): string | undefined;
+
+  /**
+   * Execute an async function within this span's tracing context.
+   *
+   * When a bridge is configured, this enables auto-instrumented operations
+   * (HTTP requests, database queries, etc.) to be properly nested under this
+   * span in the external tracing system.
+   *
+   * @param fn - The async function to execute within the span context
+   * @returns The result of the function execution
+   *
+   * @example
+   * ```typescript
+   * const result = await modelSpan.executeInContext(async () => {
+   *   return model.generateText(...);
+   * });
+   * ```
+   */
+  executeInContext<T>(fn: () => Promise<T>): Promise<T>;
+
+  /**
+   * Execute a synchronous function within this span's tracing context.
+   *
+   * When a bridge is configured, this enables auto-instrumented operations
+   * (HTTP requests, database queries, etc.) to be properly nested under this
+   * span in the external tracing system.
+   *
+   * @param fn - The synchronous function to execute within the span context
+   * @returns The result of the function execution
+   *
+   * @example
+   * ```typescript
+   * const result = modelSpan.executeInContextSync(() => {
+   *   return model.streamText(...);
+   * });
+   * ```
+   */
+  executeInContextSync<T>(fn: () => T): T;
 }
 
 /**
@@ -880,6 +918,36 @@ export interface ObservabilityBridge {
    * @param event - Tracing event with exported span
    */
   exportTracingEvent(event: TracingEvent): Promise<void>;
+
+  /**
+   * Execute an async function within the tracing context of a Mastra span.
+   * This enables auto-instrumented operations (HTTP, DB) to have correct parent spans
+   * in the external tracing system (e.g., OpenTelemetry, DataDog, etc.).
+   *
+   * @param spanId - The ID of the Mastra span to use as context
+   * @param fn - The async function to execute within the span context
+   * @returns The result of the function execution
+   */
+  executeInContext?<T>(spanId: string, fn: () => Promise<T>): Promise<T>;
+
+  /**
+   * Execute a synchronous function within the tracing context of a Mastra span.
+   * This enables auto-instrumented operations (HTTP, DB) to have correct parent spans
+   * in the external tracing system (e.g., OpenTelemetry, DataDog, etc.).
+   *
+   * @param spanId - The ID of the Mastra span to use as context
+   * @param fn - The synchronous function to execute within the span context
+   * @returns The result of the function execution
+   */
+  executeInContextSync?<T>(spanId: string, fn: () => T): T;
+
+  /**
+   * Callback invoked synchronously when a Mastra span is created.
+   * This allows bridges to set up context immediately, before user code executes.
+   *
+   * @param span - The Mastra span that was just created
+   */
+  onSpanCreated?(span: AnySpan): void;
 
   /** Shutdown bridge and cleanup resources */
   shutdown(): Promise<void>;

@@ -4,6 +4,7 @@ import type { LanguageModelV2, LanguageModelV2Usage } from '@ai-sdk/provider-v5'
 import type { ToolSet } from 'ai-v5';
 import { MessageList } from '../../../agent/message-list';
 import { getErrorFromUnknown } from '../../../error/utils.js';
+import { executeWithContextSync } from '../../../observability/utils';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { MastraModelOutput } from '../../../stream/base/output';
@@ -452,6 +453,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   downloadRetries,
   downloadConcurrency,
   processorStates,
+  modelSpanTracker,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'llm-execution',
@@ -531,46 +533,48 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
               }
             }
 
-            modelResult = execute({
-              runId,
-              model: stepModel,
-              providerOptions,
-              inputMessages,
-              tools: stepTools,
-              toolChoice: stepToolChoice,
-              options,
-              modelSettings,
-              includeRawChunks,
-              structuredOutput,
-              headers,
-              onResult: ({
-                warnings: warningsFromStream,
-                request: requestFromStream,
-                rawResponse: rawResponseFromStream,
-              }) => {
-                warnings = warningsFromStream;
-                request = requestFromStream || {};
-                rawResponse = rawResponseFromStream;
+            modelResult = executeWithContextSync(modelSpanTracker?.getTracingContext()?.currentSpan, () =>
+              execute({
+                runId,
+                model: stepModel,
+                providerOptions,
+                inputMessages,
+                tools: stepTools,
+                toolChoice: stepToolChoice,
+                options,
+                modelSettings,
+                includeRawChunks,
+                structuredOutput,
+                headers,
+                onResult: ({
+                  warnings: warningsFromStream,
+                  request: requestFromStream,
+                  rawResponse: rawResponseFromStream,
+                }) => {
+                  warnings = warningsFromStream;
+                  request = requestFromStream || {};
+                  rawResponse = rawResponseFromStream;
 
-                if (!isControllerOpen(controller)) {
-                  // Controller is closed or errored, skip enqueueing
-                  // This can happen when downstream errors (like in onStepFinish) close the controller
-                  return;
-                }
+                  if (!isControllerOpen(controller)) {
+                    // Controller is closed or errored, skip enqueueing
+                    // This can happen when downstream errors (like in onStepFinish) close the controller
+                    return;
+                  }
 
-                controller.enqueue({
-                  runId,
-                  from: ChunkFrom.AGENT,
-                  type: 'step-start',
-                  payload: {
-                    request: request || {},
-                    warnings: warnings || [],
-                    messageId: messageId,
-                  },
-                });
-              },
-              shouldThrowError: !isLastModel,
-            });
+                  controller.enqueue({
+                    runId,
+                    from: ChunkFrom.AGENT,
+                    type: 'step-start',
+                    payload: {
+                      request: request || {},
+                      warnings: warnings || [],
+                      messageId: messageId,
+                    },
+                  });
+                },
+                shouldThrowError: !isLastModel,
+              }),
+            );
             break;
           }
           default: {

@@ -7,6 +7,7 @@ import type { MastraScorers } from '../evals';
 import { runScorer } from '../evals/hooks';
 import { SpanType, wrapMastra } from '../observability';
 import type { Span, TracingContext } from '../observability';
+import { executeWithContext } from '../observability/utils';
 import type { ChunkType } from '../stream/types';
 import { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
@@ -712,7 +713,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         logger: this.logger,
       });
 
-      return step.execute(proxiedData);
+      // Execute within the step span's OTEL context for proper nesting
+      return executeWithContext(stepSpan, () => step.execute(proxiedData));
     };
 
     let execResults: any;
@@ -1184,49 +1186,52 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           });
 
           try {
-            const result = await cond(
-              createDeprecationProxy(
-                {
-                  runId,
-                  workflowId,
-                  mastra: this.mastra!,
-                  requestContext,
-                  inputData: prevOutput,
-                  state: executionContext.state,
-                  setState: (state: any) => {
-                    executionContext.state = state;
-                  },
-                  retryCount: -1,
-                  tracingContext: {
-                    currentSpan: evalSpan,
-                  },
-                  getInitData: () => stepResults?.input as any,
-                  getStepResult: getStepResult.bind(this, stepResults),
-                  // TODO: this function shouldn't have suspend probably?
-                  suspend: async (_suspendPayload: any): Promise<any> => {},
-                  bail: () => {},
-                  abort: () => {
-                    abortController?.abort();
-                  },
-                  [EMITTER_SYMBOL]: emitter,
-                  [STREAM_FORMAT_SYMBOL]: executionContext.format,
-                  engine: {},
-                  abortSignal: abortController?.signal,
-                  writer: new ToolStream(
-                    {
-                      prefix: 'workflow-step',
-                      callId: randomUUID(),
-                      name: 'conditional',
-                      runId,
+            // Execute within the eval span's OTEL context for proper nesting
+            const result = await executeWithContext(evalSpan, () =>
+              cond(
+                createDeprecationProxy(
+                  {
+                    runId,
+                    workflowId,
+                    mastra: this.mastra!,
+                    requestContext,
+                    inputData: prevOutput,
+                    state: executionContext.state,
+                    setState: (state: any) => {
+                      executionContext.state = state;
                     },
-                    writableStream,
-                  ),
-                },
-                {
-                  paramName: 'runCount',
-                  deprecationMessage: runCountDeprecationMessage,
-                  logger: this.logger,
-                },
+                    retryCount: -1,
+                    tracingContext: {
+                      currentSpan: evalSpan,
+                    },
+                    getInitData: () => stepResults?.input as any,
+                    getStepResult: getStepResult.bind(this, stepResults),
+                    // TODO: this function shouldn't have suspend probably?
+                    suspend: async (_suspendPayload: any): Promise<any> => {},
+                    bail: () => {},
+                    abort: () => {
+                      abortController?.abort();
+                    },
+                    [EMITTER_SYMBOL]: emitter,
+                    [STREAM_FORMAT_SYMBOL]: executionContext.format,
+                    engine: {},
+                    abortSignal: abortController?.signal,
+                    writer: new ToolStream(
+                      {
+                        prefix: 'workflow-step',
+                        callId: randomUUID(),
+                        name: 'conditional',
+                        runId,
+                      },
+                      writableStream,
+                    ),
+                  },
+                  {
+                    paramName: 'runCount',
+                    deprecationMessage: runCountDeprecationMessage,
+                    logger: this.logger,
+                  },
+                ),
               ),
             );
 

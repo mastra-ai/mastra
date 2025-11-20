@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import { SpanType, wrapMastra } from '../../observability';
+import { executeWithContext } from '../../observability/utils';
 import { RequestContext } from '../../request-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
@@ -188,7 +189,10 @@ export class CoreToolBuilder extends MastraBase {
 
         if (isVercelTool(tool)) {
           // Handle Vercel tools (AI SDK tools)
-          result = await tool?.execute?.(args, execOptions as ToolExecutionOptions);
+          // Execute within the tool span's OTEL context for proper nesting
+          result = await executeWithContext(toolSpan, async () =>
+            tool?.execute?.(args, execOptions as ToolExecutionOptions),
+          );
         } else {
           // Handle Mastra tools - wrap mastra instance with tracing context for context propagation
 
@@ -290,7 +294,8 @@ export class CoreToolBuilder extends MastraBase {
             toolContext = baseContext;
           }
 
-          result = await tool?.execute?.(args, toolContext);
+          // Execute within the tool span's OTEL context for proper nesting
+          result = await executeWithContext(toolSpan, async () => tool?.execute?.(args, toolContext));
         }
 
         toolSpan?.end({ output: result });

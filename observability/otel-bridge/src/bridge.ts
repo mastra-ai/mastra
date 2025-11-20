@@ -13,7 +13,7 @@
  */
 
 import type { RequestContext } from '@mastra/core/di';
-import type { ObservabilityBridge, TracingEvent } from '@mastra/core/observability';
+import type { ObservabilityBridge, TracingEvent, AnySpan } from '@mastra/core/observability';
 import { TracingEventType } from '@mastra/core/observability';
 import { BaseExporter } from '@mastra/observability';
 import { trace, context as otelContext, type Context, type Span, SpanStatusCode, SpanKind } from '@opentelemetry/api';
@@ -171,6 +171,86 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   }
 
   /**
+   * Callback invoked when a Mastra span is created.
+   * Registers specific user-facing span types so they're available for context wrapping.
+   *
+   * @param span - The Mastra span that was just created
+   */
+  onSpanCreated(span: AnySpan): void {
+    // Only register spans where user code might execute
+    const shouldRegister =
+      span.type === 'tool_call' ||
+      span.type === 'mcp_tool_call' ||
+      span.type === 'workflow_step' ||
+      span.type === 'workflow_conditional_eval';
+
+    if (shouldRegister) {
+      this.registerSpan(span.id, span.getParentSpanId(), span.type, span.name, span.startTime);
+    }
+  }
+
+  /**
+   * Synchronously register a span for context wrapping.
+   * This is called immediately when a span is created (before user code executes),
+   * ensuring the span is available for executeInContext/executeInContextSync.
+   *
+   * @param spanId - Mastra span ID
+   * @param parentSpanId - Parent Mastra span ID (if any)
+   * @param spanType - Type of span (for determining OTEL span kind)
+   * @param spanName - Name of the span
+   * @param startTime - When the span started
+   */
+  private registerSpan(
+    spanId: string,
+    parentSpanId: string | undefined,
+    spanType: string,
+    spanName: string,
+    startTime: Date,
+  ): void {
+    try {
+      // Determine parent context
+      let parentContext: Context;
+      if (parentSpanId) {
+        const parentEntry = this.spanMap.get(parentSpanId);
+        if (parentEntry) {
+          parentContext = parentEntry.otelContext;
+        } else {
+          parentContext = otelContext.active();
+        }
+      } else {
+        parentContext = otelContext.active();
+      }
+
+      // Create OTEL span
+      const otelSpan = this.tracer.startSpan(
+        spanName,
+        {
+          startTime,
+          kind: mapSpanKind(spanType),
+        },
+        parentContext,
+      );
+
+      // Set identifying attributes
+      otelSpan.setAttribute('mastra.span.type', spanType);
+      otelSpan.setAttribute('mastra.span.id', spanId);
+
+      // Create context with this span active
+      const spanContext = trace.setSpan(parentContext, otelSpan);
+
+      // Store for later retrieval
+      this.spanMap.set(spanId, { otelSpan, otelContext: spanContext });
+
+      console.log(
+        `[OtelBridge.registerSpan] Registered span [mastraId=${spanId}] [otelSpanId=${otelSpan.spanContext().spanId}] ` +
+          `[type=${spanType}] [mapSize=${this.spanMap.size}]`,
+      );
+    } catch (error) {
+      this.logger.error('[OtelBridge] Failed to register span:', error);
+    }
+  }
+
+  /**
    * Handle SPAN_STARTED event
    *
    * Creates an OTEL span and stores it with its context for later use.
@@ -181,56 +261,14 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
     try {
       const mastraSpan = event.exportedSpan;
 
-      // Determine parent context: use Mastra parent span's context if available,
-      // otherwise use active OTEL context (HTTP request span)
-      let parentContext: Context;
-      if (mastraSpan.parentSpanId) {
-        const parentEntry = this.spanMap.get(mastraSpan.parentSpanId);
-        if (parentEntry) {
-          parentContext = parentEntry.otelContext;
-          this.logger.debug(
-            `[OtelBridge] Using parent span context [parentId=${mastraSpan.parentSpanId}] for [id=${mastraSpan.id}]`,
-          );
-        } else {
-          // Parent not found in map, fall back to active context
-          parentContext = otelContext.active();
-          this.logger.debug(
-            `[OtelBridge] Parent span not found [parentId=${mastraSpan.parentSpanId}], using active context for [id=${mastraSpan.id}]`,
-          );
-        }
-      } else {
-        // No parent span ID, this is a root Mastra span
-        parentContext = otelContext.active();
-        this.logger.debug(`[OtelBridge] No parent span, using active context for root span [id=${mastraSpan.id}]`);
+      // Skip if already registered synchronously
+      if (this.spanMap.has(mastraSpan.id)) {
+        this.logger.debug(`[OtelBridge] Span already registered [id=${mastraSpan.id}], skipping async registration`);
+        return;
       }
 
-      this.logger.debug(
-        `[OtelBridge] Creating OTEL span for Mastra span [id=${mastraSpan.id}] [name=${mastraSpan.name}]`,
-      );
-
-      // Create OTEL span with minimal info (final attributes set at SPAN_ENDED)
-      const otelSpan = this.tracer.startSpan(
-        mastraSpan.name,
-        {
-          startTime: mastraSpan.startTime,
-          kind: mapSpanKind(mastraSpan.type),
-        },
-        parentContext,
-      );
-
-      // Set mastra.span.type immediately so it's available for identification
-      otelSpan.setAttribute('mastra.span.type', mastraSpan.type);
-      otelSpan.setAttribute('mastra.span.id', mastraSpan.id);
-
-      // Create context with this span active
-      const spanContext = trace.setSpan(parentContext, otelSpan);
-
-      // Store for later retrieval
-      this.spanMap.set(mastraSpan.id, { otelSpan, otelContext: spanContext });
-
-      this.logger.debug(
-        `[OtelBridge] Created OTEL span [mastraId=${mastraSpan.id}] [otelSpanId=${otelSpan.spanContext().spanId}]`,
-      );
+      // Register the span (for spans that weren't registered synchronously)
+      this.registerSpan(mastraSpan.id, mastraSpan.parentSpanId, mastraSpan.type, mastraSpan.name, mastraSpan.startTime);
     } catch (error) {
       this.logger.error('[OtelBridge] Failed to handle SPAN_STARTED:', error);
     }
@@ -322,6 +360,57 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
     } catch (error) {
       this.logger.error('[OtelBridge] Failed to handle SPAN_ENDED:', error);
     }
+  }
+
+  /**
+   * Execute a function (sync or async) within the OTEL context of a Mastra span.
+   * Retrieves the stored OTEL context for the span and executes the function within it.
+   *
+   * This is the core implementation used by both executeInContext and executeInContextSync.
+   *
+   * @param spanId - The ID of the Mastra span to use as context
+   * @param fn - The function to execute within the span context
+   * @returns The result of the function execution
+   */
+  private executeWithSpanContext<T>(spanId: string, fn: () => T): T {
+    const entry = this.spanMap.get(spanId);
+
+    // Debug logging
+    const activeSpan = trace.getSpan(otelContext.active());
+    console.log(
+      `[OtelBridge.executeWithSpanContext] spanId=${spanId}, ` +
+        `inMap=${!!entry}, ` +
+        `activeOtelSpan=${activeSpan?.spanContext().spanId || 'none'}, ` +
+        `storedOtelSpan=${entry?.otelSpan.spanContext().spanId || 'none'}`,
+    );
+
+    const spanContext = entry?.otelContext;
+    if (spanContext) {
+      return otelContext.with(spanContext, fn);
+    }
+    return fn();
+  }
+
+  /**
+   * Execute an async function within the OTEL context of a Mastra span.
+   *
+   * @param spanId - The ID of the Mastra span to use as context
+   * @param fn - The async function to execute within the span context
+   * @returns The result of the function execution
+   */
+  executeInContext<T>(spanId: string, fn: () => Promise<T>): Promise<T> {
+    return this.executeWithSpanContext(spanId, fn);
+  }
+
+  /**
+   * Execute a synchronous function within the OTEL context of a Mastra span.
+   *
+   * @param spanId - The ID of the Mastra span to use as context
+   * @param fn - The synchronous function to execute within the span context
+   * @returns The result of the function execution
+   */
+  executeInContextSync<T>(spanId: string, fn: () => T): T {
+    return this.executeWithSpanContext(spanId, fn);
   }
 
   /**

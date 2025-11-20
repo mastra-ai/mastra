@@ -106,6 +106,13 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     } else {
       this.input = deepClean(options.input);
     }
+
+    // Notify bridge of span creation so it can set up context synchronously
+    // before user code executes within this span
+    const bridge = observabilityInstance.getBridge();
+    if (bridge?.onSpanCreated) {
+      bridge.onSpanCreated(this as AnySpan);
+    }
   }
 
   // Methods for span lifecycle
@@ -196,6 +203,34 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
 
   get externalTraceId(): string | undefined {
     return this.isValid ? this.traceId : undefined;
+  }
+
+  /**
+   * Execute an async function within this span's tracing context.
+   * Delegates to the bridge if available.
+   */
+  async executeInContext<T>(fn: () => Promise<T>): Promise<T> {
+    const bridge = this.observabilityInstance.getBridge();
+
+    if (bridge?.executeInContext) {
+      return bridge.executeInContext(this.id, fn);
+    }
+
+    return fn();
+  }
+
+  /**
+   * Execute a synchronous function within this span's tracing context.
+   * Delegates to the bridge if available.
+   */
+  executeInContextSync<T>(fn: () => T): T {
+    const bridge = this.observabilityInstance.getBridge();
+
+    if (bridge?.executeInContextSync) {
+      return bridge.executeInContextSync(this.id, fn);
+    }
+
+    return fn();
   }
 }
 
