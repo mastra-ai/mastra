@@ -20,6 +20,7 @@ import {
   LIST_WORKFLOW_RUNS_ROUTE,
   GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE,
 } from './workflows';
+import { createTestRuntimeContext } from './test-utils';
 
 vi.mock('zod', async importOriginal => {
   const actual: {} = await importOriginal();
@@ -127,13 +128,16 @@ describe('vNext Workflow Handlers', () => {
 
     it('should throw error when workflow is not found', async () => {
       await expect(
-        GET_WORKFLOW_BY_ID_ROUTE.handler({ mastra: mockMastra, workflowId: 'non-existent' }),
+        GET_WORKFLOW_BY_ID_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra: mockMastra }),
+          workflowId: 'non-existent',
+        }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
     });
 
     it('should get workflow by ID successfully', async () => {
       const result = await GET_WORKFLOW_BY_ID_ROUTE.handler({
-        mastra: mockMastra,
+        ...createTestRuntimeContext({ mastra: mockMastra }),
         workflowId: 'test-workflow',
       });
 
@@ -154,7 +158,7 @@ describe('vNext Workflow Handlers', () => {
     it('should throw error when workflow is not found', async () => {
       await expect(
         START_ASYNC_WORKFLOW_ROUTE.handler({
-          mastra: mockMastra,
+          ...createTestRuntimeContext({ mastra: mockMastra }),
           workflowId: 'non-existent',
           runId: 'test-run',
         }),

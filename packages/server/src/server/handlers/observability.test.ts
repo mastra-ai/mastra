@@ -4,7 +4,13 @@ import type { MastraStorage, TraceRecord } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import * as errorHandler from './error';
-import { getTraceHandler, getTracesPaginatedHandler, listScoresBySpan, scoreTracesHandler } from './observability';
+import {
+  getTraceHandler,
+  getTracesPaginatedHandler,
+  GET_TRACES_PAGINATED_ROUTE,
+  listScoresBySpan,
+  scoreTracesHandler,
+} from './observability';
 
 // Mock scoreTraces
 vi.mock('@mastra/core/evals/scoreTraces', () => ({
@@ -351,6 +357,37 @@ describe('Observability Handlers', () => {
           expect(error.message).toBe('Invalid date format in date range');
         }
       });
+
+      // it('should handle dateRange from JSON query parameter (route-level test)', async () => {
+      //   const mockResult = {
+      //     traces: [],
+      //     totalItems: 0,
+      //     totalPages: 0,
+      //     currentPage: 1,
+      //     perPage: 10,
+      //   };
+
+      //   (mockStorage.getTracesPaginated as any).mockResolvedValue(mockResult);
+
+      //   // Simulate how the route receives dateRange as JSON string from query params
+      //   const dateRangeJson = JSON.stringify({
+      //     start: '2024-01-01T00:00:00.000Z',
+      //     end: '2024-01-31T23:59:59.999Z',
+      //   });
+
+      //   const result = await GET_TRACES_PAGINATED_ROUTE.handler({
+      //     mastra: mockMastra,
+      //     requestContext: new RequestContext(),
+      //     abortSignal: new AbortController().signal,
+      //     page: 1,
+      //     perPage: 10,
+      //     dateRange: dateRangeJson,
+      //   });
+
+      //   expect(result).toEqual(mockResult);
+      //   // After the fix, this should be called with properly converted Date objects
+      //   expect(mockStorage.getTracesPaginated).toHaveBeenCalled();
+      // });
     });
 
     it('should call handleError when storage throws', async () => {

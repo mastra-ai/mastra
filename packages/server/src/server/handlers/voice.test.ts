@@ -4,6 +4,7 @@ import type { MastraVoice } from '@mastra/core/voice';
 import { CompositeVoice } from '@mastra/core/voice';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET_SPEAKERS_ROUTE, GENERATE_SPEECH_ROUTE, TRANSCRIBE_SPEECH_ROUTE } from './voice';
+import { createTestRuntimeContext } from './test-utils';
 
 vi.mock('@mastra/core/voice');
 
@@ -46,20 +47,24 @@ describe('Voice Handlers', () => {
 
   describe('getSpeakersHandler', () => {
     it('should throw error when agentId is not provided', async () => {
-      await expect(GET_SPEAKERS_ROUTE.handler({ mastra })).rejects.toThrow('Agent ID is required');
+      await expect(
+        GET_SPEAKERS_ROUTE.handler({ ...createTestRuntimeContext({ mastra }), agentId: undefined as any }),
+      ).rejects.toThrow('Agent ID is required');
     });
 
     it('should throw error when agent is not found', async () => {
-      await expect(GET_SPEAKERS_ROUTE.handler({ mastra, agentId: 'non-existent' })).rejects.toThrow(
-        'Agent with id non-existent not found',
-      );
+      await expect(
+        GET_SPEAKERS_ROUTE.handler({ ...createTestRuntimeContext({ mastra }), agentId: 'non-existent' as any }),
+      ).rejects.toThrow('Agent with id non-existent not found');
     });
 
     it('should throw error when agent does not have voice capabilities', async () => {
       const agentWithoutVoice = createAgentWithVoice();
       await expect(
         GET_SPEAKERS_ROUTE.handler({
-          mastra: new Mastra({ logger: false, agents: { 'test-agent': agentWithoutVoice } }),
+          ...createTestRuntimeContext({
+            mastra: new Mastra({ logger: false, agents: { 'test-agent': agentWithoutVoice } }),
+          }),
           agentId: 'test-agent',
         }),
       ).rejects.toThrow('No voice provider configured');
@@ -74,7 +79,7 @@ describe('Voice Handlers', () => {
       } as any);
 
       const result = await GET_SPEAKERS_ROUTE.handler({
-        mastra: new Mastra({ logger: false, agents: { 'test-agent': agent } }),
+        ...createTestRuntimeContext({ mastra: new Mastra({ logger: false, agents: { 'test-agent': agent } }) }),
         agentId: 'test-agent',
       });
 
@@ -86,9 +91,10 @@ describe('Voice Handlers', () => {
     it('should throw error when agentId is not provided', async () => {
       await expect(
         GENERATE_SPEECH_ROUTE.handler({
-          mastra,
+          ...createTestRuntimeContext({ mastra }),
           text: 'test',
           speakerId: '1',
+          agentId: undefined as any,
         }),
       ).rejects.toThrow('Agent ID is required');
     });
@@ -96,7 +102,7 @@ describe('Voice Handlers', () => {
     it('should throw error when text or speakerId is not provided', async () => {
       await expect(
         GENERATE_SPEECH_ROUTE.handler({
-          mastra,
+          ...createTestRuntimeContext({ mastra }),
           agentId: 'test-agent',
           text: 'test',
         }),
@@ -106,7 +112,7 @@ describe('Voice Handlers', () => {
     it('should throw error when agent is not found', async () => {
       await expect(
         GENERATE_SPEECH_ROUTE.handler({
-          mastra,
+          ...createTestRuntimeContext({ mastra }),
           agentId: 'non-existent',
           text: 'test',
           speakerId: '1',
@@ -119,7 +125,9 @@ describe('Voice Handlers', () => {
 
       await expect(
         GENERATE_SPEECH_ROUTE.handler({
-          mastra: new Mastra({ logger: false, agents: { 'test-agent': agentWithoutVoice } }),
+          ...createTestRuntimeContext({
+            mastra: new Mastra({ logger: false, agents: { 'test-agent': agentWithoutVoice } }),
+          }),
           agentId: 'test-agent',
           text: 'test',
           speakerId: '1',
@@ -137,7 +145,7 @@ describe('Voice Handlers', () => {
 
       await expect(
         GENERATE_SPEECH_ROUTE.handler({
-          mastra: new Mastra({ logger: false, agents: { 'test-agent': agent } }),
+          ...createTestRuntimeContext({ mastra: new Mastra({ logger: false, agents: { 'test-agent': agent } }) }),
           agentId: 'test-agent',
           text: 'test',
           speakerId: '1',
@@ -159,7 +167,7 @@ describe('Voice Handlers', () => {
       } as any);
 
       const audioStream = await GENERATE_SPEECH_ROUTE.handler({
-        mastra: new Mastra({ logger: false, agents: { 'test-agent': agent } }),
+        ...createTestRuntimeContext({ mastra: new Mastra({ logger: false, agents: { 'test-agent': agent } }) }),
         agentId: 'test-agent',
         text: 'test',
         speakerId: '1',
@@ -186,7 +194,7 @@ describe('Voice Handlers', () => {
       } as any);
 
       const audioStream = await GENERATE_SPEECH_ROUTE.handler({
-        mastra: new Mastra({ logger: false, agents: { 'test-agent': agent } }),
+        ...createTestRuntimeContext({ mastra: new Mastra({ logger: false, agents: { 'test-agent': agent } }) }),
         agentId: 'test-agent',
         text: 'test',
         speakerId: '1',
@@ -201,7 +209,8 @@ describe('Voice Handlers', () => {
     it('should throw error when agentId is not provided', async () => {
       await expect(
         TRANSCRIBE_SPEECH_ROUTE.handler({
-          mastra,
+          ...createTestRuntimeContext({ mastra }),
+          agentId: undefined as any,
           audioData: Buffer.from('test'),
         }),
       ).rejects.toThrow('Agent ID is required');
@@ -210,8 +219,9 @@ describe('Voice Handlers', () => {
     it('should throw error when audioData is not provided', async () => {
       await expect(
         TRANSCRIBE_SPEECH_ROUTE.handler({
-          mastra,
+          ...createTestRuntimeContext({ mastra }),
           agentId: 'test-agent',
+          audioData: undefined as any,
         }),
       ).rejects.toThrow('Audio data is required');
     });
@@ -219,7 +229,7 @@ describe('Voice Handlers', () => {
     it('should throw error when agent is not found', async () => {
       await expect(
         TRANSCRIBE_SPEECH_ROUTE.handler({
-          mastra,
+          ...createTestRuntimeContext({ mastra }),
           agentId: 'non-existent',
           audioData: Buffer.from('test'),
         }),
@@ -231,7 +241,9 @@ describe('Voice Handlers', () => {
 
       await expect(
         TRANSCRIBE_SPEECH_ROUTE.handler({
-          mastra: new Mastra({ logger: false, agents: { 'test-agent': agentWithoutVoice } }),
+          ...createTestRuntimeContext({
+            mastra: new Mastra({ logger: false, agents: { 'test-agent': agentWithoutVoice } }),
+          }),
           agentId: 'test-agent',
           audioData: Buffer.from('test'),
         }),
@@ -247,7 +259,7 @@ describe('Voice Handlers', () => {
       } as any);
 
       const result = await TRANSCRIBE_SPEECH_ROUTE.handler({
-        mastra,
+        ...createTestRuntimeContext({ mastra }),
         agentId: 'test-agent',
         audioData: Buffer.from('test'),
         options: { language: 'en' },

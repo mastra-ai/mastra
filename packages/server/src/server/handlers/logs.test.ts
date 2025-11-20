@@ -5,6 +5,7 @@ import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import { LIST_LOGS_ROUTE, LIST_LOGS_BY_RUN_ID_ROUTE, LIST_LOG_TRANSPORTS_ROUTE } from './logs';
+import { createTestRuntimeContext } from './test-utils';
 
 type MockedLogger = {
   listLogsByRunId: Mock<IMastraLogger['listLogsByRunId']>;
@@ -57,9 +58,9 @@ describe('Logs Handlers', () => {
 
   describe('listLogsHandler', () => {
     it('should throw error when transportId is not provided', async () => {
-      await expect(LIST_LOGS_ROUTE.handler({ mastra })).rejects.toThrow(
-        new HTTPException(400, { message: 'Argument "transportId" is required' }),
-      );
+      await expect(
+        LIST_LOGS_ROUTE.handler({ ...createTestRuntimeContext({ mastra }), page: 1, transportId: undefined as any }),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Argument "transportId" is required' }));
     });
 
     it('should get logs successfully', async () => {
@@ -67,7 +68,8 @@ describe('Logs Handlers', () => {
 
       mockLogger.listLogs.mockResolvedValue({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
       const result = await LIST_LOGS_ROUTE.handler({
-        mastra,
+        ...createTestRuntimeContext({ mastra }),
+        page: 0,
         transportId: 'test-transport',
       });
 
@@ -80,9 +82,10 @@ describe('Logs Handlers', () => {
 
       mockLogger.listLogs.mockResolvedValue({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
       const result = await LIST_LOGS_ROUTE.handler({
-        mastra,
+        ...createTestRuntimeContext({ mastra }),
         transportId: 'test-transport',
         logLevel: LogLevel.INFO,
+        page: 0,
       });
 
       expect(result).toEqual({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
@@ -90,15 +93,35 @@ describe('Logs Handlers', () => {
         logLevel: LogLevel.INFO,
       });
     });
+
+    // it('should handle filters with colons in values correctly', async () => {
+    //   const mockLogs: BaseLogMessage[] = [createLog({})];
+
+    //   mockLogger.listLogs.mockResolvedValue({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
+    //   const result = await LIST_LOGS_ROUTE.handler({
+    //     mastra,
+    //     transportId: 'test-transport',
+    //     filters: ['timestamp:2024-01-01T10:30:00', 'url:https://example.com'],
+    //   });
+
+    //   expect(result).toEqual({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
+    //   expect(mockLogger.listLogs).toHaveBeenCalledWith('test-transport', {
+    //     filters: {
+    //       timestamp: '2024-01-01T10:30:00',
+    //       url: 'https://example.com',
+    //     },
+    //   });
+    // });
   });
 
   describe('listLogsByRunIdHandler', () => {
     it('should throw error when runId is not provided', async () => {
       await expect(
         LIST_LOGS_BY_RUN_ID_ROUTE.handler({
-          mastra,
+          ...createTestRuntimeContext({ mastra }),
           runId: undefined as any,
           transportId: 'test-transport',
+          page: 1,
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Argument "runId" is required' }));
     });
@@ -106,8 +129,10 @@ describe('Logs Handlers', () => {
     it('should throw error when transportId is not provided', async () => {
       await expect(
         LIST_LOGS_BY_RUN_ID_ROUTE.handler({
-          mastra,
+          ...createTestRuntimeContext({ mastra }),
           runId: 'test-run',
+          page: 1,
+          transportId: undefined as any,
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Argument "transportId" is required' }));
     });
@@ -123,9 +148,10 @@ describe('Logs Handlers', () => {
         hasMore: false,
       });
       const result = await LIST_LOGS_BY_RUN_ID_ROUTE.handler({
-        mastra,
+        ...createTestRuntimeContext({ mastra }),
         runId: 'test-run',
         transportId: 'test-transport',
+        page: 0,
       });
 
       expect(result).toEqual({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
@@ -143,7 +169,7 @@ describe('Logs Handlers', () => {
         ['file', {}],
       ]) as unknown as Record<string, unknown>;
 
-      const result = await LIST_LOG_TRANSPORTS_ROUTE.handler({ mastra });
+      const result = await LIST_LOG_TRANSPORTS_ROUTE.handler({ ...createTestRuntimeContext({ mastra }) });
 
       expect(result).toEqual({
         transports: ['console', 'file'],
@@ -151,9 +177,9 @@ describe('Logs Handlers', () => {
     });
 
     it('should handle empty transports', async () => {
-      mockLogger.transports = new Map<string, unknown>();
+      mockLogger.transports = new Map<string, unknown>() as unknown as Record<string, unknown>;
 
-      const result = await LIST_LOG_TRANSPORTS_ROUTE.handler({ mastra });
+      const result = await LIST_LOG_TRANSPORTS_ROUTE.handler({ ...createTestRuntimeContext({ mastra }) });
 
       expect(result).toEqual({
         transports: [],
