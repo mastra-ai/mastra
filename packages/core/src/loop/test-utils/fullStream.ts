@@ -1135,7 +1135,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
           tool1: tool({
             inputSchema: z.object({ value: z.string() }),
             execute: async (input, options) => {
-              console.info('TOOL 1', input, options);
+              // console.info('TOOL 1', input, options);
 
               expect(input).toStrictEqual({ value: 'value' });
               expect(options.messages).toStrictEqual([
