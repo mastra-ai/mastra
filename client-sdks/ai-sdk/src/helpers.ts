@@ -242,7 +242,13 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
         type: 'object',
         object: chunk.object,
       };
-
+    case 'tripwire':
+      return {
+        type: 'data-tripwire',
+        data: {
+          tripwireReason: chunk.payload.tripwireReason,
+        },
+      };
     default:
       if (chunk.type && 'payload' in chunk && chunk.payload) {
         return {
