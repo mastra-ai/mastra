@@ -725,6 +725,20 @@ describe('PIIDetector', () => {
 
       expect(detector.id).toBe('pii-detector');
     });
+
+    it('should accept providerOptions in constructor', () => {
+      const providerOptions = {
+        openai: { reasoningEffort: 'low' },
+      };
+      const model = setupMockModel(createMockPIIResult());
+
+      const detector = new PIIDetector({
+        model,
+        providerOptions,
+      });
+
+      expect(detector['providerOptions']).toEqual(providerOptions);
+    });
   });
 
   describe('edge cases', () => {

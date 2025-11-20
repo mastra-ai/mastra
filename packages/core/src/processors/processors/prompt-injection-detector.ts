@@ -1,3 +1,4 @@
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
@@ -65,6 +66,12 @@ export interface PromptInjectionOptions {
   includeScores?: boolean;
 
   /**
+   * Provider-specific options (e.g., OpenAI reasoningEffort)
+   * Passed to the internal detection agent's generate call
+   * Useful for controlling thinking models to reduce latency and token usage
+   */
+  providerOptions?: SharedV2ProviderOptions;
+  /**
    * Structured output options used for the detection agent
    */
   structuredOutputOptions?: {
@@ -91,6 +98,7 @@ export class PromptInjectionDetector implements Processor {
   private threshold: number;
   private strategy: 'block' | 'warn' | 'filter' | 'rewrite';
   private includeScores: boolean;
+  private providerOptions?: SharedV2ProviderOptions;
   private structuredOutputOptions?: PromptInjectionOptions['structuredOutputOptions'];
 
   // Default detection categories based on OWASP LLM01 and common attack patterns
@@ -108,6 +116,7 @@ export class PromptInjectionDetector implements Processor {
     this.threshold = options.threshold ?? 0.7; // Higher default threshold for security
     this.strategy = options.strategy || 'block';
     this.includeScores = options.includeScores ?? false;
+    this.providerOptions = options.providerOptions;
     this.structuredOutputOptions = options.structuredOutputOptions;
 
     this.detectionAgent = new Agent({
@@ -221,6 +230,7 @@ export class PromptInjectionDetector implements Processor {
           modelSettings: {
             temperature: 0,
           },
+          providerOptions: this.providerOptions,
           tracingContext,
         });
       } else {

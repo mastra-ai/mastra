@@ -387,6 +387,22 @@ describe('StructuredOutputProcessor', () => {
     });
   });
 
+  describe('configuration options', () => {
+    it('should accept providerOptions in constructor', () => {
+      const providerOptions = {
+        openai: { reasoningEffort: 'low' },
+      };
+
+      const customProcessor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        providerOptions,
+      });
+
+      expect(customProcessor['providerOptions']).toEqual(providerOptions);
+    });
+  });
+
   describe('integration scenarios', () => {
     it('should handle reasoning chunks', async () => {
       const { controller } = createMockController();

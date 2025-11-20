@@ -499,6 +499,20 @@ describe('ModerationProcessor', () => {
       // The custom instructions are used in the Agent constructor
       // which is mocked, but we can verify the processor was created successfully
     });
+
+    it('should accept providerOptions in constructor', () => {
+      const providerOptions = {
+        openai: { reasoningEffort: 'low' },
+      };
+      const model = setupMockModel({ object: createMockModerationResult(false) });
+
+      const moderator = new ModerationProcessor({
+        model,
+        providerOptions,
+      });
+
+      expect(moderator['providerOptions']).toEqual(providerOptions);
+    });
   });
 
   describe('edge cases', () => {

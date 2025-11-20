@@ -361,5 +361,18 @@ describe('SystemPromptScrubber', () => {
         new SystemPromptScrubber({} as any);
       }).toThrow('SystemPromptScrubber requires a model for detection');
     });
+
+    it('should accept providerOptions in constructor', () => {
+      const providerOptions = {
+        openai: { reasoningEffort: 'low' },
+      };
+
+      processor = new SystemPromptScrubber({
+        model: mockModel,
+        providerOptions,
+      });
+
+      expect(processor['providerOptions']).toEqual(providerOptions);
+    });
   });
 });

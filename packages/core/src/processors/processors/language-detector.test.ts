@@ -654,6 +654,21 @@ describe('LanguageDetector', () => {
 
       expect(detector.id).toBe('language-detector');
     });
+
+    it('should accept providerOptions in constructor', () => {
+      const providerOptions = {
+        openai: { reasoningEffort: 'low' },
+      };
+      const model = setupMockModel(createMockLanguageResult('English', 'en', 0.95, true));
+
+      const detector = new LanguageDetector({
+        model,
+        providerOptions,
+        targetLanguages: ['English'],
+      });
+
+      expect(detector['providerOptions']).toEqual(providerOptions);
+    });
   });
 
   describe('translation quality settings', () => {
