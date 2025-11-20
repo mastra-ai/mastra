@@ -1,5 +1,49 @@
 # @mastra/core
 
+## 1.0.0-beta.4
+
+### Patch Changes
+
+- Fix message list provider metadata handling and reasoning text optimization ([#10281](https://github.com/mastra-ai/mastra/pull/10281))
+  - Improved provider metadata preservation across message transformations
+  - Optimized reasoning text storage to avoid duplication (using `details` instead of `reasoning` field)
+  - Fixed test snapshots for timestamp precision and metadata handling
+
+- Allow provider to pass through options to the auth config ([#10284](https://github.com/mastra-ai/mastra/pull/10284))
+
+- Fix deprecation warning when agent network executes workflows by using `.fullStream` instead of iterating `WorkflowRunOutput` directly ([#10285](https://github.com/mastra-ai/mastra/pull/10285))
+
+- Fix generate toolResults and mismatch in provider tool names ([#10282](https://github.com/mastra-ai/mastra/pull/10282))
+
+- Support AI SDK voice models ([#10304](https://github.com/mastra-ai/mastra/pull/10304))
+
+  Mastra now supports AI SDK's transcription and speech models directly in `CompositeVoice`, enabling seamless integration with a wide range of voice providers through the AI SDK ecosystem. This allows you to use models from OpenAI, ElevenLabs, Groq, Deepgram, LMNT, Hume, and many more for both speech-to-text (transcription) and text-to-speech capabilities.
+
+  AI SDK models are automatically wrapped when passed to `CompositeVoice`, so you can mix and match AI SDK models with existing Mastra voice providers for maximum flexibility.
+
+  ## Usage Example
+
+  ```typescript
+  import { CompositeVoice } from '@mastra/core/voice';
+  import { openai } from '@ai-sdk/openai';
+  import { elevenlabs } from '@ai-sdk/elevenlabs';
+
+  // Use AI SDK models directly with CompositeVoice
+  const voice = new CompositeVoice({
+    input: openai.transcription('whisper-1'), // AI SDK transcription model
+    output: elevenlabs.speech('eleven_turbo_v2'), // AI SDK speech model
+  });
+
+  // Convert text to speech
+  const audioStream = await voice.speak('Hello from AI SDK!');
+
+  // Convert speech to text
+  const transcript = await voice.listen(audioStream);
+  console.log(transcript);
+  ```
+
+  Fixes #9947
+
 ## 1.0.0-beta.3
 
 ### Major Changes

@@ -1,5 +1,14 @@
 # @mastra/auth-workos
 
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- Allow provider to pass through options to the auth config ([#10284](https://github.com/mastra-ai/mastra/pull/10284))
+
+- Updated dependencies [[`a0a5b4b`](https://github.com/mastra-ai/mastra/commit/a0a5b4bbebe6c701ebbadf744873aa0d5ca01371)]:
+  - @mastra/auth@1.0.0-beta.1
+
 ## 1.0.0-beta.0
 
 ### Major Changes

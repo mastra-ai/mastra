@@ -1,5 +1,34 @@
 # @mastra/ai-sdk
 
+## 1.0.0-beta.3
+
+### Patch Changes
+
+- Added support for tripwire data chunks in streaming responses. ([#10269](https://github.com/mastra-ai/mastra/pull/10269))
+
+  Tripwire chunks allow the AI SDK to emit special data events when certain conditions are triggered during stream processing. These chunks include a `tripwireReason` field explaining why the tripwire was activated.
+
+  #### Usage
+
+  When converting Mastra chunks to AI SDK v5 format, tripwire chunks are now automatically handled:
+
+  ```typescript
+  // Tripwire chunks are converted to data-tripwire format
+  const chunk = {
+    type: 'tripwire',
+    payload: { tripwireReason: 'Rate limit approaching' }
+  };
+
+  // Converts to:
+  {
+    type: 'data-tripwire',
+    data: { tripwireReason: 'Rate limit approaching' }
+  }
+  ```
+
+- Updated dependencies [[`352a5d6`](https://github.com/mastra-ai/mastra/commit/352a5d625cfe09849b21e8f52a24c9f0366759d5), [`a0a5b4b`](https://github.com/mastra-ai/mastra/commit/a0a5b4bbebe6c701ebbadf744873aa0d5ca01371), [`69ea758`](https://github.com/mastra-ai/mastra/commit/69ea758358edd7117f191c2e69c8bb5fc79e7a1a), [`993ad98`](https://github.com/mastra-ai/mastra/commit/993ad98d7ad3bebda9ecef5fec5c94349a0d04bc), [`3ff2c17`](https://github.com/mastra-ai/mastra/commit/3ff2c17a58e312fad5ea37377262c12d92ca0908)]:
+  - @mastra/core@1.0.0-beta.4
+
 ## 1.0.0-beta.2
 
 ### Major Changes
