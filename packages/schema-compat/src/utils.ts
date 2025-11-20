@@ -1,6 +1,3 @@
-import { jsonSchema } from 'ai';
-import type { Schema } from 'ai';
-import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodSchema as ZodSchemaV3, ZodType as ZodTypeV3 } from 'zod/v3';
 import type { ZodType as ZodSchemaV4, ZodType as ZodTypeV4 } from 'zod/v4';
@@ -8,7 +5,10 @@ import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import { convertJsonSchemaToZod as convertJsonSchemaToZodV3 } from 'zod-from-json-schema-v3';
 import type { JSONSchema } from 'zod-from-json-schema-v3';
 import type { Targets } from 'zod-to-json-schema';
+import type { JSONSchema7 } from './json-schema';
+import { jsonSchema } from './json-schema';
 import type { SchemaCompatLayer } from './schema-compatibility';
+import type { Schema } from './types';
 import { zodToJsonSchema } from './zod-to-json';
 
 type ZodSchema = ZodSchemaV3 | ZodSchemaV4;
@@ -38,7 +38,7 @@ type ZodType = ZodTypeV3 | ZodTypeV4;
  * ```
  */
 // mirrors https://github.com/vercel/ai/blob/main/packages/ui-utils/src/zod-schema.ts#L21 but with a custom target
-export function convertZodSchemaToAISDKSchema(zodSchema: ZodSchema, target: Targets = 'jsonSchema7') {
+export function convertZodSchemaToAISDKSchema(zodSchema: ZodSchema, target: Targets = 'jsonSchema7'): Schema<any> {
   const jsonSchemaToUse = zodToJsonSchema(zodSchema, target) as JSONSchema7;
 
   return jsonSchema(jsonSchemaToUse, {

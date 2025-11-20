@@ -4,15 +4,16 @@ import { CopyIcon } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { useAgent } from '../hooks/use-agent';
 
 export interface AgentEntityHeaderProps {
   agentId: string;
-  isLoading: boolean;
-  agentName: string;
 }
 
-export const AgentEntityHeader = ({ agentId, isLoading, agentName }: AgentEntityHeaderProps) => {
+export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
+  const { data: agent, isLoading } = useAgent(agentId);
   const { handleCopy } = useCopyToClipboard({ text: agentId });
+  const agentName = agent?.name || '';
 
   return (
     <TooltipProvider>

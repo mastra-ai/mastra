@@ -29,6 +29,7 @@ memory.db-*
 .npmrc
 
 # Test directories
+packages/core/test-outputs/
 voice/**/test-outputs/
 voice/**/test-data/
 

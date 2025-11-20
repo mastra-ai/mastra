@@ -1,31 +1,31 @@
+import { randomUUID } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
+import {
+  ScoresStorage,
+  TABLE_SCORERS,
+  calculatePagination,
+  normalizePerPage,
+  safelyParseJSON,
+} from '@mastra/core/storage';
 import type { ConnectionPool } from 'mssql';
 import type { StoreOperationsMSSQL } from '../operations';
 import { getSchemaName, getTableName } from '../utils';
 
-function parseJSON(jsonString: string): any {
-  try {
-    return JSON.parse(jsonString);
-  } catch {
-    return jsonString;
-  }
-}
-
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
   return {
     ...row,
-    input: parseJSON(row.input),
-    scorer: parseJSON(row.scorer),
-    preprocessStepResult: parseJSON(row.preprocessStepResult),
-    analyzeStepResult: parseJSON(row.analyzeStepResult),
-    metadata: parseJSON(row.metadata),
-    output: parseJSON(row.output),
-    additionalContext: parseJSON(row.additionalContext),
-    runtimeContext: parseJSON(row.runtimeContext),
-    entity: parseJSON(row.entity),
+    input: safelyParseJSON(row.input),
+    scorer: safelyParseJSON(row.scorer),
+    preprocessStepResult: safelyParseJSON(row.preprocessStepResult),
+    analyzeStepResult: safelyParseJSON(row.analyzeStepResult),
+    metadata: safelyParseJSON(row.metadata),
+    output: safelyParseJSON(row.output),
+    additionalContext: safelyParseJSON(row.additionalContext),
+    requestContext: safelyParseJSON(row.requestContext),
+    entity: safelyParseJSON(row.entity),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   } as ScoreRowData;
@@ -78,9 +78,23 @@ export class ScoresMSSQL extends ScoresStorage {
   }
 
   async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    let validatedScore: ValidatedSaveScorePayload;
+    try {
+      validatedScore = saveScorePayloadSchema.parse(score);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_MSSQL_STORE_SAVE_SCORE_VALIDATION_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+
     try {
       // Generate ID like other storage implementations
-      const scoreId = crypto.randomUUID();
+      const scoreId = randomUUID();
 
       const {
         scorer,
@@ -90,25 +104,25 @@ export class ScoresMSSQL extends ScoresStorage {
         input,
         output,
         additionalContext,
-        runtimeContext,
+        requestContext,
         entity,
         ...rest
-      } = score;
+      } = validatedScore;
 
       await this.operations.insert({
         tableName: TABLE_SCORERS,
         record: {
           id: scoreId,
           ...rest,
-          input: JSON.stringify(input) || '',
-          output: JSON.stringify(output) || '',
-          preprocessStepResult: preprocessStepResult ? JSON.stringify(preprocessStepResult) : null,
-          analyzeStepResult: analyzeStepResult ? JSON.stringify(analyzeStepResult) : null,
-          metadata: metadata ? JSON.stringify(metadata) : null,
-          additionalContext: additionalContext ? JSON.stringify(additionalContext) : null,
-          runtimeContext: runtimeContext ? JSON.stringify(runtimeContext) : null,
-          entity: entity ? JSON.stringify(entity) : null,
-          scorer: scorer ? JSON.stringify(scorer) : null,
+          input: input || '',
+          output: output || '',
+          preprocessStepResult: preprocessStepResult || null,
+          analyzeStepResult: analyzeStepResult || null,
+          metadata: metadata || null,
+          additionalContext: additionalContext || null,
+          requestContext: requestContext || null,
+          entity: entity || null,
+          scorer: scorer || null,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
@@ -128,52 +142,90 @@ export class ScoresMSSQL extends ScoresStorage {
     }
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     pagination,
+    entityId,
+    entityType,
+    source,
   }: {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: string;
+    source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
-      const request = this.pool.request();
-      request.input('p1', scorerId);
+      // Build dynamic WHERE clause
+      const conditions: string[] = ['[scorerId] = @p1'];
+      const params: Record<string, any> = { p1: scorerId };
+      let paramIndex = 2;
 
-      const totalResult = await request.query(
-        `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [scorerId] = @p1`,
-      );
+      if (entityId) {
+        conditions.push(`[entityId] = @p${paramIndex}`);
+        params[`p${paramIndex}`] = entityId;
+        paramIndex++;
+      }
 
+      if (entityType) {
+        conditions.push(`[entityType] = @p${paramIndex}`);
+        params[`p${paramIndex}`] = entityType;
+        paramIndex++;
+      }
+
+      if (source) {
+        conditions.push(`[source] = @p${paramIndex}`);
+        params[`p${paramIndex}`] = source;
+        paramIndex++;
+      }
+
+      const whereClause = conditions.join(' AND ');
+      const tableName = getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) });
+
+      // Count query
+      const countRequest = this.pool.request();
+      Object.entries(params).forEach(([key, value]) => {
+        countRequest.input(key, value);
+      });
+
+      const totalResult = await countRequest.query(`SELECT COUNT(*) as count FROM ${tableName} WHERE ${whereClause}`);
       const total = totalResult.recordset[0]?.count || 0;
-
+      const { page, perPage: perPageInput } = pagination;
       if (total === 0) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageInput,
             hasMore: false,
           },
           scores: [],
         };
       }
 
-      const dataRequest = this.pool.request();
-      dataRequest.input('p1', scorerId);
-      dataRequest.input('p2', pagination.perPage);
-      dataRequest.input('p3', pagination.page * pagination.perPage);
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
 
-      const result = await dataRequest.query(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [scorerId] = @p1 ORDER BY [createdAt] DESC OFFSET @p3 ROWS FETCH NEXT @p2 ROWS ONLY`,
-      );
+      // Data query
+      const dataRequest = this.pool.request();
+      Object.entries(params).forEach(([key, value]) => {
+        dataRequest.input(key, value);
+      });
+      dataRequest.input('perPage', limitValue);
+      dataRequest.input('offset', start);
+
+      const dataQuery = `SELECT * FROM ${tableName} WHERE ${whereClause} ORDER BY [createdAt] DESC OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
+
+      const result = await dataRequest.query(dataQuery);
 
       return {
         pagination: {
           total: Number(total),
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: Number(total) > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
         scores: result.recordset.map(row => transformScoreRow(row)),
       };
@@ -190,7 +242,7 @@ export class ScoresMSSQL extends ScoresStorage {
     }
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -206,23 +258,29 @@ export class ScoresMSSQL extends ScoresStorage {
       );
 
       const total = totalResult.recordset[0]?.count || 0;
+      const { page, perPage: perPageInput } = pagination;
 
       if (total === 0) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageInput,
             hasMore: false,
           },
           scores: [],
         };
       }
 
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
+
       const dataRequest = this.pool.request();
       dataRequest.input('p1', runId);
-      dataRequest.input('p2', pagination.perPage);
-      dataRequest.input('p3', pagination.page * pagination.perPage);
+      dataRequest.input('p2', limitValue);
+      dataRequest.input('p3', start);
 
       const result = await dataRequest.query(
         `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [runId] = @p1 ORDER BY [createdAt] DESC OFFSET @p3 ROWS FETCH NEXT @p2 ROWS ONLY`,
@@ -231,9 +289,9 @@ export class ScoresMSSQL extends ScoresStorage {
       return {
         pagination: {
           total: Number(total),
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: Number(total) > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
         scores: result.recordset.map(row => transformScoreRow(row)),
       };
@@ -250,7 +308,7 @@ export class ScoresMSSQL extends ScoresStorage {
     }
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -269,24 +327,29 @@ export class ScoresMSSQL extends ScoresStorage {
       );
 
       const total = totalResult.recordset[0]?.count || 0;
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       if (total === 0) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
         };
       }
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
 
       const dataRequest = this.pool.request();
       dataRequest.input('p1', entityId);
       dataRequest.input('p2', entityType);
-      dataRequest.input('p3', pagination.perPage);
-      dataRequest.input('p4', pagination.page * pagination.perPage);
+      dataRequest.input('p3', limitValue);
+      dataRequest.input('p4', start);
 
       const result = await dataRequest.query(
         `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [entityId] = @p1 AND [entityType] = @p2 ORDER BY [createdAt] DESC OFFSET @p4 ROWS FETCH NEXT @p3 ROWS ONLY`,
@@ -295,9 +358,9 @@ export class ScoresMSSQL extends ScoresStorage {
       return {
         pagination: {
           total: Number(total),
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: Number(total) > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
         scores: result.recordset.map(row => transformScoreRow(row)),
       };
@@ -308,6 +371,76 @@ export class ScoresMSSQL extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { entityId, entityType },
+        },
+        error,
+      );
+    }
+  }
+
+  async listScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    try {
+      const request = this.pool.request();
+      request.input('p1', traceId);
+      request.input('p2', spanId);
+
+      const totalResult = await request.query(
+        `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [traceId] = @p1 AND [spanId] = @p2`,
+      );
+
+      const total = totalResult.recordset[0]?.count || 0;
+      const { page, perPage: perPageInput } = pagination;
+
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      if (total === 0) {
+        return {
+          pagination: {
+            total: 0,
+            page,
+            perPage: perPageForResponse,
+            hasMore: false,
+          },
+          scores: [],
+        };
+      }
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
+
+      const dataRequest = this.pool.request();
+      dataRequest.input('p1', traceId);
+      dataRequest.input('p2', spanId);
+      dataRequest.input('p3', limitValue);
+      dataRequest.input('p4', start);
+
+      const result = await dataRequest.query(
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [traceId] = @p1 AND [spanId] = @p2 ORDER BY [createdAt] DESC OFFSET @p4 ROWS FETCH NEXT @p3 ROWS ONLY`,
+      );
+
+      return {
+        pagination: {
+          total: Number(total),
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
+        },
+        scores: result.recordset.map(row => transformScoreRow(row)),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_SCORES_BY_SPAN_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { traceId, spanId },
         },
         error,
       );

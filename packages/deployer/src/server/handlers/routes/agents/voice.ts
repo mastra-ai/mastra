@@ -1,4 +1,4 @@
-import type { Mastra } from '@mastra/core';
+import type { Mastra } from '@mastra/core/mastra';
 import {
   getSpeakersHandler as getOriginalSpeakersHandler,
   generateSpeechHandler as getOriginalSpeakHandler,
@@ -17,10 +17,12 @@ export async function getSpeakersHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
+    const requestContext = c.get('requestContext');
 
     const speakers = await getOriginalSpeakersHandler({
       mastra,
       agentId,
+      requestContext,
     });
 
     return c.json(speakers);
@@ -36,11 +38,13 @@ export async function speakHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
+    const requestContext = c.get('requestContext');
     const { input, options } = await c.req.json();
 
     const audioStream = await getOriginalSpeakHandler({
       mastra,
       agentId,
+      requestContext,
       body: { text: input, speakerId: options?.speakerId },
     });
 
@@ -60,10 +64,11 @@ export async function getListenerHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
-
+    const requestContext = c.get('requestContext');
     const listeners = await getOriginalListenerHandler({
       mastra,
       agentId,
+      requestContext,
     });
 
     return c.json(listeners);
@@ -79,7 +84,7 @@ export async function listenHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
-
+    const requestContext = c.get('requestContext');
     const formData = await c.req.formData();
     const audioFile = formData.get('audio');
     const options = formData.get('options');
@@ -100,6 +105,7 @@ export async function listenHandler(c: Context) {
     const transcription = await getOriginalListenHandler({
       mastra,
       agentId,
+      requestContext,
       body: {
         audioData: Buffer.from(audioData),
         options: parsedOptions,

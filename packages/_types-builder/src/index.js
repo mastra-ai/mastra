@@ -10,9 +10,11 @@ const rgxFrom = /(?<=from )['|"](.*)['|"]/gm;
 export async function generateTypes(rootDir) {
   try {
     // Use spawn instead of exec to properly inherit stdio
-    const tscProcess = spawn('pnpm', ['tsc', '-p', 'tsconfig.build.json'], {
+    // Use shell: true for cross-platform compatibility
+    const tscProcess = spawn('npx', ['tsc', '-p', 'tsconfig.build.json'], {
       cwd: rootDir,
       stdio: 'inherit',
+      shell: true,
     });
 
     await new Promise((resolve, reject) => {
@@ -65,6 +67,6 @@ export async function generateTypes(rootDir) {
   } catch (err) {
     // TypeScript errors are already printed to console via stdio: 'inherit'
     // Just exit with the same code as tsc
-    process.exit(err.code || 1);
+    process.exit(typeof err.code === 'number' ? err.code : 1);
   }
 }

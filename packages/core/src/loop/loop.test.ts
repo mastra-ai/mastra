@@ -5,7 +5,6 @@ import { generateTextTestsV5 } from './test-utils/generateText';
 import { optionsTests } from './test-utils/options';
 import { resultObjectTests } from './test-utils/resultObject';
 import { streamObjectTests } from './test-utils/streamObject';
-import { telemetryTests } from './test-utils/telemetry';
 import { textStreamTests } from './test-utils/textStream';
 import { toolsTests } from './test-utils/tools';
 import { toUIMessageStreamTests } from './test-utils/toUIMessageStream';
@@ -14,7 +13,8 @@ import { mockDate } from './test-utils/utils';
 describe('Loop Tests', () => {
   describe('AISDK v5', () => {
     beforeEach(() => {
-      vi.useFakeTimers();
+      // Only fake Date to get deterministic timestamps, but allow async operations to proceed
+      vi.useFakeTimers({ toFake: ['Date'] });
       vi.setSystemTime(mockDate);
     });
 
@@ -27,7 +27,6 @@ describe('Loop Tests', () => {
     toUIMessageStreamTests({ loopFn: loop, runId: 'test-run-id' });
     resultObjectTests({ loopFn: loop, runId: 'test-run-id' });
     optionsTests({ loopFn: loop, runId: 'test-run-id' });
-    telemetryTests({ loopFn: loop, runId: 'test-run-id' });
     generateTextTestsV5({ loopFn: loop, runId: 'test-run-id' });
     toolsTests({ loopFn: loop, runId: 'test-run-id' });
 
@@ -35,8 +34,6 @@ describe('Loop Tests', () => {
   });
 
   // toolsTestsV5({ executeFn: execute, runId });
-
-  // telemetryTestsV5({ executeFn: execute, runId });
 
   // optionsTestsV5({ executeFn: execute, runId });
 

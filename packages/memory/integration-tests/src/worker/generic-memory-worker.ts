@@ -1,8 +1,8 @@
 import { parentPort, workerData } from 'worker_threads';
-import type { MastraMessageV2, SharedMemoryConfig } from '@mastra/core/memory';
+import type { MastraDBMessage, SharedMemoryConfig } from '@mastra/core/memory';
 import type { LibSQLConfig, LibSQLVectorConfig } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import type { PostgresConfig } from '@mastra/pg';
+import type { PostgresStoreConfig } from '@mastra/pg';
 import type { UpstashConfig } from '@mastra/upstash';
 import { mockEmbedder } from './mock-embedder.js';
 
@@ -18,13 +18,13 @@ enum StorageType {
 }
 interface WorkerTestConfig {
   storageTypeForWorker: StorageType;
-  storageConfigForWorker: LibSQLConfig | PostgresConfig | UpstashConfig;
+  storageConfigForWorker: LibSQLConfig | PostgresStoreConfig | UpstashConfig;
   vectorConfigForWorker?: LibSQLVectorConfig;
   memoryOptionsForWorker?: SharedMemoryConfig['options'];
 }
 
 interface MessageToProcess {
-  originalMessage: MastraMessageV2;
+  originalMessage: MastraDBMessage;
 }
 
 interface WorkerData {
@@ -44,19 +44,22 @@ async function initializeAndRun() {
     switch (storageType) {
       case 'libsql':
         const { LibSQLStore, LibSQLVector } = await import('@mastra/libsql');
-        store = new LibSQLStore(storageConfig as LibSQLConfig);
-        vector = new LibSQLVector(vectorConfig as LibSQLVectorConfig);
+        store = new LibSQLStore({ ...(storageConfig as LibSQLConfig), id: 'libsql-storage' });
+        vector = new LibSQLVector({ ...(vectorConfig as LibSQLVectorConfig), id: 'libsql-vector' });
         break;
       case 'upstash':
         const { UpstashStore } = await import('@mastra/upstash');
         const { LibSQLVector: UpstashLibSQLVector } = await import('@mastra/libsql');
-        store = new UpstashStore(storageConfig as UpstashConfig);
-        vector = new UpstashLibSQLVector({ connectionUrl: 'file:upstash-test-vector.db' });
+        store = new UpstashStore({ ...(storageConfig as UpstashConfig), id: 'upstash-storage' });
+        vector = new UpstashLibSQLVector({ connectionUrl: 'file:upstash-test-vector.db', id: 'upstash-vector' });
         break;
       case 'pg':
         const { PostgresStore, PgVector } = await import('@mastra/pg');
-        store = new PostgresStore(storageConfig as PostgresConfig);
-        vector = new PgVector({ connectionString: (storageConfig as { connectionString: string }).connectionString });
+        store = new PostgresStore({ ...(storageConfig as PostgresStoreConfig), id: 'pg-storage' });
+        vector = new PgVector({
+          connectionString: (storageConfig as { connectionString: string }).connectionString,
+          id: 'pg-vector',
+        });
         break;
       default:
         throw new Error(`Unsupported storageType in worker: ${storageType}`);
@@ -66,7 +69,7 @@ async function initializeAndRun() {
       storage: store,
       vector,
       embedder: mockEmbedder,
-      options: memoryOptions || { threads: { generateTitle: false } },
+      options: memoryOptions || { generateTitle: false },
     });
 
     for (const msgData of messages) {

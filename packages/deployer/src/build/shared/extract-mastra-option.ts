@@ -33,7 +33,9 @@ export function extractMastraOptionBundler(
       tsConfigPaths(),
       // transpile typescript to something we understand
       esbuild(),
-      optimizeLodashImports(),
+      optimizeLodashImports({
+        include: '**/*.{js,ts,mjs,cjs}',
+      }),
       commonjs({
         extensions: ['.js', '.ts'],
         strictRequires: 'strict',

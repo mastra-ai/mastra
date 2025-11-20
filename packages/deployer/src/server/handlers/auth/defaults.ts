@@ -3,6 +3,7 @@ import type { MastraAuthConfig } from '@mastra/core/server';
 // Default configuration that can be extended by clients
 export const defaultAuthConfig: MastraAuthConfig = {
   protected: ['/api/*'],
+  public: ['/api'],
   // Simple rule system
   rules: [
     // Admin users can do anything

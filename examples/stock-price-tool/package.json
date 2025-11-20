@@ -9,7 +9,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "description": "",
   "dependencies": {
     "@ai-sdk/openai": "latest",
@@ -17,10 +17,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@jest/globals": "^29.7.0",
-    "jest": "^29.7.0",
-    "mastra": "latest",
-    "ts-jest": "^29.2.6"
+    "mastra": "latest"
   },
   "pnpm": {
     "overrides": {

@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import fs from 'fs';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector } from '@mastra/libsql';
@@ -21,24 +22,25 @@ describe('Memory with UpstashStore Integration', () => {
       topK: 3,
       messageRange: 2,
     },
-    threads: {
-      generateTitle: false,
-    },
+    generateTitle: false,
   };
 
   const storageConfig = {
     url: 'http://localhost:8079',
     token: 'test_token',
+    id: randomUUID(),
   };
 
   const memory = new Memory({
     storage: new UpstashStore({
+      id: 'upstash-storage',
       url: 'http://localhost:8079',
       token: 'test_token',
     }),
     vector: new LibSQLVector({
       // TODO: use upstash vector in tests
       connectionUrl: 'file:upstash-test-vector.db',
+      id: randomUUID(),
     }),
     embedder: fastembed,
     options: memoryOptions,

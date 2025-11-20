@@ -7,9 +7,11 @@ import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: "learning-memory-storage",
     url: "file:../../memory.db",
   }),
   vector: new LibSQLVector({
+    id: "learning-memory-vector",
     connectionUrl: "file:../../memory.db",
   }),
   embedder: openai.embedding("text-embedding-3-small"),

@@ -1,0 +1,241 @@
+---
+title: "Reference: MastraModelGateway | Core"
+description: "Base class for creating custom model gateways"
+---
+
+# MastraModelGateway
+
+Abstract base class for implementing custom model gateways. Gateways handle provider-specific logic for accessing language models, including provider configuration, authentication, URL construction, and model instantiation.
+
+## Class Overview
+
+```typescript
+import { MastraModelGateway, type ProviderConfig } from '@mastra/core/llm';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+
+class MyCustomGateway extends MastraModelGateway {
+  readonly id = 'my-custom-gateway';
+  readonly name = 'My Custom Gateway';
+  readonly prefix = 'custom';
+
+  async fetchProviders(): Promise<Record<string, ProviderConfig>> {
+    return {
+      'my-provider': {
+        name: 'My Provider',
+        models: ['model-1', 'model-2'],
+        apiKeyEnvVar: 'MY_API_KEY',
+        gateway: this.id,
+      },
+    };
+  }
+
+  buildUrl(modelId: string, envVars?: Record<string, string>): string {
+    return 'https://api.my-provider.com/v1';
+  }
+
+  async getApiKey(modelId: string): Promise<string> {
+    const apiKey = process.env.MY_API_KEY;
+    if (!apiKey) throw new Error('MY_API_KEY not set');
+    return apiKey;
+  }
+
+  async resolveLanguageModel({
+    modelId,
+    providerId,
+    apiKey,
+  }: {
+    modelId: string;
+    providerId: string;
+    apiKey: string;
+  }): Promise<LanguageModelV2> {
+    const baseURL = this.buildUrl(`${providerId}/${modelId}`);
+    return createOpenAICompatible({
+      name: providerId,
+      apiKey,
+      baseURL,
+    }).chatModel(modelId);
+  }
+}
+```
+
+## Required Properties
+
+<PropertiesTable
+  content={[
+    {
+      name: 'id',
+      type: 'string',
+      description: 'Unique identifier for the gateway. Used for versioning and identification.',
+    },
+    {
+      name: 'name',
+      type: 'string',
+      description: 'Human-readable name for the gateway.',
+    },
+  ]}
+/>
+
+## Optional Properties
+
+<PropertiesTable
+  content={[
+    {
+      name: 'prefix',
+      type: 'string | undefined',
+      description: 'Optional prefix for provider IDs. If set, all providers from this gateway will be prefixed (e.g., "netlify/openai"). Registry gateways typically don\'t have a prefix.',
+    },
+  ]}
+/>
+
+## Required Methods
+
+### fetchProviders()
+
+Fetches provider configurations from the gateway.
+
+**Returns:** `Promise<Record<string, ProviderConfig>>`
+
+**ProviderConfig Structure:**
+<PropertiesTable
+  content={[
+    {
+      name: 'name',
+      type: 'string',
+      description: 'Display name of the provider',
+    },
+    {
+      name: 'models',
+      type: 'string[]',
+      description: 'Array of available model IDs',
+    },
+    {
+      name: 'apiKeyEnvVar',
+      type: 'string | string[]',
+      description: 'Environment variable(s) for API key',
+    },
+    {
+      name: 'gateway',
+      type: 'string',
+      description: 'Gateway identifier',
+    },
+    {
+      name: 'url',
+      type: 'string',
+      isOptional: true,
+      description: 'Optional base API URL',
+    },
+    {
+      name: 'apiKeyHeader',
+      type: 'string',
+      isOptional: true,
+      description: 'Optional custom auth header name',
+    },
+    {
+      name: 'docUrl',
+      type: 'string',
+      isOptional: true,
+      description: 'Optional documentation URL',
+    },
+  ]}
+/>
+
+### buildUrl()
+
+Builds the API URL for a specific model/provider combination.
+
+**Parameters:**
+<PropertiesTable
+  content={[
+    {
+      name: 'modelId',
+      type: 'string',
+      description: 'Full model ID (e.g., "custom/my-provider/model-1")',
+    },
+    {
+      name: 'envVars',
+      type: 'Record<string, string>',
+      isOptional: true,
+      description: 'Optional environment variables',
+    },
+  ]}
+/>
+
+**Returns:** `string | undefined | Promise<string | undefined>`
+
+### getApiKey()
+
+Retrieves the API key for authentication.
+
+**Parameters:**
+<PropertiesTable
+  content={[
+    {
+      name: 'modelId',
+      type: 'string',
+      description: 'Full model ID',
+    },
+  ]}
+/>
+
+**Returns:** `Promise<string>`
+
+### resolveLanguageModel()
+
+Creates a language model instance.
+
+**Parameters:**
+<PropertiesTable
+  content={[
+    {
+      name: 'modelId',
+      type: 'string',
+      description: 'The model ID',
+    },
+    {
+      name: 'providerId',
+      type: 'string',
+      description: 'The provider ID',
+    },
+    {
+      name: 'apiKey',
+      type: 'string',
+      description: 'The API key for authentication',
+    },
+  ]}
+/>
+
+**Returns:** `Promise<LanguageModelV2> | LanguageModelV2`
+
+## Instance Methods
+
+### getId()
+
+Returns the gateway's unique identifier.
+
+**Returns:** `string` - The gateway's `id` property
+
+## Model ID Format
+
+When a gateway has a prefix, models are accessed using this format:
+
+```
+[prefix]/[provider]/[model]
+```
+
+Examples:
+- With prefix `'custom'`: `'custom/my-provider/model-1'`
+- Without prefix: `'my-provider/model-1'`
+
+## Built-in Implementations
+
+- **NetlifyGateway** - Netlify AI Gateway integration
+- **ModelsDevGateway** - Registry of OpenAI-compatible providers
+
+## Related
+
+- [Custom Gateways Guide](/models/v1/gateways/custom-gateways) - Complete guide to creating custom gateways
+- [Mastra.addGateway()](/reference/v1/core/addGateway) - Add a gateway to Mastra
+- [Mastra.getGateway()](/reference/v1/core/getGateway) - Get gateway by registration key
+- [Mastra.getGatewayById()](/reference/v1/core/getGatewayById) - Get gateway by ID
+- [Mastra.listGateways()](/reference/v1/core/listGateways) - List all gateways

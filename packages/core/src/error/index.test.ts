@@ -36,6 +36,25 @@ describe('MastraError (Base Class)', () => {
     expect(error.message).toBe('Test error message');
   });
 
+  it('should handle object errors with details preserved', () => {
+    const objectError = {
+      type: 'error',
+      sequence_number: 2,
+      error: {
+        type: 'invalid_request_error',
+        code: 'context_length_exceeded',
+        message: 'Your input exceeds the context window of this model. Please adjust your input and try again.',
+        param: 'input',
+      },
+    };
+    const error = new MastraError(sampleErrorDefinition, objectError);
+    // The message should now contain the stringified object details
+    expect(error.message).toContain('context_length_exceeded');
+    expect(error.message).toContain('Your input exceeds the context window');
+    expect(error.message).toContain('sequence_number');
+    expect(error.message).toContain('invalid_request_error');
+  });
+
   it('should create a base error with a cause', () => {
     const cause = new Error('Original cause');
     const error = new MastraError(sampleErrorDefinition, cause);

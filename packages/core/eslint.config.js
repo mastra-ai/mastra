@@ -6,6 +6,6 @@ const config = await createConfig();
 export default [
   ...config,
   {
-    ignores: ['./*.d.ts', '**/*.d.ts', '!src/**/*.d.ts'],
+    ignores: ['./*.d.ts', '**/*.d.ts', '!src/**/*.d.ts', '**/test-utils/**'],
   },
 ];

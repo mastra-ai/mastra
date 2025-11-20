@@ -65,7 +65,7 @@ pnpm run tokens
 To create a custom processor, implement the `MemoryProcessor` interface:
 
 ```typescript
-import type { CoreMessage } from '@mastra/core';
+import type { CoreMessage } from '@mastra/core/llm';
 import type { MemoryProcessor } from '@mastra/core/memory';
 
 class CustomProcessor implements MemoryProcessor {

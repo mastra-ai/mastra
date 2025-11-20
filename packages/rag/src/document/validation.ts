@@ -1,24 +1,8 @@
 import { z } from 'zod';
 import type { ChunkStrategy } from './types';
 
-function handleDeprecatedSize<T extends { size?: number; maxSize?: number }>(data: T): Omit<T, 'size'> {
-  if (data.size !== undefined) {
-    console.warn(
-      '[DEPRECATION] `size` is deprecated. Use `maxSize` instead. This will be removed in the next major version.',
-    );
-
-    if (data.maxSize === undefined) {
-      data.maxSize = data.size;
-    }
-  }
-
-  const { size, ...rest } = data;
-  return rest;
-}
-
 // Base options that apply to all strategies
 const baseChunkOptionsSchema = z.object({
-  size: z.number().positive().optional(),
   maxSize: z.number().positive().optional(),
   overlap: z.number().min(0).optional(),
   lengthFunction: z.function().optional(),
@@ -122,15 +106,15 @@ const latexChunkOptionsSchema = baseChunkOptionsSchema.strict();
 
 // Strategy-specific validation schemas
 const validationSchemas = {
-  character: characterChunkOptionsSchema.transform(handleDeprecatedSize),
-  recursive: recursiveChunkOptionsSchema.transform(handleDeprecatedSize),
-  sentence: sentenceChunkOptionsSchema.transform(handleDeprecatedSize),
-  token: tokenChunkOptionsSchema.transform(handleDeprecatedSize),
-  json: jsonChunkOptionsSchema.transform(handleDeprecatedSize),
-  html: htmlChunkOptionsSchema.transform(handleDeprecatedSize),
-  markdown: markdownChunkOptionsSchema.transform(handleDeprecatedSize),
-  'semantic-markdown': semanticMarkdownChunkOptionsSchema.transform(handleDeprecatedSize),
-  latex: latexChunkOptionsSchema.transform(handleDeprecatedSize),
+  character: characterChunkOptionsSchema,
+  recursive: recursiveChunkOptionsSchema,
+  sentence: sentenceChunkOptionsSchema,
+  token: tokenChunkOptionsSchema,
+  json: jsonChunkOptionsSchema,
+  html: htmlChunkOptionsSchema,
+  markdown: markdownChunkOptionsSchema,
+  'semantic-markdown': semanticMarkdownChunkOptionsSchema,
+  latex: latexChunkOptionsSchema,
 } as const;
 
 export function validateChunkParams(strategy: ChunkStrategy, params: any): void {

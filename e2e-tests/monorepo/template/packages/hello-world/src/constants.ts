@@ -2,4 +2,4 @@ import { join } from 'node:path';
 
 export const HELLO_WORLD = 'Hello, World!';
 
-join(__dirname, 'test.js');
+export const TEST_PATH = join(__dirname, 'test.js');

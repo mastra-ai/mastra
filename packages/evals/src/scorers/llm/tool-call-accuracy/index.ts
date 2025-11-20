@@ -1,7 +1,6 @@
-import type { Tool } from '@mastra/core';
-import type { MastraLanguageModel } from '@mastra/core/agent';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
-import { createScorer } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
+import type { MastraModelConfig } from '@mastra/core/llm';
+import type { Tool } from '@mastra/core/tools';
 import { z } from 'zod';
 import {
   extractToolCalls,
@@ -12,7 +11,7 @@ import {
 import { TOOL_SELECTION_ACCURACY_INSTRUCTIONS, createAnalyzePrompt, createReasonPrompt } from './prompts';
 
 export interface ToolCallAccuracyOptions {
-  model: MastraLanguageModel;
+  model: MastraModelConfig;
   availableTools: Tool[];
 }
 
@@ -30,13 +29,15 @@ const analyzeOutputSchema = z.object({
 export function createToolCallAccuracyScorerLLM({ model, availableTools }: ToolCallAccuracyOptions) {
   const toolDefinitions = availableTools.map(tool => `${tool.id}: ${tool.description}`).join('\n');
 
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer({
+    id: 'llm-tool-call-accuracy-scorer',
     name: 'Tool Call Accuracy (LLM)',
     description: 'Evaluates whether an agent selected appropriate tools for the given task using LLM analysis',
     judge: {
       model,
       instructions: TOOL_SELECTION_ACCURACY_INSTRUCTIONS,
     },
+    type: 'agent',
   })
     .preprocess(async ({ run }) => {
       const isInputInvalid = !run.input || !run.input.inputMessages || run.input.inputMessages.length === 0;

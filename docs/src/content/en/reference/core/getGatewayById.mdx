@@ -1,0 +1,62 @@
+---
+title: "Reference: Mastra.getGatewayById() | Core"
+description: "Retrieve a registered gateway by its unique ID"
+---
+
+# Mastra.getGatewayById()
+
+Retrieves a gateway by its unique ID (the `id` property of the gateway instance). This is useful when you need to find a gateway by its intrinsic identifier rather than its registration key.
+
+## Usage example
+
+```typescript
+import { Mastra } from '@mastra/core';
+
+const mastra = new Mastra({
+  gateways: {
+    customKey: new MyCustomGateway(), // id = 'my-custom-gateway'
+  },
+});
+
+// Retrieve by ID (not registration key)
+const gateway = mastra.getGatewayById('my-custom-gateway');
+console.log(gateway.name); // 'My Custom Gateway'
+```
+
+## Use Cases
+
+- Gateway versioning: Different versions with unique IDs (`'gateway-v1'`, `'gateway-v2'`)
+- Finding gateways when registration keys are unknown
+- Identifying gateways across different Mastra instances
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: 'id',
+      type: 'string',
+      description: 'The unique ID of the gateway (gateway.id property)',
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: 'gateway',
+      type: 'MastraModelGateway | undefined',
+      description: 'The gateway instance, or undefined if not found',
+    },
+  ]}
+/>
+
+## Related
+
+- [Mastra.getGateway()](/reference/v1/core/getGateway) - Get gateway by registration key
+- [Mastra.listGateways()](/reference/v1/core/listGateways) - List all gateways
+- [Mastra.addGateway()](/reference/v1/core/addGateway) - Add a gateway
+- [MastraModelGateway](/reference/v1/core/mastra-model-gateway) - Gateway base class
+- [Custom Gateways Guide](/models/v1/gateways/custom-gateways) - Creating custom gateways

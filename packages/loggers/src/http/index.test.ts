@@ -358,11 +358,11 @@ describe('HttpTransport', () => {
     });
   });
 
-  describe('getLogs and getLogsByRunId', () => {
-    it('should return empty results for getLogs with warning', async () => {
+  describe('listLogs and listLogsByRunId', () => {
+    it('should return empty results for listLogs with warning', async () => {
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      const result = await transport.getLogs();
+      const result = await transport.listLogs();
 
       expect(result).toEqual({
         logs: [],
@@ -372,16 +372,16 @@ describe('HttpTransport', () => {
         hasMore: false,
       });
       expect(consoleSpy).toHaveBeenCalledWith(
-        'HttpTransport.getLogs: This transport is write-only. Override this method to implement log retrieval.',
+        'HttpTransport.listLogs: This transport is write-only. Override this method to implement log retrieval.',
       );
 
       consoleSpy.mockRestore();
     });
 
-    it('should return empty results for getLogsByRunId with warning', async () => {
+    it('should return empty results for listLogsByRunId with warning', async () => {
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      const result = await transport.getLogsByRunId({ runId: 'test-run-id' });
+      const result = await transport.listLogsByRunId({ runId: 'test-run-id' });
 
       expect(result).toEqual({
         logs: [],
@@ -391,7 +391,7 @@ describe('HttpTransport', () => {
         hasMore: false,
       });
       expect(consoleSpy).toHaveBeenCalledWith(
-        'HttpTransport.getLogsByRunId: This transport is write-only. Override this method to implement log retrieval.',
+        'HttpTransport.listLogsByRunId: This transport is write-only. Override this method to implement log retrieval.',
       );
 
       consoleSpy.mockRestore();

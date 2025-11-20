@@ -6,6 +6,7 @@ import { weatherTool } from '../tools';
 import { weatherReporterAgent } from '../agents';
 
 const agent = new Agent({
+  id: 'weather-agent',
   name: 'Weather Agent',
   model: openai('gpt-4o'),
   instructions: `

@@ -185,7 +185,7 @@ export const docsTool = {
     You can also use keywords from the user query to find relevant documentation, but prioritize paths. 
     This is your internal knowledge the user can\'t read. 
     If the user asks about a feature check general docs as well as reference docs for that feature. 
-    Ex: with evals check in evals/ and in reference/evals/. 
+    Ex: with workflows check in workflows/ and in reference/workflows/. 
     Provide code examples so the user understands. 
     If you build a URL from the path, only paths ending in .mdx exist. 
     Note that docs about MCP are currently in reference/tools/. 

@@ -16,7 +16,7 @@ export abstract class LoggerTransport extends Transform {
     super({ ...opts, objectMode: true });
   }
 
-  async getLogsByRunId(_args: {
+  async listLogsByRunId(_args: {
     runId: string;
     fromDate?: Date;
     toDate?: Date;
@@ -33,7 +33,7 @@ export abstract class LoggerTransport extends Transform {
   }> {
     return { logs: [], total: 0, page: _args?.page ?? 1, perPage: _args?.perPage ?? 100, hasMore: false };
   }
-  async getLogs(_args?: {
+  async listLogs(_args?: {
     fromDate?: Date;
     toDate?: Date;
     logLevel?: LogLevel;
@@ -54,15 +54,15 @@ export abstract class LoggerTransport extends Transform {
 
 export const createCustomTransport = (
   stream: Transform,
-  getLogs?: LoggerTransport['getLogs'],
-  getLogsByRunId?: LoggerTransport['getLogsByRunId'],
+  listLogs?: LoggerTransport['listLogs'],
+  listLogsByRunId?: LoggerTransport['listLogsByRunId'],
 ) => {
   let transport = stream as LoggerTransport;
-  if (getLogs) {
-    transport.getLogs = getLogs;
+  if (listLogs) {
+    transport.listLogs = listLogs;
   }
-  if (getLogsByRunId) {
-    transport.getLogsByRunId = getLogsByRunId;
+  if (listLogsByRunId) {
+    transport.listLogsByRunId = listLogsByRunId;
   }
   return transport as LoggerTransport;
 };

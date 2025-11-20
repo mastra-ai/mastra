@@ -1,38 +1,77 @@
-import { ToolCallMessagePartComponent } from '@assistant-ui/react';
+import { ToolCallMessagePartProps } from '@assistant-ui/react';
 
 import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
-import { useWorkflow } from '@/hooks/use-workflows';
 import { WorkflowRunProvider } from '@/domains/workflows';
-import { LoadingBadge } from './badges/loading-badge';
+import { MastraUIMessage } from '@mastra/react';
+import { useToolCall } from '@/services/tool-call-provider';
+import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 
-export const ToolFallback: ToolCallMessagePartComponent = ({ toolName, argsText, result, args, ...props }) => {
+export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
+  metadata?: MastraUIMessage['metadata'];
+}
+
+export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackProps) => {
   return (
     <WorkflowRunProvider>
-      <ToolFallbackInner toolName={toolName} argsText={argsText} result={result} args={args} {...props} />
+      <ToolFallbackInner toolName={toolName} result={result} args={args} {...props} />
     </WorkflowRunProvider>
   );
 };
 
-const ToolFallbackInner: ToolCallMessagePartComponent = ({ toolName, argsText, result, args }) => {
+const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...props }: ToolFallbackProps) => {
   // We need to handle the stream data even if the workflow is not resolved yet
   // The response from the fetch request resolving the workflow might theoretically
   // be resolved after we receive the first stream event
-  useWorkflowStream(args.__mastraMetadata?.partialChunk);
-  const { data: workflow, isLoading } = useWorkflow(toolName);
 
-  if (isLoading) return <LoadingBadge />;
+  const isAgent = (metadata?.mode === 'network' && metadata.from === 'AGENT') || toolName.startsWith('agent-');
+  const isWorkflow = (metadata?.mode === 'network' && metadata.from === 'WORKFLOW') || toolName.startsWith('workflow-');
 
-  if (workflow) {
+  const agentToolName = toolName.startsWith('agent-') ? toolName.substring('agent-'.length) : toolName;
+  const workflowToolName = toolName.startsWith('workflow-') ? toolName.substring('workflow-'.length) : toolName;
+
+  const requireApprovalMetadata = metadata?.mode === 'stream' && metadata?.requireApprovalMetadata;
+
+  const toolApprovalMetadata = requireApprovalMetadata ? requireApprovalMetadata?.[toolCallId] : undefined;
+
+  useWorkflowStream(result);
+
+  if (isAgent) {
     return (
-      <WorkflowBadge
-        workflowId={toolName}
-        workflow={workflow}
-        isStreaming={args.__mastraMetadata?.isStreaming}
-        runId={result?.runId}
+      <AgentBadgeWrapper
+        agentId={agentToolName}
+        result={result}
+        metadata={metadata}
+        toolCallId={toolCallId}
+        toolApprovalMetadata={toolApprovalMetadata}
       />
     );
   }
 
-  return <ToolBadge toolName={toolName} argsText={argsText} result={result} />;
+  if (isWorkflow) {
+    const isStreaming = metadata?.mode === 'stream' || metadata?.mode === 'network';
+
+    return (
+      <WorkflowBadge
+        workflowId={workflowToolName}
+        isStreaming={isStreaming}
+        result={result}
+        metadata={metadata}
+        toolCallId={toolCallId}
+        toolApprovalMetadata={toolApprovalMetadata}
+      />
+    );
+  }
+
+  return (
+    <ToolBadge
+      toolName={toolName}
+      args={args}
+      result={result}
+      toolOutput={result?.toolOutput || []}
+      metadata={metadata}
+      toolCallId={toolCallId}
+      toolApprovalMetadata={toolApprovalMetadata}
+    />
+  );
 };

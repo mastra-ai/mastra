@@ -7,19 +7,33 @@ import { WorkflowGraph, WorkflowRunContext, WorkflowRunProvider } from '@/domain
 import { useLinkComponent } from '@/lib/framework';
 import { Button } from '@/ds/components/Button';
 
-import { useHandleAgentWorkflowStream } from '@/domains/workflows/hooks/use-handle-agent-workflow-stream';
 import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
-import { StreamChunk } from '@/types';
-import { BadgeWrapper } from './badge-wrapper';
 
-export interface WorkflowBadgeProps {
-  workflow: GetWorkflowResponse;
+import { BadgeWrapper } from './badge-wrapper';
+import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
+import { WorkflowRunStreamResult } from '@/domains/workflows/context/workflow-run-context';
+import { MastraUIMessage } from '@mastra/react';
+import { LoadingBadge } from './loading-badge';
+import { useWorkflow } from '@/hooks';
+import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
+
+export interface WorkflowBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   workflowId: string;
-  runId?: string;
+  result?: any;
   isStreaming?: boolean;
+  metadata?: MastraUIMessage['metadata'];
 }
 
-export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming }: WorkflowBadgeProps) => {
+export const WorkflowBadge = ({
+  result,
+  workflowId,
+  isStreaming,
+  metadata,
+  toolCallId,
+  toolApprovalMetadata,
+}: WorkflowBadgeProps) => {
+  const { runId, status } = result || {};
+  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId);
   const { data: runs, isLoading: isRunsLoading } = useWorkflowRuns(workflowId, {
     enabled: Boolean(runId) && !isStreaming,
   });
@@ -28,8 +42,26 @@ export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming }: Work
 
   const snapshot = typeof run?.snapshot === 'object' ? run?.snapshot : undefined;
 
+  const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
+  const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
+
+  if (isWorkflowLoading || !workflow) return <LoadingBadge />;
+
   return (
-    <BadgeWrapper icon={<WorkflowIcon className="text-accent3" />} title={workflow.name} initialCollapsed={false}>
+    <BadgeWrapper
+      data-testid="workflow-badge"
+      icon={<WorkflowIcon className="text-accent3" />}
+      title={workflow.name}
+      initialCollapsed={false}
+      extraInfo={
+        metadata?.mode === 'network' && (
+          <NetworkChoiceMetadataDialogTrigger
+            selectionReason={selectionReason ?? ''}
+            input={agentNetworkInput as string | Record<string, unknown> | undefined}
+          />
+        )
+      }
+    >
       {!isStreaming && !isLoading && (
         <WorkflowRunProvider snapshot={snapshot}>
           <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />
@@ -37,6 +69,8 @@ export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming }: Work
       )}
 
       {isStreaming && <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />}
+
+      <ToolApprovalButtons toolCalled={!!status} toolCallId={toolCallId} toolApprovalMetadata={toolApprovalMetadata} />
     </BadgeWrapper>
   );
 };
@@ -56,9 +90,11 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
         <Button as={Link} href={`/workflows/${workflowId}/graph`}>
           Go to workflow
         </Button>
-        <Button as={Link} href={`/workflows/${workflowId}/graph/${runId}`}>
-          See run
-        </Button>
+        {runId && (
+          <Button as={Link} href={`/workflows/${workflowId}/graph/${runId}`}>
+            See run
+          </Button>
+        )}
       </div>
 
       <div className="rounded-md overflow-hidden h-[60vh] w-full">
@@ -68,12 +104,11 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
   );
 };
 
-export const useWorkflowStream = (partialWorkflowOutput?: StreamChunk) => {
-  const streamResult = useHandleAgentWorkflowStream(partialWorkflowOutput);
+export const useWorkflowStream = (workflowFullState?: WorkflowRunStreamResult) => {
   const { setResult } = useContext(WorkflowRunContext);
 
   useEffect(() => {
-    if (!streamResult) return;
-    setResult(streamResult);
-  }, [streamResult]);
+    if (!workflowFullState) return;
+    setResult(workflowFullState);
+  }, [workflowFullState]);
 };

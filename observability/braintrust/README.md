@@ -35,14 +35,10 @@ const mastra = new Mastra({
 
 ## Features
 
-### AI Tracing
+### Tracing
 
 - **Automatic span mapping**: Root spans become Braintrust traces
 - **Type-specific metadata**: Extracts relevant metadata for each span type (agents, tools, workflows)
 - **Error tracking**: Automatic error status and message tracking
 - **Hierarchical traces**: Maintains parent-child relationships
 - **Event span support**: Zero-duration spans for event-type traces
-
-## License
-
-Apache 2.0

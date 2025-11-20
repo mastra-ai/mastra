@@ -1,4 +1,4 @@
-import { Step, Workflow } from "@mastra/core/workflows";
+import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
 import { mastra } from "../index";
@@ -57,7 +57,7 @@ function createArrangementStep({
     | "airbnb"
     | "airbnbLocation";
 }) {
-  return new Step({
+  return createStep({
     id: type,
     inputSchema: z.object({
       userId: z.string(),
@@ -71,12 +71,13 @@ function createArrangementStep({
       }),
     }),
     execute: async ({
-      context: {
-        inputData: { travelForm, userId, sessionId },
-        steps,
-      },
+      inputData: { travelForm, userId, sessionId },
+      getStepResult,
       runId,
     }) => {
+      // Check if airbnbLocation step was executed and get its result
+      const airbnbLocationResult = getStepResult("airbnbLocation");
+
       const items = await booking[method]({
         startDate: travelForm.startDate,
         endDate: travelForm.endDate,
@@ -88,8 +89,8 @@ function createArrangementStep({
         placeId: travelForm.arrivalAttractionId,
         place: travelForm.arrivalAttractionId,
         payload:
-          steps.airbnbLocationSelection.status === "success"
-            ? steps.airbnbLocationSelection.output
+          airbnbLocationResult?.status === "success"
+            ? airbnbLocationResult.output
             : undefined,
       });
 
@@ -204,110 +205,84 @@ const arrangeAttractions = createArrangementStep({
   choiceCount: "3",
 });
 
-export const workflow = new Workflow({
-  name: "Travel Submission",
-  triggerSchema: z.object({
-    userId: z.string(),
-    sessionId: z.string(),
-    travelForm: triggerSchema,
-  }),
+const workflowInputSchema = z.object({
+  userId: z.string(),
+  sessionId: z.string(),
+  travelForm: triggerSchema,
 });
 
-workflow
-  .step(outboundFlight, {
-    variables: {
-      sessionId: {
-        step: "trigger",
-        path: "sessionId",
-      },
-      userId: {
-        step: "trigger",
-        path: "userId",
-      },
-      travelForm: {
-        step: "trigger",
-        path: "travelForm",
-      },
-    },
+const selectionSchema = z.object({
+  ids: z.array(z.string()),
+  reasoning: z.string(),
+  typeSelection: z.array(z.any()).optional(), // Full item objects selected by the agent
+});
+
+const workflowOutputSchema = z.object({
+  outboundFlightSelection: selectionSchema.optional(),
+  returnFlightSelection: selectionSchema.optional(),
+  accommodationSelection: selectionSchema.optional(),
+  attractionSelection: selectionSchema.optional(),
+  airbnbLocationSelection: selectionSchema.optional(), // Only present when airbnb is selected
+});
+
+export const workflow = createWorkflow({
+  id: "travel-submission",
+  inputSchema: workflowInputSchema,
+  outputSchema: workflowOutputSchema,
+})
+  // Run flights in parallel
+  .parallel([outboundFlight, returnFlight])
+  // Map the initial input for all following steps
+  .map(async ({ getInitData }) => {
+    const initData = getInitData();
+    return {
+      userId: initData.userId,
+      sessionId: initData.sessionId,
+      travelForm: initData.travelForm,
+    };
   })
-  .step(returnFlight, {
-    variables: {
-      sessionId: {
-        step: "trigger",
-        path: "sessionId",
-      },
-      userId: {
-        step: "trigger",
-        path: "userId",
-      },
-      travelForm: {
-        step: "trigger",
-        path: "travelForm",
-      },
-    },
+  // Branch based on accommodation type
+  .branch([
+    // Hotel path
+    [
+      async ({ getInitData }) =>
+        getInitData().travelForm.accommodationType === "hotel",
+      arrangeHotels,
+    ],
+    // Airbnb path
+    [
+      async ({ getInitData }) =>
+        getInitData().travelForm.accommodationType === "airbnb",
+      createWorkflow({
+        id: "airbnb-flow",
+        inputSchema: z.object({
+          userId: z.string(),
+          sessionId: z.string(),
+          travelForm: triggerSchema,
+        }),
+        outputSchema: z.any(),
+      })
+        .then(getAirbnbLocation)
+        .map(async ({ getInitData }) => {
+          const initData = getInitData();
+          return {
+            userId: initData.userId,
+            sessionId: initData.sessionId,
+            travelForm: initData.travelForm,
+          };
+        })
+        .then(arrangeAirbnb)
+        .commit(),
+    ],
+  ])
+  // Map data for attractions
+  .map(async ({ getInitData }) => {
+    const initData = getInitData();
+    return {
+      userId: initData.userId,
+      sessionId: initData.sessionId,
+      travelForm: initData.travelForm,
+    };
   })
-  .step(arrangeHotels, {
-    variables: {
-      sessionId: {
-        step: "trigger",
-        path: "sessionId",
-      },
-      userId: {
-        step: "trigger",
-        path: "userId",
-      },
-      travelForm: {
-        step: "trigger",
-        path: "travelForm",
-      },
-    },
-    when: {
-      ref: { step: "trigger", path: "travelForm.accommodationType" },
-      query: { $eq: "hotel" },
-    },
-  })
-  .step(arrangeAttractions, {
-    variables: {
-      sessionId: {
-        step: "trigger",
-        path: "sessionId",
-      },
-      userId: {
-        step: "trigger",
-        path: "userId",
-      },
-      travelForm: {
-        step: "trigger",
-        path: "travelForm",
-      },
-    },
-  })
-  .step(getAirbnbLocation, {
-    variables: {
-      sessionId: {
-        step: "trigger",
-        path: "sessionId",
-      },
-      userId: {
-        step: "trigger",
-        path: "userId",
-      },
-      travelForm: {
-        step: "trigger",
-        path: "travelForm",
-      },
-    },
-    when: {
-      ref: { step: "trigger", path: "travelForm.accommodationType" },
-      query: { $eq: "airbnb" },
-    },
-  })
-  .then(arrangeAirbnb, {
-    variables: {
-      travelForm: {
-        step: "trigger",
-        path: "travelForm",
-      },
-    },
-  })
+  .then(arrangeAttractions)
   .commit();

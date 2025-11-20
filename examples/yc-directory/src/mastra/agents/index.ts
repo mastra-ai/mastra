@@ -6,6 +6,7 @@ import { ycDirectoryTool } from '../tools';
 const model = anthropic('claude-3-5-sonnet-20241022');
 
 export const ycAgent = new Agent({
+  id: 'yc-directory-agent',
   name: 'YC Directory Agent',
   instructions: `
       You are a helpful assistant that answers questions about the Y Combinator directory for 2024.

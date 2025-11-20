@@ -1,5 +1,6 @@
 import { openai } from '@ai-sdk/openai';
-import { Agent, createTool } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 const instructions = `You are a helpful cat expert assistant. When discussing cats, you should always include an interesting cat fact.
@@ -32,7 +33,8 @@ const catFact = createTool({
 });
 
 const catOne = new Agent({
-  name: 'cat-one',
+  id: 'cat-one',
+  name: 'Cat Expert',
   instructions: instructions,
   model: openai('gpt-4o-mini'),
   tools: {

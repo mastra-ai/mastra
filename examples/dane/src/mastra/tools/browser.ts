@@ -13,7 +13,7 @@ export const browserTool = createTool({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async ({ context: { url } }) => {
+  execute: async (input, context) => {
     try {
       const browser = await chromium.launch({
         headless: true,
@@ -21,13 +21,13 @@ export const browserTool = createTool({
 
       const page = await browser.newPage();
 
-      await page.goto(url);
+      await page.goto(input.url);
 
       const docs = MDocument.fromHTML(await page.content());
 
       await docs.chunk({
         strategy: 'html',
-        size: 300,
+        maxSize: 300,
         sections: [
           ['h1', 'Header 1'],
           ['h2', 'Header 2'],
@@ -66,7 +66,7 @@ export const googleSearch = createTool({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async ({ context: { query } }) => {
+  execute: async (input, context) => {
     let browser;
     try {
       browser = await chromium.launch({
@@ -82,7 +82,7 @@ export const googleSearch = createTool({
 
     try {
       const page = await browser.newPage();
-      await page.goto(`https://www.google.com/search?q=${encodeURIComponent(query)}`);
+      await page.goto(`https://www.google.com/search?q=${encodeURIComponent(input.query)}`);
 
       console.log(`\n`);
       console.log(chalk.blue('Waiting for search results...'));

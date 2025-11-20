@@ -1,6 +1,7 @@
-import type { StepResult, WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Redis } from '@upstash/redis';
 import type { StoreOperationsUpstash } from '../operations';
 import { ensureDate, getKey } from '../utils';
@@ -41,13 +42,13 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       // runId,
       // stepId,
       // result,
-      // runtimeContext,
+      // requestContext,
     }: {
       workflowName: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
-      runtimeContext: Record<string, any>;
+      requestContext: Record<string, any>;
     },
   ): Promise<Record<string, StepResult<any, any, any, any>>> {
     throw new Error('Method not implemented.');
@@ -76,9 +77,10 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     namespace: string;
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
-    const { namespace = 'workflows', workflowName, runId, snapshot } = params;
+    const { namespace = 'workflows', workflowName, runId, resourceId, snapshot } = params;
     try {
       await this.operations.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -86,6 +88,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           namespace,
           workflow_name: workflowName,
           run_id: runId,
+          resourceId,
           snapshot,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -189,22 +192,28 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    perPage,
+    page,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns> {
+    status,
+  }: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     try {
+      if (page !== undefined && page < 0) {
+        throw new MastraError(
+          {
+            id: 'UPSTASH_STORE_INVALID_PAGE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
+      }
+
       // Get all workflow keys
       let pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' }) + ':*';
       if (workflowName && resourceId) {
@@ -249,6 +258,18 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         .filter(w => {
           if (fromDate && w.createdAt < fromDate) return false;
           if (toDate && w.createdAt > toDate) return false;
+          if (status) {
+            let snapshot = w.snapshot;
+            if (typeof snapshot === 'string') {
+              try {
+                snapshot = JSON.parse(snapshot) as WorkflowRunState;
+              } catch (e) {
+                console.warn(`Failed to parse snapshot for workflow ${w.workflowName}: ${e}`);
+                return false;
+              }
+            }
+            return snapshot.status === status;
+          }
           return true;
         })
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -256,15 +277,17 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       const total = runs.length;
 
       // Apply pagination if requested
-      if (limit !== undefined && offset !== undefined) {
-        runs = runs.slice(offset, offset + limit);
+      if (typeof perPage === 'number' && typeof page === 'number') {
+        const normalizedPerPage = normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
+        const offset = page * normalizedPerPage;
+        runs = runs.slice(offset, offset + normalizedPerPage);
       }
 
       return { runs, total };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'STORAGE_UPSTASH_STORAGE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

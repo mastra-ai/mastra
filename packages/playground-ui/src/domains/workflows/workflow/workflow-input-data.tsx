@@ -18,11 +18,13 @@ export interface WorkflowInputDataProps {
   isSubmitLoading: boolean;
   submitButtonLabel: string;
   onSubmit: (data: any) => void;
+  withoutSubmit?: boolean;
 }
 
 export const WorkflowInputData = ({
   schema,
   defaultValues,
+  withoutSubmit,
   isSubmitLoading,
   submitButtonLabel,
   onSubmit,
@@ -64,7 +66,7 @@ export const WorkflowInputData = ({
             defaultValues={defaultValues}
             isSubmitLoading={isSubmitLoading}
             submitButtonLabel={submitButtonLabel}
-            onSubmit={onSubmit}
+            onSubmit={withoutSubmit ? undefined : onSubmit}
           />
         ) : (
           <JSONInput
@@ -73,6 +75,7 @@ export const WorkflowInputData = ({
             isSubmitLoading={isSubmitLoading}
             submitButtonLabel={submitButtonLabel}
             onSubmit={onSubmit}
+            withoutSubmit={withoutSubmit}
           />
         )}
       </div>
@@ -80,9 +83,16 @@ export const WorkflowInputData = ({
   );
 };
 
-const JSONInput = ({ schema, defaultValues, isSubmitLoading, submitButtonLabel, onSubmit }: WorkflowInputDataProps) => {
+const JSONInput = ({
+  schema,
+  defaultValues,
+  isSubmitLoading,
+  submitButtonLabel,
+  onSubmit,
+  withoutSubmit,
+}: WorkflowInputDataProps) => {
   const [errors, setErrors] = useState<string[]>([]);
-  const [inputData, setInputData] = useState<string>(JSON.stringify(defaultValues ?? {}, null, 2));
+  const [inputData, setInputData] = useState<string>(() => JSON.stringify(defaultValues ?? {}, null, 2));
 
   const handleSubmit = () => {
     setErrors([]);
@@ -119,9 +129,11 @@ const JSONInput = ({ schema, defaultValues, isSubmitLoading, submitButtonLabel, 
 
       <SyntaxHighlighter data={inputData} onChange={setInputData} />
 
-      <Button variant="light" onClick={handleSubmit} className="w-full" size="lg">
-        {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel}
-      </Button>
+      {withoutSubmit ? null : (
+        <Button variant="light" onClick={handleSubmit} className="w-full" size="lg">
+          {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel}
+        </Button>
+      )}
     </div>
   );
 };

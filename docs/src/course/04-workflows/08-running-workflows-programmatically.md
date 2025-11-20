@@ -22,7 +22,7 @@ async function runContentWorkflow() {
     }
 
     // Create a run instance
-    const run = workflow.createRun();
+    const run = await workflow.createRun();
 
     // Execute with test data
     const result = await run.start({

@@ -1,6 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
-import { ScoresStorage } from '@mastra/core/storage';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import { saveScorePayloadSchema } from '@mastra/core/evals';
+import { ScoresStorage, calculatePagination, normalizePerPage } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
 
@@ -46,7 +47,19 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
   }
 
   async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
-    this.logger.debug('Saving score', { scorerId: score.scorerId, runId: score.runId });
+    let validatedScore: ValidatedSaveScorePayload;
+    try {
+      validatedScore = saveScorePayloadSchema.parse(score);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_DYNAMODB_STORE_SAVE_SCORE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
 
     const now = new Date();
     const scoreId = `score-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -54,34 +67,42 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     const scoreData = {
       entity: 'score',
       id: scoreId,
-      scorerId: score.scorerId,
-      traceId: score.traceId || '',
-      runId: score.runId,
-      scorer: typeof score.scorer === 'string' ? score.scorer : JSON.stringify(score.scorer),
+      scorerId: validatedScore.scorerId,
+      traceId: validatedScore.traceId || '',
+      spanId: validatedScore.spanId || '',
+      runId: validatedScore.runId,
+      scorer: typeof validatedScore.scorer === 'string' ? validatedScore.scorer : JSON.stringify(validatedScore.scorer),
       preprocessStepResult:
-        typeof score.preprocessStepResult === 'string'
-          ? score.preprocessStepResult
-          : JSON.stringify(score.preprocessStepResult),
+        typeof validatedScore.preprocessStepResult === 'string'
+          ? validatedScore.preprocessStepResult
+          : JSON.stringify(validatedScore.preprocessStepResult),
       analyzeStepResult:
-        typeof score.analyzeStepResult === 'string' ? score.analyzeStepResult : JSON.stringify(score.analyzeStepResult),
-      score: score.score,
-      reason: score.reason,
-      preprocessPrompt: score.preprocessPrompt,
-      generateScorePrompt: score.generateScorePrompt,
-      analyzePrompt: score.analyzePrompt,
-      reasonPrompt: score.reasonPrompt,
-      input: typeof score.input === 'string' ? score.input : JSON.stringify(score.input),
-      output: typeof score.output === 'string' ? score.output : JSON.stringify(score.output),
+        typeof validatedScore.analyzeStepResult === 'string'
+          ? validatedScore.analyzeStepResult
+          : JSON.stringify(validatedScore.analyzeStepResult),
+      score: validatedScore.score,
+      reason: validatedScore.reason,
+      preprocessPrompt: validatedScore.preprocessPrompt,
+      generateScorePrompt: validatedScore.generateScorePrompt,
+      generateReasonPrompt: validatedScore.generateReasonPrompt,
+      analyzePrompt: validatedScore.analyzePrompt,
+      input: typeof validatedScore.input === 'string' ? validatedScore.input : JSON.stringify(validatedScore.input),
+      output: typeof validatedScore.output === 'string' ? validatedScore.output : JSON.stringify(validatedScore.output),
       additionalContext:
-        typeof score.additionalContext === 'string' ? score.additionalContext : JSON.stringify(score.additionalContext),
-      runtimeContext:
-        typeof score.runtimeContext === 'string' ? score.runtimeContext : JSON.stringify(score.runtimeContext),
-      entityType: score.entityType,
-      entityData: typeof score.entity === 'string' ? score.entity : JSON.stringify(score.entity),
-      entityId: score.entityId,
-      source: score.source,
-      resourceId: score.resourceId || '',
-      threadId: score.threadId || '',
+        typeof validatedScore.additionalContext === 'string'
+          ? validatedScore.additionalContext
+          : JSON.stringify(validatedScore.additionalContext),
+      requestContext:
+        typeof validatedScore.requestContext === 'string'
+          ? validatedScore.requestContext
+          : JSON.stringify(validatedScore.requestContext),
+      entityType: validatedScore.entityType,
+      entityData:
+        typeof validatedScore.entity === 'string' ? validatedScore.entity : JSON.stringify(validatedScore.entity),
+      entityId: validatedScore.entityId,
+      source: validatedScore.source,
+      resourceId: validatedScore.resourceId || '',
+      threadId: validatedScore.threadId || '',
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
     };
@@ -110,7 +131,7 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     }
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     pagination,
     entityId,
@@ -145,22 +166,22 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
       // Sort by createdAt DESC (newest first)
       allScores.sort((a: ScoreRowData, b: ScoreRowData) => b.createdAt.getTime() - a.createdAt.getTime());
 
-      // Apply pagination in memory
-      const startIndex = pagination.page * pagination.perPage;
-      const endIndex = startIndex + pagination.perPage;
-      const paginatedScores = allScores.slice(startIndex, endIndex);
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      // Calculate pagination info
+      // Apply pagination in memory
       const total = allScores.length;
-      const hasMore = endIndex < total;
+      const end = perPageInput === false ? allScores.length : start + perPage;
+      const paginatedScores = allScores.slice(start, end);
 
       return {
         scores: paginatedScores,
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
       };
     } catch (error) {
@@ -183,7 +204,7 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     }
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -203,22 +224,22 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
       // Sort by createdAt DESC (newest first)
       allScores.sort((a: ScoreRowData, b: ScoreRowData) => b.createdAt.getTime() - a.createdAt.getTime());
 
-      // Apply pagination in memory
-      const startIndex = pagination.page * pagination.perPage;
-      const endIndex = startIndex + pagination.perPage;
-      const paginatedScores = allScores.slice(startIndex, endIndex);
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      // Calculate pagination info
+      // Apply pagination in memory
       const total = allScores.length;
-      const hasMore = endIndex < total;
+      const end = perPageInput === false ? allScores.length : start + perPage;
+      const paginatedScores = allScores.slice(start, end);
 
       return {
         scores: paginatedScores,
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
       };
     } catch (error) {
@@ -234,7 +255,7 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     }
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -259,22 +280,22 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
       // Sort by createdAt DESC (newest first)
       allScores.sort((a: ScoreRowData, b: ScoreRowData) => b.createdAt.getTime() - a.createdAt.getTime());
 
-      // Apply pagination in memory
-      const startIndex = pagination.page * pagination.perPage;
-      const endIndex = startIndex + pagination.perPage;
-      const paginatedScores = allScores.slice(startIndex, endIndex);
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      // Calculate pagination info
+      // Apply pagination in memory
       const total = allScores.length;
-      const hasMore = endIndex < total;
+      const end = perPageInput === false ? allScores.length : start + perPage;
+      const paginatedScores = allScores.slice(start, end);
 
       return {
         scores: paginatedScores,
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
       };
     } catch (error) {
@@ -284,6 +305,59 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { entityId, entityType, page: pagination.page, perPage: pagination.perPage },
+        },
+        error,
+      );
+    }
+  }
+
+  async listScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    this.logger.debug('Getting scores by span', { traceId, spanId, pagination });
+
+    try {
+      // Query scores by trace ID and span ID using the GSI
+      const query = this.service.entities.score.query.bySpan({ entity: 'score', traceId, spanId });
+
+      // Get all scores for this trace and span ID
+      const results = await query.go();
+      const allScores = results.data.map((data: any) => this.parseScoreData(data));
+
+      // Sort by createdAt DESC (newest first)
+      allScores.sort((a: ScoreRowData, b: ScoreRowData) => b.createdAt.getTime() - a.createdAt.getTime());
+
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      // Apply pagination in memory
+      const total = allScores.length;
+      const end = perPageInput === false ? allScores.length : start + perPage;
+      const paginatedScores = allScores.slice(start, end);
+
+      return {
+        scores: paginatedScores,
+        pagination: {
+          total,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
+        },
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_DYNAMODB_STORE_GET_SCORES_BY_SPAN_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { traceId, spanId, page: pagination.page, perPage: pagination.perPage },
         },
         error,
       );

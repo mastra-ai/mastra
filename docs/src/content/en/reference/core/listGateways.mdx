@@ -1,0 +1,53 @@
+---
+title: "Reference: Mastra.listGateways() | Core"
+description: "List all registered gateways"
+---
+
+# Mastra.listGateways()
+
+Returns a record of all registered gateways, indexed by their registration keys.
+
+## Usage example
+
+```typescript
+import { Mastra } from '@mastra/core';
+
+const mastra = new Mastra({
+  gateways: {
+    myGateway: new MyCustomGateway(),
+    anotherGateway: new AnotherGateway(),
+  },
+});
+
+const gateways = mastra.listGateways();
+console.log(Object.keys(gateways)); // ['myGateway', 'anotherGateway']
+
+// Iterate over all gateways
+for (const [key, gateway] of Object.entries(gateways)) {
+  console.log(`${key}: ${gateway.name}`);
+}
+```
+
+## Parameters
+
+None.
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: 'gateways',
+      type: 'Record<string, MastraModelGateway>',
+      description: 'A record of gateway instances indexed by registration key',
+    },
+  ]}
+/>
+
+## Related
+
+- [Mastra.getGateway()](/reference/v1/core/getGateway) - Get gateway by registration key
+- [Mastra.getGatewayById()](/reference/v1/core/getGatewayById) - Get gateway by ID
+- [Mastra.addGateway()](/reference/v1/core/addGateway) - Add a gateway
+- [MastraModelGateway](/reference/v1/core/mastra-model-gateway) - Gateway base class
+- [Custom Gateways Guide](/models/v1/gateways/custom-gateways) - Creating custom gateways

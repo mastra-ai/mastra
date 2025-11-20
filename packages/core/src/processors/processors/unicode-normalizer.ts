@@ -1,4 +1,4 @@
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import type { Processor } from '../index';
 
 export interface UnicodeNormalizerOptions {
@@ -27,7 +27,8 @@ export interface UnicodeNormalizerOptions {
 }
 
 export class UnicodeNormalizer implements Processor {
-  readonly name = 'unicode-normalizer';
+  readonly id = 'unicode-normalizer';
+  readonly name = 'Unicode Normalizer';
 
   private options: Required<UnicodeNormalizerOptions>;
 
@@ -40,7 +41,7 @@ export class UnicodeNormalizer implements Processor {
     };
   }
 
-  processInput(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }): MastraMessageV2[] {
+  processInput(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }): MastraDBMessage[] {
     try {
       return args.messages.map(message => ({
         ...message,

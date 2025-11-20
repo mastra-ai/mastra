@@ -2,12 +2,13 @@ import { writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
-import { createWatcher, getWatcherInputOptions, writeTelemetryConfig, getBundlerOptions } from '@mastra/deployer/build';
+import { createWatcher, getWatcherInputOptions, getBundlerOptions } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import * as fsExtra from 'fs-extra';
-import type { RollupWatcherEvent } from 'rollup';
+import type { InputPluginOption, RollupWatcherEvent } from 'rollup';
 
 import { devLogger } from '../../utils/dev-logger.js';
+import { shouldSkipDotenvLoading } from '../utils.js';
 
 export class DevBundler extends Bundler {
   private customEnvFile?: string;
@@ -18,6 +19,11 @@ export class DevBundler extends Bundler {
   }
 
   getEnvFiles(): Promise<string[]> {
+    // Skip loading .env files if MASTRA_SKIP_DOTENV is set
+    if (shouldSkipDotenvLoading()) {
+      return Promise.resolve([]);
+    }
+
     const possibleFiles = ['.env.development', '.env.local', '.env'];
     if (this.customEnvFile) {
       possibleFiles.unshift(this.customEnvFile);
@@ -58,11 +64,9 @@ export class DevBundler extends Bundler {
     const envFiles = await this.getEnvFiles();
 
     let sourcemapEnabled = false;
-    let transpilePackages: string[] = [];
     try {
       const bundlerOptions = await getBundlerOptions(entryFile, outputDirectory);
       sourcemapEnabled = !!bundlerOptions?.sourcemap;
-      transpilePackages = bundlerOptions?.transpilePackages ?? [];
     } catch (error) {
       this.logger.debug('Failed to get bundler options, sourcemap will be disabled', { error });
     }
@@ -73,22 +77,11 @@ export class DevBundler extends Bundler {
       {
         'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
       },
-      { sourcemap: sourcemapEnabled, transpilePackages },
+      { sourcemap: sourcemapEnabled },
     );
-    const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
+    const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
 
     const outputDir = join(outputDirectory, this.outputDir);
-    await writeTelemetryConfig(entryFile, outputDir, this.logger);
-
-    const mastraFolder = dirname(entryFile);
-    const fileService = new FileService();
-    const customInstrumentation = fileService.getFirstExistingFileOrUndefined([
-      join(mastraFolder, 'instrumentation.js'),
-      join(mastraFolder, 'instrumentation.ts'),
-      join(mastraFolder, 'instrumentation.mjs'),
-    ]);
-
-    await this.writeInstrumentationFile(outputDir, customInstrumentation);
 
     await this.writePackageJson(outputDir, new Map(), {});
 
@@ -109,9 +102,7 @@ export class DevBundler extends Bundler {
           }
         },
         plugins: [
-          // @ts-ignore - types are good
-          // eslint-disable-next-line @typescript-eslint/no-misused-promises
-          ...inputOptions.plugins,
+          ...(inputOptions.plugins as InputPluginOption[]),
           {
             name: 'env-watcher',
             buildStart() {
@@ -145,7 +136,7 @@ export class DevBundler extends Bundler {
               await writeFile(
                 join(outputDir, 'tools.mjs'),
                 `${toolImports.join('\n')}
-        
+
                 export const tools = [${toolsExports.join(', ')}]`,
               );
             },
@@ -172,7 +163,7 @@ export class DevBundler extends Bundler {
         }
 
         if (event.code === 'ERROR') {
-          console.log(event);
+          console.info(event);
           devLogger.error('Bundling failed - check console for details');
           watcher.off('event', cb);
           reject(event);

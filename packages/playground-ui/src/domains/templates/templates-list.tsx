@@ -58,7 +58,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
               })}
             >
               {template.imageURL && (
-                <div className={cn('relative overflow-hidden')}>
+                <div className={cn('overflow-hidden')}>
                   <div
                     className="w-full h-full bg-cover thumb transition-scale duration-150"
                     style={{

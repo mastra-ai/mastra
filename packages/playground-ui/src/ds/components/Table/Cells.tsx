@@ -29,21 +29,6 @@ export const TxtCell = ({ className, children }: CellProps) => {
   );
 };
 
-export const UnitCell = ({ className, children, unit }: CellProps & { unit: string }) => {
-  return (
-    <Cell className={className}>
-      <div className="flex min-w-0 items-center">
-        <Txt as="span" variant="ui-md" className="shrink-0">
-          {children}
-        </Txt>
-        <Txt as="span" variant="ui-sm" className="text-icon3 w-full truncate">
-          {unit}
-        </Txt>
-      </div>
-    </Cell>
-  );
-};
-
 export interface DateTimeCellProps extends Omit<CellProps, 'children'> {
   dateTime: Date;
 }
@@ -68,7 +53,7 @@ export const DateTimeCell = ({ dateTime, ...props }: DateTimeCellProps) => {
 export interface EntryCellProps extends Omit<CellProps, 'children'> {
   name: React.ReactNode;
   description?: React.ReactNode;
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
   meta?: React.ReactNode;
 }
 
@@ -76,9 +61,11 @@ export const EntryCell = ({ name, description, icon, meta, ...props }: EntryCell
   return (
     <Cell {...props}>
       <div className="flex items-center gap-[14px]">
-        <Icon size="lg" className="text-icon5">
-          {icon}
-        </Icon>
+        {icon && (
+          <Icon size="lg" className="text-icon5">
+            {icon}
+          </Icon>
+        )}
 
         <div className="flex flex-col gap-0">
           <Txt as="span" variant="ui-md" className="text-icon6 font-medium !leading-tight">

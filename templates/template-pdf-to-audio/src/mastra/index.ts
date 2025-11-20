@@ -1,24 +1,30 @@
+import { Observability } from '@mastra/observability';
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
-import { pdfToAudioWorkflow } from './workflows/generate-audio-from-pdf-workflow';
-import { textToAudioAgent } from './agents/text-to-audio-agent';
+import { pdfToAudioWorkflow } from './workflows/pdf-to-audio-workflow';
+import { textNaturalizerAgent } from './agents/text-naturalizer-agent';
 import { pdfToAudioAgent } from './agents/pdf-to-audio-agent';
 import { pdfSummarizationAgent } from './agents/pdf-summarization-agent';
 
 export const mastra = new Mastra({
   workflows: { pdfToAudioWorkflow },
   agents: {
-    textToAudioAgent,
     pdfToAudioAgent,
+    textNaturalizerAgent,
     pdfSummarizationAgent,
   },
   storage: new LibSQLStore({
-    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
+    id: 'mastra-storage',
     url: ':memory:',
   }),
   logger: new PinoLogger({
     name: 'Mastra',
     level: 'info',
+  }),
+  observability: new Observability({
+    default: {
+      enabled: true,
+    },
   }),
 });

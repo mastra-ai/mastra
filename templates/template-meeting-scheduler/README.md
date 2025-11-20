@@ -57,6 +57,19 @@ This template provides an AI-powered assistant that:
    pnpm dev
    ```
 
+## Model Configuration
+
+This template supports any AI model provider through Mastra's model router. You can use models from:
+
+- **OpenAI**: `openai/gpt-4o-mini`, `openai/gpt-4o`
+- **Anthropic**: `anthropic/claude-sonnet-4-5-20250929`, `anthropic/claude-haiku-4-5-20250929`
+- **Google**: `google/gemini-2.5-pro`, `google/gemini-2.0-flash-exp`
+- **Groq**: `groq/llama-3.3-70b-versatile`, `groq/llama-3.1-8b-instant`
+- **Cerebras**: `cerebras/llama-3.3-70b`
+- **Mistral**: `mistral/mistral-medium-2508`
+
+Set the `MODEL` environment variable in your `.env` file to your preferred model.
+
 ## Usage
 
 1. **Initial Authorization**: When you first interact with the agent, it will provide authorization URLs for Gmail and Google Calendar access. Arcade handles the OAuth flow automatically.

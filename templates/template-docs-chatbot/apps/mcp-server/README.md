@@ -69,7 +69,7 @@ const client = new MCPClient({
 });
 
 // Get tools from the server
-const tools = await client.getTools();
+const tools = await client.listTools();
 ```
 
 ## Customization

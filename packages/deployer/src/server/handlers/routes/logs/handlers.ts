@@ -1,21 +1,21 @@
-import type { Mastra } from '@mastra/core';
 import type { LogLevel } from '@mastra/core/logger';
+import type { Mastra } from '@mastra/core/mastra';
 import {
-  getLogsHandler as getOriginalLogsHandler,
-  getLogsByRunIdHandler as getOriginalLogsByRunIdHandler,
-  getLogTransports as getOriginalLogTransportsHandler,
+  listLogsHandler as getOriginalListLogsHandler,
+  listLogsByRunIdHandler as getOriginalListLogsByRunIdHandler,
+  listLogTransports as getOriginalListLogTransportsHandler,
 } from '@mastra/server/handlers/logs';
 import type { Context } from 'hono';
 
 import { handleError } from '../../error';
 
-export async function getLogsHandler(c: Context) {
+export async function listLogsHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const { transportId, fromDate, toDate, logLevel, page, perPage } = c.req.query();
     const filters = c.req.queries('filters');
 
-    const logs = await getOriginalLogsHandler({
+    const logs = await getOriginalListLogsHandler({
       mastra,
       transportId,
       params: {
@@ -34,14 +34,14 @@ export async function getLogsHandler(c: Context) {
   }
 }
 
-export async function getLogsByRunIdHandler(c: Context) {
+export async function listLogsByRunIdHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const runId = c.req.param('runId');
     const { transportId, fromDate, toDate, logLevel, page, perPage } = c.req.query();
     const filters = c.req.queries('filters');
 
-    const logs = await getOriginalLogsByRunIdHandler({
+    const logs = await getOriginalListLogsByRunIdHandler({
       mastra,
       runId,
       transportId,
@@ -61,11 +61,11 @@ export async function getLogsByRunIdHandler(c: Context) {
   }
 }
 
-export async function getLogTransports(c: Context) {
+export async function listLogTransports(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
 
-    const result = await getOriginalLogTransportsHandler({
+    const result = await getOriginalListLogTransportsHandler({
       mastra,
     });
 

@@ -5,7 +5,6 @@ import { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import { Workflow } from 'lucide-react';
 import { Text } from '@/components/ui/text';
 import { WorkflowNestedGraph } from '../workflow/workflow-nested-graph';
-import { WorkflowSendEventFormProps } from '../workflow/workflow-run-event-form';
 
 type WorkflowNestedGraphContextType = {
   showNestedGraph: ({
@@ -24,15 +23,7 @@ export const WorkflowNestedGraphContext = createContext<WorkflowNestedGraphConte
   {} as WorkflowNestedGraphContextType,
 );
 
-export function WorkflowNestedGraphProvider({
-  children,
-  onShowTrace,
-  onSendEvent,
-}: {
-  children: React.ReactNode;
-  onShowTrace?: ({ runId, stepName }: { runId: string; stepName: string }) => void;
-  onSendEvent?: WorkflowSendEventFormProps['onSendEvent'];
-}) {
+export function WorkflowNestedGraphProvider({ children }: { children: React.ReactNode }) {
   const [stepGraph, setStepGraph] = useState<SerializedStepFlowEntry[] | null>(null);
   const [parentStepGraphList, setParentStepGraphList] = useState<
     { stepGraph: SerializedStepFlowEntry[]; label: string; fullStep: string }[]
@@ -93,13 +84,7 @@ export function WorkflowNestedGraphProvider({
               </Text>
             </DialogTitle>
             <ReactFlowProvider>
-              <WorkflowNestedGraph
-                stepGraph={stepGraph!}
-                open={openDialog}
-                workflowName={fullStep}
-                onShowTrace={onShowTrace}
-                onSendEvent={onSendEvent}
-              />
+              <WorkflowNestedGraph stepGraph={stepGraph!} open={openDialog} workflowName={fullStep} />
             </ReactFlowProvider>
           </DialogContent>
         </DialogPortal>

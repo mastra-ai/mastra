@@ -22,8 +22,8 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
   client: Cloudflare;
   accountId: string;
 
-  constructor({ accountId, apiToken }: { accountId: string; apiToken: string }) {
-    super();
+  constructor({ accountId, apiToken, id }: { accountId: string; apiToken: string } & { id: string }) {
+    super({ id });
     this.accountId = accountId;
 
     this.client = new Cloudflare({

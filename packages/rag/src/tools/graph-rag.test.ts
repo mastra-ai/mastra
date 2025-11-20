@@ -1,4 +1,4 @@
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GraphRAG } from '../graph-rag';
 import { vectorQuerySearch } from '../utils';
@@ -18,19 +18,31 @@ vi.mock('../utils', async importOriginal => {
   };
 });
 
+// Create a mock instance tracker
+const mockGraphRAGInstances: any[] = [];
+
 vi.mock('../graph-rag', async importOriginal => {
   const actual: any = await importOriginal();
+
+  // Use a class for constructor (Vitest v4 requirement)
+  class MockGraphRAG {
+    createGraph = vi.fn();
+    query = vi.fn(() => [
+      { content: 'foo', metadata: { text: 'foo' } },
+      { content: 'bar', metadata: { text: 'bar' } },
+    ]);
+
+    constructor() {
+      mockGraphRAGInstances.push(this);
+    }
+  }
+
+  // Create a spy on the class
+  const GraphRAGSpy = vi.fn(MockGraphRAG as any);
+
   return {
     ...actual,
-    GraphRAG: vi.fn().mockImplementation(() => {
-      return {
-        createGraph: vi.fn(),
-        query: vi.fn(() => [
-          { content: 'foo', metadata: { text: 'foo' } },
-          { content: 'bar', metadata: { text: 'bar' } },
-        ]),
-      };
-    }),
+    GraphRAG: GraphRAGSpy,
   };
 });
 
@@ -50,6 +62,7 @@ const mockMastra = {
 describe('createGraphRAGTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGraphRAGInstances.length = 0; // Clear instances
   });
 
   it('validates input schema', () => {
@@ -63,26 +76,31 @@ describe('createGraphRAGTool', () => {
     expect(() => tool.inputSchema?.parse({})).toThrow();
   });
 
-  describe('runtimeContext', () => {
-    it('calls vectorQuerySearch and GraphRAG with runtimeContext params', async () => {
+  describe('requestContext', () => {
+    it('calls vectorQuerySearch and GraphRAG with requestContext params', async () => {
       const tool = createGraphRAGTool({
         id: 'test',
         model: mockModel,
         indexName: 'testIndex',
         vectorStoreName: 'testStore',
       });
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('indexName', 'anotherIndex');
-      runtimeContext.set('vectorStoreName', 'anotherStore');
-      runtimeContext.set('topK', 5);
-      runtimeContext.set('filter', { foo: 'bar' });
-      runtimeContext.set('randomWalkSteps', 99);
-      runtimeContext.set('restartProb', 0.42);
-      const result = await tool.execute({
-        context: { queryText: 'foo', topK: 2 },
-        mastra: mockMastra as any,
-        runtimeContext,
-      });
+      const requestContext = new RequestContext();
+      requestContext.set('indexName', 'anotherIndex');
+      requestContext.set('vectorStoreName', 'anotherStore');
+      requestContext.set('topK', 5);
+      requestContext.set('filter', { foo: 'bar' });
+      requestContext.set('randomWalkSteps', 99);
+      requestContext.set('restartProb', 0.42);
+      const result = await tool.execute(
+        {
+          queryText: 'foo',
+          topK: 2,
+        },
+        {
+          mastra: mockMastra as any,
+          requestContext,
+        },
+      );
       expect(result.relevantContext).toEqual(['foo', 'bar']);
       expect(result.sources.length).toBe(2);
       expect(vectorQuerySearch).toHaveBeenCalledWith(
@@ -100,7 +118,7 @@ describe('createGraphRAGTool', () => {
       );
       // GraphRAG createGraph and query should be called
       expect(GraphRAG).toHaveBeenCalled();
-      const instance = (GraphRAG as any).mock.results[0].value;
+      const instance = mockGraphRAGInstances[0];
       expect(instance.createGraph).toHaveBeenCalled();
       expect(instance.query).toHaveBeenCalledWith(
         expect.objectContaining({

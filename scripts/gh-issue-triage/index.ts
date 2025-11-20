@@ -25,6 +25,8 @@ const mappings = {
   rphansen91: 'U071Q1HAHEW',
   adeleke5140: 'U06D49JDUL9',
   TylerBarnes: 'U085QSC8S2K',
+  LekoArts: 'U09921EMPJ9',
+  roaminro: 'U09BFPD7NKF',
 };
 
 async function main() {
@@ -52,7 +54,7 @@ async function main() {
     },
   });
 
-  const tools = await mcpClient.getTools();
+  const tools = 'listTools' in mcpClient ? await mcpClient.listTools() : await mcpClient.getTools();
 
   const octokit = new Octokit({
     auth: GITHUB_PERSONAL_ACCESS_TOKEN,
@@ -62,77 +64,42 @@ async function main() {
     baseUrl: MASTRA_BASE_URL || 'http://localhost:4111',
   });
 
-  const agent = mastraClient.getAgent('triageAgent');
-  // Context build
-
   const issue = await octokit.rest.issues.get({
     owner: OWNER,
     repo: REPO,
     issue_number: Number(ISSUE_NUMBER),
   });
 
-  // Fetch the title and body of the issue
-  const response = await agent.generate({
-    messages: `
-            Issue Title: ${issue.data.title}
-            Issue Body: ${issue.data.body}
-        `,
-    output: {
-      type: 'object',
-      properties: {
-        assignee: { type: 'string' },
-        reason: { type: 'string' },
-        product_area: { type: 'string' },
-        github_username: { type: 'string' },
-      },
-      required: ['assignee', 'reason', 'product_area', 'github_username'],
+  const workflow = await mastraClient.getWorkflow('triageWorkflow');
+
+  const run = await workflow.createRunAsync();
+
+  const result = await run.startAsync({
+    inputData: {
+      owner: OWNER,
+      repo: REPO,
+      issueNumber: Number(ISSUE_NUMBER),
     },
   });
 
-  if (!response.object || typeof response.object !== 'object') {
-    throw new Error('Invalid response format from AI agent');
-  }
+  if (result.status === 'success') {
+    const workflowOutput = result.result;
+    const assignees = workflowOutput.result.assignees
+      .map((assignee: string) => mappings[assignee])
+      .filter(Boolean)
+      .map(assignee => `<@${assignee}>`);
 
-  const result = response.object as { assignee: string; reason: string; product_area: string; github_username: string };
-
-  // Label the issue
-  await octokit.rest.issues.addLabels({
-    owner: OWNER,
-    repo: REPO,
-    issue_number: Number(ISSUE_NUMBER),
-    labels: [result.product_area, 'status: needs triage'],
-  });
-
-  const userName = result.github_username.startsWith('@') ? result.github_username.slice(1) : result.github_username;
-
-  await octokit.rest.issues.addAssignees({
-    owner: OWNER,
-    repo: REPO,
-    issue_number: Number(ISSUE_NUMBER),
-    assignees: [userName],
-  });
-
-  console.log(`Assigned ${result.github_username} to issue #${ISSUE_NUMBER}`);
-
-  await octokit.rest.issues.createComment({
-    owner: OWNER,
-    repo: REPO,
-    issue_number: Number(ISSUE_NUMBER),
-    body: `Thank you for reporting this issue! We have assigned it to @${userName} and will look into it as soon as possible.`,
-  });
-
-  console.log(`Commented on issue #${ISSUE_NUMBER}`);
-
-  await tools['slack_slack_post_message'].execute({
-    context: {
-      channel_id: CHANNEL_ID,
-      text: `
-                New issue assigned to <@${mappings[userName]}>
+    await tools['slack_slack_post_message'].execute({
+      context: {
+        channel_id: CHANNEL_ID,
+        text: `
+                New issue assigned to ${assignees.join(', ')}
                 * Title: ${issue.data.title}
                 * Link: https://github.com/${OWNER}/${REPO}/issues/${ISSUE_NUMBER}
             `,
-    },
-  });
+      },
+    });
+  }
 }
 
 main()

@@ -27,7 +27,7 @@ rare cards appreciate yearly.
 
 const chunks = await doc1.chunk({
   strategy: 'recursive',
-  size: 150,
+  maxSize: 150,
   overlap: 20,
   separator: '\n',
 });

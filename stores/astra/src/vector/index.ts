@@ -34,8 +34,8 @@ type AstraQueryVectorParams = QueryVectorParams<AstraVectorFilter>;
 export class AstraVector extends MastraVector<AstraVectorFilter> {
   readonly #db: Db;
 
-  constructor({ token, endpoint, keyspace }: AstraDbOptions) {
-    super();
+  constructor({ token, endpoint, keyspace, id }: AstraDbOptions & { id: string }) {
+    super({ id });
     const client = new DataAPIClient(token);
     this.#db = client.db(endpoint, { keyspace });
   }

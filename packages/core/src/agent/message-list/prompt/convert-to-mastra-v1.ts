@@ -2,9 +2,9 @@
  * This file is an adaptation of https://github.com/vercel/ai/blob/e14c066bf4d02c5ee2180c56a01fa0e5216bc582/packages/ai/core/prompt/convert-to-core-messages.ts
  * But has been modified to work with Mastra storage adapter messages (MastraMessageV1)
  */
-import type { AssistantContent, ToolResultPart } from 'ai';
+import type { AssistantContent, ToolResultPart } from '@internal/ai-sdk-v4';
 import type { MastraMessageV1 } from '../../../memory/types';
-import type { MastraMessageContentV2, MastraMessageV2 } from '../../message-list';
+import type { MastraMessageContentV2, MastraDBMessage } from '../../message-list';
 import { attachmentsToParts } from './attachments-to-parts';
 
 const makePushOrCombine = (v1Messages: MastraMessageV1[]) => {
@@ -55,7 +55,7 @@ const makePushOrCombine = (v1Messages: MastraMessageV1[]) => {
     }
   };
 };
-export function convertToV1Messages(messages: Array<MastraMessageV2>) {
+export function convertToV1Messages(messages: Array<MastraDBMessage>) {
   const v1Messages: MastraMessageV1[] = [];
   const pushOrCombine = makePushOrCombine(v1Messages);
 

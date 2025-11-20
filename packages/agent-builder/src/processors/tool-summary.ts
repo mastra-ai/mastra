@@ -13,7 +13,8 @@ export class ToolSummaryProcessor extends MemoryProcessor {
   constructor({ summaryModel }: { summaryModel: MastraLanguageModel }) {
     super({ name: 'ToolSummaryProcessor' });
     this.summaryAgent = new Agent({
-      name: 'ToolSummaryAgent',
+      id: 'tool-summary-agent',
+      name: 'Tool Summary Agent',
       description: 'A summary agent that summarizes tool calls and results',
       instructions: 'You are a summary agent that summarizes tool calls and results',
       model: summaryModel,

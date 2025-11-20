@@ -64,8 +64,8 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
     euclidean: 'euclidean',
   } as const;
 
-  constructor(opts: S3VectorsOptions) {
-    super();
+  constructor(opts: S3VectorsOptions & { id: string }) {
+    super({ id: opts.id });
     if (!opts?.vectorBucketName) {
       throw new MastraError(
         {

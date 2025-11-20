@@ -1,6 +1,6 @@
-import { createScorer } from '@mastra/core/scores';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
 import Sentiment from 'sentiment';
+import { getTextContentFromMastraDBMessage } from '../../utils';
 
 interface ToneScorerConfig {
   referenceTone?: string;
@@ -9,14 +9,16 @@ interface ToneScorerConfig {
 export function createToneScorer(config: ToneScorerConfig = {}) {
   const { referenceTone } = config;
 
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
-    name: 'Completeness',
+  return createScorer({
+    id: 'tone-scorer',
+    name: 'Tone Scorer',
     description:
-      'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
+      'Analyzes the tone and sentiment of agent responses using sentiment analysis. Can compare against a reference tone or evaluate sentiment stability.',
+    type: 'agent',
   })
     .preprocess(async ({ run }) => {
       const sentiment = new Sentiment();
-      const agentMessage: string = run.output?.map((i: { content: string }) => i.content).join(', ') || '';
+      const agentMessage: string = run.output?.map(i => getTextContentFromMastraDBMessage(i)).join(', ') || '';
       const responseSentiment = sentiment.analyze(agentMessage);
 
       if (referenceTone) {

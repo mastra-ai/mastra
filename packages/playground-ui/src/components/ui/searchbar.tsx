@@ -41,7 +41,7 @@ export const Searchbar = ({ onSearch, label, placeholder }: SearchbarProps) => {
   return (
     <form
       onSubmit={handleSubmit}
-      className="border-sm border-icon-3 flex h-8 w-full items-center gap-2 overflow-hidden rounded-lg pl-2 pr-1"
+      className="focus-within:outline focus-within:outline-accent1 -outline-offset-2 border-sm border-icon-3 flex h-8 w-full items-center gap-2 overflow-hidden rounded-lg pl-2 pr-1"
     >
       <SearchIcon className="text-icon3 h-4 w-4" />
 
@@ -54,15 +54,19 @@ export const Searchbar = ({ onSearch, label, placeholder }: SearchbarProps) => {
           id={id}
           type="text"
           placeholder={placeholder}
-          className="bg-surface2 text-ui-md placeholder:text-icon-3 block h-8 w-full px-2 -outline-offset-2"
+          className="bg-surface2 text-ui-md placeholder:text-icon-3 block h-8 w-full px-2 outline-none"
           name={id}
           ref={inputRef}
         />
       </div>
 
       <button type="submit" className="text-ui-sm text-icon3 flex flex-row items-center gap-1">
-        <Kbd>Enter</Kbd>
+        <Kbd>↵ Enter</Kbd>
       </button>
     </form>
   );
+};
+
+export const SearchbarWrapper = ({ children }: { children: React.ReactNode }) => {
+  return <div className="px-4 py-2 border-b-sm border-border1">{children}</div>;
 };

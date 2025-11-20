@@ -1,4 +1,3 @@
-import { File } from 'node:buffer';
 import { MastraVoice } from '@mastra/core/voice';
 import { ElevenLabsClient } from 'elevenlabs';
 
@@ -82,19 +81,15 @@ export class ElevenLabsVoice extends MastraVoice {
    * A promise that resolves to an array of speaker objects.
    */
   async getSpeakers() {
-    const res = await this.traced(async () => {
-      const voices = await this.client.voices.getAll();
-      return (
-        voices?.voices?.map(voice => ({
-          voiceId: voice.voice_id,
-          name: voice.name,
-          language: voice.labels?.language || 'en',
-          gender: voice.labels?.gender || 'neutral',
-        })) ?? []
-      );
-    }, 'voice.elevenlabs.voices')();
-
-    return res;
+    const voices = await this.client.voices.getAll();
+    return (
+      voices?.voices?.map(voice => ({
+        voiceId: voice.voice_id,
+        name: voice.name,
+        language: voice.labels?.language || 'en',
+        gender: voice.labels?.gender || 'neutral',
+      })) ?? []
+    );
   }
 
   private async streamToString(stream: NodeJS.ReadableStream): Promise<string> {
@@ -130,16 +125,13 @@ export class ElevenLabsVoice extends MastraVoice {
       throw new Error('No speech model specified');
     }
     const text = typeof input === 'string' ? input : await this.streamToString(input);
-    const res = await this.traced(async () => {
-      return await this.client.generate({
-        text,
-        voice: speaker,
-        model_id: this.speechModel?.name as ElevenLabsModel,
-        stream: true,
-      });
-    }, 'voice.elevenlabs.speak')();
 
-    return res;
+    return await this.client.generate({
+      text,
+      voice: speaker,
+      model_id: this.speechModel?.name as ElevenLabsModel,
+      stream: true,
+    });
   }
 
   /**
@@ -168,35 +160,31 @@ export class ElevenLabsVoice extends MastraVoice {
    *
    */
   async listen(input: NodeJS.ReadableStream, options?: ElevenLabsListenOptions): Promise<string> {
-    const res = await this.traced(async () => {
-      const chunks: Buffer[] = [];
-      for await (const chunk of input) {
-        if (typeof chunk === 'string') {
-          chunks.push(Buffer.from(chunk));
-        } else {
-          chunks.push(chunk);
-        }
+    const chunks: Buffer[] = [];
+    for await (const chunk of input) {
+      if (typeof chunk === 'string') {
+        chunks.push(Buffer.from(chunk));
+      } else {
+        chunks.push(chunk);
       }
-      const buffer = Buffer.concat(chunks);
+    }
+    const buffer = Buffer.concat(chunks);
 
-      const { language_code, tag_audio_events, num_speakers, filetype, ...requestOptions } = options || {};
+    const { language_code, tag_audio_events, num_speakers, filetype, ...requestOptions } = options || {};
 
-      const file = new File([buffer], `audio.${filetype || 'mp3'}`);
+    const file = new File([buffer], `audio.${filetype || 'mp3'}`);
 
-      const transcription = await this.client.speechToText.convert(
-        {
-          file: file,
-          model_id: this.listeningModel?.name as ElevenLabsModel,
-          language_code,
-          tag_audio_events,
-          num_speakers,
-        },
-        requestOptions,
-      );
+    const transcription = await this.client.speechToText.convert(
+      {
+        file: file,
+        model_id: this.listeningModel?.name as ElevenLabsModel,
+        language_code,
+        tag_audio_events,
+        num_speakers,
+      },
+      requestOptions,
+    );
 
-      return transcription.text;
-    }, 'voice.elevenlabs.listen')();
-
-    return res;
+    return transcription.text;
   }
 }

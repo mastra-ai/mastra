@@ -674,7 +674,7 @@ export class AudioStreamManager {
    */
   private log(message: string, ...args: unknown[]): void {
     if (this.debug) {
-      console.log(`[AudioStreamManager] ${message}`, ...args);
+      console.info(`[AudioStreamManager] ${message}`, ...args);
     }
   }
 

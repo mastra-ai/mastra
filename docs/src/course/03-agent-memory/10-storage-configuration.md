@@ -9,9 +9,8 @@ import { LibSQLStore } from "@mastra/libsql";
 const memory = new Memory({
   // Configure storage
   storage: new LibSQLStore({
-    config: {
-      url: "file:../../memory.db", // Local database. Relative to the output folder
-    },
+    id: "learning-memory-storage",
+    url: "file:../../memory.db", // Local database. Relative to the output folder
   }),
   options: {
     lastMessages: 20,

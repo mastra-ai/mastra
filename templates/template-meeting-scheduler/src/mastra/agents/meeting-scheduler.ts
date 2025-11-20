@@ -1,5 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { anthropic } from '@ai-sdk/anthropic';
 import { Memory } from '@mastra/memory';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { fastembed } from '@mastra/fastembed';
@@ -7,8 +6,8 @@ import Arcade from '@arcadeai/arcadejs';
 import { executeOrAuthorizeZodTool, toZodToolSet } from '@arcadeai/arcadejs/lib';
 
 export const meetingSchedulerAgent = new Agent({
+  id: 'meeting-scheduler-agent',
   name: 'meetingSchedulerAgent',
-  id: 'meetingSchedulerAgent',
   instructions: () => `
 You're an intelligent email assistant that helps manage Gmail and Google Calendar integration. Your primary focus is identifying meeting requests in emails and automating calendar event creation.
 
@@ -52,24 +51,26 @@ Example response format:
 
 Once authorized, you can proceed with the requested email analysis and calendar operations. Always ask for permission before creating calendar events and provide clear summaries of what will be scheduled.
 `,
-  model: anthropic('claude-4-sonnet-20250514'),
+  model: process.env.MODEL || 'anthropic/claude-4-sonnet-20250514',
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'meeting-scheduler-agent-storage',
       url: 'file:../../mastra.db',
     }),
     vector: new LibSQLVector({
+      id: 'meeting-scheduler-agent-vector',
       connectionUrl: 'file:../../mastra.db',
     }),
     embedder: fastembed,
     options: {
       semanticRecall: true,
       workingMemory: { enabled: true },
-      threads: { generateTitle: true },
+      generateTitle: true,
     },
   }),
-  tools: async ({ runtimeContext }) => {
+  tools: async ({ requestContext }) => {
     const arcade = new Arcade();
-    const userId = runtimeContext.get('userId') as string;
+    const userId = requestContext.get('userId') as string;
 
     const [googleCalendarToolkit, gmailToolKit] = await Promise.all([
       arcade.tools.list({

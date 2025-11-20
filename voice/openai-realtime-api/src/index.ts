@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
 import type { ToolsInput } from '@mastra/core/agent';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RequestContext } from '@mastra/core/request-context';
 import { MastraVoice } from '@mastra/core/voice';
 import type { Realtime, RealtimeServerEvents } from 'openai-realtime-api';
 import { WebSocket } from 'ws';
@@ -114,7 +114,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
   private debug: boolean;
   private queue: unknown[] = [];
   private transcriber: Realtime.AudioTranscriptionModel;
-  private runtimeContext?: RuntimeContext;
+  private requestContext?: RequestContext;
   /**
    * Creates a new instance of OpenAIRealtimeVoice.
    *
@@ -373,10 +373,10 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    * // Now ready for voice interactions
    * ```
    */
-  async connect({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}) {
+  async connect({ requestContext }: { requestContext?: RequestContext } = {}) {
     const url = `${this.options.url || DEFAULT_URL}?model=${this.options.model || DEFAULT_MODEL}`;
     const apiKey = this.options.apiKey || process.env.OPENAI_API_KEY;
-    this.runtimeContext = runtimeContext;
+    this.requestContext = requestContext;
 
     this.ws = new WebSocket(url, undefined, {
       headers: {
@@ -557,7 +557,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
 
       if (this.debug) {
         const { delta, ...fields } = data;
-        console.log(data.type, fields, delta?.length < 100 ? delta : '');
+        console.info(data.type, fields, delta?.length < 100 ? delta : '');
       }
     });
 
@@ -650,7 +650,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       }
 
       const result = await tool?.execute?.(
-        { context, runtimeContext: this.runtimeContext },
+        { context, requestContext: this.requestContext },
         {
           toolCallId: output.call_id,
           messages: [],

@@ -15,7 +15,7 @@ describe('QdrantVector', () => {
 
   describe('Index Operations', () => {
     beforeAll(async () => {
-      qdrant = new QdrantVector({ url: 'http://localhost:6333/' });
+      qdrant = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-test' });
       await qdrant.createIndex({ indexName: testCollectionName, dimension });
     });
 
@@ -38,7 +38,7 @@ describe('QdrantVector', () => {
 
   describe('Vector Operations', () => {
     beforeAll(async () => {
-      qdrant = new QdrantVector({ url: 'http://localhost:6333/' });
+      qdrant = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-test' });
       await qdrant.createIndex({ indexName: testCollectionName, dimension });
     });
 
@@ -341,7 +341,7 @@ describe('QdrantVector', () => {
     ];
 
     beforeAll(async () => {
-      qdrant = new QdrantVector({ url: 'http://localhost:6333/' });
+      qdrant = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-test' });
       await qdrant.createIndex({ indexName: testCollectionName, dimension });
       await qdrant.upsert({ indexName: testCollectionName, vectors: filterTestVectors, metadata: filterTestMetadata });
     });
@@ -880,7 +880,7 @@ describe('QdrantVector', () => {
     ];
 
     beforeAll(async () => {
-      qdrant = new QdrantVector({ url: 'http://localhost:6333/' });
+      qdrant = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-test' });
       await qdrant.createIndex({ indexName: testCollectionName, dimension });
       await qdrant.upsert({ indexName: testCollectionName, vectors: filterTestVectors, metadata: filterTestMetadata });
     });
@@ -912,7 +912,7 @@ describe('QdrantVector', () => {
 
   describe('Performance Tests', () => {
     beforeAll(async () => {
-      qdrant = new QdrantVector({ url: 'http://localhost:6333/' });
+      qdrant = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-test' });
       await qdrant.createIndex({ indexName: testCollectionName, dimension });
     });
 
@@ -959,7 +959,7 @@ describe('QdrantVector', () => {
 
 // Metadata filtering tests for Memory system
 describe('Qdrant Metadata Filtering', () => {
-  const qdrantVector = new QdrantVector({ url: 'http://localhost:6333/' });
+  const qdrantVector = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-metadata-test' });
 
   createVectorTestSuite({
     vector: qdrantVector,

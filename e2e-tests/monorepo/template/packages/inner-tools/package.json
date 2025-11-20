@@ -9,9 +9,10 @@
   },
   "keywords": [],
   "author": "",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@mastra/core": "monorepo-test",
+    "@inner/lodash": "workspace:*",
     "bcrypt": "^6.0.0",
     "@inner/native-binding-package": "workspace:*"
   }

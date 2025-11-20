@@ -27,7 +27,7 @@ export const ThreadLink = ({ children, as: Component = 'a', href, className, pre
       href={href}
       prefetch={prefetch}
       to={to}
-      className={clsx('text-ui-sm flex h-full w-full flex-col justify-center font-medium', className)}
+      className={clsx('text-ui-sm flex h-full w-full flex-col justify-center font-medium cursor-pointer', className)}
     >
       {children}
     </Component>
@@ -39,20 +39,22 @@ export interface ThreadListProps {
 }
 
 export const ThreadList = ({ children }: ThreadListProps) => {
-  return <ol>{children}</ol>;
+  return <ol data-testid="thread-list">{children}</ol>;
 };
 
 export interface ThreadItemProps {
   children: React.ReactNode;
   isActive?: boolean;
+  className?: string;
 }
 
-export const ThreadItem = ({ children, isActive }: ThreadItemProps) => {
+export const ThreadItem = ({ children, isActive, className }: ThreadItemProps) => {
   return (
     <li
       className={clsx(
-        'border-b-sm border-border1 hover:bg-surface3 group flex h-[54px] items-center justify-between gap-2 pl-5 py-2',
+        'border-b-sm border-border1 hover:bg-surface3 group flex h-[54px] items-center justify-between gap-2 px-3 py-2',
         isActive && 'bg-surface4',
+        className,
       )}
     >
       {children}

@@ -5,3 +5,6 @@ export * from './side-dialog';
 export * from './headers';
 export * from './date-time-picker';
 export * from './text';
+export * from './notification';
+export * from './section';
+export * from './main-sidebar';

@@ -1,4 +1,3 @@
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
@@ -6,11 +5,13 @@ import { Memory } from '@mastra/memory';
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: 'pdf-summarization-agent-storage',
     url: process.env.MASTRA_DB_URL || 'file:../mastra.db',
   }),
 });
 
 export const pdfSummarizationAgent = new Agent({
+  id: 'pdf-summarization-agent',
   name: 'PDF Summarization Agent',
   description: 'An agent that summarizes extracted PDF text using a large context window model',
   instructions: `
@@ -88,6 +89,6 @@ Format your summaries with:
 
 Always provide summaries that would allow someone to understand the document's core value without reading the full text.
   `,
-  model: openai('gpt-4.1-mini'), // Large context window model for summarization
+  model: process.env.MODEL || 'openai/gpt-4.1-mini', // Large context window model for summarization
   memory,
 });

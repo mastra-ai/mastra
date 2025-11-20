@@ -1,4 +1,3 @@
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { pageNavigateTool } from '../tools/page-navigate-tool';
@@ -7,6 +6,7 @@ import { pageExtractTool } from '../tools/page-extract-tool';
 const memory = new Memory();
 
 export const webContentAgent = new Agent({
+  id: 'web-content-agent',
   name: 'Web Content Extraction Agent',
   instructions: `
     You are a specialized web content extraction agent focused on gathering content from blog posts, articles, and websites for marketing and ad copy generation purposes.
@@ -36,7 +36,7 @@ export const webContentAgent = new Agent({
 
     Use the pageNavigateTool to navigate to URLs and pageExtractTool to extract content.
   `,
-  model: openai('gpt-4o'),
+  model: process.env.MODEL || 'openai/gpt-4o',
   tools: { pageNavigateTool, pageExtractTool },
   memory: memory,
 });

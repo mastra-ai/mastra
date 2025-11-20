@@ -1,0 +1,153 @@
+language: en-US
+tone_instructions: ''
+early_access: false
+enable_free_tier: true
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  high_level_summary_instructions: ''
+  high_level_summary_placeholder: '@coderabbitai summary'
+  high_level_summary_in_walkthrough: false
+  auto_title_placeholder: '@coderabbitai'
+  auto_title_instructions: ''
+  review_status: true
+  commit_status: true
+  fail_commit_status: false
+  collapse_walkthrough: false
+  changed_files_summary: true
+  sequence_diagrams: false
+  estimate_code_review_effort: true
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: true
+  suggested_labels: true
+  labeling_instructions: []
+  auto_apply_labels: false
+  suggested_reviewers: true
+  auto_assign_reviewers: false
+  in_progress_fortune: true
+  poem: false
+  path_filters: []
+  path_instructions:
+    - path: '.changeset/*.md'
+      instructions: |
+        Review the changeset file (which will become part of a CHANGELOG.md file) according to these guidelines:
+        - The target audience are developers
+        - Write short, direct sentences that anyone can understand. Avoid commit messages, technical jargon, and acronyms. Use action-oriented verbs (Added, Fixed, Improved, Deprecated, Removed)
+        - Avoid generic phrases like "Update code", "Miscellaneous improvements", or "Bug fixes"
+        - Highlight outcomes rather than internal code details
+        - Add context like links to issues or PRs when relevant
+        - If the change is a breaking change or is adding a new feature, ensure that a code example is provided showing its (changed) usage
+        - Keep the formatting easy-to-read and scannable. If necessary, use bullet points or subheadings (subheadings must start with heading level 4 - ####)
+        - For larger, more substantial changes, also answer the "Why" behind the changes
+  abort_on_close: true
+  disable_cache: false
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    ignore_title_keywords: []
+    labels:
+      - '!automation'
+    drafts: false
+    base_branches: []
+    ignore_usernames: []
+  finishing_touches:
+    docstrings:
+      enabled: true
+    unit_tests:
+      enabled: true
+  pre_merge_checks:
+    docstrings:
+      mode: warning
+      threshold: 80
+    title:
+      mode: warning
+      requirements: 'Title should be concise and descriptive, ideally under 50 characters. Avoid generic phrases like "Update code" or "Fix bug". Use imperative mood and proper capitalization.'
+    description:
+      mode: warning
+    issue_assessment:
+      mode: warning
+    custom_checks: []
+  tools:
+    ast-grep:
+      rule_dirs: []
+      util_dirs: []
+      essential_rules: true
+      packages: []
+    shellcheck:
+      enabled: true
+    markdownlint:
+      enabled: true
+    github-checks:
+      enabled: true
+      timeout_ms: 90000
+    languagetool:
+      enabled: true
+      enabled_rules: []
+      disabled_rules: []
+      enabled_categories: []
+      disabled_categories: []
+      enabled_only: false
+      level: default
+    biome:
+      enabled: true
+    hadolint:
+      enabled: true
+    yamllint:
+      enabled: true
+    gitleaks:
+      enabled: true
+    checkov:
+      enabled: true
+    eslint:
+      enabled: true
+    actionlint:
+      enabled: true
+    semgrep:
+      enabled: true
+    sqlfluff:
+      enabled: true
+    prismaLint:
+      enabled: true
+    oxc:
+      enabled: true
+    dotenvLint:
+      enabled: true
+    htmlhint:
+      enabled: true
+    checkmake:
+      enabled: true
+    osvScanner:
+      enabled: true
+chat:
+  art: true
+  auto_reply: true
+  integrations:
+    linear:
+      usage: auto
+knowledge_base:
+  opt_out: false
+  web_search:
+    enabled: true
+  code_guidelines:
+    enabled: true
+    filePatterns: []
+  learnings:
+    scope: auto
+  issues:
+    scope: auto
+  linear:
+    usage: auto
+    team_keys: []
+  pull_requests:
+    scope: auto
+  mcp:
+    usage: auto
+    disabled_servers: []
+code_generation:
+  docstrings:
+    language: en-US
+    path_instructions: []
+  unit_tests:
+    path_instructions: []

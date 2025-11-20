@@ -21,11 +21,12 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
   /**
    * Creates a new UpstashVector instance.
    * @param {object} params - The parameters for the UpstashVector.
+   * @param {string} params.id - The unique identifier for this vector store instance.
    * @param {string} params.url - The URL of the Upstash vector index.
    * @param {string} params.token - The token for the Upstash vector index.
    */
-  constructor({ url, token }: { url: string; token: string }) {
-    super();
+  constructor({ url, token, id }: { url: string; token: string } & { id: string }) {
+    super({ id });
     this.client = new Index({
       url,
       token,

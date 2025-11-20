@@ -96,56 +96,19 @@ export class CloudflareDeployer extends Deployer {
   private getEntry(): string {
     return `
     import '#polyfills';
-    import { mastra } from '#mastra';
-    import { createHonoServer, getToolExports } from '#server';
-    import { tools } from '#tools';
-    import { evaluate } from '@mastra/core/eval';
-    import { AvailableHooks, registerHook } from '@mastra/core/hooks';
-    import { TABLE_EVALS } from '@mastra/core/storage';
-    import { checkEvalStorageFields } from '@mastra/core/utils';
+    import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
 
     export default {
       fetch: async (request, env, context) => {
+        const { mastra } = await import('#mastra');
+        const { tools } = await import('#tools');
+        const {createHonoServer, getToolExports} = await import('#server');
         const _mastra = mastra();
 
-        registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
-          evaluate({
-            agentName,
-            input,
-            metric,
-            output,
-            runId,
-            globalRunId: runId,
-            instructions,
-          });
-        });
+        if (_mastra.getStorage()) {
+          _mastra.__registerInternalWorkflow(scoreTracesWorkflow);
+        }
 
-        registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
-          const storage = _mastra.getStorage();
-          if (storage) {
-            // Check for required fields
-            const logger = _mastra?.getLogger();
-            const areFieldsValid = checkEvalStorageFields(traceObject, logger);
-            if (!areFieldsValid) return;
-
-            await storage.insert({
-              tableName: TABLE_EVALS,
-              record: {
-                input: traceObject.input,
-                output: traceObject.output,
-                result: JSON.stringify(traceObject.result || {}),
-                agent_name: traceObject.agentName,
-                metric_name: traceObject.metricName,
-                instructions: traceObject.instructions,
-                test_info: null,
-                global_run_id: traceObject.globalRunId,
-                run_id: traceObject.runId,
-                created_at: new Date().toISOString(),
-              },
-            });
-          }
-        });
-      
         const app = await createHonoServer(_mastra, { tools: getToolExports(tools) });
         return app.fetch(request, env, context);
       }
@@ -169,6 +132,8 @@ export class CloudflareDeployer extends Deployer {
       enableEsmShim: false,
     });
 
+    const hasPostgresStore = (await this.deps.checkDependencies(['@mastra/pg'])) === `ok`;
+
     if (Array.isArray(inputOptions.plugins)) {
       inputOptions.plugins = [
         virtual({
@@ -178,16 +143,23 @@ process.versions.node = '${process.versions.node}';
       `,
         }),
         ...inputOptions.plugins,
-        postgresStoreInstanceChecker(),
         mastraInstanceWrapper(mastraEntryFile),
       ];
+
+      if (hasPostgresStore) {
+        inputOptions.plugins.push(postgresStoreInstanceChecker());
+      }
     }
 
     return inputOptions;
   }
 
-  async bundle(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths);
+  async bundle(
+    entryFile: string,
+    outputDirectory: string,
+    { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string },
+  ): Promise<void> {
+    return this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot, enableEsmShim: false }, toolsPaths);
   }
 
   async deploy(): Promise<void> {
@@ -205,7 +177,7 @@ process.versions.node = '${process.versions.node}';
 
     if (hasLibsql) {
       this.logger.error(
-        'Cloudflare Deployer does not support @libsql/client(which may have been installed by @mastra/libsql) as a dependency. Please use Cloudflare D1 instead @mastra/cloudflare-d1',
+        'Cloudflare Deployer does not support @libsql/client (which may have been installed by @mastra/libsql) as a dependency. Please use Cloudflare D1 instead: @mastra/cloudflare-d1.',
       );
       process.exit(1);
     }

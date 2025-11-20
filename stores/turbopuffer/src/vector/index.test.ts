@@ -60,6 +60,7 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
       console.log(`Creating test vector database with index: ${testIndexName}`);
 
       vectorDB = new TurbopufferVector({
+        id: 'turbopuffer-test-vector',
         apiKey: TURBOPUFFER_API_KEY!,
         baseUrl: 'https://gcp-us-central1.turbopuffer.com',
       });

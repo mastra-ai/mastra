@@ -4,7 +4,7 @@ import { addNewScorer } from '../scorers/add-new-scorer';
 
 const origin = process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN;
 
-export const addScorer = async (scorerName: string | undefined, args: any) => {
+export const addScorer = async (scorerName: string | undefined, args: { dir?: string }) => {
   await analytics.trackCommandExecution({
     command: 'scorers-add',
     args: { ...args, scorerName },

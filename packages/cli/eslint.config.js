@@ -6,6 +6,6 @@ const config = await createConfig();
 export default [
   ...config,
   {
-    ignores: ['src/playground/**', 'src/starter-files/**'],
+    ignores: ['src/public/**'],
   },
 ];

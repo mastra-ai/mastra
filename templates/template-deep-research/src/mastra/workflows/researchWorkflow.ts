@@ -67,25 +67,27 @@ const researchStep = createStep({
         ],
         {
           maxSteps: 15,
-          experimental_output: z.object({
-            queries: z.array(z.string()),
-            searchResults: z.array(
-              z.object({
-                title: z.string(),
-                url: z.string(),
-                relevance: z.string(),
-              }),
-            ),
-            learnings: z.array(
-              z.object({
-                learning: z.string(),
-                followUpQuestions: z.array(z.string()),
-                source: z.string(),
-              }),
-            ),
-            completedQueries: z.array(z.string()),
-            phase: z.string().optional(),
-          }),
+          structuredOutput: {
+            schema: z.object({
+              queries: z.array(z.string()),
+              searchResults: z.array(
+                z.object({
+                  title: z.string(),
+                  url: z.string(),
+                  relevance: z.string(),
+                }),
+              ),
+              learnings: z.array(
+                z.object({
+                  learning: z.string(),
+                  followUpQuestions: z.array(z.string()),
+                  source: z.string(),
+                }),
+              ),
+              completedQueries: z.array(z.string()),
+              phase: z.string().optional(),
+            }),
+          },
         },
       );
 

@@ -1,14 +1,14 @@
 import { createSampleScore } from '@internal/storage-test-utils';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
 import type { StoragePagination } from '@mastra/core/storage';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createWorkflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
-import { getScorersHandler, getScoresByRunIdHandler, getScoresByEntityIdHandler, saveScoreHandler } from './scores';
+import { listScorersHandler, listScoresByRunIdHandler, listScoresByEntityIdHandler, saveScoreHandler } from './scores';
 
 function createPagination(args: Partial<StoragePagination>): StoragePagination {
   return {
@@ -39,6 +39,7 @@ describe('Scores Handlers', () => {
       },
       agents: {
         'test-agent': new Agent({
+          id: 'test-agent',
           name: 'test-agent',
           instructions: 'test-agent',
           model: {} as any,
@@ -47,17 +48,17 @@ describe('Scores Handlers', () => {
     });
   });
 
-  describe('getScorersHandler', () => {
+  describe('listScorersHandler', () => {
     it('should return empty object', async () => {
-      const result = await getScorersHandler({
+      const result = await listScorersHandler({
         mastra,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       });
       expect(result).toEqual({});
     });
   });
 
-  describe('getScoresByRunIdHandler', () => {
+  describe('listScoresByRunIdHandler', () => {
     it('should get scores by run ID successfully', async () => {
       const mockScores = [createSampleScore({ scorerId: 'test-1-scorer' })];
 
@@ -65,24 +66,20 @@ describe('Scores Handlers', () => {
 
       const pagination = createPagination({ page: 0, perPage: 10 });
 
-      const result = await getScoresByRunIdHandler({
+      const result = await listScoresByRunIdHandler({
         mastra,
         runId: mockScores?.[0]?.runId,
         pagination,
       });
 
-      if ('scores' in result) {
-        expect(result.scores).toHaveLength(1);
-      }
+      expect(result.scores).toHaveLength(1);
 
-      if ('pagination' in result) {
-        expect(result.pagination).toEqual({
-          total: 1,
-          page: 0,
-          perPage: 10,
-          hasMore: false,
-        });
-      }
+      expect(result.pagination).toEqual({
+        total: 1,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      });
     });
 
     it('should return empty array when storage method is not available', async () => {
@@ -93,23 +90,31 @@ describe('Scores Handlers', () => {
         logger: false,
       });
 
-      const result = await getScoresByRunIdHandler({
+      const result = await listScoresByRunIdHandler({
         mastra: mastraWithoutStorage,
         runId: 'test-run-1',
         pagination,
       });
 
-      expect(result).toEqual([]);
+      expect(result).toEqual({
+        pagination: {
+          hasMore: false,
+          page: 0,
+          perPage: 0,
+          total: 0,
+        },
+        scores: [],
+      });
     });
 
     it('should handle storage errors gracefully', async () => {
       const pagination = createPagination({ page: 0, perPage: 10 });
       const error = new Error('Storage error');
 
-      mockStorage.getScoresByRunId = vi.fn().mockRejectedValue(error);
+      mockStorage.listScoresByRunId = vi.fn().mockRejectedValue(error);
 
       await expect(
-        getScoresByRunIdHandler({
+        listScoresByRunIdHandler({
           mastra,
           runId: 'test-run-1',
           pagination,
@@ -124,10 +129,10 @@ describe('Scores Handlers', () => {
         status: 404,
       };
 
-      mockStorage.getScoresByRunId = vi.fn().mockRejectedValue(apiError);
+      mockStorage.listScoresByRunId = vi.fn().mockRejectedValue(apiError);
 
       await expect(
-        getScoresByRunIdHandler({
+        listScoresByRunIdHandler({
           mastra,
           runId: 'test-run-1',
           pagination,
@@ -136,32 +141,28 @@ describe('Scores Handlers', () => {
     });
   });
 
-  describe('getScoresByEntityIdHandler', () => {
+  describe('listScoresByEntityIdHandler', () => {
     it('should get scores by entity ID successfully', async () => {
       const mockScores = [createSampleScore({ entityType: 'AGENT', entityId: 'test-agent', scorerId: 'foo-scorer' })];
       const pagination = createPagination({ page: 0, perPage: 10 });
 
       await mockStorage.saveScore(mockScores[0]);
 
-      const result = await getScoresByEntityIdHandler({
+      const result = await listScoresByEntityIdHandler({
         mastra,
         entityId: 'test-agent',
         entityType: 'AGENT',
         pagination,
       });
 
-      if ('scores' in result) {
-        expect(result.scores).toHaveLength(1);
-      }
+      expect(result.scores).toHaveLength(1);
 
-      if ('pagination' in result) {
-        expect(result.pagination).toEqual({
-          total: 1,
-          page: 0,
-          perPage: 10,
-          hasMore: false,
-        });
-      }
+      expect(result.pagination).toEqual({
+        total: 1,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      });
     });
 
     it('should return empty array when storage method is not available', async () => {
@@ -172,24 +173,32 @@ describe('Scores Handlers', () => {
         logger: false,
       });
 
-      const result = await getScoresByEntityIdHandler({
+      const result = await listScoresByEntityIdHandler({
         mastra: mastraWithoutStorage,
         entityId: 'test-agent',
         entityType: 'agent',
         pagination,
       });
 
-      expect(result).toEqual([]);
+      expect(result).toEqual({
+        pagination: {
+          hasMore: false,
+          page: 0,
+          perPage: 0,
+          total: 0,
+        },
+        scores: [],
+      });
     });
 
     it('should handle storage errors gracefully', async () => {
       const pagination = createPagination({ page: 0, perPage: 10 });
       const error = new Error('Storage error');
 
-      mockStorage.getScoresByEntityId = vi.fn().mockRejectedValue(error);
+      mockStorage.listScoresByEntityId = vi.fn().mockRejectedValue(error);
 
       await expect(
-        getScoresByEntityIdHandler({
+        listScoresByEntityIdHandler({
           mastra,
           entityId: 'test-agent',
           entityType: 'agent',
@@ -205,10 +214,10 @@ describe('Scores Handlers', () => {
         status: 404,
       };
 
-      mockStorage.getScoresByEntityId = vi.fn().mockRejectedValue(apiError);
+      mockStorage.listScoresByEntityId = vi.fn().mockRejectedValue(apiError);
 
       await expect(
-        getScoresByEntityIdHandler({
+        listScoresByEntityIdHandler({
           mastra,
           entityId: 'test-agent',
           entityType: 'agent',
@@ -225,25 +234,20 @@ describe('Scores Handlers', () => {
 
       await mockStorage.saveScore(mockScores[0]);
 
-      const result = await getScoresByEntityIdHandler({
+      const result = await listScoresByEntityIdHandler({
         mastra,
         entityId: 'test-workflow',
         entityType: 'WORKFLOW',
         pagination,
       });
 
-      if ('scores' in result) {
-        expect(result.scores).toHaveLength(1);
-      }
-
-      if ('pagination' in result) {
-        expect(result.pagination).toEqual({
-          total: 1,
-          page: 0,
-          perPage: 10,
-          hasMore: false,
-        });
-      }
+      expect(result.scores).toHaveLength(1);
+      expect(result.pagination).toEqual({
+        total: 1,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      });
     });
   });
 

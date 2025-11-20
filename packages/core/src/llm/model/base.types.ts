@@ -1,40 +1,38 @@
 import type {
+  UIMessage,
   CoreMessage,
   GenerateTextResult as OriginalGenerateTextResult,
   GenerateObjectResult as OriginalGenerateObjectResult,
   StreamTextResult as OriginalStreamTextResult,
   StreamObjectResult as OriginalStreamObjectResult,
-  TelemetrySettings,
-  UIMessage,
-  Tool,
   generateText,
-  ToolSet,
   generateObject,
   streamText,
   streamObject,
-  DeepPartial,
   StreamObjectOnFinishCallback as OriginalStreamObjectOnFinishCallback,
   StreamTextOnFinishCallback as OriginalStreamTextOnFinishCallback,
   StreamTextOnStepFinishCallback as OriginalStreamTextOnStepFinishCallback,
   GenerateTextOnStepFinishCallback as OriginalGenerateTextOnStepFinishCallback,
-} from 'ai';
+  Tool,
+  ToolSet,
+  DeepPartial,
+} from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MessageList } from '../../agent/types';
-import type { TracingContext } from '../../ai-tracing';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
+import type { TracingContext, TracingProperties } from '../../observability';
 import type { OutputProcessor } from '../../processors';
-import type { RuntimeContext } from '../../runtime-context';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
+import type { RequestContext } from '../../request-context';
 import type { inferOutput, ScoringProperties, TripwireProperties } from './shared.types';
 
-export type { ToolSet } from 'ai';
+export type { ToolSet } from '@internal/ai-sdk-v4';
 
 type MastraCustomLLMOptions = {
   tools?: Record<string, Tool>;
-  telemetry?: TelemetrySettings;
   threadId?: string;
   resourceId?: string;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   tracingContext: TracingContext;
   runId?: string;
   outputProcessors?: OutputProcessor[];
@@ -96,7 +94,8 @@ export type GenerateTextResult<
   object?: Output extends undefined ? never : inferOutput<Output>;
   messageList?: MessageList;
 } & TripwireProperties &
-  ScoringProperties;
+  ScoringProperties &
+  TracingProperties;
 
 export type OriginalGenerateObjectOptions<Output extends ZodSchema | JSONSchema7 | undefined = undefined> =
   | Parameters<typeof generateObject<inferOutput<Output>>>[0]
@@ -120,7 +119,8 @@ export type GenerateObjectResult<Output extends ZodSchema | JSONSchema7 | undefi
   OriginalGenerateObjectResult<inferOutput<Output>> & {
     readonly reasoning?: never;
   } & TripwireProperties &
-    ScoringProperties;
+    ScoringProperties &
+    TracingProperties;
 
 export type GenerateReturn<
   Tools extends ToolSet,
@@ -157,7 +157,8 @@ export type StreamTextResult<
   Output extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = Omit<OriginalStreamTextResult<Tools, DeepPartial<inferOutput<Output>>>, 'experimental_output'> & {
   object?: inferOutput<Output>;
-} & TripwireProperties;
+} & TripwireProperties &
+  TracingProperties;
 
 export type OriginalStreamObjectOptions<Output extends ZodSchema | JSONSchema7> =
   | Parameters<typeof streamObject<inferOutput<Output>>>[0]

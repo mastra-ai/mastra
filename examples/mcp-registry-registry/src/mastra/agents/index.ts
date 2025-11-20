@@ -12,8 +12,9 @@ const mcp = new MCPClient({
 });
 
 export const mcpRegistryAgent = new Agent({
+  id: 'mcp-registry-agent',
   name: 'MCP Registry Agent',
   instructions: `You are a helpful assistant that provides information about MCP registries. You can search for registries by ID, tag, or name.`,
   model: openai('gpt-4o'),
-  tools: await mcp.getTools(),
+  tools: await mcp.listTools(),
 });

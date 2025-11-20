@@ -6,7 +6,7 @@ describe('blog tool', () => {
   let baseUrl: string;
 
   beforeAll(async () => {
-    tools = await mcp.getTools();
+    tools = await mcp.listTools();
     const port = (server.address() as { port: number }).port;
     baseUrl = `http://localhost:${port}`;
   });

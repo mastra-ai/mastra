@@ -1,5 +1,5 @@
-import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
 import type { MastraVoice } from '@mastra/core/voice';
 import { CompositeVoice } from '@mastra/core/voice';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -19,6 +19,7 @@ function createAgentWithVoice({
   instructions?: string | (() => string);
 } = {}) {
   return new Agent({
+    id: name ?? 'test-agent',
     name: name ?? 'test-agent',
     instructions: instructions ?? 'You are a helpful assistant',
     model: model ?? ('openai' as any),
@@ -50,7 +51,7 @@ describe('Voice Handlers', () => {
 
     it('should throw error when agent is not found', async () => {
       await expect(getSpeakersHandler({ mastra, agentId: 'non-existent' })).rejects.toThrow(
-        'Agent with name non-existent not found',
+        'Agent with id non-existent not found',
       );
     });
 
@@ -116,7 +117,7 @@ describe('Voice Handlers', () => {
             speakerId: '1',
           },
         }),
-      ).rejects.toThrow('Agent with name non-existent not found');
+      ).rejects.toThrow('Agent with id non-existent not found');
     });
 
     it('should throw error when agent does not have voice capabilities', async () => {
@@ -241,7 +242,7 @@ describe('Voice Handlers', () => {
             audioData: Buffer.from('test'),
           },
         }),
-      ).rejects.toThrow('Agent with name non-existent not found');
+      ).rejects.toThrow('Agent with id non-existent not found');
     });
 
     it('should throw error when agent does not have voice capabilities', async () => {

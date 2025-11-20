@@ -25,7 +25,7 @@ console.log('Extracted Metadata:', meta);
 // Example 2: Using chunk with metadata extraction
 await doc.chunk({
   strategy: 'recursive',
-  size: 200,
+  maxSize: 200,
   extract: {
     keywords: true,
     summary: true,

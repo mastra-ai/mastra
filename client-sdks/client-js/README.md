@@ -50,42 +50,40 @@ const client = new MastraClient({
 
 ### Agents
 
-- `getAgents()`: Get all available agents
+- `listAgents()`: Get all available agents
 - `getAgent(agentId)`: Get a specific agent instance
   - `agent.details()`: Get agent details
-  - `agent.generate(params)`: Generate a response (deprecated)
-  - `agent.generateVNext(params)`: Improved API for generating a response
-  - `agent.stream(params)`: Stream a response (deprecated)
-  - `agent.streamVNext(params)`: Improved API for streaming a response
+- `agent.generate(params)`: Generate a response
+  - `agent.generateLegacy(params)`: Legacy API for generating a response (V1 models)
+  - `agent.stream(params)`: Stream a response
+  - `agent.streamLegacy(params)`: Legacy API for streaming a response (V1 models)
   - `agent.getTool(toolId)`: Get agent tool details
   - `agent.evals()`: Get agent evaluations
   - `agent.liveEvals()`: Get live evaluations
 
 ### Memory
 
-- `getMemoryThreads(params)`: Get memory threads
+- `listMemoryThreads(params)`: Get memory threads
 - `createMemoryThread(params)`: Create a new memory thread
-- `getMemoryThread(threadId)`: Get a memory thread instance
+- `getMemoryThread({ threadId, agentId })`: Get a memory thread instance
 - `saveMessageToMemory(params)`: Save messages to memory
 - `getMemoryStatus()`: Get memory system status
 
 ### Tools
 
-- `getTools()`: Get all available tools
+- `listTools()`: Get all available tools
 - `getTool(toolId)`: Get a tool instance
   - `tool.details()`: Get tool details
   - `tool.execute(params)`: Execute the tool
 
 ### Workflows
 
-- `getWorkflows()`: Get all workflows
+- `listWorkflows()`: Get all workflows
 - `getWorkflow(workflowId)`: Get a workflow instance
   - `workflow.details()`: Get workflow details
   - `workflow.createRun()`: Create workflow run
-  - `workflow.createRunAsync()`: Create workflow run (alias)
   - `workflow.startAsync(params)`: Execute the workflow and wait for execution results
   - `workflow.resumeAsync(params)`: Resume suspended workflow step async
-  - `workflow.watch({runId},(record)=>{})`: Watch the step transitions of the workflow run
   - `workflow.start({runId, triggerData})`: Start a workflow run sync
   - `workflow.resume(params)`: Resume the workflow run sync
 
@@ -101,9 +99,9 @@ const client = new MastraClient({
 
 ### Logs
 
-- `getLogs(params)`: Get system logs
+- `listLogs(params)`: Get system logs
 - `getLog(params)`: Get specific log entry
-- `getLogTransports()`: Get configured Log transports
+- `listLogTransports()`: Get configured Log transports
 
 ### Telemetry
 
@@ -125,7 +123,3 @@ The client uses the native `fetch` API internally for making HTTP requests. All 
 - Retry logic with exponential backoff
 - Custom header management
 - Error handling
-
-## License
-
-MIT

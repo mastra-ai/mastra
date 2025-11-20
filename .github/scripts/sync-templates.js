@@ -1,6 +1,5 @@
 import { Octokit } from '@octokit/rest';
 import fs from 'fs';
-import { readFile, writeFile } from 'fs/promises';
 import * as fsExtra from 'fs-extra/esm';
 import path from 'path';
 import { execSync } from 'child_process';
@@ -15,36 +14,14 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const USERNAME = process.env.USERNAME;
 const EMAIL = process.env.EMAIL;
 
-const PROVIDERS = {
-  openai: {
-    model: 'gpt-4.1',
-    package: '@ai-sdk/openai',
-    apiKey: 'OPENAI_API_KEY',
-    name: 'OpenAI',
-    url: 'https://platform.openai.com/api-keys',
-  },
-  anthropic: {
-    model: 'claude-3-5-sonnet-20240620',
-    package: '@ai-sdk/anthropic',
-    apiKey: 'ANTHROPIC_API_KEY',
-    name: 'Anthropic',
-    url: 'https://console.anthropic.com/settings/keys',
-  },
-  google: {
-    model: 'gemini-2.5-pro',
-    package: '@ai-sdk/google',
-    apiKey: 'GOOGLE_GENERATIVE_AI_API_KEY',
-    name: 'Google',
-    url: 'https://console.cloud.google.com/apis/credentials',
-  },
-  groq: {
-    model: 'llama-3.3-70b-versatile',
-    package: '@ai-sdk/groq',
-    apiKey: 'GROQ_API_KEY',
-    name: 'Groq',
-    url: 'https://console.groq.com/keys',
-  },
-};
+// Validate required environment variables
+const requiredEnvVars = { ORGANIZATION, GITHUB_TOKEN, USERNAME, EMAIL };
+for (const [name, value] of Object.entries(requiredEnvVars)) {
+  if (!value) {
+    console.error(`Error: Required environment variable ${name} is not set`);
+    process.exit(1);
+  }
+}
 
 // Initialize Octokit
 const octokit = new Octokit({
@@ -170,11 +147,11 @@ async function pushToRepo(repoName) {
     );
 
     try {
-      console.log(`Check out to main branch in local`);
+      console.log(`Check out to beta branch in local`);
       execSync(
-        ` 
-      git checkout main &&
-      git pull origin main
+        `
+      git checkout beta &&
+      git pull origin beta
       `,
         {
           stdio: 'inherit',
@@ -182,11 +159,10 @@ async function pushToRepo(repoName) {
         },
       );
     } catch (error) {
-      console.log(`No main branch found in local, creating new main branch`);
+      console.log(`No beta branch found in local, creating new beta branch`);
       execSync(
         `
-        git checkout -b main &&
-        git branch -M main
+        git checkout -b beta
       `,
         { stdio: 'inherit', cwd: tempDir },
       );
@@ -214,183 +190,18 @@ async function pushToRepo(repoName) {
     fsExtra.copySync(templatePath, tempDir);
 
     // Initialize git and push to repo
-    console.log(`Pushing to main branch`);
+    console.log(`Pushing to beta branch`);
     try {
       execSync(
         `
       git add . &&
-      git commit -m "Update template from monorepo" &&
-      git push origin main
+      git commit -m "Update template from monorepo (beta v1.0)" &&
+      git push origin beta
     `,
         { stdio: 'inherit', cwd: tempDir },
       );
     } catch (error) {
-      console.log(`No changes to push to main branch, skipping`);
-    }
-
-    // setup different branches
-    // TODO make more dynamic
-    for (const [
-      provider,
-      { model: defaultModel, package: providerPackage, apiKey: providerApiKey, name: providerName, url: providerUrl },
-    ] of Object.entries(PROVIDERS)) {
-      console.log(`Setting up ${provider} branch`);
-      // move to new branch
-      execSync(`git checkout main && git pull origin main`, {
-        stdio: 'inherit',
-        cwd: tempDir,
-      });
-
-      try {
-        execSync(`git checkout -b ${provider}`, {
-          stdio: 'inherit',
-          cwd: tempDir,
-        });
-
-        try {
-          execSync(`git pull origin ${provider} --rebase=false`, {
-            stdio: 'inherit',
-            cwd: tempDir,
-          });
-        } catch (error) {
-          console.log(`No ${provider} branch found in origin, skipping`);
-        }
-      } catch (error) {
-        console.log(`${provider} branch already exists in local`);
-        execSync(`git checkout ${provider} && git pull origin ${provider} --rebase=false`, {
-          stdio: 'inherit',
-          cwd: tempDir,
-        });
-      }
-      // remove everything in the temp directory except .git
-      console.log(`Removing everything in the temp directory: ${tempDir} for ${provider} branch`);
-      // get all files and directories in the temp directory
-      const filesAndDirs = fs.readdirSync(tempDir);
-      console.log(
-        `Found ${filesAndDirs.length} files and directories in the temp directory: ${tempDir} for ${provider} branch`,
-      );
-      // remove all files and directories in the temp directory except .git
-      for (const fileOrDir of filesAndDirs) {
-        if (fileOrDir !== '.git') {
-          console.log(`Removing ${fileOrDir} in the temp directory: ${tempDir}`);
-          fsExtra.removeSync(path.join(tempDir, fileOrDir));
-        }
-      }
-
-      const filesAndDirsPostDelete = fs.readdirSync(tempDir);
-      console.log(
-        `Files and directories left after delete: ${filesAndDirsPostDelete.join(', ')} for ${provider} branch`,
-      );
-
-      //commit deletion
-      execSync(`git add . && git commit -m "Delete everything in the temp directory for ${provider} branch"`, {
-        stdio: 'inherit',
-        cwd: tempDir,
-      });
-
-      // Copy template content to temp directory
-      console.log(`Copying template content to temp directory: ${tempDir} for ${provider} branch`);
-      fsExtra.copySync(templatePath, tempDir);
-
-      //update llm provider agent files and workflow files
-      let agentDir = '';
-      let agentFiles = [];
-      try {
-        agentDir = path.join(tempDir, 'src/mastra/agents');
-        agentFiles = fs.readdirSync(agentDir);
-      } catch (error) {
-        console.log(`No agents directory found in ${tempDir}`);
-      }
-      const agentFilesToUpdate = agentFiles
-        .filter(file => file.endsWith('.ts'))
-        ?.map(file => path.join(agentDir, file));
-      let workflowDir = '';
-      let workflowFiles = [];
-      try {
-        workflowDir = path.join(tempDir, 'src/mastra/workflows');
-        workflowFiles = fs.readdirSync(workflowDir);
-      } catch (error) {
-        console.log(`No workflows directory found in ${tempDir}`);
-      }
-      const workflowFilesToUpdate = workflowFiles
-        .filter(file => file.endsWith('.ts'))
-        ?.map(file => path.join(workflowDir, file));
-      console.log(
-        `Updating ${workflowFilesToUpdate.length} workflow files and ${agentFilesToUpdate.length} agent files`,
-      );
-      const filePaths = [...workflowFilesToUpdate, ...agentFilesToUpdate];
-
-      //update llm provider in and agents
-      for (const filePath of filePaths) {
-        if (fs.existsSync(filePath)) {
-          console.log(`Updating ${filePath}`);
-          let content = await readFile(filePath, 'utf-8');
-          content = content.replaceAll(
-            `import { openai } from '@ai-sdk/openai';`,
-            `import { ${provider} } from '${providerPackage}';`,
-          );
-          content = content.replaceAll(
-            /openai\((['"])[^'"]*(['"])\)/g,
-            `${provider}(process.env.MODEL ?? "${defaultModel}")`,
-          );
-          await writeFile(filePath, content);
-        } else {
-          console.log(`${filePath} does not exist`);
-        }
-      }
-
-      //update llm provider in package.json
-      console.log(`Updating package.json for ${provider}`);
-      const latestVersion = await getLatestVersion(providerPackage);
-      const packageJsonPath = path.join(tempDir, 'package.json');
-      let packageJson = await readFile(packageJsonPath, 'utf-8');
-      packageJson = JSON.parse(packageJson);
-      delete packageJson.dependencies['@ai-sdk/openai'];
-      packageJson.dependencies[providerPackage] = `^${latestVersion}`;
-      await writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
-
-      console.log(`Updating .env.example for ${provider}`);
-      const envExamplePath = path.join(tempDir, '.env.example');
-      if (fs.existsSync(envExamplePath)) {
-        //update llm provider in .env.example
-        let envExample = await readFile(envExamplePath, 'utf-8');
-        envExample = envExample.replace('OPENAI_API_KEY', providerApiKey);
-        envExample = envExample.replaceAll('https://platform.openai.com/api-keys', providerUrl);
-        if (!envExample.includes('MODEL')) {
-          envExample = envExample + `\nMODEL=${defaultModel}`;
-        }
-        await writeFile(envExamplePath, envExample);
-      } else {
-        console.log(`${envExamplePath} does not exist, skipping`);
-      }
-
-      //update llm provider in README.md
-      console.log(`Updating README.md for ${provider}`);
-      const readmePath = path.join(tempDir, 'README.md');
-      if (fs.existsSync(readmePath)) {
-        let readme = await readFile(readmePath, 'utf-8');
-        readme = readme.replaceAll('OpenAI', providerName);
-        readme = readme.replaceAll('OPENAI_API_KEY', providerApiKey);
-        readme = readme.replaceAll('@ai-sdk/openai', providerPackage);
-        readme = readme.replaceAll('https://platform.openai.com/api-keys', providerUrl);
-        await writeFile(readmePath, readme);
-      } else {
-        console.log(`${readmePath} does not exist, skipping`);
-      }
-
-      try {
-        // push branch
-        execSync(
-          `
-        git add . &&
-        git commit -m "Update llm provider to ${provider}" &&
-        git push origin ${provider}
-    `,
-          { stdio: 'inherit', cwd: tempDir },
-        );
-      } catch (error) {
-        console.log(`No changes to push to ${provider} branch, skipping`);
-      }
+      console.log(`No changes to push to beta branch, skipping`);
     }
 
     console.log(`Successfully pushed template to ${repoName}`);
@@ -401,15 +212,6 @@ async function pushToRepo(repoName) {
     // Clean up temp directory
     console.log(`Cleaning up temp directory: ${tempDir}`);
     fsExtra.removeSync(path.join(process.cwd(), '.temp'));
-  }
-}
-
-async function getLatestVersion(packageName) {
-  try {
-    return execSync(`npm view ${packageName} version`, { stdio: 'pipe' }).toString().trim();
-  } catch (error) {
-    console.error(`Error getting latest version of ${packageName}`, error);
-    throw error;
   }
 }
 

@@ -1,3 +1,4 @@
+import { Observability } from '@mastra/observability';
 import { Mastra } from '@mastra/core/mastra';
 import { registerApiRoute } from '@mastra/core/server';
 import { PinoLogger } from '@mastra/loggers';
@@ -31,5 +32,10 @@ export const mastra = new Mastra({
   logger: new PinoLogger({
     name: 'Mastra',
     level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+  }),
+  observability: new Observability({
+    default: {
+      enabled: true,
+    },
   }),
 });

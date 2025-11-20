@@ -8,6 +8,7 @@ export const SelectField: React.FC<AutoFormFieldProps> = ({ field, inputProps, e
   return (
     <Select
       {...props}
+      value={value}
       onValueChange={value => {
         const syntheticEvent = {
           target: {
@@ -17,7 +18,6 @@ export const SelectField: React.FC<AutoFormFieldProps> = ({ field, inputProps, e
         } as React.ChangeEvent<HTMLInputElement>;
         props.onChange(syntheticEvent);
       }}
-      defaultValue={field.default}
     >
       <SelectTrigger id={id} className={error ? 'border-destructive' : ''}>
         <SelectValue placeholder="Select an option" />

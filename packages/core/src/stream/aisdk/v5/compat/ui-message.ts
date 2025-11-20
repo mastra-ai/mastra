@@ -1,11 +1,11 @@
-import type { InferUIMessageChunk, TextStreamPart, ToolSet, UIMessage } from 'ai-v5';
+import type { InferUIMessageChunk, TextStreamPart, ToolSet, UIMessage, IdGenerator } from 'ai-v5';
 
 export function getResponseUIMessageId({
   originalMessages,
   responseMessageId,
 }: {
   originalMessages: UIMessage[] | undefined;
-  responseMessageId: string | any;
+  responseMessageId: string | IdGenerator | undefined;
 }) {
   // when there are no original messages (i.e. no persistence),
   // the assistant message id generation is handled on the client side.
@@ -32,11 +32,12 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   sendFinish,
   responseMessageId,
 }: {
+  // tool-output is a custom mastra chunk type used in ToolStream
   part: TextStreamPart<ToolSet> | { type: 'tool-output'; toolCallId: string; output: any };
-  messageMetadataValue?: any;
+  messageMetadataValue?: unknown;
   sendReasoning?: boolean;
   sendSources?: boolean;
-  onError: (error: any) => string;
+  onError: (error: unknown) => string;
   sendStart?: boolean;
   sendFinish?: boolean;
   responseMessageId?: string;
@@ -171,7 +172,6 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
 
     case 'tool-output': {
       return {
-        id: part.toolCallId,
         ...part.output,
       };
     }
@@ -204,10 +204,10 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     case 'start': {
       if (sendStart) {
         return {
-          type: 'start',
+          type: 'start' as const,
           ...(messageMetadataValue != null ? { messageMetadata: messageMetadataValue } : {}),
           ...(responseMessageId != null ? { messageId: responseMessageId } : {}),
-        };
+        } as InferUIMessageChunk<UI_MESSAGE>;
       }
       return;
     }
@@ -215,9 +215,9 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     case 'finish': {
       if (sendFinish) {
         return {
-          type: 'finish',
+          type: 'finish' as const,
           ...(messageMetadataValue != null ? { messageMetadata: messageMetadataValue } : {}),
-        };
+        } as InferUIMessageChunk<UI_MESSAGE>;
       }
       return;
     }

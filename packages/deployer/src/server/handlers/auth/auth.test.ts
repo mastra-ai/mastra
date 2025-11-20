@@ -1,9 +1,43 @@
 import type { MastraAuthConfig } from '@mastra/core/server';
 import { describe, it, expect } from 'vitest';
 // import { authenticationMiddleware, authorizationMiddleware, exchangeTokenHandler } from '.';
-import { canAccessPublicly, pathMatchesPattern, pathMatchesRule, matchesOrIncludes, checkRules } from './helpers';
+import {
+  canAccessPublicly,
+  pathMatchesPattern,
+  pathMatchesRule,
+  matchesOrIncludes,
+  checkRules,
+  isCustomRoutePublic,
+} from './helpers';
 
 describe('auth', () => {
+  describe('/api route', () => {
+    it('should return 200 for GET /api route without authentication', async () => {
+      const { createHonoServer } = await import('../../index');
+      const { Mastra } = await import('@mastra/core/mastra');
+
+      const mastra = new Mastra({
+        server: {
+          experimental_auth: {
+            authenticateToken: async (token: string) => {
+              if (token === 'valid-token') {
+                return { id: '123', name: 'Test User' };
+              }
+              return null;
+            },
+          },
+        },
+      });
+
+      const app = await createHonoServer(mastra, { tools: {} });
+
+      const req = new Request('http://localhost/api');
+      const res = await app.request(req);
+
+      expect(res.status).toBe(200);
+    });
+  });
+
   describe('authenticationMiddleware', () => {
     it('should return 401 if no token is provided', () => {
       // const context = createMockContext();
@@ -126,6 +160,70 @@ describe('auth', () => {
 
     it('should deny access when no rules match', async () => {
       expect(await checkRules(rules, '/api/other/resource', 'GET', {})).toBe(false);
+    });
+  });
+
+  describe('isCustomRoutePublic', () => {
+    it('should return false when customRouteAuthConfig is undefined', () => {
+      expect(isCustomRoutePublic('/api/test', 'GET', undefined)).toBe(false);
+    });
+
+    it('should return false when customRouteAuthConfig is empty', () => {
+      const config = new Map<string, boolean>();
+      expect(isCustomRoutePublic('/api/test', 'GET', config)).toBe(false);
+    });
+
+    it('should return true for routes with requiresAuth set to false', () => {
+      const config = new Map<string, boolean>();
+      config.set('GET:/api/public', false);
+      expect(isCustomRoutePublic('/api/public', 'GET', config)).toBe(true);
+    });
+
+    it('should return false for routes with requiresAuth set to true', () => {
+      const config = new Map<string, boolean>();
+      config.set('GET:/api/protected', true);
+      expect(isCustomRoutePublic('/api/protected', 'GET', config)).toBe(false);
+    });
+
+    it('should check exact method match first', () => {
+      const config = new Map<string, boolean>();
+      config.set('GET:/api/endpoint', false);
+      config.set('POST:/api/endpoint', true);
+
+      expect(isCustomRoutePublic('/api/endpoint', 'GET', config)).toBe(true);
+      expect(isCustomRoutePublic('/api/endpoint', 'POST', config)).toBe(false);
+    });
+
+    it('should fall back to ALL method if exact method not found', () => {
+      const config = new Map<string, boolean>();
+      config.set('ALL:/api/endpoint', false);
+
+      expect(isCustomRoutePublic('/api/endpoint', 'GET', config)).toBe(true);
+      expect(isCustomRoutePublic('/api/endpoint', 'POST', config)).toBe(true);
+      expect(isCustomRoutePublic('/api/endpoint', 'DELETE', config)).toBe(true);
+    });
+
+    it('should prefer exact method match over ALL method', () => {
+      const config = new Map<string, boolean>();
+      config.set('GET:/api/endpoint', true); // GET requires auth
+      config.set('ALL:/api/endpoint', false); // ALL methods don't require auth
+
+      // Should use the specific GET configuration
+      expect(isCustomRoutePublic('/api/endpoint', 'GET', config)).toBe(false);
+      // Other methods should use ALL configuration
+      expect(isCustomRoutePublic('/api/endpoint', 'POST', config)).toBe(true);
+    });
+
+    it('should handle different paths correctly', () => {
+      const config = new Map<string, boolean>();
+      config.set('GET:/api/public', false);
+      config.set('GET:/api/protected', true);
+      config.set('POST:/webhooks/github', false);
+
+      expect(isCustomRoutePublic('/api/public', 'GET', config)).toBe(true);
+      expect(isCustomRoutePublic('/api/protected', 'GET', config)).toBe(false);
+      expect(isCustomRoutePublic('/webhooks/github', 'POST', config)).toBe(true);
+      expect(isCustomRoutePublic('/api/other', 'GET', config)).toBe(false);
     });
   });
 });

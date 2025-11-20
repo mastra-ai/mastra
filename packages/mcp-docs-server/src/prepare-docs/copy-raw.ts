@@ -4,9 +4,11 @@ import { fromPackageRoot, fromRepoRoot, log } from '../utils.js';
 
 const DOCS_SOURCE = fromRepoRoot('docs/src/content/en/docs');
 const REFERENCE_SOURCE = fromRepoRoot('docs/src/content/en/reference');
+const GUIDES_SOURCE = fromRepoRoot('docs/src/content/en/guides');
 const COURSE_SOURCE = fromRepoRoot('docs/src/course');
 const DOCS_DEST = fromPackageRoot('.docs/raw');
 const REFERENCE_DEST = path.join(DOCS_DEST, 'reference');
+const GUIDES_DEST = path.join(DOCS_DEST, 'guides');
 const COURSE_DEST = path.join(DOCS_DEST, 'course');
 
 async function copyDir(src: string, dest: string) {
@@ -42,6 +44,7 @@ export async function copyRaw() {
     // Copy docs
     await copyDir(DOCS_SOURCE, DOCS_DEST);
     await copyDir(REFERENCE_SOURCE, REFERENCE_DEST);
+    await copyDir(GUIDES_SOURCE, GUIDES_DEST);
     await copyDir(COURSE_SOURCE, COURSE_DEST);
     log('✅ Documentation files copied successfully');
   } catch (error) {

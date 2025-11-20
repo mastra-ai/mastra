@@ -1,7 +1,7 @@
 import { analytics, origin } from '../..';
 import { lint } from '../lint';
 
-export const lintProject = async (args: any) => {
+export const lintProject = async (args: { dir?: string; root?: string; tools?: string }) => {
   await analytics.trackCommandExecution({
     command: 'lint',
     args,

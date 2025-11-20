@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
-import type { Mastra } from '@mastra/core';
 import type { MessageSendParams, TaskQueryParams, TaskIdParams } from '@mastra/core/a2a';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { Mastra } from '@mastra/core/mastra';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import {
   getAgentCardByIdHandler as getOriginalAgentCardByIdHandler,
@@ -14,12 +14,12 @@ import { stream } from 'hono/streaming';
 export async function getAgentCardByIdHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const requestContext: RequestContext = c.get('requestContext');
 
   const result = await getOriginalAgentCardByIdHandler({
     mastra,
     agentId,
-    runtimeContext,
+    requestContext,
   });
 
   return c.json(result);
@@ -28,7 +28,7 @@ export async function getAgentCardByIdHandler(c: Context) {
 export async function getAgentExecutionHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const requestContext: RequestContext = c.get('requestContext');
   const taskStore: InMemoryTaskStore = c.get('taskStore');
   const logger = mastra.getLogger();
   const body = await c.req.json();
@@ -41,7 +41,7 @@ export async function getAgentExecutionHandler(c: Context) {
   const result = await getOriginalAgentExecutionHandler({
     mastra,
     agentId,
-    runtimeContext,
+    requestContext,
     requestId: randomUUID(),
     method: body.method as 'message/send' | 'message/stream' | 'tasks/get' | 'tasks/cancel',
     params: body.params as MessageSendParams | TaskQueryParams | TaskIdParams,

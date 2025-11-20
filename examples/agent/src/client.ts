@@ -104,7 +104,7 @@ async function main() {
 
   try {
     console.log('Connecting to MCP server...');
-    const tools = await mcpClient.getTools();
+    const tools = await mcpClient.listTools();
     console.log('Available tools:', Object.keys(tools));
 
     // Test the elicitation functionality

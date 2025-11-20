@@ -49,8 +49,8 @@ export const pdfContentExtractorTool = createTool({
     pagesCount: z.number().describe('Number of pages in the PDF'),
     characterCount: z.number().describe('Number of characters extracted from the PDF'),
   }),
-  execute: async ({ context, mastra }) => {
-    const { pdfUrl, pdfData, filename, subjectArea, focusAreas = [] } = context;
+  execute: async (inputData, context) => {
+    const { pdfUrl, pdfData, filename, subjectArea, focusAreas = [] } = inputData;
 
     let pdfBuffer: Buffer;
     const source = pdfData ? filename || 'attached file' : pdfUrl;
@@ -95,17 +95,17 @@ export const pdfContentExtractorTool = createTool({
         `✅ Extracted ${extractionResult.extractedText.length} characters from ${extractionResult.pagesCount} pages`,
       );
 
-      // Step 3: Summarize content for analysis
-      console.log('📄 Summarizing PDF content for educational analysis...');
-      const pdfSummarizationAgent = mastra?.getAgent('pdfSummarizationAgent');
-      if (!pdfSummarizationAgent) {
-        throw new Error('PDF summarization agent not found');
+      // Step 3: Process content for educational analysis
+      console.log('📄 Processing PDF content for educational analysis...');
+      const pdfProcessorAgent = context?.mastra?.getAgent('pdfProcessorAgent');
+      if (!pdfProcessorAgent) {
+        throw new Error('PDF processor agent not found');
       }
 
       const subjectAreaText = subjectArea ? `Subject area: ${subjectArea}` : '';
       const focusAreasText = focusAreas.length > 0 ? `Focus particularly on: ${focusAreas.join(', ')}` : '';
 
-      const summaryResult = await pdfSummarizationAgent.generate([
+      const summaryResult = await pdfProcessorAgent.generate([
         {
           role: 'user',
           content: `Please create an educational summary of this PDF content for flash card generation. ${subjectAreaText} ${focusAreasText}
@@ -121,7 +121,7 @@ ${extractionResult.extractedText}`,
 
       // Step 4: Create educational analysis from summarized content
       console.log('🎓 Creating educational analysis for flash card generation...');
-      const contentAnalyzerAgent = mastra?.getAgent('contentAnalyzerAgent');
+      const contentAnalyzerAgent = context?.mastra?.getAgent('contentAnalyzerAgent');
       if (!contentAnalyzerAgent) {
         throw new Error('Content analyzer agent not found');
       }

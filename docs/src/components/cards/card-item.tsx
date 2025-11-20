@@ -1,18 +1,23 @@
-import Link from "next/link";
+"use client";
+
+import Link from "@docusaurus/Link";
 import { Card, CardContent } from "../ui/card";
+import { useLocation } from "@docusaurus/router";
 
 export function CardItem({
   links,
 }: {
   links: Array<{ title: string; href: string }>;
 }) {
+  const location = useLocation();
+  const locale = location.pathname.split("/")[1] || "en";
   return (
     <Card className="dark:border-[#404040] w-full px-0 rounded-none border-none shadow-none transition-colors">
       <CardContent className="w-full px-0 gap-3 grid md:grid-cols-2 lg:grid-cols-3">
         {links.map((item) => (
           <Link
             key={`${item.title}-${item.href}`}
-            href={item.href}
+            to={`/${locale}${item.href}`}
             style={{
               textDecoration: "none",
             }}

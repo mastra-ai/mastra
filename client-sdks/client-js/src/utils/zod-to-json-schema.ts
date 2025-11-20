@@ -26,5 +26,5 @@ export function zodToJsonSchema<T extends ZodType | any>(zodSchema: T) {
     return z[fn].call(z, zodSchema);
   }
 
-  return originalZodToJsonSchema(zodSchema, { $refStrategy: 'none' });
+  return originalZodToJsonSchema(zodSchema, { $refStrategy: 'relative' });
 }

@@ -1,12 +1,11 @@
-import { jsonSchema } from 'ai';
-import type { Schema } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 import type { ZodType as ZodTypeV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4 } from 'zod/v4';
+import { jsonSchema } from './json-schema';
 import { SchemaCompatLayer } from './schema-compatibility';
-import type { ModelInformation } from './types';
+import type { Schema, ModelInformation } from './types';
 import { convertZodSchemaToAISDKSchema, convertSchemaToZod, applyCompatLayer, isZodType } from './utils';
 
 type ZodType = ZodTypeV3 | ZodTypeV4;

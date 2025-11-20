@@ -2,6 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 
 export const gameAgent = new Agent({
+  id: 'game-agent',
   name: 'Game Agent',
   instructions: `You are a helpful game assistant for a "Heads Up" guessing game.
 

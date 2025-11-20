@@ -75,20 +75,11 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
   > = new Map();
   private opts: TurbopufferVectorOptions;
 
-  constructor(opts: TurbopufferVectorOptions) {
-    super();
+  constructor(opts: TurbopufferVectorOptions & { id: string }) {
+    super({ id: opts.id });
     this.filterTranslator = new TurbopufferFilterTranslator();
     this.opts = opts;
-
-    const baseClient = new Turbopuffer(opts);
-    const telemetry = this.__getTelemetry();
-    this.client =
-      telemetry?.traceClass(baseClient, {
-        spanNamePrefix: 'turbopuffer-vector',
-        attributes: {
-          'vector.type': 'turbopuffer',
-        },
-      }) ?? baseClient;
+    this.client = new Turbopuffer(opts);
   }
 
   async createIndex({ indexName, dimension, metric }: CreateIndexParams): Promise<void> {

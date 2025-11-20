@@ -2,24 +2,34 @@ import { analytics, origin } from '../..';
 import { logger } from '../../utils/logger';
 import { dev } from '../dev/dev';
 
-export const startDevServer = async (args: any) => {
+interface DevArgs {
+  dir?: string;
+  root?: string;
+  tools?: string;
+  env?: string;
+  inspect?: string | boolean;
+  inspectBrk?: string | boolean;
+  customArgs?: string;
+  https?: boolean;
+  debug: boolean;
+}
+
+export const startDevServer = async (args: DevArgs) => {
   analytics.trackCommand({
     command: 'dev',
     origin,
   });
 
-  if (args?.port) {
-    logger.warn('The --port option is deprecated. Use the server key in the Mastra instance instead.');
-  }
   dev({
-    port: args?.port ? parseInt(args.port) : null,
     dir: args?.dir,
     root: args?.root,
     tools: args?.tools ? args.tools.split(',') : [],
     env: args?.env,
-    inspect: args?.inspect && !args?.inspectBrk,
+    inspect: args?.inspectBrk ? false : args?.inspect,
     inspectBrk: args?.inspectBrk,
     customArgs: args?.customArgs ? args.customArgs.split(',') : [],
+    https: args?.https,
+    debug: args.debug,
   }).catch(err => {
     logger.error(err.message);
   });

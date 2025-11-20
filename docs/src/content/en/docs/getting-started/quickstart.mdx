@@ -1,0 +1,27 @@
+---
+title: "Quickstart | Getting Started"
+description: Choose how to get started with Mastra - standalone server or Next.js integration.
+---
+
+import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";
+
+# Quickstart
+
+Choose how you want to get started with Mastra:
+
+<CardGrid columns={2}>
+  <CardGridItem
+    title="Standalone Server (Recommended)"
+    href="/guides/v1/quickstarts/standalone-server"
+  >
+    The fastest way to get started - spin up a standalone Mastra server and interact with your agents in Studio
+  </CardGridItem>
+  <CardGridItem
+    title="Next.js"
+    href="/guides/v1/quickstarts/nextjs"
+  >
+    Integrate Mastra into a Next.js app and use the AI SDK UI to build an in-app chat interface for your agents
+  </CardGridItem>
+</CardGrid>
+
+For more control over setup, or to add Mastra to an existing project, see the [manual installation guide](/guides/v1/guide/manual-install). You can also use [`mastra init`](/reference/v1/cli/mastra#mastra-init) for existing projects.
