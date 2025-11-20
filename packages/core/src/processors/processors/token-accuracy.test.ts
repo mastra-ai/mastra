@@ -151,16 +151,24 @@ describe('TokenLimiterProcessor', () => {
       );
     }, 60000);
 
-    it(`20 messages, 0 tools`, async () => {
-      await expectTokenEstimate(
-        {
-          messageCount: 10,
-          toolFrequency: 0,
-          threadId: '3',
-        },
-        agent,
-      );
-    }, 60000);
+    it(
+      `20 messages, 0 tools`,
+      {
+        timeout: 60000,
+        // LLM token counts can vary slightly between runs
+        retry: 3,
+      },
+      async () => {
+        await expectTokenEstimate(
+          {
+            messageCount: 10,
+            toolFrequency: 0,
+            threadId: '3',
+          },
+          agent,
+        );
+      },
+    );
 
     it(`20 messages, 2 tool messages`, async () => {
       await expectTokenEstimate(
