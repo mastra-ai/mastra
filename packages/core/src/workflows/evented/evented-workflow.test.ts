@@ -74,7 +74,7 @@ describe('Workflow', () => {
 
       const executionResult = await getWorkflowState();
 
-      console.log('executionResult===', JSON.stringify(executionResult, null, 2));
+      // console.log('executionResult===', JSON.stringify(executionResult, null, 2));
 
       expect(watchData.length).toBe(8);
       expect(watchData).toMatchObject([
@@ -853,7 +853,7 @@ describe('Workflow', () => {
 
       const executionResult = await output.result;
 
-      console.log('executionResult===', JSON.stringify(executionResult, null, 2));
+      // console.log('executionResult===', JSON.stringify(executionResult, null, 2));
 
       expect(watchData.length).toBe(8);
       expect(watchData).toMatchObject([
