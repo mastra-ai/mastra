@@ -1,5 +1,235 @@
 # @mastra/langsmith
 
+## 0.0.0-kitchen-sink-e2e-test-20251120010328
+
+### Major Changes
+
+- dd1c38d: Bump minimum required Node.js version to 22.13.0
+- eb09742: Renamed a bunch of observability/tracing-related things to drop the AI prefix.
+- 354ad0b: ```
+  import { Mastra } from '@mastra/core';
+  import { Observability } from '@mastra/observability'; // Explicit import
+
+  const mastra = new Mastra({
+  ...other_config,
+  observability: new Observability({
+  default: { enabled: true }
+  }) // Instance
+  });
+
+  ```
+
+  Instead of:
+
+  ```
+
+  import { Mastra } from '@mastra/core';
+  import '@mastra/observability/init'; // Explicit import
+
+  const mastra = new Mastra({
+  ...other_config,
+  observability: {
+  default: { enabled: true }
+  }
+  });
+
+  ```
+
+  Also renamed a bunch of:
+
+  - `Tracing` things to `Observability` things.
+  - `AI-` things to just things.
+  ```
+
+- 83d5942: Mark as stable
+- a0c8c1b: moved ai-tracing code into @mastra/observability
+
+### Minor Changes
+
+- dff01d8: Update peer dependencies to match core package version bump (1.0.0)
+- 2c4438b: Rename LLM span types and attributes to use Model prefix
+
+  BREAKING CHANGE: This release renames tracing span types and attribute interfaces to use the "Model" prefix instead of "LLM":
+  - `AISpanType.LLM_GENERATION` → `AISpanType.MODEL_GENERATION`
+  - `AISpanType.LLM_STEP` → `AISpanType.MODEL_STEP`
+  - `AISpanType.LLM_CHUNK` → `AISpanType.MODEL_CHUNK`
+  - `LLMGenerationAttributes` → `ModelGenerationAttributes`
+  - `LLMStepAttributes` → `ModelStepAttributes`
+  - `LLMChunkAttributes` → `ModelChunkAttributes`
+  - `InternalSpans.LLM` → `InternalSpans.MODEL`
+
+  This change better reflects that these span types apply to all AI models, not just Large Language Models.
+
+  Migration guide:
+  - Update all imports: `import { ModelGenerationAttributes } from '@mastra/core/ai-tracing'`
+  - Update span type references: `AISpanType.MODEL_GENERATION`
+  - Update InternalSpans usage: `InternalSpans.MODEL`
+
+### Patch Changes
+
+- 45a48e3: dependencies updates:
+  - Updated dependency [`langsmith@>=0.3.79` ↗︎](https://www.npmjs.com/package/langsmith/v/0.3.79) (from `>=0.3.72`, in `dependencies`)
+- 83b08dc: Fixed import isssues in exporters.
+- f0f8f12: Update peer dependencies to match core package version bump (1.0.0)
+- dff01d8: Update tool execution signature
+
+  Consolidated the 3 different execution contexts to one
+
+  ```typescript
+  // before depending on the context the tool was executed in
+  tool.execute({ context: data });
+  tool.execute({ context: { inputData: data } });
+  tool.execute(data);
+
+  // now, for all contexts
+  tool.execute(data, context);
+  ```
+
+  **Before:**
+
+  ```typescript
+  inputSchema: z.object({ something: z.string() }),
+  execute: async ({ context, tracingContext, runId, ... }) => {
+    return doSomething(context.string);
+  }
+  ```
+
+  **After:**
+
+  ```typescript
+  inputSchema: z.object({ something: z.string() }),
+  execute: async (inputData, context) => {
+    const { agent, mcp, workflow, ...sharedContext } = context
+
+    // context that only an agent would get like toolCallId, messages, suspend, resume, etc
+    if (agent) {
+      doSomething(inputData.something, agent)
+    // context that only a workflow would get like runId, state, suspend, resume, etc
+    } else if (workflow) {
+      doSomething(inputData.something, workflow)
+    // context that only a workflow would get like "extra", "elicitation"
+    } else if (mcp) {
+      doSomething(inputData.something, mcp)
+    } else {
+      // Running a tool in no execution context
+      return doSomething(inputData.something);
+    }
+  }
+  ```
+
+-
+- Updated dependencies [2319326]
+- Updated dependencies [39c9743]
+- Updated dependencies [f743dbb]
+- Updated dependencies [fec5129]
+- Updated dependencies [0491e7c]
+- Updated dependencies [f6f4903]
+- Updated dependencies [0e8ed46]
+- Updated dependencies [6c049d9]
+- Updated dependencies [910db9e]
+- Updated dependencies [2f897df]
+- Updated dependencies [d629361]
+- Updated dependencies [08c31c1]
+- Updated dependencies [3443770]
+- Updated dependencies [f0a07e0]
+- Updated dependencies [aaa40e7]
+- Updated dependencies [1521d71]
+- Updated dependencies [9e1911d]
+- Updated dependencies [ebac155]
+- Updated dependencies [dd1c38d]
+- Updated dependencies [5948e6a]
+- Updated dependencies [83b08dc]
+- Updated dependencies [8940859]
+- Updated dependencies [f0f8f12]
+- Updated dependencies [e629310]
+- Updated dependencies [4c6b492]
+- Updated dependencies [dff01d8]
+- Updated dependencies [9d819d5]
+- Updated dependencies [a64d16a]
+- Updated dependencies [fd3d338]
+- Updated dependencies [71c8d6c]
+- Updated dependencies [6179a9b]
+- Updated dependencies [c30400a]
+- Updated dependencies [00f4921]
+- Updated dependencies [ca8041c]
+- Updated dependencies [7051bf3]
+- Updated dependencies [a8f1494]
+- Updated dependencies [69e0a87]
+- Updated dependencies [0793497]
+- Updated dependencies [01f8878]
+- Updated dependencies [5df9cce]
+- Updated dependencies [4c77209]
+- Updated dependencies [a854ede]
+- Updated dependencies [c576fc0]
+- Updated dependencies [3defc80]
+- Updated dependencies [f111eac]
+- Updated dependencies [16153fe]
+- Updated dependencies [9f4a683]
+- Updated dependencies [bc94344]
+- Updated dependencies [57d157f]
+- Updated dependencies [903f67d]
+- Updated dependencies [d827d08]
+- Updated dependencies [2a90c55]
+- Updated dependencies [eb09742]
+- Updated dependencies [23c10a1]
+- Updated dependencies [96d35f6]
+- Updated dependencies [5cbe88a]
+- Updated dependencies [a1bd7b8]
+- Updated dependencies [d78b38d]
+- Updated dependencies [a0a5b4b]
+- Updated dependencies [0633100]
+- Updated dependencies [c710c16]
+- Updated dependencies [354ad0b]
+- Updated dependencies [cfae733]
+- Updated dependencies [e3dfda7]
+- Updated dependencies [993ad98]
+- Updated dependencies [676ccc7]
+- Updated dependencies [844ea5d]
+- Updated dependencies [398fde3]
+- Updated dependencies [c10398d]
+- Updated dependencies [f0f8f12]
+- Updated dependencies [0d7618b]
+- Updated dependencies [7b763e5]
+- Updated dependencies [d36cfbb]
+- Updated dependencies [3697853]
+- Updated dependencies [b2e45ec]
+- Updated dependencies [d6d49f7]
+- Updated dependencies [00c2387]
+- Updated dependencies [a534e95]
+- Updated dependencies [9d0e7fe]
+- Updated dependencies [53d927c]
+- Updated dependencies [ad6250d]
+- Updated dependencies [3f2faf2]
+- Updated dependencies [22f64bc]
+- Updated dependencies [3a73998]
+- Updated dependencies [83d5942]
+- Updated dependencies [b7959e6]
+- Updated dependencies [bda6370]
+- Updated dependencies [d7acd8e]
+- Updated dependencies [c7f1f7d]
+- Updated dependencies [0bddc6d]
+- Updated dependencies
+- Updated dependencies [735d8c1]
+- Updated dependencies [acf322e]
+- Updated dependencies [e16d553]
+- Updated dependencies [c942802]
+- Updated dependencies [a0c8c1b]
+- Updated dependencies [cc34739]
+- Updated dependencies [c218bd3]
+- Updated dependencies [2c4438b]
+- Updated dependencies [4d59f58]
+- Updated dependencies [2b8893c]
+- Updated dependencies [8e5c75b]
+- Updated dependencies [e1bb9c9]
+- Updated dependencies [351a11f]
+- Updated dependencies [e59e0d3]
+- Updated dependencies [465ac05]
+- Updated dependencies [fa8409b]
+- Updated dependencies [e7266a2]
+- Updated dependencies [173c535]
+  - @mastra/core@0.0.0-kitchen-sink-e2e-test-20251120010328
+  - @mastra/observability@0.0.0-kitchen-sink-e2e-test-20251120010328
+
 ## 1.0.0-beta.1
 
 ### Patch Changes

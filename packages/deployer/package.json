@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.0.0-beta.3",
+  "version": "0.0.0-kitchen-sink-e2e-test-20251120010328",
   "description": "",
   "type": "module",
   "files": [
@@ -95,7 +95,7 @@
   "dependencies": {
     "@babel/core": "^7.28.5",
     "@babel/preset-typescript": "^7.27.1",
-    "@mastra/server": "workspace:^",
+    "@mastra/server": "workspace:*",
     "@optimize-lodash/rollup-plugin": "^5.0.2",
     "@rollup/plugin-alias": "6.0.0",
     "@rollup/plugin-commonjs": "29.0.0",
@@ -123,7 +123,7 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@mastra/mcp": "workspace:^",
+    "@mastra/mcp": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/babel__core": "^7.20.5",
     "@types/fs-extra": "^11.0.4",
@@ -140,7 +140,7 @@
     "zod": "^3.25.76"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "@mastra/core": "workspace:*",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",

@@ -1,5 +1,245 @@
 # @mastra/longmemeval
 
+## 0.0.0-kitchen-sink-e2e-test-20251120010328
+
+### Major Changes
+
+- f0a07e0: **BREAKING:** Remove `getMessagesPaginated()` and add `perPage: false` support
+
+  Removes deprecated `getMessagesPaginated()` method. The `listMessages()` API and score handlers now support `perPage: false` to fetch all records without pagination limits.
+
+  **Storage changes:**
+  - `StoragePagination.perPage` type changed from `number` to `number | false`
+  - All storage implementations support `perPage: false`:
+    - Memory: `listMessages()`
+    - Scores: `listScoresBySpan()`, `listScoresByRunId()`, `listScoresByExecutionId()`
+  - HTTP query parser accepts `"false"` string (e.g., `?perPage=false`)
+
+  **Memory changes:**
+  - `memory.query()` parameter type changed from `StorageGetMessagesArg` to `StorageListMessagesInput`
+  - Uses flat parameters (`page`, `perPage`, `include`, `filter`, `vectorSearchString`) instead of `selectBy` object
+
+  **Stricter validation:**
+  - `listMessages()` requires non-empty, non-whitespace `threadId` (throws error instead of returning empty results)
+
+  **Migration:**
+
+  ```typescript
+  // Storage/Memory: Replace getMessagesPaginated with listMessages
+  - storage.getMessagesPaginated({ threadId, selectBy: { pagination: { page: 0, perPage: 20 } } })
+  + storage.listMessages({ threadId, page: 0, perPage: 20 })
+  + storage.listMessages({ threadId, page: 0, perPage: false })  // Fetch all
+
+  // Memory: Replace selectBy with flat parameters
+  - memory.query({ threadId, selectBy: { last: 20, include: [...] } })
+  + memory.query({ threadId, perPage: 20, include: [...] })
+
+  // Client SDK
+  - thread.getMessagesPaginated({ selectBy: { pagination: { page: 0 } } })
+  + thread.listMessages({ page: 0, perPage: 20 })
+  ```
+
+- aaa40e7: # Major Changes
+
+  ## Storage Layer
+
+  ### BREAKING: Removed `storage.getMessages()`
+
+  The `getMessages()` method has been removed from all storage implementations. Use `listMessages()` instead, which provides pagination support.
+
+  **Migration:**
+
+  ```typescript
+  // Before
+  const messages = await storage.getMessages({ threadId: 'thread-1' });
+
+  // After
+  const result = await storage.listMessages({
+    threadId: 'thread-1',
+    page: 0,
+    perPage: 50,
+  });
+  const messages = result.messages; // Access messages array
+  console.log(result.total); // Total count
+  console.log(result.hasMore); // Whether more pages exist
+  ```
+
+  ### Message ordering default
+
+  `listMessages()` defaults to ASC (oldest first) ordering by `createdAt`, matching the previous `getMessages()` behavior.
+
+  **To use DESC ordering (newest first):**
+
+  ```typescript
+  const result = await storage.listMessages({
+    threadId: 'thread-1',
+    orderBy: { field: 'createdAt', direction: 'DESC' },
+  });
+  ```
+
+  ## Client SDK
+
+  ### BREAKING: Renamed `client.getThreadMessages()` → `client.listThreadMessages()`
+
+  **Migration:**
+
+  ```typescript
+  // Before
+  const response = await client.getThreadMessages(threadId, { agentId });
+
+  // After
+  const response = await client.listThreadMessages(threadId, { agentId });
+  ```
+
+  The response format remains the same.
+
+  ## Type Changes
+
+  ### BREAKING: Removed `StorageGetMessagesArg` type
+
+  Use `StorageListMessagesInput` instead:
+
+  ```typescript
+  // Before
+  import type { StorageGetMessagesArg } from '@mastra/core';
+
+  // After
+  import type { StorageListMessagesInput } from '@mastra/core';
+  ```
+
+- dd1c38d: Bump minimum required Node.js version to 22.13.0
+- a854ede: Remove `getThreadsByResourceId` and `getThreadsByResourceIdPaginated` methods from storage interfaces in favor of `listThreadsByResourceId`. The new method uses `offset`/`limit` pagination and a nested `orderBy` object structure (`{ field, direction }`).
+- f0f8f12: Removed old tracing code based on OpenTelemetry
+- 83d5942: Mark as stable
+- c218bd3: Remove legacy evals from Mastra
+
+### Patch Changes
+
+-
+- Updated dependencies [2319326]
+- Updated dependencies [dbd649b]
+- Updated dependencies [39c9743]
+- Updated dependencies [f743dbb]
+- Updated dependencies [fec5129]
+- Updated dependencies [0491e7c]
+- Updated dependencies [f6f4903]
+- Updated dependencies [0e8ed46]
+- Updated dependencies [735d8c1]
+- Updated dependencies [6c049d9]
+- Updated dependencies [910db9e]
+- Updated dependencies [2f897df]
+- Updated dependencies [d629361]
+- Updated dependencies [08c31c1]
+- Updated dependencies [f0f8f12]
+- Updated dependencies [3443770]
+- Updated dependencies [f0a07e0]
+- Updated dependencies [aaa40e7]
+- Updated dependencies [1521d71]
+- Updated dependencies [9e1911d]
+- Updated dependencies [ebac155]
+- Updated dependencies [dd1c38d]
+- Updated dependencies [5948e6a]
+- Updated dependencies [8940859]
+- Updated dependencies [f0f8f12]
+- Updated dependencies [e629310]
+- Updated dependencies [844ea5d]
+- Updated dependencies [4c6b492]
+- Updated dependencies [dff01d8]
+- Updated dependencies [9d819d5]
+- Updated dependencies [a51cc81]
+- Updated dependencies [fd3d338]
+- Updated dependencies [71c8d6c]
+- Updated dependencies [6179a9b]
+- Updated dependencies [c30400a]
+- Updated dependencies [00f4921]
+- Updated dependencies [ca8041c]
+- Updated dependencies [7051bf3]
+- Updated dependencies [a8f1494]
+- Updated dependencies [b88dd9d]
+- Updated dependencies [69e0a87]
+- Updated dependencies [0793497]
+- Updated dependencies [01f8878]
+- Updated dependencies [0d7618b]
+- Updated dependencies [5df9cce]
+- Updated dependencies [4c77209]
+- Updated dependencies [a854ede]
+- Updated dependencies [c576fc0]
+- Updated dependencies [3defc80]
+- Updated dependencies [16153fe]
+- Updated dependencies [9f4a683]
+- Updated dependencies [bc94344]
+- Updated dependencies [57d157f]
+- Updated dependencies [903f67d]
+- Updated dependencies [d827d08]
+- Updated dependencies [2a90c55]
+- Updated dependencies [4c6b492]
+- Updated dependencies [eb09742]
+- Updated dependencies [ebac155]
+- Updated dependencies [23c10a1]
+- Updated dependencies [96d35f6]
+- Updated dependencies [5cbe88a]
+- Updated dependencies [a1bd7b8]
+- Updated dependencies [d78b38d]
+- Updated dependencies [a0a5b4b]
+- Updated dependencies [0633100]
+- Updated dependencies [c710c16]
+- Updated dependencies [354ad0b]
+- Updated dependencies [cfae733]
+- Updated dependencies [e3dfda7]
+- Updated dependencies [993ad98]
+- Updated dependencies [676ccc7]
+- Updated dependencies [844ea5d]
+- Updated dependencies [398fde3]
+- Updated dependencies [c10398d]
+- Updated dependencies [f0f8f12]
+- Updated dependencies [0d7618b]
+- Updated dependencies [7b763e5]
+- Updated dependencies [d36cfbb]
+- Updated dependencies [3697853]
+- Updated dependencies [b2e45ec]
+- Updated dependencies [d6d49f7]
+- Updated dependencies [00c2387]
+- Updated dependencies [a534e95]
+- Updated dependencies [9d0e7fe]
+- Updated dependencies [53d927c]
+- Updated dependencies [ad6250d]
+- Updated dependencies [3f2faf2]
+- Updated dependencies [22f64bc]
+- Updated dependencies [3a73998]
+- Updated dependencies [83d5942]
+- Updated dependencies [dff01d8]
+- Updated dependencies [b7959e6]
+- Updated dependencies [bda6370]
+- Updated dependencies [245820c]
+- Updated dependencies [d7acd8e]
+- Updated dependencies [c7f1f7d]
+- Updated dependencies [0bddc6d]
+- Updated dependencies
+- Updated dependencies [735d8c1]
+- Updated dependencies [acf322e]
+- Updated dependencies [e16d553]
+- Updated dependencies [c942802]
+- Updated dependencies [a0c8c1b]
+- Updated dependencies [cc34739]
+- Updated dependencies [c218bd3]
+- Updated dependencies [2c4438b]
+- Updated dependencies [4d59f58]
+- Updated dependencies [2b8893c]
+- Updated dependencies [c218bd3]
+- Updated dependencies [8e5c75b]
+- Updated dependencies [e1bb9c9]
+- Updated dependencies [351a11f]
+- Updated dependencies [e59e0d3]
+- Updated dependencies [465ac05]
+- Updated dependencies [fa8409b]
+- Updated dependencies [e7266a2]
+- Updated dependencies [173c535]
+  - @mastra/core@0.0.0-kitchen-sink-e2e-test-20251120010328
+  - @mastra/rag@0.0.0-kitchen-sink-e2e-test-20251120010328
+  - @mastra/libsql@0.0.0-kitchen-sink-e2e-test-20251120010328
+  - @mastra/memory@0.0.0-kitchen-sink-e2e-test-20251120010328
+  - @mastra/fastembed@0.0.0-kitchen-sink-e2e-test-20251120010328
+
 ## 1.0.0-beta.3
 
 ### Patch Changes

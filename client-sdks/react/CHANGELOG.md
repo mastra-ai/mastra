@@ -1,5 +1,59 @@
 # @mastra/react-hooks
 
+## 0.0.0-kitchen-sink-e2e-test-20251120010328
+
+### Minor Changes
+
+- dd1c38d: Bump minimum required Node.js version to 22.13.0
+- 7051bf3: Rename RuntimeContext to RequestContext
+- 0bddc6d: Renamed `MastraMessageV2` to `MastraDBMessage`
+  Made the return format of all methods that return db messages consistent. It's always `{ messages: MastraDBMessage[] }` now, and messages can be converted after that using `@mastra/ai-sdk/ui`'s `toAISdkV4/5Messages()` function
+
+### Patch Changes
+
+- 5df9cce: Add tool call approval
+- 0b6112e: Fix multi modal in react sdk
+-
+- Updated dependencies [3852192]
+- Updated dependencies [fec5129]
+- Updated dependencies [3443770]
+- Updated dependencies [f0a07e0]
+- Updated dependencies [aaa40e7]
+- Updated dependencies [dd1c38d]
+- Updated dependencies [5948e6a]
+- Updated dependencies [dff01d8]
+- Updated dependencies [b7de533]
+- Updated dependencies [7051bf3]
+- Updated dependencies [1ee3411]
+- Updated dependencies [dbd9db0]
+- Updated dependencies [6a86fe5]
+- Updated dependencies [0793497]
+- Updated dependencies [5df9cce]
+- Updated dependencies [f93d992]
+- Updated dependencies [c576fc0]
+- Updated dependencies [9f4a683]
+- Updated dependencies [ea0b8de]
+- Updated dependencies [eb09742]
+- Updated dependencies [a1bd7b8]
+- Updated dependencies [0633100]
+- Updated dependencies [354ad0b]
+- Updated dependencies [519d9e6]
+- Updated dependencies [844ea5d]
+- Updated dependencies [dfe3f8c]
+- Updated dependencies [f0f8f12]
+- Updated dependencies [e8dcd71]
+- Updated dependencies [63f2f18]
+- Updated dependencies [c23200d]
+- Updated dependencies [363284b]
+- Updated dependencies [83d5942]
+- Updated dependencies [b7959e6]
+- Updated dependencies [0bddc6d]
+- Updated dependencies
+- Updated dependencies [a0c8c1b]
+- Updated dependencies [c218bd3]
+- Updated dependencies [e1bb9c9]
+  - @mastra/client-js@0.0.0-kitchen-sink-e2e-test-20251120010328
+
 ## 0.1.0-beta.3
 
 ### Patch Changes

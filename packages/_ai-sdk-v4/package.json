@@ -1,6 +1,6 @@
 {
   "name": "@internal/ai-sdk-v4",
-  "version": "0.0.0",
+  "version": "0.0.0-kitchen-sink-e2e-test-20251120010328",
   "description": "",
   "type": "module",
   "private": true,

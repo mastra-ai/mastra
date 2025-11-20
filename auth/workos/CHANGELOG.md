@@ -1,5 +1,23 @@
 # @mastra/auth-workos
 
+## 0.0.0-kitchen-sink-e2e-test-20251120010328
+
+### Major Changes
+
+- dd1c38d: Bump minimum required Node.js version to 22.13.0
+- 16153fe: Experimental auth -> auth
+- 83d5942: Mark as stable
+
+### Patch Changes
+
+- a0a5b4b: Allow provider to pass through options to the auth config
+-
+- Updated dependencies [dd1c38d]
+- Updated dependencies [a0a5b4b]
+- Updated dependencies [83d5942]
+- Updated dependencies
+  - @mastra/auth@0.0.0-kitchen-sink-e2e-test-20251120010328
+
 ## 1.0.0-beta.0
 
 ### Major Changes

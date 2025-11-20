@@ -1,5 +1,25 @@
 # create-mastra
 
+## 0.0.0-kitchen-sink-e2e-test-20251120010328
+
+### Major Changes
+
+- dd1c38d: Bump minimum required Node.js version to 22.13.0
+- f0f8f12: Removed old tracing code based on OpenTelemetry
+- 83d5942: Mark as stable
+
+### Patch Changes
+
+- 52e5984: dependencies updates:
+  - Updated dependency [`pino@^10.1.0` ↗︎](https://www.npmjs.com/package/pino/v/10.1.0) (from `^9.7.0`, in `dependencies`)
+- bf2823c: dependencies updates:
+  - Updated dependency [`posthog-node@^5.11.2` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.11.2) (from `^4.18.0`, in `dependencies`)
+- 30e2508: Update MainSidebar component to fit required changes in Cloud CTA link
+- ab9b2ad: Make MainSidebar toggle button sticky to bottom, always visible
+- 4355421: Fix scorer filtering for SpanScoring, add error and info message for user
+- 39242ce: Fix double scroll on agent chat container
+-
+
 ## 1.0.0-beta.2
 
 ### Patch Changes

@@ -1,5 +1,267 @@
 # mastra
 
+## 0.0.0-kitchen-sink-e2e-test-20251120010328
+
+### Major Changes
+
+- fec5129: Moving scorers under the eval domain, api method consistency, prebuilt evals, scorers require ids.
+- dd1c38d: Bump minimum required Node.js version to 22.13.0
+- 354ad0b: ```
+  import { Mastra } from '@mastra/core';
+  import { Observability } from '@mastra/observability'; // Explicit import
+
+  const mastra = new Mastra({
+  ...other_config,
+  observability: new Observability({
+  default: { enabled: true }
+  }) // Instance
+  });
+
+  ```
+
+  Instead of:
+
+  ```
+
+  import { Mastra } from '@mastra/core';
+  import '@mastra/observability/init'; // Explicit import
+
+  const mastra = new Mastra({
+  ...other_config,
+  observability: {
+  default: { enabled: true }
+  }
+  });
+
+  ```
+
+  Also renamed a bunch of:
+
+  - `Tracing` things to `Observability` things.
+  - `AI-` things to just things.
+  ```
+
+- 844ea5d: Changing getAgents -> listAgents, getTools -> listTools, getWorkflows -> listWorkflows
+- f0f8f12: Removed old tracing code based on OpenTelemetry
+- 83d5942: Mark as stable
+- c218bd3: Remove legacy evals from Mastra
+
+### Minor Changes
+
+- 8928a8b: Add host:port support to --inspect and --inspect-brk flags
+
+  Enable optional host:port values for Docker debugging (e.g., `--inspect=0.0.0.0:9229`) while maintaining backward compatibility with boolean flags.
+
+- f0f8f12: Update peer dependencies to match core package version bump (1.0.0)
+
+### Patch Changes
+
+- 7277194: Use dynamic model for scorers in create cli
+- 30e2508: Update MainSidebar component to fit required changes in Cloud CTA link
+- ab9b2ad: Make MainSidebar toggle button sticky to bottom, always visible
+- dff01d8: Update tool execution signature
+
+  Consolidated the 3 different execution contexts to one
+
+  ```typescript
+  // before depending on the context the tool was executed in
+  tool.execute({ context: data });
+  tool.execute({ context: { inputData: data } });
+  tool.execute(data);
+
+  // now, for all contexts
+  tool.execute(data, context);
+  ```
+
+  **Before:**
+
+  ```typescript
+  inputSchema: z.object({ something: z.string() }),
+  execute: async ({ context, tracingContext, runId, ... }) => {
+    return doSomething(context.string);
+  }
+  ```
+
+  **After:**
+
+  ```typescript
+  inputSchema: z.object({ something: z.string() }),
+  execute: async (inputData, context) => {
+    const { agent, mcp, workflow, ...sharedContext } = context
+
+    // context that only an agent would get like toolCallId, messages, suspend, resume, etc
+    if (agent) {
+      doSomething(inputData.something, agent)
+    // context that only a workflow would get like runId, state, suspend, resume, etc
+    } else if (workflow) {
+      doSomething(inputData.something, workflow)
+    // context that only a workflow would get like "extra", "elicitation"
+    } else if (mcp) {
+      doSomething(inputData.something, mcp)
+    } else {
+      // Running a tool in no execution context
+      return doSomething(inputData.something);
+    }
+  }
+  ```
+
+- 7f27794: Update CLI start server command
+- d2faf53: Add support to skip dotenv/env file loading by adding MASTRA_SKIP_DOTENV
+- 9f4a683: Fixes issue where clicking the reset button in the model picker would fail to restore the original LanguageModelV2 (or any other types) object that was passed during agent construction.
+- 3cb5134: update translation scorer template to use util methods to get user and assistant message
+- bf2823c: dependencies updates:
+  - Updated dependency [`posthog-node@5.11.2` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.11.2) (from `4.18.0`, in `dependencies`)
+- 97292ca: Fix e2e test compatibility by passing version tags to all Mastra package installations. The `init` function now accepts an optional `versionTag` parameter that ensures all installed Mastra packages (`@mastra/evals`, `@mastra/libsql`, `@mastra/memory`, `@mastra/loggers`, `@mastra/observability`) use the same version, preventing module resolution errors when packages are updated with breaking internal changes.
+- 398fde3: Use a shared `getAllToolPaths()` method from the bundler to discover tool paths.
+- 056d075: Better handle errors during `mastra start` and throw them with Mastra's logger. Also add special error handling for `ERR_MODULE_NOT_FOUND` cases.
+- 00c2387: Add restart method to workflow run that allows restarting an active workflow run
+  Add status filter to `listWorkflowRuns`
+  Add automatic restart to restart active workflow runs when server starts
+- 4355421: Fix scorer filtering for SpanScoring, add error and info message for user
+- 963a2c6: Templates now don't dynamically create a branch for every provider, each template should be agnostic and just use a env var to set the models until the user wants to set it otherwise.
+  MCP docs server will install the beta version of the docs server if they create a project with the beta tag.
+  Updates to the templates now will get pushed to the beta branch, when beta goes stable we will merge the beta branch into the main branch for all templates and update the github script to push to main.
+  Templates have been cleaned up
+  small docs updates based off of how the template migrations went
+- bd1b2e7: Fixes an error during `mastra create` with bun/yarn due to usage of `--save-dev`. Replaced with `-D` during installation.
+- 12da8a6: Update internal dependencies, no change in behavior
+- 39242ce: Fix double scroll on agent chat container
+-
+- a168fdc: Make sure that `mastra init` also installs the `mastra` CLI package (if not already installed)
+- 499d99e: Add `@mastra/observability` to starter project dependencies
+- Updated dependencies [2319326]
+- Updated dependencies [2319326]
+- Updated dependencies [77ff370]
+- Updated dependencies [df9fdcd]
+- Updated dependencies [65591d2]
+- Updated dependencies [ac32ca9]
+- Updated dependencies [52e5984]
+- Updated dependencies [39c9743]
+- Updated dependencies [f743dbb]
+- Updated dependencies [3852192]
+- Updated dependencies [fec5129]
+- Updated dependencies [5540775]
+- Updated dependencies [0491e7c]
+- Updated dependencies [f6f4903]
+- Updated dependencies [0e8ed46]
+- Updated dependencies [6c049d9]
+- Updated dependencies [910db9e]
+- Updated dependencies [2f897df]
+- Updated dependencies [d629361]
+- Updated dependencies [08c31c1]
+- Updated dependencies [f0f8f12]
+- Updated dependencies [3443770]
+- Updated dependencies [f0a07e0]
+- Updated dependencies [aaa40e7]
+- Updated dependencies [1521d71]
+- Updated dependencies [9e1911d]
+- Updated dependencies [ebac155]
+- Updated dependencies [dd1c38d]
+- Updated dependencies [5948e6a]
+- Updated dependencies [2ef1f3c]
+- Updated dependencies [8940859]
+- Updated dependencies [f0f8f12]
+- Updated dependencies [e629310]
+- Updated dependencies [5df9cce]
+- Updated dependencies [4c6b492]
+- Updated dependencies [dff01d8]
+- Updated dependencies [9d819d5]
+- Updated dependencies [b7de533]
+- Updated dependencies [fd3d338]
+- Updated dependencies [71c8d6c]
+- Updated dependencies [6179a9b]
+- Updated dependencies [c30400a]
+- Updated dependencies [00f4921]
+- Updated dependencies [ca8041c]
+- Updated dependencies [7051bf3]
+- Updated dependencies [a8f1494]
+- Updated dependencies [69e0a87]
+- Updated dependencies [0793497]
+- Updated dependencies [01f8878]
+- Updated dependencies [5df9cce]
+- Updated dependencies [4c77209]
+- Updated dependencies [a854ede]
+- Updated dependencies [c576fc0]
+- Updated dependencies [3defc80]
+- Updated dependencies [16153fe]
+- Updated dependencies [9f4a683]
+- Updated dependencies [bc94344]
+- Updated dependencies [87f9f96]
+- Updated dependencies [57d157f]
+- Updated dependencies [903f67d]
+- Updated dependencies [d827d08]
+- Updated dependencies [2a90c55]
+- Updated dependencies [eb09742]
+- Updated dependencies [23c10a1]
+- Updated dependencies [9e0a85d]
+- Updated dependencies [96d35f6]
+- Updated dependencies [5cbe88a]
+- Updated dependencies [a1bd7b8]
+- Updated dependencies [d78b38d]
+- Updated dependencies [e41f852]
+- Updated dependencies [a0a5b4b]
+- Updated dependencies [c576fc0]
+- Updated dependencies [0633100]
+- Updated dependencies [c710c16]
+- Updated dependencies [354ad0b]
+- Updated dependencies [cfae733]
+- Updated dependencies [e3dfda7]
+- Updated dependencies [993ad98]
+- Updated dependencies [676ccc7]
+- Updated dependencies [844ea5d]
+- Updated dependencies [398fde3]
+- Updated dependencies [c10398d]
+- Updated dependencies [dfe3f8c]
+- Updated dependencies [f0f8f12]
+- Updated dependencies [0d7618b]
+- Updated dependencies [7b763e5]
+- Updated dependencies [d36cfbb]
+- Updated dependencies [3697853]
+- Updated dependencies [c23200d]
+- Updated dependencies [b2e45ec]
+- Updated dependencies [d6d49f7]
+- Updated dependencies [00c2387]
+- Updated dependencies [a534e95]
+- Updated dependencies [9d0e7fe]
+- Updated dependencies [53d927c]
+- Updated dependencies [ad6250d]
+- Updated dependencies [3f2faf2]
+- Updated dependencies [22f64bc]
+- Updated dependencies [363284b]
+- Updated dependencies [3a73998]
+- Updated dependencies [6c7ffcd]
+- Updated dependencies [83d5942]
+- Updated dependencies [b7959e6]
+- Updated dependencies [bda6370]
+- Updated dependencies [d7acd8e]
+- Updated dependencies [056d075]
+- Updated dependencies [c7f1f7d]
+- Updated dependencies [0bddc6d]
+- Updated dependencies
+- Updated dependencies [4a8cade]
+- Updated dependencies [735d8c1]
+- Updated dependencies [acf322e]
+- Updated dependencies [e16d553]
+- Updated dependencies [c942802]
+- Updated dependencies [a0c8c1b]
+- Updated dependencies [cc34739]
+- Updated dependencies [c218bd3]
+- Updated dependencies [2c4438b]
+- Updated dependencies [4d59f58]
+- Updated dependencies [2b8893c]
+- Updated dependencies [8e5c75b]
+- Updated dependencies [e1bb9c9]
+- Updated dependencies [351a11f]
+- Updated dependencies [e59e0d3]
+- Updated dependencies [465ac05]
+- Updated dependencies [fa8409b]
+- Updated dependencies [e7266a2]
+- Updated dependencies [173c535]
+- Updated dependencies [1176e03]
+  - @mastra/core@0.0.0-kitchen-sink-e2e-test-20251120010328
+  - @mastra/deployer@0.0.0-kitchen-sink-e2e-test-20251120010328
+  - @mastra/loggers@0.0.0-kitchen-sink-e2e-test-20251120010328
+
 ## 1.0.0-beta.2
 
 ### Minor Changes

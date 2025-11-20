@@ -1,5 +1,23 @@
 # @mastra/schema-compat
 
+## 0.0.0-kitchen-sink-e2e-test-20251120010328
+
+### Major Changes
+
+- dd1c38d: Bump minimum required Node.js version to 22.13.0
+- 83d5942: Mark as stable
+
+### Patch Changes
+
+- b9b7ffd: Fix Zod v4 toJSONSchema bug with z.record() single-argument form
+
+  Zod v4 has a bug in the single-argument form of `z.record(valueSchema)` where it incorrectly assigns the value schema to `keyType` instead of `valueType`, leaving `valueType` undefined. This causes `toJSONSchema()` to throw "Cannot read properties of undefined (reading '\_zod')" when processing schemas containing `z.record()` fields.
+
+  This fix patches affected schemas before conversion by detecting records with missing `valueType` and correctly assigning the schema to `valueType` while setting `keyType` to `z.string()` (the default). The patch recursively handles nested schemas including those wrapped in `.optional()`, `.nullable()`, arrays, unions, and objects.
+
+- 51acef9: Improved reliability of string field types in tool schema compatibility
+-
+
 ## 1.0.0-beta.0
 
 ### Major Changes

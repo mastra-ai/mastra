@@ -1,5 +1,285 @@
 # @mastra/inngest
 
+## 0.0.0-kitchen-sink-e2e-test-20251120010328
+
+### Major Changes
+
+- fec5129: Moving scorers under the eval domain, api method consistency, prebuilt evals, scorers require ids.
+- dd1c38d: Bump minimum required Node.js version to 22.13.0
+- 7051bf3: Rename RuntimeContext to RequestContext
+- a1bd7b8: **Breaking Change**: Remove legacy v1 watch events and consolidate on v2 implementation.
+
+  This change simplifies the workflow watching API by removing the legacy v1 event system and promoting v2 as the standard (renamed to just `watch`).
+
+  ### What's Changed
+  - Removed legacy v1 watch event handlers and types
+  - Renamed `watch-v2` to `watch` throughout the codebase
+  - Removed `.watch()` method from client-js SDK (`Workflow` and `AgentBuilder` classes)
+  - Removed `/watch` HTTP endpoints from server and deployer
+  - Removed `WorkflowWatchResult` and v1 `WatchEvent` types
+
+- 354ad0b: ```
+  import { Mastra } from '@mastra/core';
+  import { Observability } from '@mastra/observability'; // Explicit import
+
+  const mastra = new Mastra({
+  ...other_config,
+  observability: new Observability({
+  default: { enabled: true }
+  }) // Instance
+  });
+
+  ```
+
+  Instead of:
+
+  ```
+
+  import { Mastra } from '@mastra/core';
+  import '@mastra/observability/init'; // Explicit import
+
+  const mastra = new Mastra({
+  ...other_config,
+  observability: {
+  default: { enabled: true }
+  }
+  });
+
+  ```
+
+  Also renamed a bunch of:
+
+  - `Tracing` things to `Observability` things.
+  - `AI-` things to just things.
+  ```
+
+- 844ea5d: Changing getAgents -> listAgents, getTools -> listTools, getWorkflows -> listWorkflows
+- f0f8f12: Removed old tracing code based on OpenTelemetry
+- 83d5942: Mark as stable
+- a0c8c1b: moved ai-tracing code into @mastra/observability
+- c218bd3: Remove legacy evals from Mastra
+
+### Minor Changes
+
+- f0f8f12: Update peer dependencies to match core package version bump (1.0.0)
+- 5df9cce: Update peer dependencies to match core package version bump (0.22.1)
+- 6c049d9: Update peer dependencies to match core package version bump (0.22.3)
+
+### Patch Changes
+
+- c5d8a76: dependencies updates:
+  - Updated dependency [`@inngest/realtime@^0.4.5` ↗︎](https://www.npmjs.com/package/@inngest/realtime/v/0.4.5) (from `^0.4.4`, in `dependencies`)
+- 6c049d9: Deprecate `runCount` parameter in favor of `retryCount` for better naming clarity. The name `runCount` was misleading as it doesn't represent the total number of times a step has run, but rather the number of retry attempts made for a step.
+
+  `runCount` is available in `execute()` functions and methods that interact with the step execution. This also applies to condition functions and loop condition functions that use this parameter. If your code uses `runCount`, change the name to `retryCount`.
+
+  Here's an example migration:
+
+  ```diff
+  const myStep = createStep({
+    // Rest of step...
+  -  execute: async ({ runCount, ...params }) => {
+  +  execute: async ({ retryCount, ...params }) => {
+      // ... rest of your logic
+    }
+  });
+  ```
+
+- 2149955: Fix Inngest workflow tests by adding missing imports and updating middleware path.
+- dff01d8: Update tool execution signature
+
+  Consolidated the 3 different execution contexts to one
+
+  ```typescript
+  // before depending on the context the tool was executed in
+  tool.execute({ context: data });
+  tool.execute({ context: { inputData: data } });
+  tool.execute(data);
+
+  // now, for all contexts
+  tool.execute(data, context);
+  ```
+
+  **Before:**
+
+  ```typescript
+  inputSchema: z.object({ something: z.string() }),
+  execute: async ({ context, tracingContext, runId, ... }) => {
+    return doSomething(context.string);
+  }
+  ```
+
+  **After:**
+
+  ```typescript
+  inputSchema: z.object({ something: z.string() }),
+  execute: async (inputData, context) => {
+    const { agent, mcp, workflow, ...sharedContext } = context
+
+    // context that only an agent would get like toolCallId, messages, suspend, resume, etc
+    if (agent) {
+      doSomething(inputData.something, agent)
+    // context that only a workflow would get like runId, state, suspend, resume, etc
+    } else if (workflow) {
+      doSomething(inputData.something, workflow)
+    // context that only a workflow would get like "extra", "elicitation"
+    } else if (mcp) {
+      doSomething(inputData.something, mcp)
+    } else {
+      // Running a tool in no execution context
+      return doSomething(inputData.something);
+    }
+  }
+  ```
+
+- 69e0a87: fix resumeStream type to use resumeSchema
+- 5df9cce: Add tool call approval
+- 7b763e5: Added support for .streamVNext and .stream that uses it in the inngest execution engine
+- 00c2387: Add restart method to workflow run that allows restarting an active workflow run
+  Add status filter to `listWorkflowRuns`
+  Add automatic restart to restart active workflow runs when server starts
+- 9d0e7fe: Prevent changing workflow status to suspended when some parallel steps are still running
+- ad6250d: Validate schemas by default in workflow. Previously, if you want schemas in the workflow to be validated, you'd have to add `validateInputs` option, now, this will be done by default but can be disabled.
+
+  For workflows whose schemas and step schemas you don't want validated, do this
+
+  ```diff
+  createWorkflow({
+  +  options: {
+  +    validateInputs: false
+  +  }
+  })
+  ```
+
+- 3a73998: Fix inngest parallel workflow
+  Fix tool as step in inngest
+  Fix inngest nested workflow
+- b7959e6: Remove `waitForEvent` from workflows. `waitForEvent` is now removed, please use suspend & resume flow instead. See https://mastra.ai/en/docs/workflows/suspend-and-resume for more details on suspend & resume flow.
+-
+- e16d553: Add timeTravel to workflows. This makes it possible to start a workflow run from a particular step in the workflow
+
+  Example code:
+
+  ```ts
+  const result = await run.timeTravel({
+    step: 'step2',
+    inputData: {
+      value: 'input',
+    },
+  });
+  ```
+
+- 465ac05: Make suspendPayload optional when calling `suspend()`
+  Save value returned as `suspendOutput` if user returns data still after calling `suspend()`
+  Automatically call `commit()` on uncommitted workflows when registering in Mastra instance
+  Show actual suspendPayload on Studio in suspend/resume flow
+- Updated dependencies [2319326]
+- Updated dependencies [39c9743]
+- Updated dependencies [f743dbb]
+- Updated dependencies [fec5129]
+- Updated dependencies [0491e7c]
+- Updated dependencies [f6f4903]
+- Updated dependencies [0e8ed46]
+- Updated dependencies [6c049d9]
+- Updated dependencies [910db9e]
+- Updated dependencies [2f897df]
+- Updated dependencies [d629361]
+- Updated dependencies [08c31c1]
+- Updated dependencies [3443770]
+- Updated dependencies [f0a07e0]
+- Updated dependencies [aaa40e7]
+- Updated dependencies [1521d71]
+- Updated dependencies [9e1911d]
+- Updated dependencies [ebac155]
+- Updated dependencies [dd1c38d]
+- Updated dependencies [5948e6a]
+- Updated dependencies [8940859]
+- Updated dependencies [e629310]
+- Updated dependencies [4c6b492]
+- Updated dependencies [dff01d8]
+- Updated dependencies [9d819d5]
+- Updated dependencies [fd3d338]
+- Updated dependencies [71c8d6c]
+- Updated dependencies [6179a9b]
+- Updated dependencies [c30400a]
+- Updated dependencies [00f4921]
+- Updated dependencies [ca8041c]
+- Updated dependencies [7051bf3]
+- Updated dependencies [a8f1494]
+- Updated dependencies [69e0a87]
+- Updated dependencies [0793497]
+- Updated dependencies [01f8878]
+- Updated dependencies [5df9cce]
+- Updated dependencies [4c77209]
+- Updated dependencies [a854ede]
+- Updated dependencies [c576fc0]
+- Updated dependencies [3defc80]
+- Updated dependencies [16153fe]
+- Updated dependencies [9f4a683]
+- Updated dependencies [bc94344]
+- Updated dependencies [57d157f]
+- Updated dependencies [903f67d]
+- Updated dependencies [d827d08]
+- Updated dependencies [2a90c55]
+- Updated dependencies [eb09742]
+- Updated dependencies [23c10a1]
+- Updated dependencies [96d35f6]
+- Updated dependencies [5cbe88a]
+- Updated dependencies [a1bd7b8]
+- Updated dependencies [d78b38d]
+- Updated dependencies [a0a5b4b]
+- Updated dependencies [0633100]
+- Updated dependencies [c710c16]
+- Updated dependencies [354ad0b]
+- Updated dependencies [cfae733]
+- Updated dependencies [e3dfda7]
+- Updated dependencies [993ad98]
+- Updated dependencies [676ccc7]
+- Updated dependencies [844ea5d]
+- Updated dependencies [398fde3]
+- Updated dependencies [c10398d]
+- Updated dependencies [f0f8f12]
+- Updated dependencies [0d7618b]
+- Updated dependencies [7b763e5]
+- Updated dependencies [d36cfbb]
+- Updated dependencies [3697853]
+- Updated dependencies [b2e45ec]
+- Updated dependencies [d6d49f7]
+- Updated dependencies [00c2387]
+- Updated dependencies [a534e95]
+- Updated dependencies [9d0e7fe]
+- Updated dependencies [53d927c]
+- Updated dependencies [ad6250d]
+- Updated dependencies [3f2faf2]
+- Updated dependencies [22f64bc]
+- Updated dependencies [3a73998]
+- Updated dependencies [83d5942]
+- Updated dependencies [b7959e6]
+- Updated dependencies [bda6370]
+- Updated dependencies [d7acd8e]
+- Updated dependencies [c7f1f7d]
+- Updated dependencies [0bddc6d]
+- Updated dependencies
+- Updated dependencies [735d8c1]
+- Updated dependencies [acf322e]
+- Updated dependencies [e16d553]
+- Updated dependencies [c942802]
+- Updated dependencies [a0c8c1b]
+- Updated dependencies [cc34739]
+- Updated dependencies [c218bd3]
+- Updated dependencies [2c4438b]
+- Updated dependencies [4d59f58]
+- Updated dependencies [2b8893c]
+- Updated dependencies [8e5c75b]
+- Updated dependencies [e1bb9c9]
+- Updated dependencies [351a11f]
+- Updated dependencies [e59e0d3]
+- Updated dependencies [465ac05]
+- Updated dependencies [fa8409b]
+- Updated dependencies [e7266a2]
+- Updated dependencies [173c535]
+  - @mastra/core@0.0.0-kitchen-sink-e2e-test-20251120010328
+
 ## 1.0.0-beta.2
 
 ### Patch Changes

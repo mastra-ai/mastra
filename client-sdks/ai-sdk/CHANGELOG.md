@@ -1,5 +1,175 @@
 # @mastra/ai-sdk
 
+## 0.0.0-kitchen-sink-e2e-test-20251120010328
+
+### Major Changes
+
+- dd1c38d: Bump minimum required Node.js version to 22.13.0
+- 7051bf3: Rename RuntimeContext to RequestContext
+- f0f8f12: Removed old tracing code based on OpenTelemetry
+- 271519f: Add sendStart, sendFinish, sendReasoning, and sendSources options to toAISdkV5Stream function, allowing fine-grained control over which message chunks are included in the converted stream. Previously, these values were hardcoded in the transformer.
+
+  BREAKING CHANGE: AgentStreamToAISDKTransformer now accepts an options object instead of a single lastMessageId parameter
+
+  Also, add sendStart, sendFinish, sendReasoning, and sendSources parameters to
+  chatRoute function, enabling fine-grained control over which chunks are
+  included in the AI SDK stream output.
+
+- 83d5942: Mark as stable
+- 0bddc6d: Renamed `MastraMessageV2` to `MastraDBMessage`
+  Made the return format of all methods that return db messages consistent. It's always `{ messages: MastraDBMessage[] }` now, and messages can be converted after that using `@mastra/ai-sdk/ui`'s `toAISdkV4/5Messages()` function
+- a0c8c1b: moved ai-tracing code into @mastra/observability
+
+### Minor Changes
+
+- f0f8f12: Update peer dependencies to match core package version bump (1.0.0)
+
+### Patch Changes
+
+- 47c34d8: Added support for tripwire data chunks in streaming responses.
+
+  Tripwire chunks allow the AI SDK to emit special data events when certain conditions are triggered during stream processing. These chunks include a `tripwireReason` field explaining why the tripwire was activated.
+
+  #### Usage
+
+  When converting Mastra chunks to AI SDK v5 format, tripwire chunks are now automatically handled:
+
+  ```typescript
+  // Tripwire chunks are converted to data-tripwire format
+  const chunk = {
+    type: 'tripwire',
+    payload: { tripwireReason: 'Rate limit approaching' }
+  };
+
+  // Converts to:
+  {
+    type: 'data-tripwire',
+    data: { tripwireReason: 'Rate limit approaching' }
+  }
+  ```
+
+- 7491634: Preserve lastMessageId in chatRoute
+- 627067b: Improve ai-sdk transformers, handle custom data from agent sub workflow, sug agent tools
+- d4efaf3: Improve error handling in ai-sdk package
+- b98ba1a: Extend the workflow route to accept optional runId and resourceId
+  parameters, allowing clients to specify custom identifiers when
+  creating workflow runs. These parameters are now properly validated
+  in the OpenAPI schema and passed through to the createRun method.
+
+  Also updates the OpenAPI schema to include previously undocumented
+  resumeData and step fields.
+
+- e4ab0a4: Handle custom data writes in agent network execution events in ai sdk transformers
+- 7fa87f0: Add support for suspend/resume in AI SDK workflowRoute
+-
+- 8e5c75b: Fix usage tracking with agent network
+- Updated dependencies [2319326]
+- Updated dependencies [39c9743]
+- Updated dependencies [f743dbb]
+- Updated dependencies [fec5129]
+- Updated dependencies [0491e7c]
+- Updated dependencies [f6f4903]
+- Updated dependencies [0e8ed46]
+- Updated dependencies [6c049d9]
+- Updated dependencies [910db9e]
+- Updated dependencies [2f897df]
+- Updated dependencies [d629361]
+- Updated dependencies [08c31c1]
+- Updated dependencies [3443770]
+- Updated dependencies [f0a07e0]
+- Updated dependencies [aaa40e7]
+- Updated dependencies [1521d71]
+- Updated dependencies [9e1911d]
+- Updated dependencies [ebac155]
+- Updated dependencies [dd1c38d]
+- Updated dependencies [5948e6a]
+- Updated dependencies [8940859]
+- Updated dependencies [e629310]
+- Updated dependencies [4c6b492]
+- Updated dependencies [dff01d8]
+- Updated dependencies [9d819d5]
+- Updated dependencies [fd3d338]
+- Updated dependencies [71c8d6c]
+- Updated dependencies [6179a9b]
+- Updated dependencies [c30400a]
+- Updated dependencies [00f4921]
+- Updated dependencies [ca8041c]
+- Updated dependencies [7051bf3]
+- Updated dependencies [a8f1494]
+- Updated dependencies [69e0a87]
+- Updated dependencies [0793497]
+- Updated dependencies [01f8878]
+- Updated dependencies [5df9cce]
+- Updated dependencies [4c77209]
+- Updated dependencies [a854ede]
+- Updated dependencies [c576fc0]
+- Updated dependencies [3defc80]
+- Updated dependencies [16153fe]
+- Updated dependencies [9f4a683]
+- Updated dependencies [bc94344]
+- Updated dependencies [57d157f]
+- Updated dependencies [903f67d]
+- Updated dependencies [d827d08]
+- Updated dependencies [2a90c55]
+- Updated dependencies [eb09742]
+- Updated dependencies [23c10a1]
+- Updated dependencies [96d35f6]
+- Updated dependencies [5cbe88a]
+- Updated dependencies [a1bd7b8]
+- Updated dependencies [d78b38d]
+- Updated dependencies [a0a5b4b]
+- Updated dependencies [0633100]
+- Updated dependencies [c710c16]
+- Updated dependencies [354ad0b]
+- Updated dependencies [cfae733]
+- Updated dependencies [e3dfda7]
+- Updated dependencies [993ad98]
+- Updated dependencies [676ccc7]
+- Updated dependencies [844ea5d]
+- Updated dependencies [398fde3]
+- Updated dependencies [c10398d]
+- Updated dependencies [f0f8f12]
+- Updated dependencies [0d7618b]
+- Updated dependencies [7b763e5]
+- Updated dependencies [d36cfbb]
+- Updated dependencies [3697853]
+- Updated dependencies [b2e45ec]
+- Updated dependencies [d6d49f7]
+- Updated dependencies [00c2387]
+- Updated dependencies [a534e95]
+- Updated dependencies [9d0e7fe]
+- Updated dependencies [53d927c]
+- Updated dependencies [ad6250d]
+- Updated dependencies [3f2faf2]
+- Updated dependencies [22f64bc]
+- Updated dependencies [3a73998]
+- Updated dependencies [83d5942]
+- Updated dependencies [b7959e6]
+- Updated dependencies [bda6370]
+- Updated dependencies [d7acd8e]
+- Updated dependencies [c7f1f7d]
+- Updated dependencies [0bddc6d]
+- Updated dependencies
+- Updated dependencies [735d8c1]
+- Updated dependencies [acf322e]
+- Updated dependencies [e16d553]
+- Updated dependencies [c942802]
+- Updated dependencies [a0c8c1b]
+- Updated dependencies [cc34739]
+- Updated dependencies [c218bd3]
+- Updated dependencies [2c4438b]
+- Updated dependencies [4d59f58]
+- Updated dependencies [2b8893c]
+- Updated dependencies [8e5c75b]
+- Updated dependencies [e1bb9c9]
+- Updated dependencies [351a11f]
+- Updated dependencies [e59e0d3]
+- Updated dependencies [465ac05]
+- Updated dependencies [fa8409b]
+- Updated dependencies [e7266a2]
+- Updated dependencies [173c535]
+  - @mastra/core@0.0.0-kitchen-sink-e2e-test-20251120010328
+
 ## 1.0.0-beta.2
 
 ### Major Changes

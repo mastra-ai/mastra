@@ -1,6 +1,6 @@
 {
   "name": "@observability/test-utils",
-  "version": "0.0.1",
+  "version": "0.0.0-kitchen-sink-e2e-test-20251120010328",
   "description": "Test utilities for observability exporters",
   "type": "module",
   "private": true,
@@ -17,6 +17,6 @@
     "@vitest/ui": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <2.0.0-0"
+    "@mastra/core": "workspace:*"
   }
 }

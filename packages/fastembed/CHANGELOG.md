@@ -1,5 +1,17 @@
 # @mastra/fastembed
 
+## 0.0.0-kitchen-sink-e2e-test-20251120010328
+
+### Major Changes
+
+- dd1c38d: Bump minimum required Node.js version to 22.13.0
+- a51cc81: Upgraded to AI SDK v5 (specification version v2) for compatibility with @mastra/core. Default exports now use v2 specification. Legacy v1 exports available for backwards compatibility via `fastembed.smallLegacy` and `fastembed.baseLegacy`.
+- 83d5942: Mark as stable
+
+### Patch Changes
+
+-
+
 ## 1.0.0-beta.0
 
 ### Major Changes

@@ -1,5 +1,20 @@
 # @mastra/auth-auth0
 
+## 0.0.0-kitchen-sink-e2e-test-20251120010328
+
+### Major Changes
+
+- dd1c38d: Bump minimum required Node.js version to 22.13.0
+- 16153fe: Experimental auth -> auth
+- 83d5942: Mark as stable
+
+### Patch Changes
+
+- 14a6739: dependencies updates:
+  - Updated dependency [`jose@^6.1.1` ↗︎](https://www.npmjs.com/package/jose/v/6.1.1) (from `^6.0.12`, in `dependencies`)
+- a0a5b4b: Allow provider to pass through options to the auth config
+-
+
 ## 1.0.0-beta.1
 
 ### Patch Changes

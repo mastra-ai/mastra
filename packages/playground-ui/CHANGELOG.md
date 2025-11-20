@@ -1,5 +1,449 @@
 # @mastra/playground-ui
 
+## 0.0.0-kitchen-sink-e2e-test-20251120010328
+
+### Major Changes
+
+- aaa40e7: # Major Changes
+
+  ## Storage Layer
+
+  ### BREAKING: Removed `storage.getMessages()`
+
+  The `getMessages()` method has been removed from all storage implementations. Use `listMessages()` instead, which provides pagination support.
+
+  **Migration:**
+
+  ```typescript
+  // Before
+  const messages = await storage.getMessages({ threadId: 'thread-1' });
+
+  // After
+  const result = await storage.listMessages({
+    threadId: 'thread-1',
+    page: 0,
+    perPage: 50,
+  });
+  const messages = result.messages; // Access messages array
+  console.log(result.total); // Total count
+  console.log(result.hasMore); // Whether more pages exist
+  ```
+
+  ### Message ordering default
+
+  `listMessages()` defaults to ASC (oldest first) ordering by `createdAt`, matching the previous `getMessages()` behavior.
+
+  **To use DESC ordering (newest first):**
+
+  ```typescript
+  const result = await storage.listMessages({
+    threadId: 'thread-1',
+    orderBy: { field: 'createdAt', direction: 'DESC' },
+  });
+  ```
+
+  ## Client SDK
+
+  ### BREAKING: Renamed `client.getThreadMessages()` → `client.listThreadMessages()`
+
+  **Migration:**
+
+  ```typescript
+  // Before
+  const response = await client.getThreadMessages(threadId, { agentId });
+
+  // After
+  const response = await client.listThreadMessages(threadId, { agentId });
+  ```
+
+  The response format remains the same.
+
+  ## Type Changes
+
+  ### BREAKING: Removed `StorageGetMessagesArg` type
+
+  Use `StorageListMessagesInput` instead:
+
+  ```typescript
+  // Before
+  import type { StorageGetMessagesArg } from '@mastra/core';
+
+  // After
+  import type { StorageListMessagesInput } from '@mastra/core';
+  ```
+
+- dd1c38d: Bump minimum required Node.js version to 22.13.0
+- 5948e6a: Replace `getThreadsByResourceIdPaginated` with `listThreadsByResourceId` across memory handlers. Update client SDK to use `listThreads()` with `offset`/`limit` parameters instead of deprecated `getMemoryThreads()`. Consolidate `/api/memory/threads` routes to single paginated endpoint.
+- 7051bf3: Rename RuntimeContext to RequestContext
+- eb09742: Renamed a bunch of observability/tracing-related things to drop the AI prefix.
+- a1bd7b8: **Breaking Change**: Remove legacy v1 watch events and consolidate on v2 implementation.
+
+  This change simplifies the workflow watching API by removing the legacy v1 event system and promoting v2 as the standard (renamed to just `watch`).
+
+  ### What's Changed
+  - Removed legacy v1 watch event handlers and types
+  - Renamed `watch-v2` to `watch` throughout the codebase
+  - Removed `.watch()` method from client-js SDK (`Workflow` and `AgentBuilder` classes)
+  - Removed `/watch` HTTP endpoints from server and deployer
+  - Removed `WorkflowWatchResult` and v1 `WatchEvent` types
+
+- 0633100: **BREAKING CHANGE**: Pagination APIs now use `page`/`perPage` instead of `offset`/`limit`
+
+  All storage and memory pagination APIs have been updated to use `page` (0-indexed) and `perPage` instead of `offset` and `limit`, aligning with standard REST API patterns.
+
+  **Affected APIs:**
+  - `Memory.listThreadsByResourceId()`
+  - `Memory.listMessages()`
+  - `Storage.listWorkflowRuns()`
+
+  **Migration:**
+
+  ```typescript
+  // Before
+  await memory.listThreadsByResourceId({
+    resourceId: 'user-123',
+    offset: 20,
+    limit: 10,
+  });
+
+  // After
+  await memory.listThreadsByResourceId({
+    resourceId: 'user-123',
+    page: 2, // page = Math.floor(offset / limit)
+    perPage: 10,
+  });
+
+  // Before
+  await memory.listMessages({
+    threadId: 'thread-456',
+    offset: 20,
+    limit: 10,
+  });
+
+  // After
+  await memory.listMessages({
+    threadId: 'thread-456',
+    page: 2,
+    perPage: 10,
+  });
+
+  // Before
+  await storage.listWorkflowRuns({
+    workflowName: 'my-workflow',
+    offset: 20,
+    limit: 10,
+  });
+
+  // After
+  await storage.listWorkflowRuns({
+    workflowName: 'my-workflow',
+    page: 2,
+    perPage: 10,
+  });
+  ```
+
+  **Additional improvements:**
+  - Added validation for negative `page` values in all storage implementations
+  - Improved `perPage` validation to handle edge cases (negative values, `0`, `false`)
+  - Added reusable query parser utilities for consistent validation in handlers
+
+- 354ad0b: ```
+  import { Mastra } from '@mastra/core';
+  import { Observability } from '@mastra/observability'; // Explicit import
+
+  const mastra = new Mastra({
+  ...other_config,
+  observability: new Observability({
+  default: { enabled: true }
+  }) // Instance
+  });
+
+  ```
+
+  Instead of:
+
+  ```
+
+  import { Mastra } from '@mastra/core';
+  import '@mastra/observability/init'; // Explicit import
+
+  const mastra = new Mastra({
+  ...other_config,
+  observability: {
+  default: { enabled: true }
+  }
+  });
+
+  ```
+
+  Also renamed a bunch of:
+
+  - `Tracing` things to `Observability` things.
+  - `AI-` things to just things.
+  ```
+
+- 844ea5d: Changing getAgents -> listAgents, getTools -> listTools, getWorkflows -> listWorkflows
+- 83d5942: Mark as stable
+- 0bddc6d: Renamed `MastraMessageV2` to `MastraDBMessage`
+  Made the return format of all methods that return db messages consistent. It's always `{ messages: MastraDBMessage[] }` now, and messages can be converted after that using `@mastra/ai-sdk/ui`'s `toAISdkV4/5Messages()` function
+- c218bd3: Remove legacy evals from Mastra
+
+### Minor Changes
+
+- fec5129: Moving scorers under the eval domain, api method consistency, prebuilt evals, scorers require ids.
+- 5df9cce: Update peer dependencies to match core package version bump (0.22.1)
+- 9d0e7fe: Toast error from workflow stream and resume stream
+  Update peer dependencies to match core package version bump (0.22.3)
+- c7f1f7d: Update peer dependencies to match core package version bump (0.22.0)
+
+### Patch Changes
+
+- 56e7f78: dependencies updates:
+  - Updated dependency [`@uiw/codemirror-theme-github@^4.25.3` ↗︎](https://www.npmjs.com/package/@uiw/codemirror-theme-github/v/4.25.3) (from `^4.25.2`, in `dependencies`)
+- 2d1e6fc: dependencies updates:
+  - Updated dependency [`@xyflow/react@^12.9.3` ↗︎](https://www.npmjs.com/package/@xyflow/react/v/12.9.3) (from `^12.8.6`, in `dependencies`)
+- bae29c4: dependencies updates:
+  - Updated dependency [`@lezer/highlight@^1.2.3` ↗︎](https://www.npmjs.com/package/@lezer/highlight/v/1.2.3) (from `^1.2.1`, in `dependencies`)
+- e878b3d: dependencies updates:
+  - Updated dependency [`@dagrejs/dagre@^1.1.8` ↗︎](https://www.npmjs.com/package/@dagrejs/dagre/v/1.1.8) (from `^1.1.5`, in `dependencies`)
+- 63f2f18: fetch from the client-js sdk instead of local fetch
+- 30e2508: Update MainSidebar component to fit required changes in Cloud CTA link
+- ea0b8de: Add enhance instruction capability + instruction tweak for experiment purpose
+- f0f8f12: Update peer dependencies to match core package version bump (1.0.0)
+- ab9b2ad: Make MainSidebar toggle button sticky to bottom, always visible
+- 1ee3411: Use client-js search memory instead of custom fetch one
+- 0b1b86d: Render zod unions and discriminated unions correctly in dynamic form.
+- e0eff78: Removing uneeded files
+- 36d68de: Add breacrumb action for popovers
+- 64db147: Prefill `providerOptions` on Mastra Studio. When creating your agent, you can add `providerOptions` to the Agent `instructions`, we now prefill the `providerOptions` field on Mastra Studio model settings advanced settings section with the `instructions.providerOptions` added.
+
+  Example agent code
+
+  ```@typescript
+  export const chefModelV2Agent = new Agent({
+    name: 'Chef Agent V2 Model',
+    description: 'A chef agent that can help you cook great meals with whatever ingredients you have available.',
+    instructions: {
+      content: `
+        You are Michel, a practical and experienced home chef who helps people cook great meals with whatever
+        ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
+        You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
+        `,
+      role: 'system',
+      providerOptions: {
+        openai: {
+          reasoning_effort: 'high',
+        },
+      },
+    },
+    model: openai('gpt-4o-mini'),
+    tools: {
+      cookingTool,
+    },
+    memory
+  });
+  ```
+
+- d47e9ea: Refactor agent information for easier cloud recomposable UIs
+- 5df9cce: Add tool call approval
+- 9f4a683: Fixes issue where clicking the reset button in the model picker would fail to restore the original LanguageModelV2 (or any other types) object that was passed during agent construction.
+- 0b6112e: Fix multi modal in playground-ui
+- 712ced3: Add export for agent memory for use in cloud
+- 7ac7015: Remove "show trace" that pointed to legacy traces
+- 4359a40: Fix resume form for nested workflow not displaying when viewing a previously suspended run on studio
+- 87a63d6: Avoid fetch retries when fetching model providers
+- dfe3f8c: Remove unused /model-providers API
+- c23200d: Fix undefined runtimeContext using memory from playground
+- 4355421: Fix scorer filtering for SpanScoring, add error and info message for user
+- 963a2c6: Templates now don't dynamically create a branch for every provider, each template should be agnostic and just use a env var to set the models until the user wants to set it otherwise.
+  MCP docs server will install the beta version of the docs server if they create a project with the beta tag.
+  Updates to the templates now will get pushed to the beta branch, when beta goes stable we will merge the beta branch into the main branch for all templates and update the github script to push to main.
+  Templates have been cleaned up
+  small docs updates based off of how the template migrations went
+- 0b4a7ff: Fix playground white screen when Zod discriminatedUnion is intersected using `and()`.
+  This now works, but zod validation will fail, please use `extend` instead
+
+  Instead of
+
+  ```
+  z.discriminatedUnion('type', [
+    z.object({ type: z.literal('byCity'), city: z.string() }),
+    z.object({ type: z.literal('byCoords'), lat: z.number(), lon: z.number() }),
+  ]).and(
+    z.object({ order: z.number() })
+  )
+  ```
+
+  do
+
+  ```
+  z.discriminatedUnion('type', [
+    z.object({ type: z.literal('byCity'), city: z.string() }).extend({ order: z.number() }),
+    z.object({ type: z.literal('byCoords'), lat: z.number(), lon: z.number() }).extend({ order: z.number() }),
+  ]);
+  ```
+
+- 0b8e8b5: Extract more components to playground-ui for sharing with cloud
+- 93ddc42: Fix undefined window issue when Sidebar used in Next app
+- 39242ce: Fix double scroll on agent chat container
+- da4577c: Move WorkflowInformation to playground-ui
+- b7959e6: Remove `waitForEvent` from workflows. `waitForEvent` is now removed, please use suspend & resume flow instead. See https://mastra.ai/en/docs/workflows/suspend-and-resume for more details on suspend & resume flow.
+- 2012873: Add combobox in playground for entities and update routes and error handling
+- c7f1f7d: **Breaking Changes:**
+  - Moved `generateTitle` from `threads.generateTitle` to top-level memory option
+  - Changed default value from `true` to `false`
+  - Using `threads.generateTitle` now throws an error
+
+  **Migration:**
+  Replace `threads: { generateTitle: true }` with `generateTitle: true` at the top level of memory options.
+
+  **Playground:**
+  The playground UI now displays thread IDs instead of "Chat from" when titles aren't generated.
+
+-
+- f0c1314: Move some components to playground-ui for usage in cloud
+- 70189fc: Fix the link from traces to workflow
+- b94b151: Explicitly set color of line number in CodeMirror
+- d923f06: Remove unecessary react components + dependencies
+- a46c7de: Fix studio crashing when message contains non JSON text output of tool call
+- 465ac05: Make suspendPayload optional when calling `suspend()`
+  Save value returned as `suspendOutput` if user returns data still after calling `suspend()`
+  Automatically call `commit()` on uncommitted workflows when registering in Mastra instance
+  Show actual suspendPayload on Studio in suspend/resume flow
+- e7266a2: Add visual styles and labels for more workflow node types
+- Updated dependencies [2319326]
+- Updated dependencies [39c9743]
+- Updated dependencies [f743dbb]
+- Updated dependencies [3852192]
+- Updated dependencies [fec5129]
+- Updated dependencies [0491e7c]
+- Updated dependencies [f6f4903]
+- Updated dependencies [0e8ed46]
+- Updated dependencies [6c049d9]
+- Updated dependencies [910db9e]
+- Updated dependencies [2f897df]
+- Updated dependencies [d629361]
+- Updated dependencies [08c31c1]
+- Updated dependencies [f0f8f12]
+- Updated dependencies [3443770]
+- Updated dependencies [f0a07e0]
+- Updated dependencies [aaa40e7]
+- Updated dependencies [1521d71]
+- Updated dependencies [9e1911d]
+- Updated dependencies [ebac155]
+- Updated dependencies [47c34d8]
+- Updated dependencies [dd1c38d]
+- Updated dependencies [5948e6a]
+- Updated dependencies [8940859]
+- Updated dependencies [e629310]
+- Updated dependencies [4c6b492]
+- Updated dependencies [dff01d8]
+- Updated dependencies [7491634]
+- Updated dependencies [9d819d5]
+- Updated dependencies [b7de533]
+- Updated dependencies [fd3d338]
+- Updated dependencies [71c8d6c]
+- Updated dependencies [6179a9b]
+- Updated dependencies [c30400a]
+- Updated dependencies [627067b]
+- Updated dependencies [00f4921]
+- Updated dependencies [ca8041c]
+- Updated dependencies [7051bf3]
+- Updated dependencies [a8f1494]
+- Updated dependencies [69e0a87]
+- Updated dependencies [1ee3411]
+- Updated dependencies [dbd9db0]
+- Updated dependencies [6a86fe5]
+- Updated dependencies [0793497]
+- Updated dependencies [01f8878]
+- Updated dependencies [5df9cce]
+- Updated dependencies [f93d992]
+- Updated dependencies [4c77209]
+- Updated dependencies [a854ede]
+- Updated dependencies [c576fc0]
+- Updated dependencies [3defc80]
+- Updated dependencies [16153fe]
+- Updated dependencies [9f4a683]
+- Updated dependencies [ea0b8de]
+- Updated dependencies [bc94344]
+- Updated dependencies [d4efaf3]
+- Updated dependencies [57d157f]
+- Updated dependencies [903f67d]
+- Updated dependencies [d827d08]
+- Updated dependencies [2a90c55]
+- Updated dependencies [b98ba1a]
+- Updated dependencies [0b6112e]
+- Updated dependencies [eb09742]
+- Updated dependencies [23c10a1]
+- Updated dependencies [96d35f6]
+- Updated dependencies [5cbe88a]
+- Updated dependencies [a1bd7b8]
+- Updated dependencies [d78b38d]
+- Updated dependencies [a0a5b4b]
+- Updated dependencies [0633100]
+- Updated dependencies [c710c16]
+- Updated dependencies [354ad0b]
+- Updated dependencies [cfae733]
+- Updated dependencies [e3dfda7]
+- Updated dependencies [519d9e6]
+- Updated dependencies [993ad98]
+- Updated dependencies [676ccc7]
+- Updated dependencies [844ea5d]
+- Updated dependencies [398fde3]
+- Updated dependencies [c10398d]
+- Updated dependencies [dfe3f8c]
+- Updated dependencies [f0f8f12]
+- Updated dependencies [0d7618b]
+- Updated dependencies [7b763e5]
+- Updated dependencies [e8dcd71]
+- Updated dependencies [d36cfbb]
+- Updated dependencies [63f2f18]
+- Updated dependencies [3697853]
+- Updated dependencies [c23200d]
+- Updated dependencies [b2e45ec]
+- Updated dependencies [e4ab0a4]
+- Updated dependencies [271519f]
+- Updated dependencies [d6d49f7]
+- Updated dependencies [00c2387]
+- Updated dependencies [a534e95]
+- Updated dependencies [9d0e7fe]
+- Updated dependencies [53d927c]
+- Updated dependencies [ad6250d]
+- Updated dependencies [3f2faf2]
+- Updated dependencies [22f64bc]
+- Updated dependencies [363284b]
+- Updated dependencies [3a73998]
+- Updated dependencies [83d5942]
+- Updated dependencies [7fa87f0]
+- Updated dependencies [b7959e6]
+- Updated dependencies [bda6370]
+- Updated dependencies [d7acd8e]
+- Updated dependencies [c7f1f7d]
+- Updated dependencies [0bddc6d]
+- Updated dependencies
+- Updated dependencies [735d8c1]
+- Updated dependencies [acf322e]
+- Updated dependencies [e16d553]
+- Updated dependencies [c942802]
+- Updated dependencies [a0c8c1b]
+- Updated dependencies [cc34739]
+- Updated dependencies [c218bd3]
+- Updated dependencies [2c4438b]
+- Updated dependencies [4d59f58]
+- Updated dependencies [2b8893c]
+- Updated dependencies [8e5c75b]
+- Updated dependencies [e1bb9c9]
+- Updated dependencies [351a11f]
+- Updated dependencies [e59e0d3]
+- Updated dependencies [465ac05]
+- Updated dependencies [fa8409b]
+- Updated dependencies [e7266a2]
+- Updated dependencies [173c535]
+  - @mastra/core@0.0.0-kitchen-sink-e2e-test-20251120010328
+  - @mastra/client-js@0.0.0-kitchen-sink-e2e-test-20251120010328
+  - @mastra/ai-sdk@0.0.0-kitchen-sink-e2e-test-20251120010328
+  - @mastra/react@0.0.0-kitchen-sink-e2e-test-20251120010328
+
 ## 7.0.0-beta.3
 
 ### Patch Changes

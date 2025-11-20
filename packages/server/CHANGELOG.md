@@ -1,5 +1,435 @@
 # @mastra/server
 
+## 0.0.0-kitchen-sink-e2e-test-20251120010328
+
+### Major Changes
+
+- fec5129: Moving scorers under the eval domain, api method consistency, prebuilt evals, scorers require ids.
+- f6f4903: Every Mastra primitive (agent, MCPServer, workflow, tool, processor, scorer, and vector) now has a get, list, and add method associated with it. Each primitive also now requires an id to be set.
+
+  Primitives that are added to other primitives are also automatically added to the Mastra instance
+
+- 3443770: Update handlers to use `listWorkflowRuns` instead of `getWorkflowRuns`. Fix type names from `StoragelistThreadsByResourceIdInput/Output` to `StorageListThreadsByResourceIdInput/Output`.
+- f0a07e0: **BREAKING:** Remove `getMessagesPaginated()` and add `perPage: false` support
+
+  Removes deprecated `getMessagesPaginated()` method. The `listMessages()` API and score handlers now support `perPage: false` to fetch all records without pagination limits.
+
+  **Storage changes:**
+  - `StoragePagination.perPage` type changed from `number` to `number | false`
+  - All storage implementations support `perPage: false`:
+    - Memory: `listMessages()`
+    - Scores: `listScoresBySpan()`, `listScoresByRunId()`, `listScoresByExecutionId()`
+  - HTTP query parser accepts `"false"` string (e.g., `?perPage=false`)
+
+  **Memory changes:**
+  - `memory.query()` parameter type changed from `StorageGetMessagesArg` to `StorageListMessagesInput`
+  - Uses flat parameters (`page`, `perPage`, `include`, `filter`, `vectorSearchString`) instead of `selectBy` object
+
+  **Stricter validation:**
+  - `listMessages()` requires non-empty, non-whitespace `threadId` (throws error instead of returning empty results)
+
+  **Migration:**
+
+  ```typescript
+  // Storage/Memory: Replace getMessagesPaginated with listMessages
+  - storage.getMessagesPaginated({ threadId, selectBy: { pagination: { page: 0, perPage: 20 } } })
+  + storage.listMessages({ threadId, page: 0, perPage: 20 })
+  + storage.listMessages({ threadId, page: 0, perPage: false })  // Fetch all
+
+  // Memory: Replace selectBy with flat parameters
+  - memory.query({ threadId, selectBy: { last: 20, include: [...] } })
+  + memory.query({ threadId, perPage: 20, include: [...] })
+
+  // Client SDK
+  - thread.getMessagesPaginated({ selectBy: { pagination: { page: 0 } } })
+  + thread.listMessages({ page: 0, perPage: 20 })
+  ```
+
+- aaa40e7: # Major Changes
+
+  ## Storage Layer
+
+  ### BREAKING: Removed `storage.getMessages()`
+
+  The `getMessages()` method has been removed from all storage implementations. Use `listMessages()` instead, which provides pagination support.
+
+  **Migration:**
+
+  ```typescript
+  // Before
+  const messages = await storage.getMessages({ threadId: 'thread-1' });
+
+  // After
+  const result = await storage.listMessages({
+    threadId: 'thread-1',
+    page: 0,
+    perPage: 50,
+  });
+  const messages = result.messages; // Access messages array
+  console.log(result.total); // Total count
+  console.log(result.hasMore); // Whether more pages exist
+  ```
+
+  ### Message ordering default
+
+  `listMessages()` defaults to ASC (oldest first) ordering by `createdAt`, matching the previous `getMessages()` behavior.
+
+  **To use DESC ordering (newest first):**
+
+  ```typescript
+  const result = await storage.listMessages({
+    threadId: 'thread-1',
+    orderBy: { field: 'createdAt', direction: 'DESC' },
+  });
+  ```
+
+  ## Client SDK
+
+  ### BREAKING: Renamed `client.getThreadMessages()` → `client.listThreadMessages()`
+
+  **Migration:**
+
+  ```typescript
+  // Before
+  const response = await client.getThreadMessages(threadId, { agentId });
+
+  // After
+  const response = await client.listThreadMessages(threadId, { agentId });
+  ```
+
+  The response format remains the same.
+
+  ## Type Changes
+
+  ### BREAKING: Removed `StorageGetMessagesArg` type
+
+  Use `StorageListMessagesInput` instead:
+
+  ```typescript
+  // Before
+  import type { StorageGetMessagesArg } from '@mastra/core';
+
+  // After
+  import type { StorageListMessagesInput } from '@mastra/core';
+  ```
+
+- dd1c38d: Bump minimum required Node.js version to 22.13.0
+- 5948e6a: Replace `getThreadsByResourceIdPaginated` with `listThreadsByResourceId` across memory handlers. Update client SDK to use `listThreads()` with `offset`/`limit` parameters instead of deprecated `getMemoryThreads()`. Consolidate `/api/memory/threads` routes to single paginated endpoint.
+- ca8041c: This simplifies the Memory API by removing the confusing rememberMessages method and renaming query to recall for better clarity.
+
+  The rememberMessages method name implied it might persist data when it was actually just retrieving messages, same as query. Having two methods that did essentially the same thing was unnecessary.
+
+  Before:
+
+  ```typescript
+  // Two methods that did the same thing
+  memory.rememberMessages({ threadId, resourceId, config, vectorMessageSearch });
+  memory.query({ threadId, resourceId, perPage, vectorSearchString });
+  ```
+
+  After:
+
+  ```typescript
+  // Single unified method with clear purpose
+  memory.recall({ threadId, resourceId, perPage, vectorMessageSearch, threadConfig });
+  ```
+
+  All usages have been updated across the codebase including tests. The agent now calls recall directly with the appropriate parameters.
+
+- 7051bf3: Rename RuntimeContext to RequestContext
+- 0793497: Rename `defaultVNextStreamOptions` to `defaultOptions`. Add "Legacy" suffix to v1 option properties and methods (`defaultGenerateOptions` → `defaultGenerateOptionsLegacy`, `defaultStreamOptions` → `defaultStreamOptionsLegacy`).
+- a854ede: Remove `getThreadsByResourceId` and `getThreadsByResourceIdPaginated` methods from storage interfaces in favor of `listThreadsByResourceId`. The new method uses `offset`/`limit` pagination and a nested `orderBy` object structure (`{ field, direction }`).
+- eb09742: Renamed a bunch of observability/tracing-related things to drop the AI prefix.
+- a1bd7b8: **Breaking Change**: Remove legacy v1 watch events and consolidate on v2 implementation.
+
+  This change simplifies the workflow watching API by removing the legacy v1 event system and promoting v2 as the standard (renamed to just `watch`).
+
+  ### What's Changed
+  - Removed legacy v1 watch event handlers and types
+  - Renamed `watch-v2` to `watch` throughout the codebase
+  - Removed `.watch()` method from client-js SDK (`Workflow` and `AgentBuilder` classes)
+  - Removed `/watch` HTTP endpoints from server and deployer
+  - Removed `WorkflowWatchResult` and v1 `WatchEvent` types
+
+- 0633100: **BREAKING CHANGE**: Pagination APIs now use `page`/`perPage` instead of `offset`/`limit`
+
+  All storage and memory pagination APIs have been updated to use `page` (0-indexed) and `perPage` instead of `offset` and `limit`, aligning with standard REST API patterns.
+
+  **Affected APIs:**
+  - `Memory.listThreadsByResourceId()`
+  - `Memory.listMessages()`
+  - `Storage.listWorkflowRuns()`
+
+  **Migration:**
+
+  ```typescript
+  // Before
+  await memory.listThreadsByResourceId({
+    resourceId: 'user-123',
+    offset: 20,
+    limit: 10,
+  });
+
+  // After
+  await memory.listThreadsByResourceId({
+    resourceId: 'user-123',
+    page: 2, // page = Math.floor(offset / limit)
+    perPage: 10,
+  });
+
+  // Before
+  await memory.listMessages({
+    threadId: 'thread-456',
+    offset: 20,
+    limit: 10,
+  });
+
+  // After
+  await memory.listMessages({
+    threadId: 'thread-456',
+    page: 2,
+    perPage: 10,
+  });
+
+  // Before
+  await storage.listWorkflowRuns({
+    workflowName: 'my-workflow',
+    offset: 20,
+    limit: 10,
+  });
+
+  // After
+  await storage.listWorkflowRuns({
+    workflowName: 'my-workflow',
+    page: 2,
+    perPage: 10,
+  });
+  ```
+
+  **Additional improvements:**
+  - Added validation for negative `page` values in all storage implementations
+  - Improved `perPage` validation to handle edge cases (negative values, `0`, `false`)
+  - Added reusable query parser utilities for consistent validation in handlers
+
+- 844ea5d: Changing getAgents -> listAgents, getTools -> listTools, getWorkflows -> listWorkflows
+- f0f8f12: Removed old tracing code based on OpenTelemetry
+- 0d7618b: Remove deprecated vector prompts and cohere provider from code
+- 83d5942: Mark as stable
+- d7acd8e: Enforcing id required on Processor primitive
+- 0bddc6d: Renamed `MastraMessageV2` to `MastraDBMessage`
+  Made the return format of all methods that return db messages consistent. It's always `{ messages: MastraDBMessage[] }` now, and messages can be converted after that using `@mastra/ai-sdk/ui`'s `toAISdkV4/5Messages()` function
+- a0c8c1b: moved ai-tracing code into @mastra/observability
+- c218bd3: Remove legacy evals from Mastra
+
+### Minor Changes
+
+- f0f8f12: Update peer dependencies to match core package version bump (1.0.0)
+- ebac155: **BREAKING CHANGE**: Memory scope defaults changed from 'thread' to 'resource'
+
+  Both `workingMemory.scope` and `semanticRecall.scope` now default to `'resource'` instead of `'thread'`. This means:
+  - Working memory persists across all conversations for the same user/resource
+  - Semantic recall searches across all threads for the same user/resource
+
+  **Migration**: To maintain the previous thread-scoped behavior, explicitly set `scope: 'thread'`:
+
+  ```typescript
+  memory: new Memory({
+    storage,
+    workingMemory: {
+      enabled: true,
+      scope: 'thread', // Explicitly set for thread-scoped behavior
+    },
+    semanticRecall: {
+      scope: 'thread', // Explicitly set for thread-scoped behavior
+    },
+  }),
+  ```
+
+  See the [migration guide](https://mastra.ai/docs/guides/migrations/memory-scope-defaults) for more details.
+
+  Also fixed issues where playground semantic recall search could show missing or incorrect results in certain cases.
+
+- 844ea5d: Update peer dependencies to match core package version bump (1.0.0)
+- 5df9cce: Update peer dependencies to match core package version bump (0.22.1)
+- b7de533: Add observeStream support for agent-builder template installation
+  - Add observeStream, observeStreamVNext, observeStreamLegacy, and resumeStream methods to agent-builder client SDK
+  - Add corresponding server handlers and deployer routes for observe streaming
+  - Add tracingOptions parameter to existing agent-builder handlers for parity with workflows
+  - Update template installation processor to support both legacy and VNext streaming event formats
+
+- ebac155: Update peer dependencies to match core package version bump (0.22.0)
+- c218bd3: Update peer dependencies to match core package version bump (1.0.0)
+
+### Patch Changes
+
+- 3852192: Make step optional in all resume APIs
+- 60937c1: Fix semantic search endpoint to return results in the correct format. Also fix the delete messages endpoint to properly normalize ids in the expected format.
+- ffd8f1b: Add agent id to the list agent
+- dff01d8: Update tool execution signature
+
+  Consolidated the 3 different execution contexts to one
+
+  ```typescript
+  // before depending on the context the tool was executed in
+  tool.execute({ context: data });
+  tool.execute({ context: { inputData: data } });
+  tool.execute(data);
+
+  // now, for all contexts
+  tool.execute(data, context);
+  ```
+
+  **Before:**
+
+  ```typescript
+  inputSchema: z.object({ something: z.string() }),
+  execute: async ({ context, tracingContext, runId, ... }) => {
+    return doSomething(context.string);
+  }
+  ```
+
+  **After:**
+
+  ```typescript
+  inputSchema: z.object({ something: z.string() }),
+  execute: async (inputData, context) => {
+    const { agent, mcp, workflow, ...sharedContext } = context
+
+    // context that only an agent would get like toolCallId, messages, suspend, resume, etc
+    if (agent) {
+      doSomething(inputData.something, agent)
+    // context that only a workflow would get like runId, state, suspend, resume, etc
+    } else if (workflow) {
+      doSomething(inputData.something, workflow)
+    // context that only a workflow would get like "extra", "elicitation"
+    } else if (mcp) {
+      doSomething(inputData.something, mcp)
+    } else {
+      // Running a tool in no execution context
+      return doSomething(inputData.something);
+    }
+  }
+  ```
+
+- f15fb34: Add the description field to listAgents
+- 70189fc: Fix the link issue in observability
+- 5df9cce: Add tool call approval
+- 8e85939: Fix scorers listing filtring
+- 9f4a683: Fixes issue where clicking the reset button in the model picker would fail to restore the original LanguageModelV2 (or any other types) object that was passed during agent construction.
+- 4c6b492: Update peer dependencies to match core package version bump (1.0.0)
+- c23200d: Fix undefined runtimeContext using memory from playground
+- 363284b: Make step optional in resumeStreamVNext API
+- b7959e6: Remove `waitForEvent` from workflows. `waitForEvent` is now removed, please use suspend & resume flow instead. See https://mastra.ai/en/docs/workflows/suspend-and-resume for more details on suspend & resume flow.
+-
+- 735d8c1: Use memory mock in server tests
+- c942802: Remove format from stream/generate
+- Updated dependencies [2319326]
+- Updated dependencies [39c9743]
+- Updated dependencies [f743dbb]
+- Updated dependencies [fec5129]
+- Updated dependencies [0491e7c]
+- Updated dependencies [f6f4903]
+- Updated dependencies [0e8ed46]
+- Updated dependencies [6c049d9]
+- Updated dependencies [910db9e]
+- Updated dependencies [2f897df]
+- Updated dependencies [d629361]
+- Updated dependencies [08c31c1]
+- Updated dependencies [3443770]
+- Updated dependencies [f0a07e0]
+- Updated dependencies [aaa40e7]
+- Updated dependencies [1521d71]
+- Updated dependencies [9e1911d]
+- Updated dependencies [ebac155]
+- Updated dependencies [dd1c38d]
+- Updated dependencies [5948e6a]
+- Updated dependencies [8940859]
+- Updated dependencies [e629310]
+- Updated dependencies [4c6b492]
+- Updated dependencies [dff01d8]
+- Updated dependencies [9d819d5]
+- Updated dependencies [fd3d338]
+- Updated dependencies [71c8d6c]
+- Updated dependencies [6179a9b]
+- Updated dependencies [c30400a]
+- Updated dependencies [00f4921]
+- Updated dependencies [ca8041c]
+- Updated dependencies [7051bf3]
+- Updated dependencies [a8f1494]
+- Updated dependencies [69e0a87]
+- Updated dependencies [0793497]
+- Updated dependencies [01f8878]
+- Updated dependencies [5df9cce]
+- Updated dependencies [4c77209]
+- Updated dependencies [a854ede]
+- Updated dependencies [c576fc0]
+- Updated dependencies [3defc80]
+- Updated dependencies [16153fe]
+- Updated dependencies [9f4a683]
+- Updated dependencies [bc94344]
+- Updated dependencies [57d157f]
+- Updated dependencies [903f67d]
+- Updated dependencies [d827d08]
+- Updated dependencies [2a90c55]
+- Updated dependencies [eb09742]
+- Updated dependencies [23c10a1]
+- Updated dependencies [96d35f6]
+- Updated dependencies [5cbe88a]
+- Updated dependencies [a1bd7b8]
+- Updated dependencies [d78b38d]
+- Updated dependencies [a0a5b4b]
+- Updated dependencies [0633100]
+- Updated dependencies [c710c16]
+- Updated dependencies [354ad0b]
+- Updated dependencies [cfae733]
+- Updated dependencies [e3dfda7]
+- Updated dependencies [993ad98]
+- Updated dependencies [676ccc7]
+- Updated dependencies [844ea5d]
+- Updated dependencies [398fde3]
+- Updated dependencies [c10398d]
+- Updated dependencies [f0f8f12]
+- Updated dependencies [0d7618b]
+- Updated dependencies [7b763e5]
+- Updated dependencies [d36cfbb]
+- Updated dependencies [3697853]
+- Updated dependencies [b2e45ec]
+- Updated dependencies [d6d49f7]
+- Updated dependencies [00c2387]
+- Updated dependencies [a534e95]
+- Updated dependencies [9d0e7fe]
+- Updated dependencies [53d927c]
+- Updated dependencies [ad6250d]
+- Updated dependencies [3f2faf2]
+- Updated dependencies [22f64bc]
+- Updated dependencies [3a73998]
+- Updated dependencies [83d5942]
+- Updated dependencies [b7959e6]
+- Updated dependencies [bda6370]
+- Updated dependencies [d7acd8e]
+- Updated dependencies [c7f1f7d]
+- Updated dependencies [0bddc6d]
+- Updated dependencies
+- Updated dependencies [735d8c1]
+- Updated dependencies [acf322e]
+- Updated dependencies [e16d553]
+- Updated dependencies [c942802]
+- Updated dependencies [a0c8c1b]
+- Updated dependencies [cc34739]
+- Updated dependencies [c218bd3]
+- Updated dependencies [2c4438b]
+- Updated dependencies [4d59f58]
+- Updated dependencies [2b8893c]
+- Updated dependencies [8e5c75b]
+- Updated dependencies [e1bb9c9]
+- Updated dependencies [351a11f]
+- Updated dependencies [e59e0d3]
+- Updated dependencies [465ac05]
+- Updated dependencies [fa8409b]
+- Updated dependencies [e7266a2]
+- Updated dependencies [173c535]
+  - @mastra/core@0.0.0-kitchen-sink-e2e-test-20251120010328
+
 ## 1.0.0-beta.3
 
 ### Patch Changes

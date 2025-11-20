@@ -1,5 +1,7 @@
 # @internal/changeset-cli
 
+## 0.0.0-kitchen-sink-e2e-test-20251120010328
+
 ## 0.0.7
 
 ## 0.0.6

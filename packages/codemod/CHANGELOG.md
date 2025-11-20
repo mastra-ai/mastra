@@ -1,5 +1,19 @@
 # @mastra/codemod
 
+## 0.0.0-kitchen-sink-e2e-test-20251120010328
+
+### Minor Changes
+
+- 91ff046: Initial release of `@mastra/codemod` package
+
+### Patch Changes
+
+- bd2682a: Fix `mastra-required-id`, `mcp-get-toolsets`, and `mcp-get-tools` codemods to add missing imports and instances.
+- 1edec97: - Improve existing codemods
+  - Make package ESM-only
+  - Add new codemods
+-
+
 ## 0.1.0-beta.2
 
 ### Patch Changes
