@@ -1,5 +1,6 @@
 import type { ToolSet } from 'ai-v5';
 import z from 'zod';
+import type { MastraMessageV2 } from '../../../agent/message-list';
 import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type { ChunkType } from '../../../stream/types';
@@ -7,7 +8,6 @@ import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
-import type { MastraMessageV2 } from '../../../agent/message-list';
 
 export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>(
   { models, telemetry_settings, _internal, modelStreamSpan, ...rest }: OuterLLMRun<Tools, OUTPUT>,

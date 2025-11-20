@@ -2667,10 +2667,7 @@ export class MessageList {
     }
     return messages;
   }
-  private sanitizeV5UIMessages(
-    messages: AIV5Type.UIMessage[],
-    filterIncompleteToolCalls = false,
-  ): AIV5Type.UIMessage[] {
+  private sanitizeV5UIMessages(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
     const msgs = messages
       .map(m => {
         if (m.parts.length === 0) return false;
