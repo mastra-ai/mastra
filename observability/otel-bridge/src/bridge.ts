@@ -16,7 +16,8 @@ import type { RequestContext } from '@mastra/core/di';
 import type { ObservabilityBridge, TracingEvent, AnySpan } from '@mastra/core/observability';
 import { TracingEventType } from '@mastra/core/observability';
 import { BaseExporter } from '@mastra/observability';
-import { trace, context as otelContext, type Context, type Span, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import { trace as otelTrace, context as otelContext, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import type { Span as OtelSpan, Context as OtelContext, SpanContext as OtelSpanContext } from '@opentelemetry/api';
 
 /**
  * Configuration for the OtelBridge
@@ -75,8 +76,8 @@ function mapSpanKind(mastraType: string): SpanKind {
  */
 export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   name = 'otel-bridge';
-  private tracer = trace.getTracer('@mastra/otel-bridge', '1.0.0');
-  private spanMap = new Map<string, { otelSpan: Span; otelContext: Context; spanType: string }>();
+  private otelTracer = otelTrace.getTracer('@mastra/otel-bridge', '1.0.0');
+  private otelSpanMap = new Map<string, { otelSpan: OtelSpan; otelContext: OtelContext; spanType: string }>();
 
   constructor(config: OtelBridgeConfig = {}) {
     super(config);
@@ -88,44 +89,9 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
    * Extracts context from the active OTEL span using AsyncLocalStorage.
    * Requires OTEL auto-instrumentation to be configured.
    *
-   * @param _requestContext - Unused, kept for compatibility
    * @returns OTEL context or undefined if not available
    */
-  getCurrentContext(_requestContext?: RequestContext):
-    | {
-        traceId: string;
-        parentSpanId?: string;
-        isSampled: boolean;
-      }
-    | undefined {
-    const activeContext = this.getActiveContext();
-    if (activeContext) {
-      this.logger.debug(`[OtelBridge] Extracted context from active span [traceId=${activeContext.traceId}]`);
-      return activeContext;
-    }
-
-    this.logger.debug('[OtelBridge] No OTEL context found');
-    return undefined;
-  }
-
-  /**
-   * Get OTEL context for a specific Mastra span
-   *
-   * This allows Mastra core to execute user code (tools, workflow steps, etc.)
-   * within the OTEL span context, enabling proper parent-child relationships
-   * for any OTEL-instrumented operations (DB calls, HTTP requests, etc.).
-   *
-   * @param spanId - Mastra span ID
-   * @returns OTEL context for the span, or undefined if not found
-   */
-  getSpanContext(spanId: string): Context | undefined {
-    return this.spanMap.get(spanId)?.otelContext;
-  }
-
-  /**
-   * Extract context from active OTEL span
-   */
-  private getActiveContext():
+  getCurrentContext():
     | {
         traceId: string;
         parentSpanId?: string;
@@ -134,7 +100,7 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
     | undefined {
     try {
       // Use standard OTEL API to get active span
-      const activeSpan = trace.getSpan(otelContext.active());
+      const activeSpan = otelTrace.getSpan(otelContext.active());
       if (!activeSpan) {
         return undefined;
       }
@@ -143,6 +109,7 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
       if (!spanContext) {
         return undefined;
       }
+      this.logger.debug(`[OtelBridge] Extracted context from active span [traceId=${activeContext.traceId}]`);
 
       return {
         traceId: spanContext.traceId,
@@ -213,26 +180,26 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   ): void {
     try {
       // Determine parent context
-      let parentContext: Context;
+      let parentOtelContext: OtelContext;
       if (parentSpanId) {
-        const parentEntry = this.spanMap.get(parentSpanId);
+        const parentEntry = this.otelSpanMap.get(parentSpanId);
         if (parentEntry) {
-          parentContext = parentEntry.otelContext;
+          parentOtelContext = parentEntry.otelContext;
         } else {
-          parentContext = otelContext.active();
+          parentOtelContext = otelContext.active();
         }
       } else {
-        parentContext = otelContext.active();
+        parentOtelContext = otelContext.active();
       }
 
       // Create OTEL span
-      const otelSpan = this.tracer.startSpan(
+      const otelSpan = this.otelTracer.startSpan(
         spanName,
         {
           startTime,
           kind: mapSpanKind(spanType),
         },
-        parentContext,
+        parentOtelContext,
       );
 
       // Set identifying attributes
@@ -240,14 +207,14 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
       otelSpan.setAttribute('mastra.span.id', spanId);
 
       // Create context with this span active
-      const spanContext = trace.setSpan(parentContext, otelSpan);
+      const spanContext = otelTrace.setSpan(parentOtelContext, otelSpan);
 
       // Store for later retrieval
-      this.spanMap.set(spanId, { otelSpan, otelContext: spanContext, spanType });
+      this.otelSpanMap.set(spanId, { otelSpan, otelContext: spanContext, spanType });
 
       console.log(
         `[OtelBridge.registerSpan] Registered span [mastraId=${spanId}] [otelSpanId=${otelSpan.spanContext().spanId}] ` +
-          `[type=${spanType}] [mapSize=${this.spanMap.size}]`,
+          `[type=${spanType}] [mapSize=${this.otelSpanMap.size}]`,
       );
     } catch (error) {
       this.logger.error('[OtelBridge] Failed to register span:', error);
@@ -266,7 +233,7 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
       const mastraSpan = event.exportedSpan;
 
       // Skip if already registered synchronously
-      if (this.spanMap.has(mastraSpan.id)) {
+      if (this.otelSpanMap.has(mastraSpan.id)) {
         this.logger.debug(`[OtelBridge] Span already registered [id=${mastraSpan.id}], skipping async registration`);
         return;
       }
@@ -287,7 +254,7 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   private async handleSpanEnded(event: TracingEvent): Promise<void> {
     try {
       const mastraSpan = event.exportedSpan;
-      const entry = this.spanMap.get(mastraSpan.id);
+      const entry = this.otelSpanMap.get(mastraSpan.id);
 
       if (!entry) {
         this.logger.warn(
@@ -356,7 +323,7 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
       otelSpan.end(mastraSpan.endTime);
 
       // Clean up
-      this.spanMap.delete(mastraSpan.id);
+      this.otelSpanMap.delete(mastraSpan.id);
 
       this.logger.debug(
         `[OtelBridge] Completed OTEL span [mastraId=${mastraSpan.id}] [traceId=${otelSpan.spanContext().traceId}]`,
@@ -377,10 +344,10 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
    * @returns The result of the function execution
    */
   private executeWithSpanContext<T>(spanId: string, fn: () => T): T {
-    const entry = this.spanMap.get(spanId);
+    const entry = this.otelSpanMap.get(spanId);
 
     // Debug logging
-    const activeSpan = trace.getSpan(otelContext.active());
+    const activeSpan = otelTrace.getSpan(otelContext.active());
     const spanType = entry?.spanType || 'unknown';
     console.log(
       `[OtelBridge.executeWithSpanContext] spanId=${spanId}, ` +
@@ -424,11 +391,11 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
    */
   async shutdown(): Promise<void> {
     // End any remaining spans
-    for (const [spanId, { otelSpan }] of this.spanMap.entries()) {
+    for (const [spanId, { otelSpan }] of this.otelSpanMap.entries()) {
       this.logger.warn(`[OtelBridge] Force-ending span that was not properly closed [id=${spanId}]`);
       otelSpan.end();
     }
-    this.spanMap.clear();
+    this.otelSpanMap.clear();
     this.logger.info('[OtelBridge] Shutdown complete');
   }
 }

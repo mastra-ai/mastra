@@ -9,8 +9,10 @@
     "build": "npm run tsc",
     "lint": "prettier --check '*/**/*.{js,jsx,ts,tsx}'",
     "lint:fix": "prettier --write '*/**/*.{js,jsx,ts,tsx}'",
+    "test": "vitest run",
     "start:playground": "LOG_PRETTY=true NODE_CONFIG_ENV=playground mastra dev --dir src/core/mastra/playground",
     "start:dev": "OTEL_SERVICE_NAME=genstudio-agent-hub LOG_PRETTY=true OTEL_LOGS_EXPORTER=none NODE_CONFIG_ENV=localdev KNOWN_EXTS=js,ts nodemon -e ts,json --exec node -r dotenv/config --loader ts-node/esm --no-warnings=ExperimentalWarning --import=specifier-resolution-node/register --import=./instrumentation-hook.js --import=./src/core/telemetry/init.ts src/server.ts",
+    "start:test": "OTEL_SERVICE_NAME=genstudio-agent-hub LOG_PRETTY=true OTEL_LOGS_EXPORTER=none NODE_CONFIG_ENV=test KNOWN_EXTS=js,ts node -r dotenv/config --loader ts-node/esm --no-warnings=ExperimentalWarning --import=specifier-resolution-node/register --import=./instrumentation-hook.js --import=./src/core/telemetry/init.ts src/server.ts",
     "start": "OTEL_SERVICE_NAME=genstudio-agent-hub LOG_PRETTY=true OTEL_LOGS_EXPORTER=none NODE_CONFIG_ENV=localdev node -r dotenv/config --import=specifier-resolution-node/register --import=./instrumentation-hook.js --import=./dist/core/telemetry/init.js dist/server.js",
     "postgres:start": "make run-depsonly",
     "postgres:stop": "make stop-depsonly"
@@ -67,6 +69,7 @@
     "nodemon": "3.1.10",
     "prettier": "3.6.2",
     "ts-node": "10.9.2",
-    "typescript": "5.9.2"
+    "typescript": "5.9.2",
+    "vitest": "^2.0.0"
   }
 }
