@@ -75,6 +75,29 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
    * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
    */
   jsonPromptInjection?: boolean;
+
+  /**
+   * Apply schema compatibility transformations for the model.
+   * Useful for OpenAI models with strict mode, which require all properties to be in the `required` array.
+   * This automatically converts `.optional()` to just `.nullable()` and applies other model-specific fixes.
+   *
+   * @default false
+   * @example
+   * ```typescript
+   * const schema = z.object({
+   *   name: z.string(),
+   *   age: z.number().optional()// Would cause issues with OpenAI strict mode
+   * });
+   *
+   * await agent.generate("Extract info", {
+   *   structuredOutput: {
+   *     schema,
+   *     applySchemaCompatTransformation: true // Fixes the schema automatically
+   *   }
+   * });
+   * ```
+   */
+  applySchemaCompatTransformation?: boolean;
 } & FallbackFields<OUTPUT>;
 
 export type SerializableStructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = Omit<

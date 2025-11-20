@@ -4,7 +4,7 @@ import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ModelInformation } from '../types';
-import { isOptional, isObj, isArr, isUnion, isDefault, isNumber, isString, isDate } from '../zodTypes';
+import { isOptional, isObj, isArr, isUnion, isDefault, isNumber, isString, isDate, isNullable } from '../zodTypes';
 
 export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
@@ -42,6 +42,23 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
     if (isOptional(z)(value)) {
       const innerZodType = this.processZodType(value._def.innerType);
       return innerZodType.nullable();
+    } else if (isNullable(z)(value)) {
+      // Handle nullable: if inner is optional, strip it
+      // This converts .optional().nullable() -> .nullable()
+      const innerType = '_def' in value ? value._def.innerType : (value as any)._zod?.def?.innerType;
+      if (innerType && isOptional(z)(innerType)) {
+        const innerInnerType = '_def' in innerType ? innerType._def.innerType : (innerType as any)._zod?.def?.innerType;
+        if (innerInnerType) {
+          const processedInnerInner = this.processZodType(innerInnerType);
+          return (processedInnerInner as any).nullable();
+        }
+      }
+      // Otherwise process inner and re-wrap with nullable
+      if (innerType) {
+        const processedInner = this.processZodType(innerType);
+        return (processedInner as any).nullable();
+      }
+      return value;
     } else if (isObj(z)(value)) {
       return this.defaultZodObjectHandler(value, { passthrough: false });
     } else if (isArr(z)(value)) {
