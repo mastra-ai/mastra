@@ -7,7 +7,6 @@ import type {
   TextStreamPart,
   ToolSet,
   UIMessage,
-  UIMessageStreamOptions,
 } from 'ai';
 import { isDataChunkType } from './utils';
 
