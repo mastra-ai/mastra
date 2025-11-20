@@ -86,6 +86,20 @@
       "permanent": true
     },
     {
+      "source": "/v1/examples/processors/message-length-limiter",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/processors-message-length-limiter",
+      "permanent": true
+    },
+    {
+      "source": "/v1/examples/processors/response-length-limiter",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-length-limiter",
+      "permanent": true
+    },
+    {
+      "source": "/v1/examples/processors/response-validator",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-validator"
+    },
+    {
       "source": "/examples/v1/memory/working-memory-schema",
       "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-schema",
       "permanent": true

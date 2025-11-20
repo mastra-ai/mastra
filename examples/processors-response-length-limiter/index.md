@@ -1,8 +1,3 @@
----
-title: "Example: Response Length Limiter | Processors"
-description: Example of creating a custom output processor that limits AI response length during streaming to prevent excessively long outputs.
----
-
 # Response Length Limiter
 
 This example shows how to create a custom output processor that monitors and limits the length of AI responses during streaming. This processor tracks cumulative response length and aborts generation when a specified character limit is reached, helping control costs and response quality.
@@ -11,7 +6,8 @@ This example shows how to create a custom output processor that monitors and lim
 
 A custom output processor in Mastra implements the `Processor` interface with the `processOutputStream` method for streaming responses. This processor tracks the cumulative length of text deltas and terminates the stream when the limit is exceeded.
 
-```typescript title="src/mastra/processors/response-length-limiter.ts" showLineNumbers copy
+```typescript
+// src/mastra/processors/response-length-limiter.ts
 import type { Processor } from "@mastra/core/processors";
 import type { ChunkType } from "@mastra/core/stream";
 
@@ -107,7 +103,8 @@ export class ResponseLengthLimiter implements Processor {
 
 Using the options object approach with explicit strategy configuration:
 
-```typescript title="src/mastra/agents/blocking-agent.ts" showLineNumbers copy
+```typescript
+// src/mastra/agents/blocking-agent.ts
 import { Agent } from "@mastra/core/agent";
 import { ResponseLengthLimiter } from "../processors/response-length-limiter";
 
@@ -124,7 +121,8 @@ export const blockingAgent = new Agent({
 
 Using the simple number approach (defaults to 'block' strategy):
 
-```typescript title="src/mastra/agents/simple-agent.ts" showLineNumbers copy
+```typescript
+// src/mastra/agents/simple-agent.ts
 import { Agent } from "@mastra/core/agent";
 import { ResponseLengthLimiter } from "../processors/response-length-limiter";
 
@@ -141,7 +139,8 @@ export const simpleAgent = new Agent({
 
 This example shows a response that stays within the configured character limit and streams successfully to completion.
 
-```typescript title="src/example-high-response-length.ts" showLineNumbers copy
+```typescript
+// src/example-high-response-length.ts
 import { Agent } from "@mastra/core/agent";
 import { ResponseLengthLimiter } from "./mastra/processors/response-length-limiter";
 
@@ -175,7 +174,8 @@ Character count: 156
 
 This example shows what happens when a response reaches exactly the character limit during generation.
 
-```typescript title="src/example-partial-response-length.ts" showLineNumbers copy
+```typescript
+// src/example-partial-response-length.ts
 import { Agent } from "@mastra/core/agent";
 import { ResponseLengthLimiter } from "./mastra/processors/response-length-limiter";
 
@@ -215,7 +215,8 @@ Character count: 200
 
 This example demonstrates streaming behavior when the response limit is exceeded.
 
-```typescript title="src/example-low-response-length.ts" showLineNumbers copy
+```typescript
+// src/example-low-response-length.ts
 import { Agent } from "@mastra/core/agent";
 import { ResponseLengthLimiter } from "./mastra/processors/response-length-limiter";
 
@@ -315,3 +316,4 @@ When using `ResponseLengthLimiter`, the processor:
 - **Rate limiting**: Control resource usage across multiple concurrent requests
 
 This processor is particularly valuable for applications that need predictable response lengths, whether for cost management, user interface constraints, or maintaining consistent response quality.
+

@@ -1,8 +1,3 @@
----
-title: "Example: Message Length Limiter | Processors"
-description: Example of creating a custom input processor that limits message length before sending to the language model.
----
-
 # Message Length Limiter
 
 This example shows how to create a custom input processor that validates and limits the total length of messages before they are sent to the language model. This processor helps prevent expensive API calls and ensures consistent input constraints across your application.
@@ -11,7 +6,8 @@ This example shows how to create a custom input processor that validates and lim
 
 A custom input processor in Mastra implements the `Processor` interface with the `processInput` method. This processor validates the total character count of all text content in the message thread and blocks requests that exceed the configured limit.
 
-```typescript title="src/mastra/processors/message-length-limiter.ts" showLineNumbers copy
+```typescript
+// src/mastra/processors/message-length-limiter.ts
 import type { Processor } from "@mastra/core/processors";
 import type { MastraMessageV2 } from "@mastra/core/agent/message-list";
 import { TripWire } from "@mastra/core/agent";
@@ -143,7 +139,8 @@ export class MessageLengthLimiter implements Processor {
 
 Using the options object approach with explicit strategy configuration:
 
-```typescript title="src/mastra/agents/blocking-agent.ts" showLineNumbers copy
+```typescript
+// src/mastra/agents/blocking-agent.ts
 import { Agent } from "@mastra/core/agent";
 import { MessageLengthLimiter } from "../processors/message-length-limiter";
 
@@ -160,7 +157,8 @@ export const blockingAgent = new Agent({
 
 Using the simple number approach (defaults to 'block' strategy):
 
-```typescript title="src/mastra/agents/simple-agent.ts" showLineNumbers copy
+```typescript
+// src/mastra/agents/simple-agent.ts
 import { Agent } from "@mastra/core/agent";
 import { MessageLengthLimiter } from "../processors/message-length-limiter";
 
@@ -177,7 +175,8 @@ export const simpleAgent = new Agent({
 
 This example shows a message that stays within the configured character limit and processes successfully.
 
-```typescript title="src/example-high-message-length.ts" showLineNumbers copy
+```typescript
+// src/example-high-message-length.ts
 import { Agent } from "@mastra/core/agent";
 import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter";
 
@@ -210,7 +209,8 @@ The message processes successfully because it's well under the 500-character lim
 
 This example shows a message that's close to but still within the character limit.
 
-```typescript title="src/example-partial-message-length.ts" showLineNumbers copy
+```typescript
+// src/example-partial-message-length.ts
 import { Agent } from "@mastra/core/agent";
 import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter";
 
@@ -244,7 +244,8 @@ The message processes successfully as it's under the 300-character limit:
 
 This example shows what happens when a message exceeds the configured character limit.
 
-```typescript title="src/example-low-message-length.ts" showLineNumbers copy
+```typescript
+// src/example-low-message-length.ts
 import { Agent } from "@mastra/core/agent";
 import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter";
 
@@ -315,3 +316,4 @@ This processor is particularly useful for:
 - Ensuring consistent input validation across your application
 - Protecting against accidentally large inputs that could cause timeouts
 - Implementing tiered access controls based on user permissions
+

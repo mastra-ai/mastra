@@ -1,8 +1,3 @@
----
-title: "Example: Response Validator | Processors"
-description: Example of creating a custom output processor that validates AI responses contain required keywords before returning them to users.
----
-
 # Response Validator
 
 This example shows how to create a custom output processor that validates AI responses after generation but before they are returned to users. This processor checks that responses contain required keywords and can reject responses that don't meet validation criteria, ensuring quality and compliance.
@@ -11,7 +6,8 @@ This example shows how to create a custom output processor that validates AI res
 
 A custom output processor in Mastra implements the `Processor` interface with the `processOutputResult` method for final result validation. This processor examines the complete response and validates it contains all specified keywords.
 
-```typescript title="src/mastra/processors/response-validator.ts" showLineNumbers copy
+```typescript
+// src/mastra/processors/response-validator.ts
 import type { Processor, MastraMessageV2 } from "@mastra/core/processors";
 
 export class ResponseValidator implements Processor {
@@ -57,7 +53,8 @@ export class ResponseValidator implements Processor {
 
 ### Using the processor
 
-```typescript title="src/mastra/agents/example-agent.ts" showLineNumbers copy
+```typescript
+// src/mastra/agents/example-agent.ts
 import { Agent } from "@mastra/core/agent";
 import { ResponseValidator } from "../processors/response-validator";
 
@@ -77,7 +74,8 @@ export const validatedAgent = new Agent({
 
 This example shows a response that contains all required keywords and passes validation successfully.
 
-```typescript title="src/example-high-response-validation.ts" showLineNumbers copy
+```typescript
+// src/example-high-response-validation.ts
 import { Agent } from "@mastra/core/agent";
 import { ResponseValidator } from "./mastra/processors/response-validator";
 
@@ -111,7 +109,8 @@ The response passes validation because it contains both required keywords:
 
 This example shows what happens when a response is missing one or more required keywords.
 
-```typescript title="src/example-partial-response-validation.ts" showLineNumbers copy
+```typescript
+// src/example-partial-response-validation.ts
 import { Agent } from "@mastra/core/agent";
 import { ResponseValidator } from "./mastra/processors/response-validator";
 
@@ -152,7 +151,8 @@ Response missing required keyword: encryption
 
 This example demonstrates validation failure when none of the required keywords are present in the response.
 
-```typescript title="src/example-low-response-validation.ts" showLineNumbers copy
+```typescript
+// src/example-low-response-validation.ts
 import { Agent } from "@mastra/core/agent";
 import { ResponseValidator } from "./mastra/processors/response-validator";
 
@@ -193,7 +193,8 @@ Response missing required keyword: blockchain
 
 You can create more sophisticated validators with custom logic:
 
-```typescript title="src/example-advanced-response-validation.ts" showLineNumbers copy
+```typescript
+// src/example-advanced-response-validation.ts
 import type { Processor, MastraMessageV2 } from "@mastra/core/processors";
 
 export class AdvancedResponseValidator implements Processor {
@@ -340,3 +341,4 @@ When using `ResponseValidator`, the processor:
 - **Technical documentation**: Ensure responses include necessary technical terms
 
 This processor is particularly useful for applications that need to guarantee response content meets specific criteria, whether for compliance, quality assurance, or educational purposes.
+
