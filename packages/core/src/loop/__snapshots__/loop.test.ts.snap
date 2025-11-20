@@ -692,6 +692,23 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
 ]
 `;
 
+exports[`Loop Tests > AISDK v5 > generateText > result.files > should contain files 1`] = `
+[
+  DefaultGeneratedFileWithType {
+    "base64Data": "Hello World",
+    "mediaType": "text/plain",
+    "type": "file",
+    "uint8ArrayData": undefined,
+  },
+  DefaultGeneratedFileWithType {
+    "base64Data": "QkFVRw==",
+    "mediaType": "image/jpeg",
+    "type": "file",
+    "uint8ArrayData": undefined,
+  },
+]
+`;
+
 exports[`Loop Tests > AISDK v5 > generateText > result.response > should contain response body and headers 1`] = `
 {
   "body": "test body",
