@@ -200,7 +200,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     });
 
     describe('result.files', () => {
-      it.todo('should contain files', async () => {
+      it('should contain files', async () => {
         const result = await generateText({
           agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
@@ -652,6 +652,13 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               maxRetries: 0,
               id: 'test-model',
               model: new MockLanguageModelV2({
+                doGenerate: async () => ({
+                  ...dummyResponseValues,
+                  content: [{ type: 'text', text: 'Hello, world!' }],
+                  request: {
+                    body: 'test body',
+                  },
+                }),
                 doStream: async ({}) => ({
                   ...dummyResponseValues,
                   stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
@@ -670,7 +677,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           messageList: createMessageListWithUserMessage(),
         });
 
-        expect(await result.request).toStrictEqual({
+        expect(result.request).toStrictEqual({
           body: 'test body',
         });
       });
@@ -685,6 +692,21 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               maxRetries: 0,
               id: 'test-model',
               model: new MockLanguageModelV2({
+                doGenerate: async () => ({
+                  ...dummyResponseValues,
+                  content: [{ type: 'text', text: 'Hello, world!' }],
+                  response: {
+                    id: 'test-id-from-model',
+                    timestamp: new Date(10000),
+                    modelId: 'test-response-model-id',
+                    modelProvider: 'mock-provider',
+                    modelVersion: 'v2',
+                    headers: {
+                      'custom-response-header': 'response-header-value',
+                    },
+                    body: 'test body',
+                  },
+                }),
                 doStream: async ({}) => ({
                   ...dummyResponseValues,
                   stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
@@ -743,7 +765,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               {
                 "id": "1234",
                 "metadata": {
-                  "createdAt": 2024-01-01T00:00:00.001Z,
+                  "createdAt": 2024-01-01T00:00:00.000Z,
                 },
                 "parts": [
                   {
@@ -787,7 +809,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               {
                 "id": "1234",
                 "metadata": {
-                  "createdAt": 2024-01-01T00:00:00.001Z,
+                  "createdAt": 2024-01-01T00:00:00.000Z,
                 },
                 "parts": [
                   {

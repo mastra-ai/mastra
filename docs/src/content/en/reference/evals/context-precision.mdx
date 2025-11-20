@@ -152,7 +152,7 @@ MAP = (1.0 + 0.67) / 2 = 0.835 ≈ **0.83**
 
 ```typescript
 const scorer = createContextPrecisionScorer({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     contextExtractor: (input, output) => {
       // Extract context dynamically based on the query
@@ -171,7 +171,7 @@ const scorer = createContextPrecisionScorer({
 
 ```typescript
 const scorer = createContextPrecisionScorer({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     context: [
       // Simulate retrieved documents from vector database
@@ -196,7 +196,7 @@ This example shows perfect context precision where all relevant context appears 
 import { createContextPrecisionScorer } from "@mastra/evals";
 
 const scorer = createContextPrecisionScorer({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     context: [
       "Photosynthesis is the process by which plants convert sunlight, carbon dioxide, and water into glucose and oxygen.",
@@ -243,7 +243,7 @@ This example shows moderate precision with both relevant and irrelevant context:
 import { createContextPrecisionScorer } from "@mastra/evals";
 
 const scorer = createContextPrecisionScorer({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     context: [
       "Regular exercise improves cardiovascular health by strengthening the heart muscle.",
@@ -292,7 +292,7 @@ This example shows poor context precision with mostly irrelevant context:
 import { createContextPrecisionScorer } from "@mastra/evals";
 
 const scorer = createContextPrecisionScorer({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     context: [
       "The weather forecast shows sunny skies this weekend.",

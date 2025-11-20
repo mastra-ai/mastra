@@ -1752,7 +1752,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 let fullText = '';
                 for await (const chunk of streamResult.fullStream) {
                   if (context?.writer) {
-                    await context.writer.write(chunk);
+                    // Data chunks from writer.custom() should bubble up directly without wrapping
+                    if (chunk.type.startsWith('data-')) {
+                      // Write data chunks directly to original stream to bubble up
+                      await context.writer.custom(chunk as any);
+                    } else {
+                      await context.writer.write(chunk);
+                    }
                   }
 
                   if (chunk.type === 'text-delta') {
@@ -1771,7 +1777,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 let fullText = '';
                 for await (const chunk of streamResult.fullStream) {
                   if (context?.writer) {
-                    await context.writer.write(chunk);
+                    // Data chunks from writer.custom() should bubble up directly without wrapping
+                    if (chunk.type.startsWith('data-')) {
+                      // Write data chunks directly to original stream to bubble up
+                      await context.writer.custom(chunk as any);
+                    } else {
+                      await context.writer.write(chunk);
+                    }
                   }
 
                   if (chunk.type === 'text-delta') {

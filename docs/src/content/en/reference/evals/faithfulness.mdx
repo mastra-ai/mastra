@@ -131,7 +131,7 @@ In this example, the response closely aligns with the context. Each statement in
 ```typescript title="src/example-high-faithfulness.ts" showLineNumbers copy
 import { createFaithfulnessScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {
+const scorer = createFaithfulnessScorer({ model: 'openai/gpt-5.1', options: {
   context: [
     "The Tesla Model 3 was launched in 2017.",
     "It has a range of up to 358 miles.",
@@ -168,7 +168,7 @@ In this example, there are a mix of supported and unsupported claims. Some parts
 ```typescript title="src/example-mixed-faithfulness.ts" showLineNumbers copy
 import { createFaithfulnessScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {
+const scorer = createFaithfulnessScorer({ model: 'openai/gpt-5.1', options: {
   context: [
     "Python was created by Guido van Rossum.",
     "The first version was released in 1991.",
@@ -205,7 +205,7 @@ In this example, the response directly contradicts the context. None of the clai
 ```typescript title="src/example-low-faithfulness.ts" showLineNumbers copy
 import { createFaithfulnessScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {
+const scorer = createFaithfulnessScorer({ model: 'openai/gpt-5.1', options: {
   context: [
     "Mars is the fourth planet from the Sun.",
     "It has a thin atmosphere of mostly carbon dioxide.",
