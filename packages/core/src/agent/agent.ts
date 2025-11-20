@@ -1697,8 +1697,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               });
 
               let result: any;
-              const slugify = require('@sindresorhus/slugify');
-
+              const slugify = await import(`@sindresorhus/slugify`);
               const subAgentThreadId = inputData.threadId || context?.mastra?.generateId() || randomUUID();
               const subAgentResourceId =
                 inputData.resourceId || context?.mastra?.generateId() || `${slugify.default(this.id)}-${agentName}`;
@@ -1943,7 +1942,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
               if (result?.status === 'success') {
                 const workflowOutput = result?.result || result;
-                return { result: workflowOutput, runId: run.runId };
+                const toolResult = { result: workflowOutput, runId: run.runId };
+                console.log(
+                  '[WORKFLOW TOOL RESULT]',
+                  JSON.stringify({ workflowName, toolResult, fullResult: result }, null, 2),
+                );
+                return toolResult;
               } else if (result?.status === 'failed') {
                 const workflowOutputError = result?.error;
                 return {
