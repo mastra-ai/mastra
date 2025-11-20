@@ -500,6 +500,24 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
         });
       }
 
+      // Guard against match-all patterns that would update all vectors
+      // Normalize SQL by removing WHERE prefix and extra whitespace for pattern matching
+      const normalizedCondition = filterSql
+        .replace(/^\s*WHERE\s+/i, '')
+        .trim()
+        .toLowerCase();
+      const matchAllPatterns = ['true', '1 = 1', '1=1'];
+
+      if (matchAllPatterns.includes(normalizedCondition)) {
+        throw new MastraError({
+          id: 'LIBSQL_VECTOR_UPDATE_MATCH_ALL_FILTER',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName, filterSql: normalizedCondition },
+          text: 'Filter matches all vectors. Provide a specific filter to update targeted vectors.',
+        });
+      }
+
       // buildFilterQuery already includes "WHERE" in the SQL, so we need to extract just the condition
       whereClause = filterSql.replace(/^WHERE\s+/i, '');
       whereValues = filterValues;
@@ -636,6 +654,24 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
           category: ErrorCategory.USER,
           details: { indexName },
           text: 'Filter produced empty WHERE clause',
+        });
+      }
+
+      // Guard against match-all patterns that would delete all vectors
+      // Normalize SQL by removing WHERE prefix and extra whitespace for pattern matching
+      const normalizedCondition = filterSql
+        .replace(/^\s*WHERE\s+/i, '')
+        .trim()
+        .toLowerCase();
+      const matchAllPatterns = ['true', '1 = 1', '1=1'];
+
+      if (matchAllPatterns.includes(normalizedCondition)) {
+        throw new MastraError({
+          id: 'LIBSQL_VECTOR_DELETE_MATCH_ALL_FILTER',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName, filterSql: normalizedCondition },
+          text: 'Filter matches all vectors. Use deleteIndex to delete all vectors from an index.',
         });
       }
 
