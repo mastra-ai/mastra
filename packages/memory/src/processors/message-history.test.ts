@@ -168,7 +168,7 @@ describe('MessageHistory', () => {
           role: 'user',
           content: { format: 2, content: 'Historical', parts: [{ type: 'text', text: 'Historical' }] },
           threadId: 'thread-1',
-          createdAt: new Date(),
+          createdAt: new Date(Date.now() - 10000), // 10 seconds ago
         },
       ];
 
@@ -184,36 +184,42 @@ describe('MessageHistory', () => {
           role: 'user',
           content: { format: 2, content: 'New', parts: [{ type: 'text', text: 'New' }] },
           threadId: 'thread-1',
-          createdAt: new Date(),
+          createdAt: new Date(), // now
         },
       ];
 
+      const messageList = new MessageList();
+      messageList.add(newMessages, 'input');
+
       const result = await processor.processInput({
         messages: newMessages,
+        messageList,
         abort: mockAbort,
         runtimeContext: createRuntimeContextWithMemory('thread-1'),
       });
 
-      expect(result).toHaveLength(2);
-      expect(result[0].content.content).toBe('Historical');
-      expect(result[1].content.content).toBe('New');
+      const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
+      expect(resultMessages).toHaveLength(2);
+      expect(resultMessages[0].content.content).toBe('Historical');
+      expect(resultMessages[1].content.content).toBe('New');
     });
 
     it('should avoid duplicate message IDs', async () => {
+      const baseTime = Date.now();
       const historicalMessages: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'user',
           content: { format: 2, content: 'Message 1', parts: [{ type: 'text', text: 'Message 1' }] },
           threadId: 'thread-1',
-          createdAt: new Date(),
+          createdAt: new Date(baseTime - 3000), // 3 seconds ago
         },
         {
           id: 'msg-2',
           role: 'assistant',
           content: { format: 2, content: 'Message 2', parts: [{ type: 'text', text: 'Message 2' }] },
           threadId: 'thread-1',
-          createdAt: new Date(),
+          createdAt: new Date(baseTime - 2000), // 2 seconds ago
         },
       ];
 
@@ -229,29 +235,34 @@ describe('MessageHistory', () => {
           role: 'assistant',
           content: { format: 2, content: 'Message 2 (new)', parts: [{ type: 'text', text: 'Message 2 (new)' }] },
           threadId: 'thread-1',
-          createdAt: new Date(),
+          createdAt: new Date(baseTime - 1000), // 1 second ago
         },
         {
           id: 'msg-3',
           role: 'user',
           content: { format: 2, content: 'Message 3', parts: [{ type: 'text', text: 'Message 3' }] },
           threadId: 'thread-1',
-          createdAt: new Date(),
+          createdAt: new Date(baseTime), // now
         },
       ];
 
+      const messageList = new MessageList();
+      messageList.add(newMessages, 'input');
+
       const result = await processor.processInput({
         messages: newMessages,
+        messageList,
         abort: mockAbort,
         runtimeContext: createRuntimeContextWithMemory('thread-1'),
       });
 
+      const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
       // msg-1 from history, msg-2 from new (duplicate filtered), msg-3 from new
-      expect(result).toHaveLength(3);
-      expect(result[0].id).toBe('msg-1');
-      expect(result[1].id).toBe('msg-2');
-      expect(result[1].content.content).toBe('Message 2 (new)'); // New version kept
-      expect(result[2].id).toBe('msg-3');
+      expect(resultMessages).toHaveLength(3);
+      expect(resultMessages[0].id).toBe('msg-1');
+      expect(resultMessages[1].id).toBe('msg-2');
+      expect(resultMessages[1].content.content).toBe('Message 2 (new)'); // New version kept
+      expect(resultMessages[2].id).toBe('msg-3');
     });
 
     it('should handle empty storage', async () => {
@@ -269,66 +280,19 @@ describe('MessageHistory', () => {
         },
       ];
 
+      const messageList = new MessageList();
+      messageList.add(newMessages, 'input');
+
       const result = await processor.processInput({
         messages: newMessages,
+        messageList,
         abort: mockAbort,
         runtimeContext: createRuntimeContextWithMemory('thread-1'),
       });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('msg-1');
-    });
-
-    it('should respect includeSystemMessages flag', async () => {
-      const baseTime = Date.now();
-      const historicalMessages: MastraDBMessage[] = [
-        {
-          id: 'msg-1',
-          role: 'system',
-          content: { format: 2, content: 'System prompt', parts: [{ type: 'text', text: 'System prompt' }] },
-          threadId: 'thread-1',
-          createdAt: new Date(baseTime - 2000),
-        },
-        {
-          id: 'msg-2',
-          role: 'user',
-          content: { format: 2, content: 'User message', parts: [{ type: 'text', text: 'User message' }] },
-          threadId: 'thread-1',
-          createdAt: new Date(baseTime - 1000),
-        },
-      ];
-
-      mockStorage.setMessages(historicalMessages);
-
-      // Test with includeSystemMessages = false (default)
-      processor = new MessageHistory({
-        storage: mockStorage,
-      });
-
-      const result1 = await processor.processInput({
-        messages: [],
-        abort: mockAbort,
-        runtimeContext: createRuntimeContextWithMemory('thread-1'),
-      });
-
-      expect(result1).toHaveLength(1);
-      expect(result1[0].role).toBe('user');
-
-      // Test with includeSystemMessages = true
-      processor = new MessageHistory({
-        storage: mockStorage,
-        includeSystemMessages: true,
-      });
-
-      const result2 = await processor.processInput({
-        messages: [],
-        abort: mockAbort,
-        runtimeContext: createRuntimeContextWithMemory('thread-1'),
-      });
-
-      expect(result2).toHaveLength(2);
-      expect(result2[0].role).toBe('system');
-      expect(result2[1].role).toBe('user');
+      const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
+      expect(resultMessages).toHaveLength(1);
+      expect(resultMessages[0].id).toBe('msg-1');
     });
 
     it('should propagate storage errors', async () => {
@@ -349,10 +313,14 @@ describe('MessageHistory', () => {
         },
       ];
 
+      const messageList = new MessageList();
+      messageList.add(newMessages, 'input');
+
       // Should propagate the error instead of silently failing
       await expect(
         processor.processInput({
           messages: newMessages,
+          messageList,
           abort: mockAbort,
           runtimeContext: createRuntimeContextWithMemory('thread-1'),
         }),
@@ -375,13 +343,18 @@ describe('MessageHistory', () => {
         },
       ];
 
+      const messageList = new MessageList();
+      messageList.add(newMessages, 'input');
+
       const result = await processor.processInput({
         messages: newMessages,
+        messageList,
         abort: mockAbort,
         runtimeContext: createRuntimeContextWithMemory('thread-1'),
       });
 
-      expect(result).toEqual(newMessages);
+      const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
+      expect(resultMessages).toEqual(newMessages);
     });
 
     it('should handle assistant messages with tool calls', async () => {
@@ -415,16 +388,20 @@ describe('MessageHistory', () => {
         storage: mockStorage,
       });
 
+      const messageList1 = new MessageList();
+
       const result = await processor.processInput({
         messages: [],
+        messageList: messageList1,
         abort: mockAbort,
         runtimeContext: createRuntimeContextWithMemory('thread-1'),
       });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].role).toBe('assistant');
-      expect(result[0].content.parts).toHaveLength(2);
-      expect(result[0].content.parts?.[1].type).toBe('tool-invocation');
+      const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
+      expect(resultMessages).toHaveLength(1);
+      expect(resultMessages[0].role).toBe('assistant');
+      expect(resultMessages[0].content.parts).toHaveLength(2);
+      expect(resultMessages[0].content.parts?.[1].type).toBe('tool-invocation');
     });
 
     it('should handle tool result messages', async () => {
@@ -458,15 +435,19 @@ describe('MessageHistory', () => {
         storage: mockStorage,
       });
 
+      const messageList2 = new MessageList();
+
       const result = await processor.processInput({
         messages: [],
+        messageList: messageList2,
         abort: mockAbort,
         runtimeContext: createRuntimeContextWithMemory('thread-1'),
       });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].role).toBe('assistant');
-      expect(result[0].content.parts?.[0].type).toBe('tool-invocation');
+      const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
+      expect(resultMessages).toHaveLength(1);
+      expect(resultMessages[0].role).toBe('assistant');
+      expect(resultMessages[0].content.parts?.[0].type).toBe('tool-invocation');
     });
   });
 

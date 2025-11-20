@@ -11,7 +11,6 @@ import type { MemoryStorage } from '@mastra/core/storage';
 export interface MessageHistoryOptions {
   storage: MemoryStorage;
   lastMessages?: number;
-  includeSystemMessages?: boolean;
 }
 
 /**
@@ -27,12 +26,10 @@ export class MessageHistory implements Processor {
   readonly name = 'MessageHistory';
   private storage: MemoryStorage;
   private lastMessages?: number;
-  private includeSystemMessages: boolean;
 
   constructor(options: MessageHistoryOptions) {
     this.storage = options.storage;
     this.lastMessages = options.lastMessages;
-    this.includeSystemMessages = options.includeSystemMessages ?? false;
   }
 
   async processInput(args: {
@@ -60,14 +57,9 @@ export class MessageHistory implements Processor {
       orderBy: { field: 'createdAt', direction: 'DESC' },
     });
 
-    // 2. Filter based on includeSystemMessages option
+    // 2. Filter out system messages (they should never be stored in DB)
     const filteredMessages = result.messages.filter((msg: MastraDBMessage) => {
-      // Filter out system messages if not included
-      if (!this.includeSystemMessages && msg.role === 'system') {
-        return false;
-      }
-
-      return true;
+      return msg.role !== 'system';
     });
 
     // 3. Merge with incoming messages (avoiding duplicates by ID)
@@ -83,7 +75,11 @@ export class MessageHistory implements Processor {
 
     // Add historical messages with source: 'memory'
     for (const msg of chronologicalMessages) {
-      messageList.add(msg, 'memory');
+      if (msg.role === 'system') {
+        continue; // memory should not store system messages
+      } else {
+        messageList.add(msg, 'memory');
+      }
     }
 
     return messageList;
