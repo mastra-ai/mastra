@@ -288,6 +288,11 @@ export class SemanticRecall implements Processor {
 
       if (msg.role === 'user') {
         // Extract text content from MastraMessageV2
+        // Ensure msg.content is an object before accessing nested properties
+        if (typeof msg.content !== 'object' || msg.content === null) {
+          continue;
+        }
+
         // First check if there's a content string
         if (typeof msg.content.content === 'string' && msg.content.content !== '') {
           return msg.content.content;
@@ -496,6 +501,11 @@ export class SemanticRecall implements Processor {
       for (const message of messages) {
         // Skip system messages - they're instructions, not user content
         if (message.role === 'system') {
+          continue;
+        }
+
+        // Skip messages without valid IDs
+        if (!message.id || typeof message.id !== 'string') {
           continue;
         }
 
