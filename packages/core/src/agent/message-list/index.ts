@@ -43,6 +43,7 @@ export type MastraMessageContentV2 = {
   reasoning?: AIV4Type.UIMessage['reasoning'];
   annotations?: AIV4Type.UIMessage['annotations'];
   metadata?: Record<string, unknown>;
+  providerMetadata?: AIV5Type.ProviderMetadata; // message-level provider metadata from finish chunk
 };
 
 // maps to AI SDK V4 UIMessage
@@ -54,6 +55,7 @@ export type MastraMessageContentV3 = {
   format: 3; // format 3 === UIMessage in AI SDK v5
   parts: AIV5Type.UIMessage['parts'];
   metadata?: AIV5Type.UIMessage['metadata'];
+  providerMetadata?: AIV5Type.ProviderMetadata; // message-level provider metadata from finish chunk
 };
 
 // maps to AI SDK V5 UIMessage
@@ -1398,6 +1400,14 @@ export class MessageList {
   private hydrateMastraMessageV2Fields(message: MastraMessageV2): MastraMessageV2 {
     if (!(message.createdAt instanceof Date)) message.createdAt = new Date(message.createdAt);
 
+    // Add threadId and resourceId from memoryInfo if not already present
+    if (!message.threadId && this.memoryInfo?.threadId) {
+      message.threadId = this.memoryInfo.threadId;
+    }
+    if (!message.resourceId && this.memoryInfo?.resourceId) {
+      message.resourceId = this.memoryInfo.resourceId;
+    }
+
     // Fix toolInvocations with empty args by looking in the parts array
     // This handles messages restored from database where toolInvocations might have lost their args
     if (message.content.toolInvocations && message.content.parts) {
@@ -1441,6 +1451,10 @@ export class MessageList {
     // Preserve metadata field if present
     if ('metadata' in message && message.metadata !== null && message.metadata !== undefined) {
       content.metadata = message.metadata as Record<string, unknown>;
+    }
+    // Preserve message-level providerMetadata if present
+    if ('providerMetadata' in message && message.providerMetadata !== null && message.providerMetadata !== undefined) {
+      content.providerMetadata = message.providerMetadata as AIV5Type.ProviderMetadata;
     }
 
     return {
@@ -1506,8 +1520,8 @@ export class MessageList {
             });
             break;
 
-          case 'tool-call':
-            parts.push({
+          case 'tool-call': {
+            const toolCallPart: MastraMessageV2['content']['parts'][number] = {
               type: 'tool-invocation',
               toolInvocation: {
                 state: 'call',
@@ -1515,8 +1529,13 @@ export class MessageList {
                 toolName: part.toolName,
                 args: part.args,
               },
-            });
+            };
+            if ('providerOptions' in part && part.providerOptions) {
+              toolCallPart.providerMetadata = part.providerOptions;
+            }
+            parts.push(toolCallPart);
             break;
+          }
 
           case 'tool-result':
             // Try to find args from the corresponding tool-call in previous messages
@@ -1558,20 +1577,32 @@ export class MessageList {
               result: part.result ?? '', // undefined will cause AI SDK to throw an error, but for client side tool calls this really could be undefined
               args: toolArgs, // Use the args from the corresponding tool-call
             };
-            parts.push({
+
+            const toolResultPart: MastraMessageV2['content']['parts'][number] = {
               type: 'tool-invocation',
               toolInvocation: invocation,
-            });
+            };
+
+            if ('providerOptions' in part && part.providerOptions) {
+              toolResultPart.providerMetadata = part.providerOptions;
+            }
+
+            parts.push(toolResultPart);
             toolInvocations.push(invocation);
             break;
 
-          case 'reasoning':
-            parts.push({
+          case 'reasoning': {
+            const reasoningPart: MastraMessageV2['content']['parts'][number] = {
               type: 'reasoning',
               reasoning: '', // leave this blank so we aren't double storing it in the db along with details
               details: [{ type: 'text', text: part.text, signature: part.signature }],
-            });
+            };
+            if ('providerOptions' in part && part.providerOptions) {
+              reasoningPart.providerMetadata = part.providerOptions;
+            }
+            parts.push(reasoningPart);
             break;
+          }
           case 'redacted-reasoning':
             parts.push({
               type: 'reasoning',
@@ -2391,6 +2422,11 @@ export class MessageList {
       v3Msg.content.metadata = { ...v2Msg.content.metadata };
     }
 
+    // Preserve message-level providerMetadata from V2 to V3
+    if (v2Msg.content.providerMetadata) {
+      v3Msg.content.providerMetadata = v2Msg.content.providerMetadata;
+    }
+
     // Preserve original content and experimental_attachments for round-trip
     if (v2Msg.content.content !== undefined) {
       v3Msg.content.metadata = {
@@ -2426,12 +2462,16 @@ export class MessageList {
               callProviderMetadata: part.providerMetadata,
             } satisfies AIV5Type.UIMessagePart<any, any>);
           } else {
-            parts.push({
+            const toolPart: any = {
               type: `tool-${part.toolInvocation.toolName}` as const,
               toolCallId: part.toolInvocation.toolCallId,
               state: part.toolInvocation.state === `call` ? `input-available` : `input-streaming`,
               input: part.toolInvocation.args,
-            } satisfies AIV5Type.UIMessagePart<any, any>);
+            };
+            if (part.providerMetadata) {
+              toolPart.callProviderMetadata = part.providerMetadata;
+            }
+            parts.push(toolPart);
           }
           break;
 
@@ -2558,10 +2598,60 @@ export class MessageList {
     return v3Msg;
   }
 
-  private aiV5UIMessagesToAIV5ModelMessages(messages: AIV5Type.UIMessage[]): AIV5Type.ModelMessage[] {
-    const preprocessed = this.addStartStepPartsForAIV5(this.sanitizeV5UIMessages(messages));
+  private aiV5UIMessagesToAIV5ModelMessages(
+    messages: AIV5Type.UIMessage[],
+    filterIncompleteToolCalls = false,
+  ): AIV5Type.ModelMessage[] {
+    const sanitized = this.sanitizeV5UIMessages(messages, filterIncompleteToolCalls);
+    const preprocessed = this.addStartStepPartsForAIV5(sanitized);
     const result = AIV5.convertToModelMessages(preprocessed);
-    return result;
+
+    // Restore message-level providerOptions from metadata.providerMetadata
+    // AND restore part-level providerOptions for tool-call parts from callProviderMetadata
+    // This preserves providerOptions through the DB → UI → Model conversion
+    const finalResult = result.map((modelMsg, index) => {
+      const uiMsg = preprocessed[index];
+      let updatedMsg = modelMsg;
+      
+      // Restore message-level providerOptions
+      if (
+        uiMsg?.metadata &&
+        typeof uiMsg.metadata === 'object' &&
+        'providerMetadata' in uiMsg.metadata &&
+        uiMsg.metadata.providerMetadata
+      ) {
+        updatedMsg = {
+          ...updatedMsg,
+          providerOptions: uiMsg.metadata.providerMetadata as AIV5Type.ProviderMetadata,
+        } satisfies AIV5Type.ModelMessage;
+      }
+      
+      // Restore part-level providerOptions for tool-call parts
+      if (updatedMsg.role === 'assistant' && Array.isArray(updatedMsg.content)) {
+        const updatedContent = updatedMsg.content.map((part, partIndex) => {
+          if (part.type === 'tool-call') {
+            // Find corresponding UI part to get callProviderMetadata
+            const uiPart = uiMsg?.parts[partIndex];
+            if (uiPart && 'callProviderMetadata' in uiPart && uiPart.callProviderMetadata) {
+              return {
+                ...part,
+                providerMetadata: uiPart.callProviderMetadata,
+              };
+            }
+          }
+          return part;
+        });
+        
+        return {
+          ...updatedMsg,
+          content: updatedContent,
+        } satisfies AIV5Type.ModelMessage;
+      }
+      
+      return updatedMsg;
+    });
+    
+    return finalResult;
   }
   private addStartStepPartsForAIV5(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
     for (const message of messages) {
@@ -2577,15 +2667,21 @@ export class MessageList {
     }
     return messages;
   }
-  private sanitizeV5UIMessages(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
+  private sanitizeV5UIMessages(
+    messages: AIV5Type.UIMessage[],
+    filterIncompleteToolCalls = false,
+  ): AIV5Type.UIMessage[] {
     const msgs = messages
       .map(m => {
         if (m.parts.length === 0) return false;
-        // Filter out streaming states and input-available (which isn't supported by convertToModelMessages)
+        // Filter out streaming states and optionally input-available (which isn't supported by convertToModelMessages)
         const safeParts = m.parts.filter(p => {
           if (!AIV5.isToolUIPart(p)) return true;
           // Only keep tool parts with output states for model messages
-          return p.state === 'output-available' || p.state === 'output-error';
+          if (filterIncompleteToolCalls) {
+            return p.state === 'output-available' || p.state === 'output-error';
+          }
+          return p.state !== 'input-streaming';
         });
 
         if (!safeParts.length) return false;
@@ -2619,6 +2715,7 @@ export class MessageList {
     if (m.createdAt) metadata.createdAt = m.createdAt;
     if (m.threadId) metadata.threadId = m.threadId;
     if (m.resourceId) metadata.resourceId = m.resourceId;
+    if (m.content.providerMetadata) metadata.providerMetadata = m.content.providerMetadata;
 
     // Convert parts, keeping all v5 tool parts regardless of state
     const filteredParts = m.content.parts;

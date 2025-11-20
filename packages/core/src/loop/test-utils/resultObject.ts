@@ -474,7 +474,6 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   },
                 ],
                 "finishReason": "stop",
-                "providerMetadata": undefined,
                 "request": {},
                 "response": {
                   "headers": undefined,
