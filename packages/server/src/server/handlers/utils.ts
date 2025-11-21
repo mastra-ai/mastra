@@ -41,3 +41,18 @@ export function parsePerPage(
   if (isNaN(parsed)) return defaultValue;
   return Math.min(max, Math.max(1, parsed));
 }
+
+/**
+ * Parses filter query parameters into a key-value object.
+ */
+export function parseFilters(filters: string | string[] | undefined): Record<string, string> | undefined {
+  if (!filters) return undefined;
+
+  return Object.fromEntries(
+    (Array.isArray(filters) ? filters : [filters]).map((attr: string) => {
+      const [key, ...valueParts] = attr.split(':');
+      const value = valueParts.join(':'); // ✅ Handles colons in values
+      return [key, value];
+    }),
+  );
+}

@@ -24,6 +24,10 @@ export const listMcpServersQuerySchema = z.object({
   offset: z.coerce.number().optional(),
 });
 
+export const getMcpServerDetailQuerySchema = z.object({
+  version: z.string().optional(),
+});
+
 // Response schemas
 export const versionDetailSchema = z.object({
   version: z.string(),
