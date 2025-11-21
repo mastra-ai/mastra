@@ -154,8 +154,11 @@ export class ProcessorRunner {
           processableMessages = result.get.all.db();
         }
       } else {
-        messageList.clear.response.db();
-        processableMessages = result || [];
+        if (result) {
+          messageList.clear.response.db();
+          processableMessages = result || [];
+        }
+
         if (processableMessages.length > 0) {
           messageList.add(processableMessages, 'response');
         }
@@ -397,28 +400,30 @@ export class ProcessorRunner {
         // Processor returned an array - stop recording before clear/add (that's just internal plumbing)
         mutations = messageList.stopRecording();
 
-        // Clear and re-add since processor worked with array. clear all messages, the new result array is all messages in the list (new input but also any messages added by other processors, memory for ex)
-        messageList.clear.all.db();
+        if (result) {
+          // Clear and re-add since processor worked with array. clear all messages, the new result array is all messages in the list (new input but also any messages added by other processors, memory for ex)
+          messageList.clear.all.db();
 
-        // Separate system messages from other messages since they need different handling
-        const systemMessages = result.filter(m => m.role === 'system');
-        const nonSystemMessages = result.filter(m => m.role !== 'system');
+          // Separate system messages from other messages since they need different handling
+          const systemMessages = result.filter(m => m.role === 'system');
+          const nonSystemMessages = result.filter(m => m.role !== 'system');
 
-        // Add system messages using addSystem
-        for (const sysMsg of systemMessages) {
-          const systemText =
-            (sysMsg.content.content as string | undefined) ??
-            sysMsg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
-            '';
-          messageList.addSystem(systemText);
+          // Add system messages using addSystem
+          for (const sysMsg of systemMessages) {
+            const systemText =
+              (sysMsg.content.content as string | undefined) ??
+              sysMsg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
+              '';
+            messageList.addSystem(systemText);
+          }
+
+          // Add non-system messages normally
+          if (nonSystemMessages.length > 0) {
+            messageList.add(nonSystemMessages, 'input');
+          }
+
+          processableMessages = nonSystemMessages;
         }
-
-        // Add non-system messages normally
-        if (nonSystemMessages.length > 0) {
-          messageList.add(nonSystemMessages, 'input');
-        }
-
-        processableMessages = nonSystemMessages;
       }
 
       processorSpan?.end({
