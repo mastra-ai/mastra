@@ -1,4 +1,4 @@
-import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
+import type { WorkflowRunState, StepResult, TimeTravelContext } from '@mastra/core/workflows';
 
 import { WorkflowRunStreamResult } from './context/workflow-run-context';
 
@@ -50,4 +50,30 @@ export function convertWorkflowRunStateToStreamResult(runState: WorkflowRunState
     ...(runState.status === 'failed' ? { error: runState.error } : {}),
     ...(runState.status === 'suspended' ? { suspended: suspendedStepIds, suspendPayload: suspendPayload } : {}),
   } as WorkflowRunStreamResult;
+}
+
+export function constructNestedStepContext(
+  nestedSteps: WorkflowRunStreamResult['steps'],
+): Record<string, TimeTravelContext<any, any, any, any>> {
+  let nestedStepContext: Record<string, TimeTravelContext<any, any, any, any>> = {};
+  for (const stepId of Object.keys(nestedSteps)) {
+    const stepIdArr = stepId.split('.');
+    const mainStepId = stepIdArr[0];
+    if (stepIdArr.length === 2) {
+      nestedStepContext[mainStepId] = {
+        ...(nestedStepContext[mainStepId] ?? {}),
+        [stepIdArr[1]]: nestedSteps[stepId],
+      } as any;
+    } else {
+      const innerStepIds = stepIdArr.slice(1).join('.');
+      const innerNestedStepContext = constructNestedStepContext({
+        [innerStepIds]: nestedSteps[stepId],
+      });
+      nestedStepContext = {
+        ...nestedStepContext,
+        ...innerNestedStepContext,
+      };
+    }
+  }
+  return nestedStepContext;
 }

@@ -13,7 +13,7 @@ export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
 
 export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackProps) => {
   return (
-    <WorkflowRunProvider>
+    <WorkflowRunProvider workflowId={''}>
       <ToolFallbackInner toolName={toolName} result={result} args={args} {...props} />
     </WorkflowRunProvider>
   );
