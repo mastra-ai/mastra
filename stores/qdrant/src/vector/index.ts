@@ -42,12 +42,12 @@ export class QdrantVector extends MastraVector {
     this.client = new QdrantClient(qdrantParams);
   }
 
-  async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
+  async upsert({ indexName, vectors, metadata, ids, vectorName }: UpsertVectorParams & { vectorName?: string }): Promise<string[]> {
     const pointIds = ids || vectors.map(() => crypto.randomUUID());
 
     const records = vectors.map((vector, i) => ({
       id: pointIds[i],
-      vector: vector,
+      vector: vectorName ? { [vectorName]: vector } : vector,
       payload: metadata?.[i] || {},
     }));
 
@@ -75,13 +75,15 @@ export class QdrantVector extends MastraVector {
     }
   }
 
-  async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
+  async createIndex({ indexName, dimension, metric = 'cosine', namedVectors }: CreateIndexParams & { namedVectors?: Record<string, { size: number; distance: string }> }): Promise<void> {
     try {
-      if (!Number.isInteger(dimension) || dimension <= 0) {
-        throw new Error('Dimension must be a positive integer');
-      }
-      if (!DISTANCE_MAPPING[metric]) {
-        throw new Error(`Invalid metric: "${metric}". Must be one of: cosine, euclidean, dotproduct`);
+      if (!namedVectors) {
+        if (!Number.isInteger(dimension) || dimension <= 0) {
+          throw new Error('Dimension must be a positive integer');
+        }
+        if (!DISTANCE_MAPPING[metric]) {
+          throw new Error(`Invalid metric: "${metric}". Must be one of: cosine, euclidean, dotproduct`);
+        }
       }
     } catch (validationError) {
       throw new MastraError(
@@ -96,11 +98,22 @@ export class QdrantVector extends MastraVector {
     }
 
     try {
+      // If namedVectors is provided, use it; otherwise use default vector config
+      const vectorsConfig = namedVectors
+        ? Object.entries(namedVectors).reduce((acc, [name, config]) => {
+            acc[name] = {
+              size: config.size,
+              distance: DISTANCE_MAPPING[config.distance] || 'Cosine',
+            };
+            return acc;
+          }, {} as Record<string, { size: number; distance: Schemas['Distance'] }>)
+        : {
+            size: dimension,
+            distance: DISTANCE_MAPPING[metric],
+          };
+
       await this.client.createCollection(indexName, {
-        vectors: {
-          size: dimension,
-          distance: DISTANCE_MAPPING[metric],
-        },
+        vectors: vectorsConfig,
       });
     } catch (error: any) {
       const message = error?.message || error?.toString();

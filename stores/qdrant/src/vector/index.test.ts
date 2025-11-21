@@ -39,7 +39,14 @@ describe('QdrantVector', () => {
   describe('Vector Operations', () => {
     beforeAll(async () => {
       qdrant = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-test' });
-      await qdrant.createIndex({ indexName: testCollectionName, dimension });
+      await qdrant.createIndex({ 
+        indexName: testCollectionName, 
+        dimension,
+        namedVectors: {
+          text: { size: dimension, distance: 'cosine' },
+          image: { size: dimension, distance: 'cosine' }
+        }
+      });
     });
 
     afterAll(async () => {
@@ -55,7 +62,12 @@ describe('QdrantVector', () => {
     let vectorIds: string[];
 
     it('should upsert vectors with metadata', async () => {
-      vectorIds = await qdrant.upsert({ indexName: testCollectionName, vectors: testVectors, metadata: testMetadata });
+      vectorIds = await qdrant.upsert({ 
+        indexName: testCollectionName, 
+        vectors: testVectors, 
+        metadata: testMetadata,
+        vectorName: 'text'
+      });
       expect(vectorIds).toHaveLength(3);
     }, 50000);
 
@@ -71,24 +83,51 @@ describe('QdrantVector', () => {
 
       expect(results).toBeDefined();
       expect(results.length).toBeGreaterThan(0);
+      expect(results.length).toBeLessThanOrEqual(2);
+      // Verify that results contain vectors and metadata
+      expect(results[0]?.vector).toBeDefined();
+      expect(results[0]?.vector).toHaveLength(dimension);
+      expect(results[0]?.metadata).toBeDefined();
+      expect(results[0]?.score).toBeGreaterThan(0);
     });
 
-    it('should fallback to default vector when `using` is not provided', async () => {
-      const queryVector = [1, 2, 3];
+    it('should query another named vector (image) when specified', async () => {
+      // First upsert some vectors to the image vector space
+      const imageVectors = [
+        [0.5, 0.5, 0.0],
+        [0.0, 0.5, 0.5],
+      ];
+      const imageMetadata = [{ type: 'image1' }, { type: 'image2' }];
+      await qdrant.upsert({ 
+        indexName: testCollectionName, 
+        vectors: imageVectors, 
+        metadata: imageMetadata,
+        vectorName: 'image'
+      });
+
+      const queryVector = [0.5, 0.5, 0.0];
       const results = await qdrant.query({
         indexName: testCollectionName,
         queryVector,
         topK: 2,
         includeVector: true,
+        using: 'image',
       });
 
       expect(results).toBeDefined();
       expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.vector).toBeDefined();
+      expect(results[0]?.metadata?.type).toMatch(/image/);
     });
 
     it('should query vectors and return nearest neighbors', async () => {
       const queryVector = [1.0, 0.1, 0.1];
-      const results = await qdrant.query({ indexName: testCollectionName, queryVector, topK: 3 });
+      const results = await qdrant.query({ 
+        indexName: testCollectionName, 
+        queryVector, 
+        topK: 3,
+        using: 'text'
+      });
 
       expect(results).toHaveLength(3);
       expect(results?.[0]?.score).toBeGreaterThan(0);
@@ -97,7 +136,13 @@ describe('QdrantVector', () => {
 
     it('should query vectors and return vector in results', async () => {
       const queryVector = [1.0, 0.1, 0.1];
-      const results = await qdrant.query({ indexName: testCollectionName, queryVector, topK: 3, includeVector: true });
+      const results = await qdrant.query({ 
+        indexName: testCollectionName, 
+        queryVector, 
+        topK: 3, 
+        includeVector: true,
+        using: 'text'
+      });
 
       expect(results).toHaveLength(3);
       expect(results?.[0]?.vector).toBeDefined();
@@ -110,10 +155,370 @@ describe('QdrantVector', () => {
         label: 'y-axis',
       };
 
-      const results = await qdrant.query({ indexName: testCollectionName, queryVector, topK: 1, filter });
+      const results = await qdrant.query({ 
+        indexName: testCollectionName, 
+        queryVector, 
+        topK: 1, 
+        filter,
+        using: 'text'
+      });
 
       expect(results).toHaveLength(1);
       expect(results?.[0]?.metadata?.label).toBe('y-axis');
+    }, 50000);
+  });
+
+  describe('Named Vector Spaces - Comprehensive Coverage', () => {
+    const namedVectorCollectionName = 'test-named-vectors-' + Date.now();
+
+    beforeAll(async () => {
+      qdrant = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-test' });
+      // Create collection with multiple named vector spaces
+      await qdrant.createIndex({ 
+        indexName: namedVectorCollectionName, 
+        dimension,
+        namedVectors: {
+          text: { size: dimension, distance: 'cosine' },
+          image: { size: dimension, distance: 'euclidean' }
+        }
+      });
+    });
+
+    afterAll(async () => {
+      await qdrant.deleteIndex({ indexName: namedVectorCollectionName });
+    }, 50000);
+
+    it('should upsert and query distinct records in multiple named vector spaces', async () => {
+      // Upsert text vectors
+      const textVectors = [
+        [1.0, 0.0, 0.0],
+        [0.9, 0.1, 0.0],
+        [0.8, 0.2, 0.0],
+      ];
+      const textMetadata = [
+        { type: 'text', content: 'doc1' },
+        { type: 'text', content: 'doc2' },
+        { type: 'text', content: 'doc3' },
+      ];
+      const textIds = await qdrant.upsert({ 
+        indexName: namedVectorCollectionName, 
+        vectors: textVectors, 
+        metadata: textMetadata,
+        vectorName: 'text'
+      });
+      expect(textIds).toHaveLength(3);
+
+      // Upsert image vectors (different vectors, same IDs to test isolation)
+      const imageVectors = [
+        [0.0, 0.0, 1.0],
+        [0.0, 0.1, 0.9],
+        [0.0, 0.2, 0.8],
+      ];
+      const imageMetadata = [
+        { type: 'image', content: 'img1' },
+        { type: 'image', content: 'img2' },
+        { type: 'image', content: 'img3' },
+      ];
+      const imageIds = await qdrant.upsert({ 
+        indexName: namedVectorCollectionName, 
+        vectors: imageVectors, 
+        metadata: imageMetadata,
+        vectorName: 'image',
+        ids: textIds // Reuse same IDs to test that named vectors are independent
+      });
+      expect(imageIds).toHaveLength(3);
+      expect(imageIds).toEqual(textIds);
+
+      // Query text vector space
+      const textQueryVector = [1.0, 0.0, 0.0];
+      const textResults = await qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector: textQueryVector,
+        topK: 3,
+        includeVector: true,
+        using: 'text',
+      });
+
+      // Query image vector space
+      const imageQueryVector = [0.0, 0.0, 1.0];
+      const imageResults = await qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector: imageQueryVector,
+        topK: 3,
+        includeVector: true,
+        using: 'image',
+      });
+
+      // Assert results differ
+      expect(textResults).toHaveLength(3);
+      expect(imageResults).toHaveLength(3);
+      
+      // Text results should have text metadata
+      expect(textResults[0]?.metadata?.type).toBe('text');
+      expect(textResults[0]?.metadata?.content).toMatch(/doc/);
+      
+      // Image results should have image metadata
+      expect(imageResults[0]?.metadata?.type).toBe('image');
+      expect(imageResults[0]?.metadata?.content).toMatch(/img/);
+
+      // Verify IDs are returned
+      expect(textResults[0]?.id).toBeDefined();
+      expect(imageResults[0]?.id).toBeDefined();
+      expect(textIds).toContain(textResults[0]?.id);
+      expect(imageIds).toContain(imageResults[0]?.id);
+
+      // The top results should be different because we queried different vector spaces
+      // Text query [1,0,0] should match text vectors better
+      // Image query [0,0,1] should match image vectors better
+      const textTopVector = textResults[0]?.vector;
+      const imageTopVector = imageResults[0]?.vector;
+      expect(textTopVector).toBeDefined();
+      expect(imageTopVector).toBeDefined();
+      expect(textTopVector).not.toEqual(imageTopVector);
+    }, 50000);
+
+    it('should return vectors from the correct named space when includeVector is true', async () => {
+      // Clear and set up fresh data
+      const textVec = [[0.7, 0.7, 0.0]];
+      const imageVec = [[0.0, 0.7, 0.7]];
+      
+      const textId = await qdrant.upsert({ 
+        indexName: namedVectorCollectionName, 
+        vectors: textVec, 
+        metadata: [{ space: 'text-only' }],
+        vectorName: 'text'
+      });
+
+      const imageId = await qdrant.upsert({ 
+        indexName: namedVectorCollectionName, 
+        vectors: imageVec, 
+        metadata: [{ space: 'image-only' }],
+        vectorName: 'image',
+        ids: textId // Same ID, different vector space
+      });
+
+      // Query text space with includeVector
+      const textResults = await qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector: [0.7, 0.7, 0.0],
+        topK: 1,
+        includeVector: true,
+        using: 'text',
+        filter: { space: 'text-only' }
+      });
+
+      // Query image space with includeVector
+      const imageResults = await qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector: [0.0, 0.7, 0.7],
+        topK: 1,
+        includeVector: true,
+        using: 'image',
+        filter: { space: 'image-only' }
+      });
+
+      // Assert vectors are returned and are from correct space
+      expect(textResults).toHaveLength(1);
+      expect(textResults[0]?.vector).toBeDefined();
+      expect(textResults[0]?.vector).toHaveLength(dimension);
+      
+      expect(imageResults).toHaveLength(1);
+      expect(imageResults[0]?.vector).toBeDefined();
+      expect(imageResults[0]?.vector).toHaveLength(dimension);
+
+      // Verify the vectors are different (from different spaces)
+      expect(textResults[0]?.vector).not.toEqual(imageResults[0]?.vector);
+
+      // Verify vector values match what we inserted (approximately, due to normalization)
+      const textReturnedVec = textResults[0]?.vector || [];
+      const imageReturnedVec = imageResults[0]?.vector || [];
+      
+      // Text vector should have high values in first two dimensions
+      expect(textReturnedVec[0]).toBeGreaterThan(0.4);
+      expect(textReturnedVec[1]).toBeGreaterThan(0.4);
+      
+      // Image vector should have high values in last two dimensions
+      expect(imageReturnedVec[1]).toBeGreaterThan(0.4);
+      expect(imageReturnedVec[2]).toBeGreaterThan(0.4);
+    }, 50000);
+
+    it('should handle querying a non-existent named vector appropriately', async () => {
+      // Insert some data
+      await qdrant.upsert({ 
+        indexName: namedVectorCollectionName, 
+        vectors: [[1.0, 0.0, 0.0]], 
+        metadata: [{ test: 'data' }],
+        vectorName: 'text'
+      });
+
+      // Try to query with a non-existent named vector
+      const queryPromise = qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector: [1.0, 0.0, 0.0],
+        topK: 1,
+        using: 'nonexistent',
+      });
+
+      // Assert that it throws an error (Qdrant should reject invalid vector names)
+      await expect(queryPromise).rejects.toThrow();
+    }, 50000);
+
+    it('should combine named vector query with metadata filters correctly', async () => {
+      // Set up data with overlapping metadata but different vector spaces
+      const textVectors = [
+        [1.0, 0.0, 0.0],
+        [0.9, 0.1, 0.0],
+        [0.8, 0.2, 0.0],
+      ];
+      const textMetadata = [
+        { category: 'A', priority: 1, source: 'text' },
+        { category: 'B', priority: 2, source: 'text' },
+        { category: 'A', priority: 3, source: 'text' },
+      ];
+      
+      const imageVectors = [
+        [0.0, 0.0, 1.0],
+        [0.0, 0.1, 0.9],
+        [0.0, 0.2, 0.8],
+      ];
+      const imageMetadata = [
+        { category: 'A', priority: 1, source: 'image' },
+        { category: 'B', priority: 2, source: 'image' },
+        { category: 'A', priority: 3, source: 'image' },
+      ];
+
+      await qdrant.upsert({ 
+        indexName: namedVectorCollectionName, 
+        vectors: textVectors, 
+        metadata: textMetadata,
+        vectorName: 'text'
+      });
+
+      await qdrant.upsert({ 
+        indexName: namedVectorCollectionName, 
+        vectors: imageVectors, 
+        metadata: imageMetadata,
+        vectorName: 'image'
+      });
+
+      // Query text space with filter for category A
+      const textFilteredResults = await qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector: [1.0, 0.0, 0.0],
+        topK: 10,
+        using: 'text',
+        filter: { category: 'A' },
+        includeVector: true,
+      });
+
+      // Query image space with filter for category A
+      const imageFilteredResults = await qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector: [0.0, 0.0, 1.0],
+        topK: 10,
+        using: 'image',
+        filter: { category: 'A' },
+        includeVector: true,
+      });
+
+      // Assert correct number of results (2 items with category A in each space)
+      expect(textFilteredResults.length).toBe(2);
+      expect(imageFilteredResults.length).toBe(2);
+
+      // Assert all results have category A
+      textFilteredResults.forEach(result => {
+        expect(result.metadata?.category).toBe('A');
+        expect(result.metadata?.source).toBe('text');
+      });
+
+      imageFilteredResults.forEach(result => {
+        expect(result.metadata?.category).toBe('A');
+        expect(result.metadata?.source).toBe('image');
+      });
+
+      // Assert vectors are from correct spaces
+      expect(textFilteredResults[0]?.vector).toBeDefined();
+      expect(imageFilteredResults[0]?.vector).toBeDefined();
+      expect(textFilteredResults[0]?.vector).not.toEqual(imageFilteredResults[0]?.vector);
+
+      // Query with more complex filter (category A AND priority > 1)
+      const complexFilterResults = await qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector: [1.0, 0.0, 0.0],
+        topK: 10,
+        using: 'text',
+        filter: { 
+          category: 'A',
+          priority: { $gt: 1 }
+        },
+        includeVector: true,
+      });
+
+      // Should only return 1 result (category A with priority 3)
+      expect(complexFilterResults.length).toBe(1);
+      expect(complexFilterResults[0]?.metadata?.category).toBe('A');
+      expect(complexFilterResults[0]?.metadata?.priority).toBe(3);
+      expect(complexFilterResults[0]?.metadata?.source).toBe('text');
+      expect(complexFilterResults[0]?.id).toBeDefined();
+      expect(complexFilterResults[0]?.vector).toHaveLength(dimension);
+    }, 50000);
+
+    it('should handle empty results when filter excludes all vectors in named space', async () => {
+      // Query with filter that matches nothing
+      const results = await qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector: [1.0, 0.0, 0.0],
+        topK: 10,
+        using: 'text',
+        filter: { category: 'NONEXISTENT' },
+      });
+
+      expect(results).toHaveLength(0);
+    }, 50000);
+  });
+
+  describe('Default Vector Operations (backward compatibility)', () => {
+    const defaultCollectionName = 'test-default-collection-' + Date.now();
+
+    beforeAll(async () => {
+      qdrant = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-test' });
+      // Create collection with default vector (no named vectors)
+      await qdrant.createIndex({ indexName: defaultCollectionName, dimension });
+    });
+
+    afterAll(async () => {
+      await qdrant.deleteIndex({ indexName: defaultCollectionName });
+    }, 50000);
+
+    it('should upsert and query with default vector space', async () => {
+      const testVectors = [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+      ];
+      const testMetadata = [{ label: 'default-x' }, { label: 'default-y' }];
+      
+      // Upsert without vectorName parameter
+      const vectorIds = await qdrant.upsert({ 
+        indexName: defaultCollectionName, 
+        vectors: testVectors, 
+        metadata: testMetadata
+      });
+      expect(vectorIds).toHaveLength(2);
+
+      // Query without using parameter (should use default vector)
+      const queryVector = [1.0, 0.1, 0.0];
+      const results = await qdrant.query({
+        indexName: defaultCollectionName,
+        queryVector,
+        topK: 2,
+        includeVector: true,
+      });
+
+      expect(results).toBeDefined();
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.vector).toBeDefined();
+      expect(results[0]?.vector).toHaveLength(dimension);
+      expect(results[0]?.metadata).toBeDefined();
     }, 50000);
   });
 
