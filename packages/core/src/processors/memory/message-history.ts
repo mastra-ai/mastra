@@ -1,10 +1,10 @@
-import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
-import { ErrorDomain, MastraError } from '@mastra/core/error';
-import { parseMemoryRuntimeContext } from '@mastra/core/memory';
-import type { TracingContext } from '@mastra/core/observability';
-import type { Processor } from '@mastra/core/processors';
-import type { RequestContext } from '@mastra/core/request-context';
-import type { MemoryStorage } from '@mastra/core/storage';
+import type { MastraDBMessage, MessageList } from '../../agent';
+import { ErrorDomain, MastraError } from '../../error';
+import { parseMemoryRuntimeContext } from '../../memory';
+import type { TracingContext } from '../../observability';
+import type { Processor } from '..';
+import type { RequestContext } from '../../request-context';
+import type { MemoryStorage } from '../../storage';
 
 /**
  * Options for the MessageHistory processor

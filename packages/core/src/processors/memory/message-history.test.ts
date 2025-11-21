@@ -1,8 +1,8 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
-import { MessageList } from '@mastra/core/agent';
-import type { MemoryRuntimeContext } from '@mastra/core/memory';
-import { RequestContext } from '@mastra/core/request-context';
-import { MemoryStorage } from '@mastra/core/storage';
+import type { MastraDBMessage } from '../../agent';
+import { MessageList } from '../../agent';
+import type { MemoryRuntimeContext } from '../../memory';
+import { RequestContext } from '../../request-context';
+import { MemoryStorage } from '../../storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MessageHistory } from './message-history.js';

@@ -4,7 +4,6 @@ import type { ZodTypeAny } from 'zod';
 import { ZodObject } from 'zod';
 import type { MastraDBMessage } from '../agent/message-list';
 import { MessageList } from '../agent/message-list';
-import type { InputProcessor, OutputProcessor } from '../processors';
 import type {
   StorageListMessagesInput,
   StorageListThreadsByResourceIdInput,
@@ -17,30 +16,24 @@ import type { StorageThreadType, MemoryConfig, MessageDeleteInput, WorkingMemory
 const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
 
 export class MockMemory extends MastraMemory {
-  private inputProcessors: InputProcessor[];
-  private outputProcessors: OutputProcessor[];
-
   constructor({
     storage,
-    inputProcessors = [],
-    outputProcessors = [],
+    enableWorkingMemory = true,
+    enableMessageHistory = true,
   }: {
     storage?: InMemoryStore;
-    inputProcessors?: InputProcessor[];
-    outputProcessors?: OutputProcessor[];
+    enableWorkingMemory?: boolean;
+    enableMessageHistory?: boolean;
   } = {}) {
-    super({ name: 'mock', storage: storage || new InMemoryStore() });
+    super({ 
+      name: 'mock', 
+      storage: storage || new InMemoryStore(),
+      options: {
+        workingMemory: enableWorkingMemory ? { enabled: true } : undefined,
+        lastMessages: enableMessageHistory ? 10 : undefined,
+      },
+    });
     this._hasOwnStorage = true;
-    this.inputProcessors = inputProcessors;
-    this.outputProcessors = outputProcessors;
-  }
-
-  getInputProcessors(): InputProcessor[] {
-    return this.inputProcessors;
-  }
-
-  getOutputProcessors(): OutputProcessor[] {
-    return this.outputProcessors;
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {

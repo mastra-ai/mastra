@@ -2,9 +2,11 @@ import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
 import type { EmbeddingModel, AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import { MastraBase } from '../base';
+import { ErrorDomain, MastraError } from '../error';
 import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
 import type { Mastra } from '../mastra';
 import type { InputProcessor, OutputProcessor } from '../processors';
+import { MessageHistory, WorkingMemory, SemanticRecall } from '../processors/memory';
 import type { RequestContext } from '../request-context';
 import type {
   MastraStorage,
@@ -467,34 +469,222 @@ https://mastra.ai/en/docs/memory/overview`,
   }): Promise<{ success: boolean; reason: string }>;
 
   /**
-   * Get input processors for this memory instance.
+   * Get input processors for this memory instance
    * This allows Memory to be used as a ProcessorProvider in Agent's inputProcessors array.
-   *
-   * NOTE: This base implementation returns an empty array. Concrete implementations
-   * (e.g., @mastra/memory) should override this method to instantiate memory-specific
-   * processors like SemanticRecall, WorkingMemory, and MessageHistory.
    *
    * @param configuredProcessors - Processors already configured by the user (for deduplication)
    * @param context - Optional execution context with threadId and resourceId
    * @returns Array of input processors configured for this memory instance
    */
-  getInputProcessors(_configuredProcessors: InputProcessor[] = [], _context?: RequestContext): InputProcessor[] {
-    return [];
+  getInputProcessors(configuredProcessors: InputProcessor[] = [], context?: RequestContext): InputProcessor[] {
+    const processors: InputProcessor[] = [];
+
+    // Extract runtime memoryConfig from context if available
+    const memoryContext = context?.get('MastraMemory') as any;
+    const runtimeMemoryConfig = memoryContext?.memoryConfig;
+    const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
+
+    // Add working memory input processor if configured
+    const isWorkingMemoryEnabled =
+      typeof effectiveConfig.workingMemory === 'object' && effectiveConfig.workingMemory.enabled !== false;
+
+    if (isWorkingMemoryEnabled) {
+      if (!this.storage?.stores?.memory)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.STORAGE,
+          id: 'WORKING_MEMORY_MISSING_STORAGE_ADAPTER',
+          text: 'Using Mastra Memory working memory requires a storage adapter but no attached adapter was detected.',
+        });
+
+      // Check if user already manually added WorkingMemory
+      const hasWorkingMemory = configuredProcessors.some(p => p.constructor.name === 'WorkingMemory');
+
+      if (!hasWorkingMemory) {
+        // Convert string template to WorkingMemoryTemplate format
+        let template: { format: 'markdown' | 'json'; content: string } | undefined;
+        if (typeof effectiveConfig.workingMemory === 'object' && effectiveConfig.workingMemory.template) {
+          template = {
+            format: 'markdown',
+            content: effectiveConfig.workingMemory.template,
+          };
+        }
+
+        processors.push(
+          new WorkingMemory({
+            storage: this.storage.stores.memory,
+            template,
+            scope: typeof effectiveConfig.workingMemory === 'object' ? effectiveConfig.workingMemory.scope : undefined,
+            useVNext:
+              typeof effectiveConfig.workingMemory === 'object' &&
+              'version' in effectiveConfig.workingMemory &&
+              effectiveConfig.workingMemory.version === 'vnext',
+            templateProvider: this,
+          }),
+        );
+      }
+    }
+
+    const lastMessages = effectiveConfig.lastMessages;
+    if (lastMessages) {
+      if (!this.storage?.stores?.memory)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.STORAGE,
+          id: 'MESSAGE_HISTORY_MISSING_STORAGE_ADAPTER',
+          text: 'Using Mastra Memory message history requires a storage adapter but no attached adapter was detected.',
+        });
+
+      // Check if user already manually added MessageHistory
+      const hasMessageHistory = configuredProcessors.some(p => p.constructor.name === 'MessageHistory');
+
+      if (!hasMessageHistory) {
+        processors.push(
+          new MessageHistory({
+            storage: this.storage.stores.memory,
+            lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
+          }),
+        );
+      }
+    }
+
+    // Add semantic recall input processor if configured
+    if (effectiveConfig.semanticRecall) {
+      if (!this.storage?.stores?.memory)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.STORAGE,
+          id: 'SEMANTIC_RECALL_MISSING_STORAGE_ADAPTER',
+          text: 'Using Mastra Memory semantic recall requires a storage adapter but no attached adapter was detected.',
+        });
+
+      if (!this.vector)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          id: 'SEMANTIC_RECALL_MISSING_VECTOR_ADAPTER',
+          text: 'Using Mastra Memory semantic recall requires a vector adapter but no attached adapter was detected.',
+        });
+
+      if (!this.embedder)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          id: 'SEMANTIC_RECALL_MISSING_EMBEDDER',
+          text: 'Using Mastra Memory semantic recall requires an embedder but no attached embedder was detected.',
+        });
+
+      // Check if user already manually added SemanticRecall
+      const hasSemanticRecall = configuredProcessors.some(p => p.constructor.name === 'SemanticRecall');
+
+      if (!hasSemanticRecall) {
+        const semanticConfig = typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
+
+        processors.push(
+          new SemanticRecall({
+            storage: this.storage.stores.memory,
+            vector: this.vector,
+            embedder: this.embedder,
+            ...semanticConfig,
+          }),
+        );
+      }
+    }
+
+    // Return only the auto-generated processors (not the configured ones)
+    // The agent will merge them with configuredProcessors
+    return processors;
   }
 
   /**
    * Get output processors for this memory instance
    * This allows Memory to be used as a ProcessorProvider in Agent's outputProcessors array.
    *
-   * NOTE: This base implementation returns an empty array. Concrete implementations
-   * (e.g., @mastra/memory) should override this method to instantiate memory-specific
-   * processors like MessageHistory and SemanticRecall.
-   *
    * @param configuredProcessors - Processors already configured by the user (for deduplication)
+   * @param context - Optional execution context
    * @returns Array of output processors configured for this memory instance
    */
-  getOutputProcessors(_configuredProcessors: OutputProcessor[] = [], _context?: RequestContext): OutputProcessor[] {
-    return [];
+  getOutputProcessors(configuredProcessors: OutputProcessor[] = [], context?: RequestContext): OutputProcessor[] {
+    const processors: OutputProcessor[] = [];
+
+    // Extract runtime memoryConfig from context if available
+    const memoryContext = context?.get('MastraMemory') as any;
+    const runtimeMemoryConfig = memoryContext?.memoryConfig;
+    const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
+
+    if (effectiveConfig.readOnly) {
+      return [];
+    }
+
+    // Add SemanticRecall output processor if configured
+    if (effectiveConfig.semanticRecall) {
+      if (!this.storage?.stores?.memory)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.STORAGE,
+          id: 'SEMANTIC_RECALL_MISSING_STORAGE_ADAPTER',
+          text: 'Using Mastra Memory semantic recall requires a storage adapter but no attached adapter was detected.',
+        });
+
+      if (!this.vector)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          id: 'SEMANTIC_RECALL_MISSING_VECTOR_ADAPTER',
+          text: 'Using Mastra Memory semantic recall requires a vector adapter but no attached adapter was detected.',
+        });
+
+      if (!this.embedder)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          id: 'SEMANTIC_RECALL_MISSING_EMBEDDER',
+          text: 'Using Mastra Memory semantic recall requires an embedder but no attached embedder was detected.',
+        });
+
+      // Check if user already manually added SemanticRecall
+      const hasSemanticRecall = configuredProcessors.some(p => p.constructor.name === 'SemanticRecall');
+
+      if (!hasSemanticRecall) {
+        const semanticRecallConfig =
+          typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
+        processors.push(
+          new SemanticRecall({
+            storage: this.storage.stores.memory,
+            vector: this.vector,
+            embedder: this.embedder,
+            ...semanticRecallConfig,
+          }),
+        );
+      }
+    }
+
+    const lastMessages = effectiveConfig.lastMessages;
+    if (lastMessages) {
+      if (!this.storage?.stores?.memory)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.STORAGE,
+          id: 'MESSAGE_HISTORY_MISSING_STORAGE_ADAPTER',
+          text: 'Using Mastra Memory message history requires a storage adapter but no attached adapter was detected.',
+        });
+
+      // Check if user already manually added MessageHistory
+      const hasMessageHistory = configuredProcessors.some(p => p.constructor.name === 'MessageHistory');
+
+      if (!hasMessageHistory) {
+        processors.push(
+          new MessageHistory({
+            storage: this.storage.stores.memory,
+            lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
+          }),
+        );
+      }
+    }
+
+    // Return only the auto-generated processors (not the configured ones)
+    // The agent will merge them with configuredProcessors
+    return processors;
   }
 
   abstract deleteMessages(messageIds: MessageDeleteInput): Promise<void>;

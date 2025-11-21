@@ -1,7 +1,7 @@
-import { MessageList } from '@mastra/core/agent';
-import type { MastraDBMessage } from '@mastra/core/memory';
-import { RequestContext } from '@mastra/core/request-context';
-import type { MemoryStorage } from '@mastra/core/storage';
+import { MessageList } from '../../agent';
+import type { MastraDBMessage } from '../../memory';
+import { RequestContext } from '../../request-context';
+import type { MemoryStorage } from '../../storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import type { WorkingMemoryTemplate } from './working-memory';

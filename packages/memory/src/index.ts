@@ -29,7 +29,7 @@ import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
 import { ZodObject } from 'zod';
 import type { ZodTypeAny } from 'zod';
-import { SemanticRecall, WorkingMemory, MessageHistory } from './processors';
+import { SemanticRecall, WorkingMemory, MessageHistory } from '@mastra/core/processors';
 import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
 
 // Average characters per token based on OpenAI's tokenization
@@ -1254,5 +1254,5 @@ ${
   }
 }
 
-// Re-export memory processors
-export { SemanticRecall, WorkingMemory, MessageHistory } from './processors';
+// Re-export memory processors from @mastra/core for backward compatibility
+export { SemanticRecall, WorkingMemory, MessageHistory } from '@mastra/core/processors';
