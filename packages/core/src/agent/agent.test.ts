@@ -11,6 +11,7 @@ import { config } from 'dotenv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { TestIntegration } from '../integration/openapi-toolset.mock';
+import { processSchema } from '../llm/process-schema';
 import { noopLogger } from '../logger';
 import { Mastra } from '../mastra';
 import type { MastraDBMessage, StorageThreadType } from '../memory';
@@ -23,7 +24,6 @@ import { delay } from '../utils';
 import { MessageList } from './message-list/index';
 import { assertNoDuplicateParts } from './test-utils';
 import { Agent } from './index';
-import { processSchema } from '../llm/process-schema';
 
 config();
 
@@ -233,7 +233,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
   });
 
   describe('test schema compat structured output', async () => {
-    it('should work', async () => {
+    it('should convert optional nullable fields to nullable for openai and succeed without error', async () => {
       const weatherInfo = createTool({
         id: 'weather-info',
         description: 'Fetches the current weather information for a given city',
@@ -275,15 +275,19 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         temperature: z.number(),
         humidity: z.number(),
         windSpeed: z.string().optional(),
+        barometricPressure: z.number().optional().nullable(),
       });
 
       const openaiSchema = processSchema.openai(schema);
 
-      const result = await agent.stream('What is the weather in London? You can omit wind speed.', {
-        structuredOutput: {
-          schema: openaiSchema,
+      const result = await agent.stream(
+        'What is the weather in London? You can omit wind speed and barometric pressure.',
+        {
+          structuredOutput: {
+            schema: openaiSchema,
+          },
         },
-      });
+      );
 
       for await (const chunk of result.fullStream) {
         if (chunk.type === 'object-result') {
@@ -291,9 +295,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         }
         console.log(chunk);
       }
-
-      const res = await result.object;
-      console.log('Final object:', res);
 
       expect(result.error).toBeUndefined();
     });

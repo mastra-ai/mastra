@@ -30,26 +30,24 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   processZodType(value: ZodTypeV4): ZodTypeV4;
   processZodType(value: ZodTypeV3 | ZodTypeV4): ZodTypeV3 | ZodTypeV4 {
     if (isOptional(z)(value)) {
-      // For OpenAI strict mode, convert .optional().nullable() or .nullable().optional()
-      // to just .nullable() so the field stays in the required array
+      // For OpenAI strict mode, convert .optional() to .nullable()
+      // This ensures all fields are in the required array but can accept null values
       const innerType = '_def' in value ? value._def.innerType : (value as any)._zod?.def?.innerType;
 
-      if (innerType && isNullable(z)(innerType)) {
-        // Inner type is nullable, so process it and return without re-applying optional
+      if (innerType) {
+        // If inner is nullable, just process and return it (strips the optional wrapper)
         // This converts .optional().nullable() -> .nullable()
-        return this.processZodType(innerType);
+        if (isNullable(z)(innerType)) {
+          return this.processZodType(innerType);
+        }
+
+        // Otherwise, process inner and make it nullable
+        // This converts .optional() -> .nullable()
+        const processedInner = this.processZodType(innerType);
+        return processedInner.nullable();
       }
 
-      return this.defaultZodOptionalHandler(value, [
-        'ZodObject',
-        'ZodArray',
-        'ZodUnion',
-        'ZodString',
-        'ZodNever',
-        'ZodUndefined',
-        'ZodTuple',
-        'ZodNullable', // Add ZodNullable to the list
-      ]);
+      return value;
     } else if (isNullable(z)(value)) {
       // Process nullable: unwrap, process inner, and re-wrap with nullable
       const innerType = '_def' in value ? value._def.innerType : (value as any)._zod?.def?.innerType;
@@ -61,12 +59,12 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
             '_def' in innerType ? innerType._def.innerType : (innerType as any)._zod?.def?.innerType;
           if (innerInnerType) {
             const processedInnerInner = this.processZodType(innerInnerType);
-            return (processedInnerInner as any).nullable();
+            return processedInnerInner.nullable();
           }
         }
 
         const processedInner = this.processZodType(innerType);
-        return (processedInner as any).nullable();
+        return processedInner.nullable();
       }
       return value;
     } else if (isObj(z)(value)) {
