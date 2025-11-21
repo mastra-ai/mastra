@@ -6,13 +6,14 @@
  *  - Improve graph traversal and querying using types
  */
 type SupportedEdgeType = 'semantic';
+type GraphMetadata = Record<string, any>;
 
 // Types for graph nodes and edges
 export interface GraphNode {
   id: string;
   content: string;
   embedding?: number[];
-  metadata?: Record<string, any>;
+  metadata?: GraphMetadata;
 }
 
 export interface RankedNode extends GraphNode {
@@ -268,7 +269,7 @@ export class GraphRAG {
     topK?: number;
     randomWalkSteps?: number;
     restartProb?: number;
-    filter?: Partial<GraphNode['metadata']>;
+    filter?: Partial<GraphMetadata>;
   }): RankedNode[] {
     if (!query || query.length !== this.dimension) {
       throw new Error(`Query embedding must have dimension ${this.dimension}`);
@@ -299,20 +300,20 @@ export class GraphRAG {
     similarities.sort((a, b) => b.similarity - a.similarity);
     const topNodes = similarities.slice(0, topK);
 
+    const useFilter = filterEntries.length > 0;
     // Re-rank using random walk, but only over filtered nodes
-    const filteredNodeIds = new Set(nodesToSearch.map(n => n.id));
+    const allowedNodeIds = useFilter ? new Set(nodesToSearch.map(n => n.id)) : undefined;
 
     // Re-ranks nodes using random walk with restart
     const rerankedNodes = new Map<string, { node: GraphNode; score: number }>();
 
-    const useFilter = filterEntries.length > 0;
     // For each top node, perform random walk
     for (const { node, similarity } of topNodes) {
       const walkScores = this.randomWalkWithRestart(
         node.id,
         randomWalkSteps,
         restartProb,
-        useFilter ? filteredNodeIds : undefined,
+        allowedNodeIds,
       );
 
       // Combine dense retrieval score with graph score
