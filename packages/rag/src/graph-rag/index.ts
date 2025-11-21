@@ -285,12 +285,18 @@ export class GraphRAG {
     similarities.sort((a, b) => b.similarity - a.similarity);
     const topNodes = similarities.slice(0, topK);
 
+    const matchesFilter = (node: GraphNode) =>
+        Object.entries(filter || {}).every(([key, value]) => node.metadata?.[key] === value);
+
+    // Re-rank using random walk, but only over filtered nodes
+    const filteredNodeIds = new Set(Array.from(this.nodes.values()).filter(matchesFilter).map(n => n.id));
+    
     // Re-ranks nodes using random walk with restart
     const rerankedNodes = new Map<string, { node: GraphNode; score: number }>();
 
     // For each top node, perform random walk
     for (const { node, similarity } of topNodes) {
-      const walkScores = this.randomWalkWithRestart(node.id, randomWalkSteps, restartProb);
+      const walkScores = this.randomWalkWithRestartFiltered(node.id, randomWalkSteps, restartProb, filteredNodeIds);
 
       // Combine dense retrieval score with graph score
       for (const [nodeId, walkScore] of walkScores) {
@@ -314,4 +320,41 @@ export class GraphRAG {
         score: item.score,
       }));
   }
+  
+  // New helper for random walk restricted to filtered nodes
+  private randomWalkWithRestartFiltered(
+    startNodeId: string,
+    steps: number,
+    restartProb: number,
+    allowedNodeIds: Set<string>
+  ): Map<string, number> {
+    const visits = new Map<string, number>();
+    let currentNodeId = startNodeId;
+
+    for (let step = 0; step < steps; step++) {
+      visits.set(currentNodeId, (visits.get(currentNodeId) || 0) + 1);
+
+      if (Math.random() < restartProb) {
+        currentNodeId = startNodeId;
+        continue;
+      }
+      const neighbors = this.getNeighbors(currentNodeId)
+        .filter(n => allowedNodeIds.has(n.id));
+
+      if (neighbors.length === 0) {
+        currentNodeId = startNodeId;
+        continue;
+      }
+
+      currentNodeId = this.selectWeightedNeighbor(neighbors);
+    }
+
+    const totalVisits = Array.from(visits.values()).reduce((a, b) => a + b, 0);
+    const normalizedVisits = new Map<string, number>();
+    for (const [nodeId, count] of visits) {
+      normalizedVisits.set(nodeId, count / totalVisits);
+    }
+    return normalizedVisits;
+  }
+
 }

@@ -295,6 +295,42 @@ describe('GraphRAG', () => {
 
       expect(results.length).toBe(2);
     });
+    it('should not include unfiltered neighbors in the final results', () => {
+      const graph = new GraphRAG(3);
+
+      graph.addNode({ 
+        id: '1', 
+        content: 'Node 1', 
+        embedding: [1, 2, 3], 
+        metadata: { type: 'a' } 
+      });
+
+      graph.addNode({ 
+        id: '2', 
+        content: 'Node 2', 
+        embedding: [4, 5, 6], 
+        metadata: { type: 'b' } 
+      });
+
+      graph.addEdge({ 
+        source: '1', 
+        target: '2', 
+        weight: 1, 
+        type: 'semantic' 
+      });
+
+      const results = graph.query({
+        query: [1, 2, 3],
+        topK: 10,
+        randomWalkSteps: 10,
+        restartProb: 0.1,
+        filter: { type: 'a' },
+      });
+
+      expect(results.some(n => n.id === '2')).toBe(false);
+      expect(results.length).toBe(1);
+      expect(results[0].id).toBe('1');
+    });
 
     it('should return the top ranked nodes', () => {
       const graph = new GraphRAG(3);
