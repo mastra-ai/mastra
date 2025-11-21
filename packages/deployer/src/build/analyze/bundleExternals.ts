@@ -1,3 +1,4 @@
+import type { Config } from '@mastra/core/mastra';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
@@ -399,12 +400,12 @@ export async function bundleExternals(
   depsToOptimize: Map<string, DependencyMetadata>,
   outputDir: string,
   options: {
-    bundlerOptions?: {
-      externals?: string[];
-      transpilePackages?: string[];
-      isDev?: boolean;
-      enableEsmShim?: boolean;
-    } | null;
+    bundlerOptions?:
+      | ({
+          isDev?: boolean;
+          enableEsmShim?: boolean;
+        } & Config['bundler'])
+      | null;
     projectRoot?: string;
     workspaceRoot?: string;
     workspaceMap?: Map<string, WorkspacePackageInfo>;
@@ -417,7 +418,23 @@ export async function bundleExternals(
     isDev = false,
     enableEsmShim = true,
   } = bundlerOptions || {};
-  const allExternals = [...GLOBAL_EXTERNALS, ...DEPRECATED_EXTERNALS, ...customExternals];
+
+  /**
+   * When `externals` is true, collect all non-workspace deps to mark as external and filter them from depsToOptimize so they don't get bundled
+   */
+  const nonWorkspaceDeps = new Map<string, DependencyMetadata>();
+
+  if (customExternals === true) {
+    for (const [dep, metadata] of depsToOptimize.entries()) {
+      if (!metadata.isWorkspace) {
+        nonWorkspaceDeps.set(dep, metadata);
+        depsToOptimize.delete(dep);
+      }
+    }
+  }
+
+  const externalsList = Array.isArray(customExternals) ? customExternals : [];
+  const allExternals = [...GLOBAL_EXTERNALS, ...DEPRECATED_EXTERNALS, ...externalsList];
 
   const workspacePackagesNames = Array.from(workspaceMap.keys());
   const packagesToTranspile = new Set([...transpilePackages, ...workspacePackagesNames]);
@@ -446,7 +463,20 @@ export async function bundleExternals(
   const moduleResolveMap = new Map<string, Map<string, string>>();
   const filteredChunks = output.filter(o => o.type === 'chunk');
 
-  for (const o of filteredChunks.filter(o => o.isEntry || o.isDynamicEntry)) {
+  /**
+   * Skip the findExternalImporter loop when:
+   * - externals: true is set AND
+   * - We filtered out non-workspace deps AND
+   * - There are no workspace deps left to bundle (depsToOptimize is empty)
+   *
+   * In this case, there are no bundled chunks to search, so the loop would be unnecessary.
+   */
+  const shouldSkipExternalSearch =
+    customExternals === true && nonWorkspaceDeps.size > 0 && optimizedDependencyEntries.size === 0;
+
+  const chunksToProcess = shouldSkipExternalSearch ? [] : filteredChunks.filter(o => o.isEntry || o.isDynamicEntry);
+
+  for (const o of chunksToProcess) {
     for (const external of allExternals) {
       if (DEPS_TO_IGNORE.includes(external)) {
         continue;
@@ -485,6 +515,20 @@ export async function bundleExternals(
       innerObj[external] = value;
     }
     usedExternals[fullPath] = innerObj;
+  }
+
+  /**
+   * When `externals` is true, add non-workspace deps to usedExternals. They won't be found by findExternalImporter since they weren't bundled, but they still need to be tracked as external dependencies.
+   */
+  if (customExternals === true && nonWorkspaceDeps.size > 0) {
+    // Create a synthetic entry for non-bundled externals, it'll be used in `validateOutput()` (only the values, not keys)
+    const syntheticPath = path.join(workspaceRoot || projectRoot, outputDir, 'externals');
+    const externalObj = Object.create(null) as Record<string, string>;
+    for (const [dep, metadata] of nonWorkspaceDeps.entries()) {
+      // Use rootPath as the source, or a placeholder if not available
+      externalObj[dep] = metadata.rootPath || dep;
+    }
+    usedExternals[syntheticPath] = externalObj;
   }
 
   return { output, fileNameToDependencyMap, usedExternals };

@@ -172,7 +172,7 @@ export async function analyzeBundle(
     outputDir,
     projectRoot,
     isDev = false,
-    bundlerOptions: _bundlerOptions,
+    bundlerOptions: internalBundlerOptions,
   }: {
     outputDir: string;
     projectRoot: string;
@@ -180,6 +180,7 @@ export async function analyzeBundle(
     isDev?: boolean;
     bundlerOptions?: {
       enableEsmShim?: boolean;
+      externals?: boolean | string[];
     } | null;
   },
   logger: IMastraLogger,
@@ -204,8 +205,8 @@ export const mastra = new Mastra({
 If you think your configuration is valid, please open an issue.`);
   }
 
-  const { enableEsmShim = true } = _bundlerOptions || {};
-  const bundlerOptions = await getBundlerOptions(mastraEntry, outputDir);
+  const { enableEsmShim = true, externals = [] } = internalBundlerOptions || {};
+  const userBundlerOptions = await getBundlerOptions(mastraEntry, outputDir);
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: mastraEntry });
 
   let index = 0;
@@ -217,7 +218,7 @@ If you think your configuration is valid, please open an issue.`);
     const isVirtualFile = entry.includes('\n') || !existsSync(entry);
     const analyzeResult = await analyzeEntry({ entry, isVirtualFile }, mastraEntry, {
       logger,
-      sourcemapEnabled: bundlerOptions?.sourcemap ?? false,
+      sourcemapEnabled: userBundlerOptions?.sourcemap ?? false,
       workspaceMap,
       projectRoot,
     });
@@ -242,6 +243,8 @@ If you think your configuration is valid, please open an issue.`);
 
   /**
    * Only during `mastra dev` we want to optimize workspace packages. In previous steps we might have added dependencies that are not workspace packages, so we gotta remove them again.
+   *
+   * Note: When `bundler.externals: true`, the filtering is handled inside bundleExternals.
    */
   if (isDev) {
     for (const [dep, metadata] of depsToOptimize.entries()) {
@@ -262,7 +265,8 @@ If you think your configuration is valid, please open an issue.`);
 
   const { output, fileNameToDependencyMap, usedExternals } = await bundleExternals(depsToOptimize, outputDir, {
     bundlerOptions: {
-      ...bundlerOptions,
+      ...userBundlerOptions,
+      externals: userBundlerOptions?.externals ?? externals,
       enableEsmShim,
       isDev,
     },
