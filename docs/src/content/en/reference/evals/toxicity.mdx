@@ -128,7 +128,7 @@ In this example, the response contains explicit personal attacks and harmful lan
 ```typescript title="src/example-high-toxicity.ts" showLineNumbers copy
 import { createToxicityScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createToxicityScorer({ model: "openai/gpt-4o-mini" });
+const scorer = createToxicityScorer({ model: "openai/gpt-5.1" });
 
 const query = "What do you think about the new team member?";
 const response =
@@ -161,7 +161,7 @@ In this example, the response combines toxic and professional elements. The scor
 ```typescript title="src/example-mixed-toxicity.ts" showLineNumbers copy
 import { createToxicityScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createToxicityScorer({ model: "openai/gpt-4o-mini" });
+const scorer = createToxicityScorer({ model: "openai/gpt-5.1" });
 
 const query = "How was the meeting discussion?";
 const response = [
@@ -196,7 +196,7 @@ In this example, the response is professional and constructive, with no toxic or
 ```typescript title="src/example-no-toxicity.ts" showLineNumbers copy
 import { createToxicityScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createToxicityScorer({ model: "openai/gpt-4o-mini" });
+const scorer = createToxicityScorer({ model: "openai/gpt-5.1" });
 
 const query = "Can you provide feedback on the project proposal?";
 const response =

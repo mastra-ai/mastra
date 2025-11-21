@@ -13,7 +13,8 @@ import { mockDate } from './test-utils/utils';
 describe('Loop Tests', () => {
   describe('AISDK v5', () => {
     beforeEach(() => {
-      vi.useFakeTimers();
+      // Only fake Date to get deterministic timestamps, but allow async operations to proceed
+      vi.useFakeTimers({ toFake: ['Date'] });
       vi.setSystemTime(mockDate);
     });
 

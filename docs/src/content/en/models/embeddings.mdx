@@ -15,12 +15,9 @@ Mastra's model router supports embedding models using the same `provider/model` 
 import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { embedMany } from "ai";
 
-// Create an embedding model
-const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
-
 // Generate embeddings
 const { embeddings } = await embedMany({
-  model: embedder,
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   values: ["Hello world", "Semantic search is powerful"],
 });
 ```
@@ -81,14 +78,15 @@ The embedding model router integrates seamlessly with Mastra's memory system:
 ```typescript
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
 const agent = new Agent({
   id: "my-agent",
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-4o",
+  model: "openai/gpt-5.1",
   memory: new Memory({
-    embedder: "openai/text-embedding-3-small", // String with autocomplete
+    embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   }),
 });
 ```
@@ -111,11 +109,9 @@ Use embedding models for document chunking and retrieval:
 import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { embedMany } from "ai";
 
-const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
-
 // Embed document chunks
 const { embeddings } = await embedMany({
-  model: embedder,
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   values: chunks.map((chunk) => chunk.text),
 });
 
@@ -134,7 +130,7 @@ await vectorStore.upsert(
 The model router provides full TypeScript autocomplete for embedding model IDs:
 
 ```typescript
-import type { EmbeddingModelId } from "@mastra/core/llm";
+import type { EmbeddingModelId } from "@mastra/core";
 
 // Type-safe embedding model selection
 const modelId: EmbeddingModelId = "openai/text-embedding-3-small";
