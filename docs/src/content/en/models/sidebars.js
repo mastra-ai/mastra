@@ -133,6 +133,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/cohere",
+          label: "Cohere",
+        },
+        {
+          type: "doc",
           id: "providers/cortecs",
           label: "Cortecs",
         },
