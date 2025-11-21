@@ -622,7 +622,7 @@ export class Memory extends MastraMemory {
 
     try {
       const existingWorkingMemory = (await this.getWorkingMemory({ threadId, resourceId, memoryConfig })) || '';
-      const template = await this.getWorkingMemoryTemplate({ threadId, resourceId });
+      const template = await this.getWorkingMemoryTemplate({ memoryConfig });
 
       let reason = '';
       if (existingWorkingMemory) {
@@ -994,20 +994,12 @@ ${workingMemory}`;
    * @param memoryConfig - The memory configuration containing the working memory settings
    * @returns The working memory template with format and content, or null if working memory is disabled
    */
-  public async getWorkingMemoryTemplate(args: {
-    threadId?: string;
-    resourceId?: string;
+  public async getWorkingMemoryTemplate({
+    memoryConfig,
+  }: {
+    memoryConfig?: MemoryConfig;
   }): Promise<WorkingMemoryTemplate | null> {
-    // Get the thread config
-    let memoryConfig: MemoryConfig = {};
-    if (args.threadId) {
-      const thread = await this.storage.getThreadById({ threadId: args.threadId });
-      if (thread?.metadata?.memory) {
-        memoryConfig = thread.metadata.memory as MemoryConfig;
-      }
-    }
-
-    const config = this.getMergedThreadConfig(memoryConfig);
+    const config = this.getMergedThreadConfig(memoryConfig || {});
 
     if (!config.workingMemory?.enabled) {
       return null;
@@ -1051,7 +1043,7 @@ ${workingMemory}`;
       return null;
     }
 
-    const workingMemoryTemplate = await this.getWorkingMemoryTemplate({ threadId, resourceId });
+    const workingMemoryTemplate = await this.getWorkingMemoryTemplate({ memoryConfig });
     const workingMemoryData = await this.getWorkingMemory({ threadId, resourceId, memoryConfig: config });
 
     if (!workingMemoryTemplate) {

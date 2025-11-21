@@ -1,7 +1,7 @@
 import type { MessageList } from '@mastra/core/agent/message-list';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { parseMemoryRuntimeContext } from '@mastra/core/memory';
-import type { MastraDBMessage } from '@mastra/core/memory';
+import type { MastraDBMessage, MemoryConfig } from '@mastra/core/memory';
 import type { InputProcessor } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
@@ -64,10 +64,7 @@ export class WorkingMemory implements InputProcessor {
       scope?: 'thread' | 'resource';
       useVNext?: boolean;
       templateProvider?: {
-        getWorkingMemoryTemplate(args: {
-          threadId?: string;
-          resourceId?: string;
-        }): Promise<WorkingMemoryTemplate | null>;
+        getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfig }): Promise<WorkingMemoryTemplate | null>;
       };
       logger?: IMastraLogger;
     },
@@ -114,8 +111,7 @@ export class WorkingMemory implements InputProcessor {
       let template: WorkingMemoryTemplate;
       if (this.options.templateProvider) {
         const dynamicTemplate = await this.options.templateProvider.getWorkingMemoryTemplate({
-          threadId,
-          resourceId,
+          memoryConfig: memoryContext.memoryConfig,
         });
         template = dynamicTemplate ||
           this.options.template || {

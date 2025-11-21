@@ -431,9 +431,10 @@ https://mastra.ai/en/docs/memory/overview`,
    * @param resourceId - Resource ID
    * @returns Promise resolving to working memory template or null if not found
    */
-  abstract getWorkingMemoryTemplate(args: {
-    threadId?: string;
-    resourceId?: string;
+  abstract getWorkingMemoryTemplate({
+    memoryConfig,
+  }?: {
+    memoryConfig?: MemoryConfig;
   }): Promise<WorkingMemoryTemplate | null>;
 
   abstract updateWorkingMemory({

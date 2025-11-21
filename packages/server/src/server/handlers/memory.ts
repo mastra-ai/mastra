@@ -314,7 +314,7 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
       }
       const thread = await memory.getThreadById({ threadId: threadId! });
       const threadExists = !!thread;
-      const template = await memory.getWorkingMemoryTemplate({ threadId: threadId!, resourceId });
+      const template = await memory.getWorkingMemoryTemplate({ memoryConfig });
       const workingMemoryTemplate =
         template?.format === 'json'
           ? { ...template, content: JSON.stringify(generateEmptyFromSchema(template.content)) }
