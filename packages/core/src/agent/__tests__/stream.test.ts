@@ -927,8 +927,11 @@ function runStreamTest(version: 'v1' | 'v2') {
           // After PR changes: sanitizeV5UIMessages filters out input-available tool parts
           // and keeps only output-available parts. When convertToModelMessages processes
           // an output-available tool part, it generates both function_call and function_call_output
-          expect.objectContaining({ type: 'function_call', name: 'get_weather' }),
-          expect.objectContaining({ type: 'function_call_output' }),
+          expect.objectContaining({ type: 'item_reference', id: expect.stringContaining(`fc_`) }),
+          expect.objectContaining({
+            type: 'function_call_output',
+            output: expect.stringContaining(`It is currently 70 degrees and feels like 65 degrees.`),
+          }),
           expect.objectContaining({ role: 'assistant' }),
           expect.objectContaining({ role: 'user' }),
         ]);
