@@ -5,15 +5,15 @@
  *  - Utilize metadata for richer connections
  *  - Improve graph traversal and querying using types
  */
+
 type SupportedEdgeType = 'semantic';
-type GraphMetadata = Record<string, any>;
 
 // Types for graph nodes and edges
 export interface GraphNode {
   id: string;
   content: string;
   embedding?: number[];
-  metadata?: GraphMetadata;
+  metadata?: Record<string, any>;
 }
 
 export interface RankedNode extends GraphNode {
@@ -205,12 +205,7 @@ export class GraphRAG {
   }
 
   // Perform random walk with restart
-  private randomWalkWithRestart(
-    startNodeId: string,
-    steps: number,
-    restartProb: number,
-    allowedNodeIds?: Set<string>,
-  ): Map<string, number> {
+  private randomWalkWithRestart(startNodeId: string, steps: number, restartProb: number): Map<string, number> {
     const visits = new Map<string, number>();
     let currentNodeId = startNodeId;
 
@@ -225,10 +220,7 @@ export class GraphRAG {
       }
 
       // Get neighbors
-      let neighbors = this.getNeighbors(currentNodeId);
-      if (allowedNodeIds) {
-        neighbors = neighbors.filter(n => allowedNodeIds.has(n.id));
-      }
+      const neighbors = this.getNeighbors(currentNodeId);
       if (neighbors.length === 0) {
         currentNodeId = startNodeId;
         continue;
@@ -248,28 +240,17 @@ export class GraphRAG {
     return normalizedVisits;
   }
 
-  /**
-   * Query the graph with a dense embedding and optional metadata filter.
-   *
-   * @param query - The embedding vector to query.
-   * @param topK - Number of top results to return.
-   * @param randomWalkSteps - Steps for random walk reranking.
-   * @param restartProb - Restart probability for random walk.
-   * @param filter - Optional strict metadata filter. All key-value pairs must match exactly.
-   */
   // Retrieve relevant nodes using hybrid approach
   query({
     query,
     topK = 10,
     randomWalkSteps = 100,
     restartProb = 0.15,
-    filter,
   }: {
     query: number[];
     topK?: number;
     randomWalkSteps?: number;
     restartProb?: number;
-    filter?: Partial<GraphMetadata>;
   }): RankedNode[] {
     if (!query || query.length !== this.dimension) {
       throw new Error(`Query embedding must have dimension ${this.dimension}`);
@@ -283,15 +264,8 @@ export class GraphRAG {
     if (restartProb <= 0 || restartProb >= 1) {
       throw new Error('Restart probability must be between 0 and 1');
     }
-
-    const filterEntries = Object.entries(filter ?? {});
-    const matchesFilter = (node: GraphNode) =>
-      filterEntries.length === 0 ? true : filterEntries.every(([key, value]) => node.metadata?.[key] === value);
-
-    const nodesToSearch = Array.from(this.nodes.values()).filter(matchesFilter);
-
     // Retrieve nodes and calculate similarity
-    const similarities = nodesToSearch.map(node => ({
+    const similarities = Array.from(this.nodes.values()).map(node => ({
       node,
       similarity: this.cosineSimilarity(query, node.embedding!),
     }));
@@ -300,16 +274,12 @@ export class GraphRAG {
     similarities.sort((a, b) => b.similarity - a.similarity);
     const topNodes = similarities.slice(0, topK);
 
-    const useFilter = filterEntries.length > 0;
-    // Re-rank using random walk, but only over filtered nodes
-    const allowedNodeIds = useFilter ? new Set(nodesToSearch.map(n => n.id)) : undefined;
-
     // Re-ranks nodes using random walk with restart
     const rerankedNodes = new Map<string, { node: GraphNode; score: number }>();
 
     // For each top node, perform random walk
     for (const { node, similarity } of topNodes) {
-      const walkScores = this.randomWalkWithRestart(node.id, randomWalkSteps, restartProb, allowedNodeIds);
+      const walkScores = this.randomWalkWithRestart(node.id, randomWalkSteps, restartProb);
 
       // Combine dense retrieval score with graph score
       for (const [nodeId, walkScore] of walkScores) {
