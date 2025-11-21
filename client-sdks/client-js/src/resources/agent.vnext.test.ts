@@ -194,6 +194,299 @@ describe('Agent vNext', () => {
     expect(receivedChunks.length).toBeGreaterThan(5); // At least step-start + text + tool + step-finish + finish per cycle
   });
 
+  describe('MastraClientModelOutput API', () => {
+    it('fullStream: should iterate over chunks using async iterator', async () => {
+      const sseChunks = [
+        { type: 'step-start', payload: { messageId: 'm1' } },
+        { type: 'text-delta', payload: { text: 'Hello ' } },
+        { type: 'text-delta', payload: { text: 'world' } },
+        { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+        { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 10 } } },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(sseChunks));
+
+      const stream = await agent.stream({ messages: 'Hello' });
+
+      // Test async iterator pattern
+      const receivedChunks: any[] = [];
+      for await (const chunk of stream.fullStream) {
+        receivedChunks.push(chunk);
+      }
+
+      // Verify all chunks were received
+      expect(receivedChunks).toHaveLength(5);
+      expect(receivedChunks[0].type).toBe('step-start');
+      expect(receivedChunks[1].type).toBe('text-delta');
+      expect(receivedChunks[1].payload.text).toBe('Hello ');
+      expect(receivedChunks[2].type).toBe('text-delta');
+      expect(receivedChunks[2].payload.text).toBe('world');
+      expect(receivedChunks[3].type).toBe('step-finish');
+      expect(receivedChunks[4].type).toBe('finish');
+    });
+
+    it('text: should resolve to complete text after streaming', async () => {
+      const sseChunks = [
+        { type: 'step-start', payload: { messageId: 'm1' } },
+        { type: 'text-delta', payload: { text: 'The ' } },
+        { type: 'text-delta', payload: { text: 'weather ' } },
+        { type: 'text-delta', payload: { text: 'is ' } },
+        { type: 'text-delta', payload: { text: 'sunny' } },
+        { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+        { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 15 } } },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(sseChunks));
+
+      const stream = await agent.stream({ messages: 'What is the weather?' });
+
+      // Test awaiting text property
+      const text = await stream.text;
+
+      expect(text).toBe('The weather is sunny');
+    });
+
+    it('usage: should resolve to token usage after streaming', async () => {
+      const sseChunks = [
+        { type: 'step-start', payload: { messageId: 'm1' } },
+        { type: 'text-delta', payload: { text: 'Response' } },
+        { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+        {
+          type: 'finish',
+          payload: {
+            stepResult: { reason: 'stop' },
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          },
+        },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(sseChunks));
+
+      const stream = await agent.stream({ messages: 'Test' });
+
+      // Test awaiting usage property
+      const usage = await stream.usage;
+
+      expect(usage).toEqual({
+        inputTokens: 10,
+        outputTokens: 5,
+        totalTokens: 15,
+      });
+    });
+
+    it('toolCalls: should resolve to tool calls after streaming', async () => {
+      const toolCallId = 'call_123';
+      const sseChunks = [
+        { type: 'step-start', payload: { messageId: 'm1' } },
+        { type: 'text-delta', payload: { text: 'Let me check' } },
+        {
+          type: 'tool-call',
+          payload: { toolCallId, toolName: 'weatherTool', args: { location: 'SF' } },
+        },
+        { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+        { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 20 } } },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(sseChunks));
+
+      const stream = await agent.stream({ messages: 'Check weather' });
+
+      // Test awaiting toolCalls property
+      const toolCalls = await stream.toolCalls;
+
+      expect(toolCalls).toHaveLength(1);
+      expect(toolCalls[0]).toEqual({
+        toolCallId,
+        toolName: 'weatherTool',
+        args: { location: 'SF' },
+      });
+    });
+
+    it('finishReason: should resolve to finish reason after streaming', async () => {
+      const sseChunks = [
+        { type: 'step-start', payload: { messageId: 'm1' } },
+        { type: 'text-delta', payload: { text: 'Done' } },
+        { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+        { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 5 } } },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(sseChunks));
+
+      const stream = await agent.stream({ messages: 'Test' });
+
+      // Test awaiting finishReason property
+      const finishReason = await stream.finishReason;
+
+      expect(finishReason).toBe('stop');
+    });
+
+    it('should support both fullStream iteration and property awaiting simultaneously', async () => {
+      const sseChunks = [
+        { type: 'step-start', payload: { messageId: 'm1' } },
+        { type: 'text-delta', payload: { text: 'Hello' } },
+        { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+        { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 8 } } },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(sseChunks));
+
+      const stream = await agent.stream({ messages: 'Hi' });
+
+      // Start consuming fullStream
+      const chunks: any[] = [];
+      const streamPromise = (async () => {
+        for await (const chunk of stream.fullStream) {
+          chunks.push(chunk);
+        }
+      })();
+
+      // Await properties simultaneously
+      const [text, usage, finishReason] = await Promise.all([stream.text, stream.usage, stream.finishReason]);
+
+      // Wait for stream to complete
+      await streamPromise;
+
+      // Verify both patterns worked
+      expect(chunks).toHaveLength(4);
+      expect(text).toBe('Hello');
+      expect(usage.totalTokens).toBe(8);
+      expect(finishReason).toBe('stop');
+    });
+
+    it('fullStream: should work with tool execution flow', async () => {
+      const toolCallId = 'call_1';
+
+      const firstCycle = [
+        { type: 'step-start', payload: { messageId: 'm1' } },
+        { type: 'text-delta', payload: { text: 'Checking...' } },
+        {
+          type: 'tool-call',
+          payload: { toolCallId, toolName: 'testTool', args: { input: 'test' } },
+        },
+        { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+        { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 5 } } },
+      ];
+
+      const secondCycle = [
+        { type: 'step-start', payload: { messageId: 'm2' } },
+        { type: 'text-delta', payload: { text: 'Result: success' } },
+        { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+        { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 10 } } },
+      ];
+
+      (global.fetch as any)
+        .mockResolvedValueOnce(sseResponse(firstCycle))
+        .mockResolvedValueOnce(sseResponse(secondCycle));
+
+      const executeSpy = vi.fn(async () => ({ result: 'success' }));
+      const testTool = createTool({
+        id: 'testTool',
+        description: 'Test tool',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: executeSpy,
+      });
+
+      const stream = await agent.stream({ messages: 'Test', clientTools: { testTool } });
+
+      // Consume stream with fullStream
+      const chunks: any[] = [];
+      for await (const chunk of stream.fullStream) {
+        chunks.push(chunk);
+      }
+
+      // Verify chunks from both cycles
+      const textChunks = chunks.filter(c => c.type === 'text-delta');
+      expect(textChunks).toHaveLength(2);
+      expect(textChunks[0].payload.text).toBe('Checking...');
+      expect(textChunks[1].payload.text).toBe('Result: success');
+
+      // Verify tool was executed
+      expect(executeSpy).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('Backward Compatibility: processDataStream (deprecated)', () => {
+    it('processDataStream: should still work for backward compatibility', async () => {
+      const sseChunks = [
+        { type: 'step-start', payload: { messageId: 'm1' } },
+        { type: 'text-delta', payload: { text: 'Legacy ' } },
+        { type: 'text-delta', payload: { text: 'support' } },
+        { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+        { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 5 } } },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(sseChunks));
+
+      const stream = await agent.stream({ messages: 'Test legacy' });
+
+      // Test deprecated processDataStream method
+      const receivedChunks: any[] = [];
+      await stream.processDataStream({
+        onChunk: async chunk => {
+          receivedChunks.push(chunk);
+        },
+      });
+
+      // Verify it still works as expected
+      expect(receivedChunks).toHaveLength(5);
+      const textDeltas = receivedChunks.filter(c => c.type === 'text-delta');
+      expect(textDeltas).toHaveLength(2);
+      expect(textDeltas[0].payload.text).toBe('Legacy ');
+      expect(textDeltas[1].payload.text).toBe('support');
+    });
+
+    it('processDataStream: should work with tool execution', async () => {
+      const toolCallId = 'call_legacy';
+
+      const firstCycle = [
+        { type: 'step-start', payload: { messageId: 'm1' } },
+        {
+          type: 'tool-call',
+          payload: { toolCallId, toolName: 'legacyTool', args: { value: 42 } },
+        },
+        { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+        { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 3 } } },
+      ];
+
+      const secondCycle = [
+        { type: 'step-start', payload: { messageId: 'm2' } },
+        { type: 'text-delta', payload: { text: 'Tool result received' } },
+        { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+        { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 8 } } },
+      ];
+
+      (global.fetch as any)
+        .mockResolvedValueOnce(sseResponse(firstCycle))
+        .mockResolvedValueOnce(sseResponse(secondCycle));
+
+      const executeSpy = vi.fn(async () => ({ status: 'ok' }));
+      const legacyTool = createTool({
+        id: 'legacyTool',
+        description: 'Legacy tool',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ status: z.string() }),
+        execute: executeSpy,
+      });
+
+      const stream = await agent.stream({ messages: 'Test', clientTools: { legacyTool } });
+
+      // Use deprecated API
+      const chunks: any[] = [];
+      await stream.processDataStream({
+        onChunk: async chunk => {
+          chunks.push(chunk);
+        },
+      });
+
+      // Verify tool execution and chunks
+      expect(executeSpy).toHaveBeenCalledOnce();
+      const textChunks = chunks.filter(c => c.type === 'text-delta');
+      expect(textChunks).toHaveLength(1);
+      expect(textChunks[0].payload.text).toBe('Tool result received');
+    });
+  });
+
   it('stream: handles multiple sequential client tool calls', async () => {
     // First cycle: first tool call
     const firstCycle = [
@@ -780,5 +1073,279 @@ describe('Agent vNext', () => {
     expect(errorChunk.payload.error.responseBody).toEqual(testAPICallError.responseBody);
     expect(errorChunk.payload.error.isRetryable).toEqual(testAPICallError.isRetryable);
     expect(errorChunk.payload.error.url).toEqual(testAPICallError.url);
+  });
+
+  // Tests for network API (MastraClientNetworkOutput)
+  describe('MastraClientNetworkOutput API', () => {
+    it('fullStream: should iterate over network chunks using async iterator', async () => {
+      const networkChunks = [
+        { type: 'routing-agent-start', payload: { agentId: 'router', task: 'route request' } },
+        { type: 'agent-execution-start', payload: { agentId: 'agent-1', task: 'execute task' } },
+        { type: 'agent-execution-end', payload: { agentId: 'agent-1', usage: { totalTokens: 10 } } },
+        {
+          type: 'network-execution-event-finish',
+          payload: {
+            task: 'Main task',
+            result: 'Task completed',
+            completionReason: 'success',
+            primitiveId: 'net-1',
+            primitiveType: 'agent',
+            prompt: 'test',
+            iteration: 1,
+            usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+          },
+        },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(networkChunks));
+
+      const stream = await agent.network({ messages: 'Test network' });
+
+      // Test async iterator pattern
+      const receivedChunks: any[] = [];
+      for await (const chunk of stream.fullStream) {
+        receivedChunks.push(chunk);
+      }
+
+      // Verify all chunks were received
+      expect(receivedChunks).toHaveLength(4);
+      expect(receivedChunks[0].type).toBe('routing-agent-start');
+      expect(receivedChunks[1].type).toBe('agent-execution-start');
+      expect(receivedChunks[2].type).toBe('agent-execution-end');
+      expect(receivedChunks[3].type).toBe('network-execution-event-finish');
+    });
+
+    it('usage: should accumulate usage from multiple agents', async () => {
+      const networkChunks = [
+        { type: 'routing-agent-start', payload: { agentId: 'router' } },
+        {
+          type: 'routing-agent-end',
+          payload: { agentId: 'router', usage: { totalTokens: 5, inputTokens: 2, outputTokens: 3 } },
+        },
+        { type: 'agent-execution-start', payload: { agentId: 'agent-1' } },
+        {
+          type: 'agent-execution-end',
+          payload: { agentId: 'agent-1', usage: { totalTokens: 10, inputTokens: 4, outputTokens: 6 } },
+        },
+        { type: 'agent-execution-start', payload: { agentId: 'agent-2' } },
+        {
+          type: 'agent-execution-end',
+          payload: { agentId: 'agent-2', usage: { totalTokens: 8, inputTokens: 3, outputTokens: 5 } },
+        },
+        {
+          type: 'network-execution-event-finish',
+          payload: {
+            task: 'Complete',
+            result: 'done',
+            completionReason: 'success',
+            primitiveId: 'net-1',
+            primitiveType: 'agent',
+            prompt: 'test',
+            iteration: 1,
+            usage: { inputTokens: 9, outputTokens: 14, totalTokens: 23 },
+          },
+        },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(networkChunks));
+
+      const stream = await agent.network({ messages: 'Multi-agent test' });
+
+      // Test awaiting usage property
+      const usage = await stream.usage;
+
+      // Should use the usage from the finish event (which is the accumulated total from the server)
+      // When finish event provides usage, it replaces the accumulated count
+      expect(usage.inputTokens).toBe(9);
+      expect(usage.outputTokens).toBe(14);
+      expect(usage.totalTokens).toBe(23);
+    });
+
+    it('result: should resolve to network execution result', async () => {
+      const networkChunks = [
+        { type: 'agent-execution-start', payload: { agentId: 'agent-1' } },
+        { type: 'agent-execution-end', payload: { agentId: 'agent-1' } },
+        {
+          type: 'network-execution-event-finish',
+          payload: {
+            task: 'Analyze data',
+            result: 'Analysis complete: positive sentiment',
+            completionReason: 'success',
+            primitiveId: 'net-1',
+            primitiveType: 'agent',
+            prompt: 'Analyze this',
+            iteration: 1,
+            isComplete: true,
+          },
+        },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(networkChunks));
+
+      const stream = await agent.network({ messages: 'Analyze' });
+
+      // Test awaiting result property
+      const result = await stream.result;
+
+      expect(result).toEqual({
+        task: 'Analyze data',
+        result: 'Analysis complete: positive sentiment',
+        completionReason: 'success',
+        primitiveId: 'net-1',
+        primitiveType: 'agent',
+        prompt: 'Analyze this',
+        iteration: 1,
+        isComplete: true,
+      });
+    });
+
+    it('status: should resolve to completion reason', async () => {
+      const networkChunks = [
+        { type: 'agent-execution-start', payload: { agentId: 'agent-1' } },
+        { type: 'agent-execution-end', payload: { agentId: 'agent-1' } },
+        {
+          type: 'network-execution-event-finish',
+          payload: {
+            task: 'Task',
+            result: 'done',
+            completionReason: 'max-iterations',
+            primitiveId: 'net-1',
+            primitiveType: 'agent',
+            prompt: 'test',
+            iteration: 5,
+          },
+        },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(networkChunks));
+
+      const stream = await agent.network({ messages: 'Test' });
+
+      // Test awaiting status property
+      const status = await stream.status;
+
+      expect(status).toBe('max-iterations');
+    });
+
+    it('should support both fullStream iteration and property awaiting simultaneously', async () => {
+      const networkChunks = [
+        { type: 'agent-execution-start', payload: { agentId: 'agent-1' } },
+        { type: 'agent-execution-end', payload: { agentId: 'agent-1', usage: { totalTokens: 15 } } },
+        {
+          type: 'network-execution-event-finish',
+          payload: {
+            task: 'Task',
+            result: 'Complete',
+            completionReason: 'success',
+            primitiveId: 'net-1',
+            primitiveType: 'agent',
+            prompt: 'test',
+            iteration: 1,
+            usage: { inputTokens: 7, outputTokens: 8, totalTokens: 15 },
+          },
+        },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(networkChunks));
+
+      const stream = await agent.network({ messages: 'Test' });
+
+      // Start consuming fullStream
+      const chunks: any[] = [];
+      const streamPromise = (async () => {
+        for await (const chunk of stream.fullStream) {
+          chunks.push(chunk);
+        }
+      })();
+
+      // Await properties simultaneously
+      const [usage, result, status] = await Promise.all([stream.usage, stream.result, stream.status]);
+
+      // Wait for stream to complete
+      await streamPromise;
+
+      // Verify both patterns worked
+      expect(chunks).toHaveLength(3);
+      expect(usage.totalTokens).toBe(15);
+      expect(result.result).toBe('Complete');
+      expect(status).toBe('success');
+    });
+
+    it('fullStream: should work with workflow execution', async () => {
+      const networkChunks = [
+        { type: 'workflow-execution-start', payload: { workflowId: 'wf-1' } },
+        { type: 'workflow-execution-end', payload: { workflowId: 'wf-1', usage: { totalTokens: 25 } } },
+        {
+          type: 'network-execution-event-finish',
+          payload: {
+            task: 'Workflow task',
+            result: 'Workflow completed',
+            completionReason: 'success',
+            primitiveId: 'wf-1',
+            primitiveType: 'workflow',
+            prompt: 'run workflow',
+            iteration: 1,
+            usage: { inputTokens: 12, outputTokens: 13, totalTokens: 25 },
+          },
+        },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(networkChunks));
+
+      const stream = await agent.network({ messages: 'Run workflow' });
+
+      // Consume stream with fullStream
+      const chunks: any[] = [];
+      for await (const chunk of stream.fullStream) {
+        chunks.push(chunk);
+      }
+
+      // Verify chunks
+      expect(chunks).toHaveLength(3);
+      expect(chunks[0].type).toBe('workflow-execution-start');
+      expect(chunks[1].type).toBe('workflow-execution-end');
+      expect(chunks[2].type).toBe('network-execution-event-finish');
+      expect(chunks[2].payload.primitiveType).toBe('workflow');
+    });
+  });
+
+  // Regression test for deprecated processDataStream on network
+  describe('Backward Compatibility: network processDataStream (deprecated)', () => {
+    it('processDataStream: should still work for backward compatibility', async () => {
+      const networkChunks = [
+        { type: 'agent-execution-start', payload: { agentId: 'agent-1' } },
+        { type: 'agent-execution-end', payload: { agentId: 'agent-1' } },
+        {
+          type: 'network-execution-event-finish',
+          payload: {
+            task: 'Legacy task',
+            result: 'Legacy support',
+            completionReason: 'success',
+            primitiveId: 'net-1',
+            primitiveType: 'agent',
+            prompt: 'test',
+            iteration: 1,
+          },
+        },
+      ];
+
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(networkChunks));
+
+      const stream = await agent.network({ messages: 'Test legacy' });
+
+      // Test deprecated processDataStream method
+      const receivedChunks: any[] = [];
+      await stream.processDataStream({
+        onChunk: async chunk => {
+          receivedChunks.push(chunk);
+        },
+      });
+
+      // Verify it still works as expected
+      expect(receivedChunks).toHaveLength(3);
+      expect(receivedChunks[0].type).toBe('agent-execution-start');
+      expect(receivedChunks[1].type).toBe('agent-execution-end');
+      expect(receivedChunks[2].type).toBe('network-execution-event-finish');
+    });
   });
 });

@@ -101,13 +101,25 @@ try {
     },
   });
 
+  // Iterate over stream chunks
   for await (const chunk of stream) {
     console.log(JSON.stringify(chunk, null, 2));
   }
+
+  // Or use promise-based properties
+  const status = await stream.status;
+  const result = await stream.result;
+  const usage = await stream.usage;
 } catch (e) {
   console.error("Workflow error:", e);
 }
 ```
+
+The stream is a `ReadableStream<ChunkType>` that you can iterate over directly, and also provides:
+- **`status`**: `Promise<string>` - Workflow execution status
+- **`result`**: `Promise<any>` - Complete workflow result
+- **`usage`**: `Promise<any>` - Token usage statistics
+- **`error`**: `Error | undefined` - Error information if available
 
 ### Get Workflow Run result
 
