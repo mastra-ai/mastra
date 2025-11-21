@@ -82,7 +82,7 @@ new PosthogExporter({
   defaultDistinctId: 'anonymous', // Fallback if no userId in metadata
 
   // Optional: Privacy
-  enablePrivacyMode: false, // Excludes input/output from LLM events
+  enablePrivacyMode: false, // Set to true to exclude input/output from LLM events
 });
 ```
 

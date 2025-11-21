@@ -14,3 +14,24 @@ Adds a new PostHog exporter for AI tracing that sends spans to PostHog's LLM Ana
 - 4-tier distinct ID resolution for user identification
 - MODEL_CHUNK streaming event support
 - Regional deployment support (US/EU/self-hosted)
+
+```typescript
+import { Mastra } from '@mastra/core';
+import { Observability } from '@mastra/observability';
+import { PosthogExporter } from '@mastra/posthog';
+
+const posthogExporter = new PosthogExporter({
+  apiKey: process.env.POSTHOG_API_KEY!,
+});
+
+const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      posthog: {
+        serviceName: 'my-app',
+        exporters: [posthogExporter],
+      },
+    },
+  }),
+});
+```
