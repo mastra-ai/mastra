@@ -27,7 +27,7 @@ const DISTANCE_MAPPING: Record<string, Schemas['Distance']> = {
 type QdrantQueryVectorParams = QueryVectorParams<QdrantVectorFilter>;
 
 export class QdrantVector extends MastraVector {
-  private client: QdrantClient;
+  protected client: QdrantClient;
 
   /**
    * Creates a new QdrantVector client.
@@ -133,7 +133,8 @@ export class QdrantVector extends MastraVector {
     topK = 10,
     filter,
     includeVector = false,
-  }: QdrantQueryVectorParams): Promise<QueryResult[]> {
+    using,
+  }: QdrantQueryVectorParams & {using ? : string}): Promise<QueryResult[]> {
     const translatedFilter = this.transformFilter(filter) ?? {};
 
     try {
@@ -144,6 +145,7 @@ export class QdrantVector extends MastraVector {
           filter: translatedFilter,
           with_payload: true,
           with_vector: includeVector,
+          ...(using ? {using} : {}),
         })
       ).points;
 
