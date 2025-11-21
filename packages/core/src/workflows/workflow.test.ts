@@ -11999,7 +11999,7 @@ describe('Workflow', () => {
       expect(execute).toHaveBeenCalledTimes(1);
     });
 
-    it.only('should timeTravel a workflow execution that has nested workflows', async () => {
+    it('should timeTravel a workflow execution that has nested workflows', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
       const executeStep2 = vi.fn<any>().mockResolvedValue({ step2Result: 3 });
       const step1 = createStep({

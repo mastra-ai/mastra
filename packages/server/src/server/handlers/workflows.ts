@@ -754,7 +754,7 @@ export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ASYNC_ROUTE = createRoute({
   pathParamSchema: workflowIdPathParams,
   responseSchema: workflowControlResponseSchema,
   summary: 'Restart all active workflow runs asynchronously',
-  description: 'Restarts all active workflow runs asynchronously without streaming',
+  description: 'Restarts all active workflow runs asynchronously',
   tags: ['Workflows'],
   handler: async ({ mastra, workflowId }) => {
     try {
@@ -783,8 +783,8 @@ export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ROUTE = createRoute({
   responseType: 'json',
   pathParamSchema: workflowIdPathParams,
   responseSchema: workflowControlResponseSchema,
-  summary: 'Restart all active workflow runs asynchronously',
-  description: 'Restarts all active workflow runs asynchronously without streaming',
+  summary: 'Restart all active workflow runs',
+  description: 'Restarts all active workflow runs',
   tags: ['Workflows'],
   handler: async ({ mastra, workflowId }) => {
     try {
@@ -825,7 +825,7 @@ export const TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE = createRoute({
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to restart workflow' });
+        throw new HTTPException(400, { message: 'runId required to time travel workflow' });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -845,7 +845,7 @@ export const TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error restarting workflow');
+      return handleError(error, 'Error time traveling workflow');
     }
   },
 });

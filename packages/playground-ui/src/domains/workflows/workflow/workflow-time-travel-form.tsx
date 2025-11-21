@@ -1,21 +1,19 @@
-import { useContext, useEffect, useMemo, useState, FormEvent } from 'react';
+import { useContext, useMemo, useState } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { jsonLanguage } from '@codemirror/lang-json';
 import { useCodemirrorTheme } from '@/components/syntax-highlighter';
 import { WorkflowInputData } from './workflow-input-data';
 import { WorkflowRunContext } from '../context/workflow-run-context';
-import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Braces, ChevronDown, CopyIcon, EyeIcon, EyeOffIcon, Loader2 } from 'lucide-react';
+import { Braces, ChevronDown, CopyIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { formatJSON, isValidJson } from '@/lib/formatting';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { parse } from 'superjson';
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
 import { z } from 'zod';
-import { constructNestedStepContext } from '../utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { usePlaygroundStore } from '@/store/playground-store';
@@ -247,12 +245,13 @@ export const WorkflowTimeTravelForm = ({ stepKey, closeModal }: WorkflowTimeTrav
       };
 
       timeTravelWorkflowStream(payload);
+
+      closeModal();
     } catch (error) {
       console.error('Invalid JSON provided', error);
       setFormError(error instanceof Error ? error.message : 'Error time traveling workflow');
     } finally {
       setIsSubmitting(false);
-      closeModal();
     }
   };
 

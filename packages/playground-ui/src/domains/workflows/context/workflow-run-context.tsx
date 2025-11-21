@@ -1,5 +1,5 @@
 import { WorkflowRunState, WorkflowStreamResult } from '@mastra/core/workflows';
-import { createContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useEffect, useMemo, useState, type Dispatch, type SetStateAction, type ReactNode } from 'react';
 import { convertWorkflowRunStateToStreamResult } from '../utils';
 import { useCancelWorkflowRun, useExecuteWorkflow, useStreamWorkflow } from '../hooks';
 import { WorkflowTriggerProps } from '../workflow/workflow-trigger';
@@ -10,13 +10,13 @@ export type WorkflowRunStreamResult = WorkflowStreamResult<any, any, any, any>;
 
 type WorkflowRunContextType = {
   result: WorkflowRunStreamResult | null;
-  setResult: React.Dispatch<React.SetStateAction<WorkflowRunStreamResult | null>>;
+  setResult: Dispatch<SetStateAction<WorkflowRunStreamResult | null>>;
   payload: any;
-  setPayload: React.Dispatch<React.SetStateAction<any>>;
+  setPayload: Dispatch<SetStateAction<any>>;
   clearData: () => void;
   snapshot?: WorkflowRunState;
   runId?: string;
-  setRunId: React.Dispatch<React.SetStateAction<string>>;
+  setRunId: Dispatch<SetStateAction<string>>;
   workflowError: Error | null;
   observeWorkflowStream?: ({
     workflowId,
@@ -48,7 +48,7 @@ export function WorkflowRunProvider({
   initialRunId,
   withoutTimeTravel = false,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   snapshot?: WorkflowRunState;
   workflowId: string;
   initialRunId?: string;
@@ -83,7 +83,7 @@ export function WorkflowRunProvider({
           status: runExecutionResult?.status,
           result: runExecutionResult?.result,
           error: runExecutionResult?.error,
-          runId,
+          runId: initialRunId,
           serializedStepGraph: runExecutionResult?.serializedStepGraph,
         } as WorkflowRunState)
       : undefined;

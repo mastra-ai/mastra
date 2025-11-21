@@ -69,8 +69,9 @@ export const WorkflowInputData = ({
             isSubmitLoading={isSubmitLoading}
             submitButtonLabel={submitButtonLabel}
             onSubmit={withoutSubmit ? undefined : onSubmit}
-            children={children}
-          />
+          >
+            {children}
+          </DynamicForm>
         ) : (
           <JSONInput
             schema={schema}
@@ -79,8 +80,9 @@ export const WorkflowInputData = ({
             submitButtonLabel={submitButtonLabel}
             onSubmit={onSubmit}
             withoutSubmit={withoutSubmit}
-            children={children}
-          />
+          >
+            {children}
+          </JSONInput>
         )}
       </div>
     </div>
