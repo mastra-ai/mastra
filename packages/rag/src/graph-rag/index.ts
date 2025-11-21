@@ -239,6 +239,15 @@ export class GraphRAG {
     return normalizedVisits;
   }
 
+  /**
+   * Query the graph with a dense embedding and optional metadata filter.
+   * 
+   * @param query - The embedding vector to query.
+   * @param topK - Number of top results to return.
+   * @param randomWalkSteps - Steps for random walk reranking.
+   * @param restartProb - Restart probability for random walk.
+   * @param filter - Optional strict metadata filter. All key-value pairs must match exactly.
+   */
   // Retrieve relevant nodes using hybrid approach
   query({
     query,
@@ -251,7 +260,7 @@ export class GraphRAG {
     topK?: number;
     randomWalkSteps?: number;
     restartProb?: number;
-    filter?: Record<string, any>;
+    filter?: Partial<GraphNode['metadata']>
   }): RankedNode[] {
     if (!query || query.length !== this.dimension) {
       throw new Error(`Query embedding must have dimension ${this.dimension}`);
@@ -266,14 +275,13 @@ export class GraphRAG {
       throw new Error('Restart probability must be between 0 and 1');
     }
 
-    // apply metadata filter if provided
-    let nodesToSearch = Array.from(this.nodes.values());
-    if (filter) {
-      nodesToSearch = nodesToSearch.filter(node => {
-        if (!node.metadata) return false;
-        return Object.entries(filter).every(([key, value]) => node.metadata?.[key] === value);
-      });
-    }
+    const filterEntries = Object.entries(filter ?? {});
+    const matchesFilter = (node: GraphNode) =>
+      filterEntries.length === 0
+        ? true
+        : filterEntries.every(([key, value]) => node.metadata?.[key] === value);
+
+    const nodesToSearch = Array.from(this.nodes.values()).filter(matchesFilter);
 
     // Retrieve nodes and calculate similarity
     const similarities = nodesToSearch.map(node => ({
@@ -284,23 +292,21 @@ export class GraphRAG {
     // Sort by similarity
     similarities.sort((a, b) => b.similarity - a.similarity);
     const topNodes = similarities.slice(0, topK);
-
-    const matchesFilter = (node: GraphNode) =>
-      Object.entries(filter || {}).every(([key, value]) => node.metadata?.[key] === value);
-
+    
     // Re-rank using random walk, but only over filtered nodes
     const filteredNodeIds = new Set(
-      Array.from(this.nodes.values())
-        .filter(matchesFilter)
-        .map(n => n.id),
+      nodesToSearch.map(n => n.id)
     );
 
     // Re-ranks nodes using random walk with restart
     const rerankedNodes = new Map<string, { node: GraphNode; score: number }>();
 
+    const useFilter = filterEntries.length > 0;
     // For each top node, perform random walk
     for (const { node, similarity } of topNodes) {
-      const walkScores = this.randomWalkWithRestartFiltered(node.id, randomWalkSteps, restartProb, filteredNodeIds);
+      const walkScores = useFilter
+        ? this.randomWalkWithRestartFiltered(node.id, randomWalkSteps, restartProb, filteredNodeIds)
+        : this.randomWalkWithRestart(node.id, randomWalkSteps, restartProb);
 
       // Combine dense retrieval score with graph score
       for (const [nodeId, walkScore] of walkScores) {
