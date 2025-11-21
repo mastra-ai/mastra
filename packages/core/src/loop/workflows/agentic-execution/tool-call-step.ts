@@ -60,7 +60,8 @@ export function createToolCallStep<
               const pendingSuspensions = (currentMetadata.pendingSuspensions as Record<string, any>) || {};
 
               await memory.updateThread({
-                threadId,
+                id: threadId,
+                title: currentThread.title,
                 metadata: {
                   ...currentMetadata,
                   pendingSuspensions: {
@@ -88,12 +89,16 @@ export function createToolCallStep<
 
         try {
           const thread = await memory.getThreadById({ threadId });
+          if (!thread) {
+            return;
+          }
           const currentMetadata = thread?.metadata || {};
           const pendingSuspensions = { ...((currentMetadata.pendingSuspensions as Record<string, any>) || {}) };
           delete pendingSuspensions[toolCallId];
 
           await memory.updateThread({
-            threadId,
+            id: threadId,
+            title: thread?.title,
             metadata: {
               ...currentMetadata,
               pendingSuspensions,
