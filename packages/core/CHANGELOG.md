@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.24.5
+
+### Patch Changes
+
+- Fix parallel tool call handling for Gemini models ([#10371](https://github.com/mastra-ai/mastra/pull/10371))
+  - Fix addStartStepPartsForAIV5 to prevent step-start parts from being inserted between consecutive tool parts (parallel tool calls)
+  - This ensures parallel tool calls maintain correct order and preserve thought_signature metadata on the first tool call as required by Gemini API
+
 ## 0.24.5-alpha.0
 
 ### Patch Changes
