@@ -353,6 +353,10 @@ export class MessageList {
     this.messages = this.messages.filter(m => {
       if (idsSet.has(m.id)) {
         removed.push(m);
+        this.memoryMessages.delete(m);
+        this.newUserMessages.delete(m);
+        this.newResponseMessages.delete(m);
+        this.userContextMessages.delete(m);
         return false;
       }
       return true;
