@@ -130,7 +130,7 @@ const result = await agent.stream({
   clientTools: { colorChangeTool },
 });
 
-for await (const chunk of stream.fullStream) {
+for await (const chunk of result.fullStream) {
     if (chunk.type === "text-delta") {
       console.log(chunk.payload.text);
     } else if (chunk.type === "tool-call") {
@@ -201,7 +201,7 @@ const result = await agent.stream({ messages: "Tell me a story" });
 
 const uiMessageStream = createUIMessageStream({
   execute: async ({ writer }) => {
-    for await (const part of toAISdkStream(stream.fullStream, { from: "agent" })) {
+    for await (const part of toAISdkStream(result.fullStream, { from: "agent" })) {
       writer.write(part);
     }
   },
