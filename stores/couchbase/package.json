@@ -1,6 +1,10 @@
 {
   "name": "@mastra/couchbase",
+<<<<<<< HEAD
+  "version": "1.0.0",
+=======
   "version": "1.0.0-beta.1",
+>>>>>>> origin/main
   "description": "Couchbase vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",

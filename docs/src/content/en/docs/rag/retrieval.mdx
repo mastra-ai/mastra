@@ -478,6 +478,23 @@ export const ragAgent = new Agent({
 
   </TabItem>
 
+<Tabs.Tab>
+```ts filename="vector-store.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { COUCHBASE_SEARCH_STORE_PROMPT } from "@mastra/s3vectors";
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  model: openai('gpt-4o-mini'),
+  instructions: `
+  Process queries using the provided context. Structure responses to be concise and relevant.
+  ${COUCHBASE_SEARCH_STORE_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+</Tabs.Tab>
+
 </Tabs>
 
 ### Re-ranking
