@@ -74,49 +74,6 @@ export class Memory extends MastraMemory {
     const runtimeMemoryConfig = memoryContext?.memoryConfig;
     const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
 
-    // Add semantic recall input processor if configured
-    if (effectiveConfig.semanticRecall) {
-      if (!this.storage?.stores?.memory)
-        throw new MastraError({
-          category: 'USER',
-          domain: ErrorDomain.STORAGE,
-          id: 'SEMANTIC_RECALL_MISSING_STORAGE_ADAPTER',
-          text: 'Using Mastra Memory semantic recall requires a storage adapter but no attached adapter was detected.',
-        });
-
-      if (!this.vector)
-        throw new MastraError({
-          category: 'USER',
-          domain: ErrorDomain.MASTRA_VECTOR,
-          id: 'SEMANTIC_RECALL_MISSING_VECTOR_ADAPTER',
-          text: 'Using Mastra Memory semantic recall requires a vector adapter but no attached adapter was detected.',
-        });
-
-      if (!this.embedder)
-        throw new MastraError({
-          category: 'USER',
-          domain: ErrorDomain.MASTRA_VECTOR,
-          id: 'SEMANTIC_RECALL_MISSING_EMBEDDER',
-          text: 'Using Mastra Memory semantic recall requires an embedder but no attached embedder was detected.',
-        });
-
-      // Check if user already manually added SemanticRecall
-      const hasSemanticRecall = configuredProcessors.some(p => p.constructor.name === 'SemanticRecall');
-
-      if (!hasSemanticRecall) {
-        const semanticConfig = typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
-
-        processors.push(
-          new SemanticRecall({
-            storage: this.storage.stores.memory,
-            vector: this.vector,
-            embedder: this.embedder,
-            ...semanticConfig,
-          }),
-        );
-      }
-    }
-
     // Add working memory input processor if configured
     const isWorkingMemoryEnabled =
       typeof effectiveConfig.workingMemory === 'object' && effectiveConfig.workingMemory.enabled !== false;
@@ -181,6 +138,49 @@ export class Memory extends MastraMemory {
       }
     }
 
+    // Add semantic recall input processor if configured
+    if (effectiveConfig.semanticRecall) {
+      if (!this.storage?.stores?.memory)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.STORAGE,
+          id: 'SEMANTIC_RECALL_MISSING_STORAGE_ADAPTER',
+          text: 'Using Mastra Memory semantic recall requires a storage adapter but no attached adapter was detected.',
+        });
+
+      if (!this.vector)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          id: 'SEMANTIC_RECALL_MISSING_VECTOR_ADAPTER',
+          text: 'Using Mastra Memory semantic recall requires a vector adapter but no attached adapter was detected.',
+        });
+
+      if (!this.embedder)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          id: 'SEMANTIC_RECALL_MISSING_EMBEDDER',
+          text: 'Using Mastra Memory semantic recall requires an embedder but no attached embedder was detected.',
+        });
+
+      // Check if user already manually added SemanticRecall
+      const hasSemanticRecall = configuredProcessors.some(p => p.constructor.name === 'SemanticRecall');
+
+      if (!hasSemanticRecall) {
+        const semanticConfig = typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
+
+        processors.push(
+          new SemanticRecall({
+            storage: this.storage.stores.memory,
+            vector: this.vector,
+            embedder: this.embedder,
+            ...semanticConfig,
+          }),
+        );
+      }
+    }
+
     // Return only the auto-generated processors (not the configured ones)
     // The agent will merge them with configuredProcessors
     return processors;
@@ -202,29 +202,6 @@ export class Memory extends MastraMemory {
 
     if (effectiveConfig.readOnly) {
       return [];
-    }
-
-    const lastMessages = effectiveConfig.lastMessages;
-    if (lastMessages) {
-      if (!this.storage?.stores?.memory)
-        throw new MastraError({
-          category: 'USER',
-          domain: ErrorDomain.STORAGE,
-          id: 'MESSAGE_HISTORY_MISSING_STORAGE_ADAPTER',
-          text: 'Using Mastra Memory message history requires a storage adapter but no attached adapter was detected.',
-        });
-
-      // Check if user already manually added MessageHistory
-      const hasMessageHistory = configuredProcessors.some(p => p.constructor.name === 'MessageHistory');
-
-      if (!hasMessageHistory) {
-        processors.push(
-          new MessageHistory({
-            storage: this.storage.stores.memory,
-            lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
-          }),
-        );
-      }
     }
 
     // Add SemanticRecall output processor if configured
@@ -265,6 +242,29 @@ export class Memory extends MastraMemory {
             vector: this.vector,
             embedder: this.embedder,
             ...semanticRecallConfig,
+          }),
+        );
+      }
+    }
+
+    const lastMessages = effectiveConfig.lastMessages;
+    if (lastMessages) {
+      if (!this.storage?.stores?.memory)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.STORAGE,
+          id: 'MESSAGE_HISTORY_MISSING_STORAGE_ADAPTER',
+          text: 'Using Mastra Memory message history requires a storage adapter but no attached adapter was detected.',
+        });
+
+      // Check if user already manually added MessageHistory
+      const hasMessageHistory = configuredProcessors.some(p => p.constructor.name === 'MessageHistory');
+
+      if (!hasMessageHistory) {
+        processors.push(
+          new MessageHistory({
+            storage: this.storage.stores.memory,
+            lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
           }),
         );
       }
