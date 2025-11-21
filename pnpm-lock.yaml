@@ -7,14 +7,14 @@ settings:
 catalogs:
   default:
     '@vitest/coverage-v8':
-      specifier: 4.0.8
-      version: 4.0.8
+      specifier: 4.0.12
+      version: 4.0.12
     '@vitest/ui':
-      specifier: 4.0.8
-      version: 4.0.8
+      specifier: 4.0.12
+      version: 4.0.12
     vitest:
-      specifier: ^4.0.8
-      version: 4.0.8
+      specifier: 4.0.12
+      version: 4.0.12
 
 overrides:
   typescript: ^5.8.3
@@ -46,11 +46,11 @@ importers:
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
-        specifier: ^4.0.8
-        version: 4.0.8(vitest@4.0.8)
+        specifier: 'catalog:'
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
-        specifier: ^4.0.8
-        version: 4.0.8(vitest@4.0.8)
+        specifier: 'catalog:'
+        version: 4.0.12(vitest@4.0.12)
       changesets-changelog-github-local:
         specifier: ^1.0.1
         version: 1.0.1
@@ -77,13 +77,13 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   auth/auth0:
     dependencies:
       jose:
         specifier: ^6.1.1
-        version: 6.1.1
+        version: 6.1.2
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -99,10 +99,10 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -114,7 +114,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   auth/clerk:
     dependencies:
@@ -139,10 +139,10 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -154,7 +154,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   auth/firebase:
     dependencies:
@@ -176,10 +176,10 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -191,7 +191,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   auth/supabase:
     dependencies:
@@ -213,10 +213,10 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -228,7 +228,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   auth/workos:
     dependencies:
@@ -253,10 +253,10 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -268,13 +268,13 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   client-sdks/ai-sdk:
     dependencies:
       ai:
         specifier: ^5.0.60
-        version: 5.0.93(zod@3.25.76)
+        version: 5.0.76(zod@3.25.76)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -290,10 +290,10 @@ importers:
         version: 7.0.15
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -305,7 +305,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -342,10 +342,10 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       ai:
         specifier: ^4.3.19
         version: 4.3.19(react@19.2.0)(zod@3.25.76)
@@ -363,7 +363,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -415,10 +415,10 @@ importers:
         version: 5.0.4(vite@7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1))
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -439,7 +439,7 @@ importers:
         version: 9.1.13(@testing-library/dom@10.4.1)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(prettier@3.6.2)(vite@7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1))
       tailwindcss:
         specifier: ^4
-        version: 4.1.17
+        version: 4.1.15
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
@@ -451,7 +451,7 @@ importers:
         version: 4.5.4(@types/node@22.13.17)(rollup@4.50.2)(typescript@5.9.3)(vite@7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1))
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   deployers/cloud:
     dependencies:
@@ -494,10 +494,10 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -509,7 +509,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   deployers/cloudflare:
     dependencies:
@@ -546,7 +546,7 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/babel__core':
         specifier: ^7.20.5
         version: 7.20.5
@@ -555,22 +555,22 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -598,7 +598,7 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/fs-extra':
         specifier: ^11.0.4
         version: 11.0.4
@@ -607,22 +607,22 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   deployers/vercel:
     dependencies:
@@ -644,7 +644,7 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/fs-extra':
         specifier: ^11.0.4
         version: 11.0.4
@@ -653,22 +653,22 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   examples/dane:
     dependencies:
@@ -823,10 +823,10 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       tsx:
         specifier: ^4.19.2
         version: 4.20.6
@@ -835,7 +835,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   observability/_test-utils:
     devDependencies:
@@ -844,10 +844,10 @@ importers:
         version: link:../../packages/core
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
 
   observability/arize:
     dependencies:
@@ -884,28 +884,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.36.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   observability/braintrust:
     dependencies:
@@ -927,28 +927,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   observability/langfuse:
     dependencies:
@@ -970,28 +970,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   observability/langsmith:
     dependencies:
@@ -1016,16 +1016,16 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       dotenv:
         specifier: ^17.2.2
         version: 17.2.3
@@ -1034,13 +1034,13 @@ importers:
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -1062,28 +1062,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   observability/otel-exporter:
     dependencies:
@@ -1120,28 +1120,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
     optionalDependencies:
       '@grpc/grpc-js':
         specifier: ^1.14.1
@@ -1179,10 +1179,10 @@ importers:
         version: 7.55.0(@types/node@22.13.17)
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       ai:
         specifier: ^4.3.19
         version: 4.3.19(react@19.2.0)(zod@3.25.76)
@@ -1264,10 +1264,10 @@ importers:
         version: 7.7.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -1279,13 +1279,13 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   packages/_config:
     dependencies:
       '@vitest/eslint-plugin':
         specifier: ^1.3.20
-        version: 1.3.23(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)(vitest@4.0.8)
+        version: 1.3.23(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)(vitest@4.0.12)
       eslint-plugin-import-x:
         specifier: ^4.16.1
         version: 4.16.1(@typescript-eslint/utils@8.46.2(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3))(eslint@9.38.0(jiti@2.6.1))
@@ -1307,10 +1307,10 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
 
   packages/_external-types:
     dependencies:
@@ -1323,7 +1323,7 @@ importers:
     devDependencies:
       '@ai-sdk/provider-utils':
         specifier: ^3.0.12
-        version: 3.0.17(zod@3.25.76)
+        version: 3.0.12(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1332,16 +1332,16 @@ importers:
         version: link:../_types-builder
       '@microsoft/api-extractor':
         specifier: ^7.53.1
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       ai:
         specifier: ^4.3.19
         version: 4.3.19(react@19.2.0)(zod@3.25.76)
@@ -1350,13 +1350,13 @@ importers:
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   packages/_types-builder:
     dependencies:
@@ -1369,10 +1369,10 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
 
   packages/agent-builder:
     dependencies:
@@ -1411,7 +1411,7 @@ importers:
         version: link:../memory
       ai:
         specifier: ^5.0.60
-        version: 5.0.93(zod@3.25.76)
+        version: 5.0.76(zod@3.25.76)
       ignore:
         specifier: ^7.0.5
         version: 7.0.5
@@ -1439,10 +1439,10 @@ importers:
         version: 7.7.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -1457,7 +1457,7 @@ importers:
         version: 8.46.2(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -1488,10 +1488,10 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -1503,7 +1503,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   packages/cli:
     dependencies:
@@ -1585,16 +1585,16 @@ importers:
         version: 1.7.5
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       memfs:
         specifier: ^4.50.0
-        version: 4.50.0
+        version: 4.51.0
       rollup:
         specifier: ^4.50.2
         version: 4.50.2
@@ -1609,7 +1609,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   packages/codemod:
     dependencies:
@@ -1643,10 +1643,10 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -1658,7 +1658,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   packages/core:
     dependencies:
@@ -1682,7 +1682,7 @@ importers:
         version: 2.0.1
       '@mastra/observability':
         specifier: '>=1.0.0-0 <2.0.0-0'
-        version: 1.0.0-beta.0(@mastra/core@1.0.0-beta.3)
+        version: 1.0.0-beta.0(@mastra/core@1.0.0-beta.4)
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../schema-compat
@@ -1730,8 +1730,8 @@ importers:
         specifier: npm:@ai-sdk/anthropic@2.0.45
         version: '@ai-sdk/anthropic@2.0.45(zod@3.25.76)'
       '@ai-sdk/google-v5':
-        specifier: npm:@ai-sdk/google@2.0.39
-        version: '@ai-sdk/google@2.0.39(zod@3.25.76)'
+        specifier: npm:@ai-sdk/google@2.0.40
+        version: '@ai-sdk/google@2.0.40(zod@3.25.76)'
       '@ai-sdk/mistral-v5':
         specifier: npm:@ai-sdk/mistral@2.0.24
         version: '@ai-sdk/mistral@2.0.24(zod@3.25.76)'
@@ -1764,7 +1764,7 @@ importers:
         version: link:../_types-builder
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@openrouter/ai-sdk-provider':
         specifier: ^0.4.6
         version: 0.4.6(zod@3.25.76)
@@ -1779,10 +1779,10 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -1800,13 +1800,13 @@ importers:
         version: 27.0.2
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -1843,7 +1843,7 @@ importers:
         version: link:../_config
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@rollup/plugin-commonjs':
         specifier: 29.0.0
         version: 29.0.0(rollup@4.50.2)
@@ -1968,12 +1968,15 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/hono':
+        specifier: workspace:*
+        version: link:../../server-adapters/hono
       '@mastra/mcp':
         specifier: workspace:^
         version: link:../mcp
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/babel__core':
         specifier: ^7.20.5
         version: 7.20.5
@@ -1985,10 +1988,10 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -2000,7 +2003,7 @@ importers:
         version: 0.4.8(hono@4.10.6)(openapi-types@12.1.3)(zod@3.25.76)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       type-fest:
         specifier: ^5.2.0
         version: 5.2.0
@@ -2009,7 +2012,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -2043,7 +2046,7 @@ importers:
         version: link:../core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/sentiment':
         specifier: ^5.0.4
         version: 5.0.4
@@ -2052,10 +2055,10 @@ importers:
         version: 4.0.2
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       ai:
         specifier: ^4.3.19
         version: 4.3.19(react@19.2.0)(zod@3.25.76)
@@ -2067,13 +2070,13 @@ importers:
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -2085,7 +2088,7 @@ importers:
         version: 2.0.0
       ai:
         specifier: ^5.0.76
-        version: 5.0.93(zod@4.1.12)
+        version: 5.0.76(zod@4.1.12)
       ai-v4:
         specifier: npm:ai@4.3.19
         version: ai@4.3.19(react@19.2.0)(zod@4.1.12)
@@ -2104,10 +2107,10 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
@@ -2116,7 +2119,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   packages/loggers:
     dependencies:
@@ -2138,28 +2141,28 @@ importers:
         version: link:../core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   packages/mcp:
     dependencies:
@@ -2202,19 +2205,19 @@ importers:
         version: 1.29.3
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       ai:
         specifier: ^5.0.60
-        version: 5.0.93(zod@3.25.76)
+        version: 5.0.76(zod@3.25.76)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -2226,7 +2229,7 @@ importers:
         version: 0.0.7(@modelcontextprotocol/sdk@1.20.1)(hono@4.10.6)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       tsx:
         specifier: ^4.19.4
         version: 4.20.6
@@ -2235,7 +2238,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -2275,10 +2278,10 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@wong2/mcp-cli':
         specifier: ^1.13.0
         version: 1.13.0
@@ -2302,7 +2305,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   packages/mcp-registry-registry:
     dependencies:
@@ -2339,10 +2342,10 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@wong2/mcp-cli':
         specifier: ^1.13.0
         version: 1.13.0
@@ -2366,7 +2369,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   packages/memory:
     dependencies:
@@ -2409,7 +2412,7 @@ importers:
         version: link:../core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/json-schema':
         specifier: ^7.0.15
         version: 7.0.15
@@ -2418,16 +2421,16 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
@@ -2436,7 +2439,7 @@ importers:
         version: 8.46.2(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   packages/playground:
     dependencies:
@@ -2768,10 +2771,10 @@ importers:
         version: 5.0.4(vite@7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1))
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       autoprefixer:
         specifier: ^10.4.22
         version: 10.4.22(postcss@8.5.6)
@@ -2810,7 +2813,7 @@ importers:
         version: 2.2.2(vite@7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1))
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   packages/rag:
     dependencies:
@@ -2853,7 +2856,7 @@ importers:
         version: link:../core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/big.js':
         specifier: ^6.2.2
         version: 6.2.2
@@ -2862,10 +2865,10 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       ai:
         specifier: ^4.3.19
         version: 4.3.19(react@19.2.0)(zod@3.25.76)
@@ -2877,13 +2880,13 @@ importers:
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -2920,10 +2923,10 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -2935,12 +2938,16 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
 
   packages/server:
+    dependencies:
+      hono:
+        specifier: ^4.10.5
+        version: 4.10.6
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.24
@@ -2965,16 +2972,16 @@ importers:
         version: link:../core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -2983,13 +2990,13 @@ importers:
         version: 2.2.2
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -3032,10 +3039,10 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       ai:
         specifier: ^4.3.16
         version: 4.3.19(react@19.2.0)(zod@3.25.76)
@@ -3050,23 +3057,179 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+
+  server-adapters/_test-utils:
+    dependencies:
+      vitest:
+        specifier: '*'
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+    devDependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@mastra/server':
+        specifier: workspace:*
+        version: link:../../packages/server
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+
+  server-adapters/express:
+    dependencies:
+      '@mastra/server':
+        specifier: workspace:*
+        version: link:../../packages/server
+    devDependencies:
+      '@ai-sdk/openai':
+        specifier: ^2.0.62
+        version: 2.0.62(zod@3.25.76)
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
+      '@internal/server-adapter-test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
+      '@internal/storage-test-utils':
+        specifier: workspace:*
+        version: link:../../stores/_test-utils
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../packages/_types-builder
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@mastra/evals':
+        specifier: workspace:*
+        version: link:../../packages/evals
+      '@mastra/libsql':
+        specifier: workspace:*
+        version: link:../../stores/libsql
+      '@mastra/memory':
+        specifier: workspace:*
+        version: link:../../packages/memory
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../../observability/mastra
+      '@types/cors':
+        specifier: ^2.8.19
+        version: 2.8.19
+      '@types/express':
+        specifier: ^5.0.5
+        version: 5.0.5
+      '@types/node':
+        specifier: 22.13.17
+        version: 22.13.17
+      '@types/swagger-ui-express':
+        specifier: ^4.1.6
+        version: 4.1.8
+      cors:
+        specifier: ^2.8.5
+        version: 2.8.5
+      eslint:
+        specifier: ^9.37.0
+        version: 9.38.0(jiti@2.6.1)
+      express:
+        specifier: ^5.1.0
+        version: 5.1.0
+      swagger-ui-express:
+        specifier: ^5.0.1
+        version: 5.0.1(express@5.1.0)
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
+
+  server-adapters/hono:
+    dependencies:
+      '@mastra/server':
+        specifier: workspace:*
+        version: link:../../packages/server
+      '@types/express':
+        specifier: ^5.0.5
+        version: 5.0.5
+      express:
+        specifier: ^5.1.0
+        version: 5.1.0
+    devDependencies:
+      '@ai-sdk/openai':
+        specifier: ^2.0.62
+        version: 2.0.62(zod@3.25.76)
+      '@hono/node-server':
+        specifier: ^1.19.6
+        version: 1.19.6(hono@4.10.4)
+      '@hono/swagger-ui':
+        specifier: ^0.5.2
+        version: 0.5.2(hono@4.10.4)
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
+      '@internal/server-adapter-test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
+      '@internal/storage-test-utils':
+        specifier: workspace:*
+        version: link:../../stores/_test-utils
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../packages/_types-builder
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@mastra/libsql':
+        specifier: workspace:*
+        version: link:../../stores/libsql
+      '@mastra/memory':
+        specifier: workspace:*
+        version: link:../../packages/memory
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../../observability/mastra
+      '@types/node':
+        specifier: 22.13.17
+        version: 22.13.17
+      eslint:
+        specifier: ^9.37.0
+        version: 9.38.0(jiti@2.6.1)
+      hono:
+        specifier: ^4.10.4
+        version: 4.10.4
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
 
   stores/_test-utils:
     dependencies:
       vitest:
         specifier: '*'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
     devDependencies:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@3.2.4)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@3.2.4)
 
   stores/astra:
     dependencies:
@@ -3085,28 +3248,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   stores/chroma:
     dependencies:
@@ -3128,28 +3291,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   stores/clickhouse:
     dependencies:
@@ -3171,28 +3334,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   stores/cloudflare:
     dependencies:
@@ -3202,7 +3365,7 @@ importers:
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20251111.0
-        version: 4.20251111.0
+        version: 4.20251117.0
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -3217,16 +3380,16 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       dotenv:
         specifier: ^17.0.0
         version: 17.2.3
@@ -3238,13 +3401,13 @@ importers:
         version: 4.20251109.1
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   stores/cloudflare-d1:
     dependencies:
@@ -3254,7 +3417,7 @@ importers:
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20251111.0
-        version: 4.20251111.0
+        version: 4.20251117.0
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -3269,16 +3432,16 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       dotenv:
         specifier: ^17.0.0
         version: 17.2.3
@@ -3290,13 +3453,13 @@ importers:
         version: 4.20251109.1
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   stores/couchbase:
     dependencies:
@@ -3315,16 +3478,16 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       axios:
         specifier: ^1.12.2
         version: 1.12.2(debug@4.4.3)
@@ -3333,13 +3496,13 @@ importers:
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   stores/dynamodb:
     dependencies:
@@ -3367,16 +3530,16 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       axios:
         specifier: ^1.12.2
         version: 1.12.2(debug@4.4.3)
@@ -3385,13 +3548,13 @@ importers:
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   stores/lance:
     dependencies:
@@ -3416,28 +3579,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   stores/libsql:
     dependencies:
@@ -3459,28 +3622,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   stores/mongodb:
     dependencies:
@@ -3511,28 +3674,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   stores/mssql:
     dependencies:
@@ -3554,7 +3717,7 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/mssql':
         specifier: ^9.1.8
         version: 9.1.8
@@ -3563,22 +3726,22 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   stores/opensearch:
     dependencies:
@@ -3597,28 +3760,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   stores/pg:
     dependencies:
@@ -3649,7 +3812,7 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
@@ -3658,22 +3821,22 @@ importers:
         version: 8.15.6
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   stores/pinecone:
     dependencies:
@@ -3692,16 +3855,16 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       dotenv:
         specifier: ^17.0.0
         version: 17.2.3
@@ -3710,13 +3873,13 @@ importers:
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   stores/qdrant:
     dependencies:
@@ -3738,28 +3901,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   stores/s3vectors:
     dependencies:
@@ -3784,16 +3947,16 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       dotenv:
         specifier: ^17.0.0
         version: 17.2.3
@@ -3802,13 +3965,13 @@ importers:
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   stores/turbopuffer:
     dependencies:
@@ -3827,16 +3990,16 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       dotenv:
         specifier: ^17.0.0
         version: 17.2.3
@@ -3845,13 +4008,13 @@ importers:
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   stores/upstash:
     dependencies:
@@ -3876,16 +4039,16 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       dotenv:
         specifier: ^17.0.0
         version: 17.2.3
@@ -3894,13 +4057,13 @@ importers:
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   stores/vectorize:
     dependencies:
@@ -3919,16 +4082,16 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       dotenv:
         specifier: ^17.0.0
         version: 17.2.3
@@ -3937,13 +4100,13 @@ importers:
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   voice/azure:
     dependencies:
@@ -3962,28 +4125,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   voice/cloudflare:
     dependencies:
@@ -3993,7 +4156,7 @@ importers:
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20251111.0
-        version: 4.20251111.0
+        version: 4.20251117.0
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -4005,28 +4168,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -4051,28 +4214,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   voice/elevenlabs:
     dependencies:
@@ -4094,28 +4257,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   voice/gladia:
     devDependencies:
@@ -4130,16 +4293,16 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.5
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -4148,13 +4311,13 @@ importers:
         version: 10.18.2
       tsup:
         specifier: ^8.4.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -4185,10 +4348,10 @@ importers:
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -4200,13 +4363,13 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   voice/google-gemini-live-api:
     dependencies:
       '@google/genai':
         specifier: latest
-        version: 1.29.1(@modelcontextprotocol/sdk@1.20.1)
+        version: 1.28.0(@modelcontextprotocol/sdk@1.20.1)
       google-auth-library:
         specifier: ^10.2.1
         version: 10.4.1
@@ -4237,10 +4400,10 @@ importers:
         version: 8.18.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -4255,7 +4418,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   voice/murf:
     dependencies:
@@ -4277,28 +4440,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   voice/openai:
     dependencies:
@@ -4320,28 +4483,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   voice/openai-realtime-api:
     dependencies:
@@ -4366,7 +4529,7 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
@@ -4375,22 +4538,22 @@ importers:
         version: 8.18.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -4412,28 +4575,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   voice/sarvam:
     devDependencies:
@@ -4448,28 +4611,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -4494,28 +4657,28 @@ importers:
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   workflows/inngest:
     dependencies:
@@ -4555,16 +4718,16 @@ importers:
         version: link:../../stores/libsql
       '@microsoft/api-extractor':
         specifier: ^7.52.8
-        version: 7.55.0(@types/node@22.13.17)
+        version: 7.53.1(@types/node@22.13.17)
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.8(vitest@4.0.8)
+        version: 4.0.12(vitest@4.0.12)
       ai:
         specifier: ^4.3.19
         version: 4.3.19(react@19.2.0)(zod@3.25.76)
@@ -4585,13 +4748,13 @@ importers:
         version: 1.12.1(encoding@0.1.13)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+        version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
 packages:
 
@@ -4656,8 +4819,8 @@ packages:
     peerDependencies:
       zod: ^3.0.0
 
-  '@ai-sdk/google@2.0.39':
-    resolution: {integrity: sha512-uCqNNABzIvY6e4dutFO5P428HcaiwvgvBPUsqI2W7qB8ee+Oz5WtNGKPeR5gnf9736HaB3UrIUZFWGhr4/HwVQ==}
+  '@ai-sdk/google@2.0.40':
+    resolution: {integrity: sha512-E7MTVE6vhWXQJzXQDvojwA9t5xlhWpxttCH3R/kUyiE6y0tT8Ay2dmZLO+bLpFBQ5qrvBMrjKWpDVQMoo6TJZg==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -4722,6 +4885,12 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
+  '@ai-sdk/openai@2.0.62':
+    resolution: {integrity: sha512-ZHUhUV6yyBBb0bCbuqAkML7nYIOWyXZYbZQ59mlr1TpIJzSHjQzF4BndZHIIieOMm4ZrpZw15Cn78BTyaIAUwQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
   '@ai-sdk/openai@2.0.69':
     resolution: {integrity: sha512-UF9qZ1qiVOpWdbj/FGf8jz+PciMI2zxt8ZNKjsvyFtUfk1E5PIG8GYR65maGblVhwKrRR5zAAJ5BumNyDt2v4Q==}
     engines: {node: '>=18'}
@@ -4751,6 +4920,12 @@ packages:
 
   '@ai-sdk/provider-utils@3.0.12':
     resolution: {integrity: sha512-ZtbdvYxdMoria+2SlNarEk6Hlgyf+zzcznlD55EAl+7VZvJaSg2sqPvwArY7L6TfDEDJsnCq0fdhBSkYo0Xqdg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/provider-utils@3.0.16':
+    resolution: {integrity: sha512-lsWQY9aDXHitw7C1QRYIbVGmgwyT98TF3MfM8alNIXKpdJdi+W782Rzd9f1RyOfgRmZ08gJ2EYNDhWNK7RqpEA==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -5206,6 +5381,10 @@ packages:
     resolution: {integrity: sha512-cjQ7ZlQ0Mv3b47hABuTevyTuYN4i+loJKGeV9flcCgIK37cCXRh+L1bd3iBHlynerhQ7BhCkn2BPbQUL+rGqFg==}
     engines: {node: '>=6.9.0'}
 
+  '@babel/compat-data@7.28.4':
+    resolution: {integrity: sha512-YsmSKC29MJwf0gF8Rjjrg5LQCmyh+j/nD8/eP7f+BeoQTKYqs9RoWbjGOdy0+1Ekr68RJZMUOPVQaQisnIo4Rw==}
+    engines: {node: '>=6.9.0'}
+
   '@babel/compat-data@7.28.5':
     resolution: {integrity: sha512-6uFXyCayocRbqhZOB+6XcuZbkMNimwfVGFji8CTZnCzOHVGvDqzvitu1re2AU5LROliz7eQPhB8CpAMvnx9EjA==}
     engines: {node: '>=6.9.0'}
@@ -5592,6 +5771,12 @@ packages:
     peerDependencies:
       '@babel/core': ^7.0.0-0
 
+  '@babel/plugin-transform-optional-chaining@7.27.1':
+    resolution: {integrity: sha512-BQmKPPIuc8EkZgNKsv0X4bPmOoayeu4F1YCwx2/CfmDSXDbp7GnzlUH+/ul5VGfRg1AoFPsrIThlEBj2xb4CAg==}
+    engines: {node: '>=6.9.0'}
+    peerDependencies:
+      '@babel/core': ^7.0.0-0
+
   '@babel/plugin-transform-optional-chaining@7.28.5':
     resolution: {integrity: sha512-N6fut9IZlPnjPwgiQkXNhb+cT8wQKFlJNqcZkWlcTqkcqx6/kU4ynGmLFoa4LViBSirn05YAwk+sQBbPfxtYzQ==}
     engines: {node: '>=6.9.0'}
@@ -5893,8 +6078,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@cloudflare/workers-types@4.20251111.0':
-    resolution: {integrity: sha512-C8BgQRJlnxcUGycNr8pSKs7WBDQwc43p3pnuGv+Lc0KR2y6raR/9Rs7/lPqQ086ECYSiNqU6IPcbeszKbg4LXA==}
+  '@cloudflare/workers-types@4.20251117.0':
+    resolution: {integrity: sha512-4U6phQE/qbmWuJX/0cTk3iOx9KyhWmo34okKb2BSS09UMRWLCwML+P3dnHxCHnSQij8c0orvdzMr9hyqgJGNgw==}
 
   '@codemirror/autocomplete@6.19.0':
     resolution: {integrity: sha512-61Hfv3cF07XvUxNeC3E7jhG8XNi1Yom1G0lRC936oLnlF+jrbrv8rc/J98XlYzcsAoTVupfsf5fLej1aI8kyIg==}
@@ -6696,8 +6881,8 @@ packages:
     resolution: {integrity: sha512-gAcNqVL6E6V+d7yZbv5pQAPh5ZTE66UB0n2AZB3QaVaQDo9H8yalja3u2v3NE4QTVt03DkpoIuyvzs4i3w/b7A==}
     engines: {node: '>=18'}
 
-  '@google/genai@1.29.1':
-    resolution: {integrity: sha512-Buywpq0A6xf9cOdhiWCi5KUiDBbZkjCH5xbl+xxNQRItoYQgd31p0OKyn5cUnT0YNzC/pAmszqXoOc7kncqfFQ==}
+  '@google/genai@1.28.0':
+    resolution: {integrity: sha512-0pfZ1EWQsM9kINsL+mFKJvpzM6NRHS9t360S1MzKq4JtIwTj/RbsPpC/K5wpKiPy9PC+J+bsz/9gvaL51++KrA==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': ^1.20.1
@@ -6877,6 +7062,10 @@ packages:
     peerDependencies:
       react: '>=18.0.0'
 
+  '@inquirer/ansi@1.0.1':
+    resolution: {integrity: sha512-yqq0aJW/5XPhi5xOAL1xRCpe1eh8UFVgYFpFsjEqmIR8rKLyP+HINvFXwUaxYICflJrVlxnp7lLN6As735kVpw==}
+    engines: {node: '>=18'}
+
   '@inquirer/ansi@1.0.2':
     resolution: {integrity: sha512-S8qNSZiYzFd0wAcyG5AXCvUHC5Sr7xpZ9wZ2py9XR88jUz8wooStVx5M6dRzczbBWjic9NP7+rY0Xi7qqK/aMQ==}
     engines: {node: '>=18'}
@@ -6899,8 +7088,26 @@ packages:
       '@types/node':
         optional: true
 
+  '@inquirer/core@10.3.0':
+    resolution: {integrity: sha512-Uv2aPPPSK5jeCplQmQ9xadnFx2Zhj9b5Dj7bU6ZeCdDNNY11nhYy4btcSdtDguHqCT2h5oNeQTcUNSGGLA7NTA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': 22.13.17
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
   '@inquirer/core@10.3.2':
     resolution: {integrity: sha512-43RTuEbfP8MbKzedNqBrlhhNKVwoK//vUFNW3Q3vZ88BLcrs4kYpGg+B2mm5p2K/HfygoCxuKwJJiv8PbGmE0A==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': 22.13.17
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
+  '@inquirer/editor@4.2.21':
+    resolution: {integrity: sha512-MjtjOGjr0Kh4BciaFShYpZ1s9400idOdvQ5D7u7lE6VztPFoyLcVNE5dXBmEEIQq5zi4B9h2kU+q7AVBxJMAkQ==}
     engines: {node: '>=18'}
     peerDependencies:
       '@types/node': 22.13.17
@@ -6926,6 +7133,15 @@ packages:
       '@types/node':
         optional: true
 
+  '@inquirer/external-editor@1.0.2':
+    resolution: {integrity: sha512-yy9cOoBnx58TlsPrIxauKIFQTiyH+0MK4e97y4sV9ERbI+zDxw7i2hxHLCIEGIE/8PPvDxGhgzIOTSOWcs6/MQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': 22.13.17
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
   '@inquirer/external-editor@1.0.3':
     resolution: {integrity: sha512-RWbSrDiYmO4LbejWY7ttpxczuwQyZLBUyygsA9Nsv95hpzUWwnNTVQmAq3xuh7vNwCp07UTmE5i11XAEExx4RA==}
     engines: {node: '>=18'}
@@ -6934,6 +7150,10 @@ packages:
     peerDependenciesMeta:
       '@types/node':
         optional: true
+
+  '@inquirer/figures@1.0.14':
+    resolution: {integrity: sha512-DbFgdt+9/OZYFM+19dbpXOSeAstPy884FPy1KjDu4anWwymZeOYhMY1mdFri172htv6mvc/uvIAAi7b7tvjJBQ==}
+    engines: {node: '>=18'}
 
   '@inquirer/figures@1.0.15':
     resolution: {integrity: sha512-t2IEY+unGHOzAaVM5Xx6DEWKeXlDDcNPeDyUpsRc6CUhBfU3VQOEl+Vssh7VNp1dR8MdUJBWhuObjXCsVpjN5g==}
@@ -7004,6 +7224,15 @@ packages:
 
   '@inquirer/type@3.0.10':
     resolution: {integrity: sha512-BvziSRxfz5Ov8ch0z/n3oijRSEcEsHnhggm4xFZe93DHcUCTlutlq9Ox4SVENAfcRD22UQq7T/atg9Wr3k09eA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': 22.13.17
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
+  '@inquirer/type@3.0.9':
+    resolution: {integrity: sha512-QPaNt/nmE2bLGQa9b7wwyRJoLZ7pN6rcyXvzU0YCmivmJyq1BVo94G98tStRWkoD1RgDX5C+dPlhhHzNdu/W/w==}
     engines: {node: '>=18'}
     peerDependencies:
       '@types/node': 22.13.17
@@ -7325,8 +7554,8 @@ packages:
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
 
-  '@mastra/core@1.0.0-beta.3':
-    resolution: {integrity: sha512-TB1MDUw2x40UmwAwkIecnE/tADUpPZj+PhroPtAHXIIEouC5e2n0VGrWVOg3QSImwqI4nWn2pmQIqhtvhqZUrw==}
+  '@mastra/core@1.0.0-beta.4':
+    resolution: {integrity: sha512-4h27OL9ywUVXhRUO6vaYGy0OB+tpQnbuvDOU2XxVt6V/sRfE+7llRVZNzQ45ZHFYcbHaoquECjOZUSrqEH6lUg==}
     engines: {node: '>=22.13.0'}
     peerDependencies:
       '@mastra/observability': '>=1.0.0-0 <2.0.0-0'
@@ -7364,15 +7593,28 @@ packages:
     resolution: {integrity: sha512-+uvDktesJmVtiwxMtimq+3f5bKlsan4T7TokxOI7DbxFkApwrRNss5GYEXbInveMTz8LpGth/9Ch5BTwCqrpfA==}
     engines: {node: '>=22.0.0'}
 
+  '@microsoft/api-extractor-model@7.31.1':
+    resolution: {integrity: sha512-Dhnip5OFKbl85rq/ICHBFGhV4RA5UQSl8AC/P/zoGvs+CBudPkatt5kIhMGiYgVPnUWmfR6fcp38+1AFLYNtUw==}
+
   '@microsoft/api-extractor-model@7.32.0':
     resolution: {integrity: sha512-QIVJSreb8fGGJy1Qx0yzGVXxvHJN1WXgkFNHFheVv1iBJNqgvp+xeT3ienJmRwXmPPc5Es/cxBrXtKZJR3i7iw==}
+
+  '@microsoft/api-extractor@7.53.1':
+    resolution: {integrity: sha512-bul5eTNxijLdDBqLye74u9494sRmf+9QULtec9Od0uHnifahGeNt8CC4/xCdn7mVyEBrXIQyQ5+sc4Uc0QfBSA==}
+    hasBin: true
 
   '@microsoft/api-extractor@7.55.0':
     resolution: {integrity: sha512-TYc5OtAK/9E3HGgd2bIfSjQDYIwPc0dysf9rPiwXZGsq916I6W2oww9bhm1OxPOeg6rMfOX3PoroGd7oCryYog==}
     hasBin: true
 
+  '@microsoft/tsdoc-config@0.17.1':
+    resolution: {integrity: sha512-UtjIFe0C6oYgTnad4q1QP4qXwLhe6tIpNTRStJ2RZEPIkqQPREAwE5spzVxsdn9UaEMUqhh0AqSx3X4nWAKXWw==}
+
   '@microsoft/tsdoc-config@0.18.0':
     resolution: {integrity: sha512-8N/vClYyfOH+l4fLkkr9+myAoR6M7akc8ntBJ4DJdWH2b09uVfr71+LTMpNyG19fNqWDg8KEDZhx5wxuqHyGjw==}
+
+  '@microsoft/tsdoc@0.15.1':
+    resolution: {integrity: sha512-4aErSrCR/On/e5G2hDP0wjooqDdauzEbIq8hIkIe5pXV0rtWJZvdCEKL0ykZxex+IxIwBp0eGeV48hQN07dXtw==}
 
   '@microsoft/tsdoc@0.16.0':
     resolution: {integrity: sha512-xgAyonlVVS+q7Vc7qLW0UrJU7rSFcETRWsqdXZtjzRU8dF+6CkozTK4V4y1LwOX7j8r/vHphjDeMeGI4tNGeGA==}
@@ -7494,6 +7736,10 @@ packages:
   '@noble/hashes@1.8.0':
     resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
     engines: {node: ^14.21.3 || >=16}
+
+  '@noble/hashes@2.0.1':
+    resolution: {integrity: sha512-XlOlEbQcE9fmuXxrVTXCTlG2nlRXa9Rj3rr5Ue/+tX+nmkgbX720YHh0VR3hBF9xDvwnb8D2shVGOwNx+ulArw==}
+    engines: {node: '>= 20.19.0'}
 
   '@node-rs/xxhash-android-arm-eabi@1.7.6':
     resolution: {integrity: sha512-ptmfpFZ8SgTef58Us+0HsZ9BKhyX/gZYbhLkuzPt7qUoMqMSJK85NC7LEgzDgjUiG+S5GahEEQ9/tfh9BVvKhw==}
@@ -7668,13 +7914,6 @@ packages:
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
-
-  '@openrouter/ai-sdk-provider@1.2.0':
-    resolution: {integrity: sha512-stuIwq7Yb7DNmk3GuCtz+oS3nZOY4TXEV3V5KsknDGQN7Fpu3KRMQVWRc1J073xKdf0FC9EHOctSyzsACmp5Ag==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      ai: ^5.0.0
-      zod: ^3.24.1 || ^v4
 
   '@openrouter/ai-sdk-provider@1.2.3':
     resolution: {integrity: sha512-a6Nc8dPRHakRH9966YJ/HZJhLOds7DuPTscNZDoAr+Aw+tEFUlacSJMvb/b3gukn74mgbuaJRji9YOn62ipfVg==}
@@ -8272,6 +8511,11 @@ packages:
   '@optimize-lodash/transform@3.0.6':
     resolution: {integrity: sha512-9+qMSaDpahC0+vX2ChM46/ls6a5Ankqs6RTLrHSaFpm7o1mFanP82e+jm9/0o5D660ueK8dWJGPCXQrBxBNNWA==}
     engines: {node: '>= 12'}
+
+  '@paralleldrive/cuid2@2.3.0':
+    resolution: {integrity: sha512-dnBUdZHawCgqpp8bJhzFDAdkzci00nCN47EiW6TxD9OVfP+gh4qVnstXRRnBKW3hm9vpa+P7cod6jiBJdf7V+g==}
+    deprecated: this version is deprecated because it should have been a major bump
+    hasBin: true
 
   '@paralleldrive/cuid2@2.3.1':
     resolution: {integrity: sha512-XO7cAxhnTZl0Yggq6jOgjiOHhbgcO4NqFqwSmQpjK3b6TEE6Uj/jfSk6wzYyemh3+I0sHirKSetjQwn5cZktFw==}
@@ -9078,6 +9322,14 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@rushstack/node-core-library@5.17.0':
+    resolution: {integrity: sha512-24vt1GbHN6kyIglRMTVpyEiNRRRJK8uZHc1XoGAhmnTDKnrWet8OmOpImMswJIe6gM78eV8cMg1HXwuUHkSSgg==}
+    peerDependencies:
+      '@types/node': 22.13.17
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
   '@rushstack/node-core-library@5.18.0':
     resolution: {integrity: sha512-XDebtBdw5S3SuZIt+Ra2NieT8kQ3D2Ow1HxhDQ/2soinswnOu9e7S69VSwTOLlQnx5mpWbONu+5JJjDxMAb6Fw==}
     peerDependencies:
@@ -9097,6 +9349,14 @@ packages:
   '@rushstack/rig-package@0.6.0':
     resolution: {integrity: sha512-ZQmfzsLE2+Y91GF15c65L/slMRVhF6Hycq04D4TwtdGaUAbIXXg9c5pKA5KFU7M4QMaihoobp9JJYpYcaY3zOw==}
 
+  '@rushstack/terminal@0.19.1':
+    resolution: {integrity: sha512-jsBuSad67IDVMO2yp0hDfs0OdE4z3mDIjIL2pclDT3aEJboeZXE85e1HjuD0F6JoW3XgHvDwoX+WOV+AVTDQeA==}
+    peerDependencies:
+      '@types/node': 22.13.17
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
   '@rushstack/terminal@0.19.3':
     resolution: {integrity: sha512-0P8G18gK9STyO+CNBvkKPnWGMxESxecTYqOcikHOVIHXa9uAuTK+Fw8TJq2Gng1w7W6wTC9uPX6hGNvrMll2wA==}
     peerDependencies:
@@ -9105,8 +9365,14 @@ packages:
       '@types/node':
         optional: true
 
+  '@rushstack/ts-command-line@5.1.1':
+    resolution: {integrity: sha512-HPzFsUcr+wZ3oQI08Ec/E6cuiAVHKzrXZGHhwiwIGygAFiqN5QzX+ff30n70NU2WyE26CykgMwBZZSSyHCJrzA==}
+
   '@rushstack/ts-command-line@5.1.3':
     resolution: {integrity: sha512-Kdv0k/BnnxIYFlMVC1IxrIS0oGQd4T4b7vKfx52Y2+wk2WZSDFIvedr7JrhenzSlm3ou5KwtoTGTGd5nbODRug==}
+
+  '@scarf/scarf@1.4.0':
+    resolution: {integrity: sha512-xxeapPiUXdZAE3che6f3xogoJPeZgig6omHEy1rIY5WVsB3H2BHNnZH+gHG6x91SCWyQCzWGsuL2Hh3ClO5/qQ==}
 
   '@sec-ant/readable-stream@0.4.1':
     resolution: {integrity: sha512-831qok9r2t8AlxLko40y2ebgSDhenenCatLVeW/uBtnHPyhHOvG0C7TvfgecV+wHzIm5KUICgzmVpWS+IMEAeg==}
@@ -9669,8 +9935,14 @@ packages:
   '@types/express-serve-static-core@4.19.7':
     resolution: {integrity: sha512-FvPtiIf1LfhzsaIXhv/PHan/2FeQBbtBDtfX2QfvPxdUelMDEckK08SM6nqo1MIZY3RUlfA+HV8+hFUSio78qg==}
 
+  '@types/express-serve-static-core@5.1.0':
+    resolution: {integrity: sha512-jnHMsrd0Mwa9Cf4IdOzbz543y4XJepXrbia2T4b6+spXC2We3t1y6K44D3mR8XMFSXMCf3/l7rCgddfx7UNVBA==}
+
   '@types/express@4.17.23':
     resolution: {integrity: sha512-Crp6WY9aTYP3qPi2wGDo9iUe/rceX01UMhnF1jmwDcKCFM6cx7YhGP/Mpr3y9AASpfHixIG0E6azCcL5OcDHsQ==}
+
+  '@types/express@5.0.5':
+    resolution: {integrity: sha512-LuIQOcb6UmnF7C1PCFmEU1u2hmiHL43fgFQX67sN3H4Z+0Yk0Neo++mFsBjhOAuLzvlQeqAAkeDOZrJs9rzumQ==}
 
   '@types/fs-extra@11.0.4':
     resolution: {integrity: sha512-yTbItCNreRooED33qjunPthRcSjERP1r4MqCZc7wv0u2sUkzTFp45tgUfS5+r7FrZPdmCCNflLhVSP/o+SemsQ==}
@@ -9827,6 +10099,9 @@ packages:
 
   '@types/string-similarity@4.0.2':
     resolution: {integrity: sha512-LkJQ/jsXtCVMK+sKYAmX/8zEq+/46f1PTQw7YtmQwb74jemS1SlNLmARM2Zml9DgdDTWKAtc5L13WorpHPDjDA==}
+
+  '@types/swagger-ui-express@4.1.8':
+    resolution: {integrity: sha512-AhZV8/EIreHFmBV5wAs0gzJUNq9JbbSXgJLQubCC0jtIo6prnI9MIRRxnU4MZX9RB9yXxF1V4R7jtLl/Wcj31g==}
 
   '@types/tedious@4.0.14':
     resolution: {integrity: sha512-KHPsfX/FoVbUGbyYvk1q9MMQHLPeRZhRJZdO45Q4YjvFkv4hMNghCWTvy7rdKessBsmtz4euWCWAB6/tVpI1Iw==}
@@ -10090,11 +10365,11 @@ packages:
     peerDependencies:
       vite: ^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0
 
-  '@vitest/coverage-v8@4.0.8':
-    resolution: {integrity: sha512-wQgmtW6FtPNn4lWUXi8ZSYLpOIb92j3QCujxX3sQ81NTfQ/ORnE0HtK7Kqf2+7J9jeveMGyGyc4NWc5qy3rC4A==}
+  '@vitest/coverage-v8@4.0.12':
+    resolution: {integrity: sha512-d+w9xAFJJz6jyJRU4BUU7MH409Ush7FWKNkxJU+jASKg6WX33YT0zc+YawMR1JesMWt9QRFQY/uAD3BTn23FaA==}
     peerDependencies:
-      '@vitest/browser': 4.0.8
-      vitest: 4.0.8
+      '@vitest/browser': 4.0.12
+      vitest: 4.0.12
     peerDependenciesMeta:
       '@vitest/browser':
         optional: true
@@ -10115,8 +10390,8 @@ packages:
   '@vitest/expect@3.2.4':
     resolution: {integrity: sha512-Io0yyORnB6sikFlt8QW5K7slY4OjqNX9jmJQ02QDda8lyM6B5oNgVWoSoKPac8/kgnCUzuHQKrSLtu/uOqqrig==}
 
-  '@vitest/expect@4.0.8':
-    resolution: {integrity: sha512-Rv0eabdP/xjAHQGr8cjBm+NnLHNoL268lMDK85w2aAGLFoVKLd8QGnVon5lLtkXQCoYaNL0wg04EGnyKkkKhPA==}
+  '@vitest/expect@4.0.12':
+    resolution: {integrity: sha512-is+g0w8V3/ZhRNrRizrJNr8PFQKwYmctWlU4qg8zy5r9aIV5w8IxXLlfbbxJCwSpsVl2PXPTm2/zruqTqz3QSg==}
 
   '@vitest/mocker@3.2.4':
     resolution: {integrity: sha512-46ryTE9RZO/rfDd7pEqFl7etuyzekzEhUbTW3BvmeO/BcCMEgq59BKhek3dXDWgAj4oMK6OZi+vRr1wPW6qjEQ==}
@@ -10129,8 +10404,8 @@ packages:
       vite:
         optional: true
 
-  '@vitest/mocker@4.0.8':
-    resolution: {integrity: sha512-9FRM3MZCedXH3+pIh+ME5Up2NBBHDq0wqwhOKkN4VnvCiKbVxddqH9mSGPZeawjd12pCOGnl+lo/ZGHt0/dQSg==}
+  '@vitest/mocker@4.0.12':
+    resolution: {integrity: sha512-GsmA/tD5Ht3RUFoz41mZsMU1AXch3lhmgbTnoSPTdH231g7S3ytNN1aU0bZDSyxWs8WA7KDyMPD5L4q6V6vj9w==}
     peerDependencies:
       msw: ^2.4.9
       vite: ^6.0.0 || ^7.0.0-0
@@ -10143,31 +10418,42 @@ packages:
   '@vitest/pretty-format@3.2.4':
     resolution: {integrity: sha512-IVNZik8IVRJRTr9fxlitMKeJeXFFFN0JaB9PHPGQ8NKQbGpfjlTx9zO4RefN8gp7eqjNy8nyK3NZmBzOPeIxtA==}
 
-  '@vitest/pretty-format@4.0.8':
-    resolution: {integrity: sha512-qRrjdRkINi9DaZHAimV+8ia9Gq6LeGz2CgIEmMLz3sBDYV53EsnLZbJMR1q84z1HZCMsf7s0orDgZn7ScXsZKg==}
+  '@vitest/pretty-format@4.0.12':
+    resolution: {integrity: sha512-R7nMAcnienG17MvRN8TPMJiCG8rrZJblV9mhT7oMFdBXvS0x+QD6S1G4DxFusR2E0QIS73f7DqSR1n87rrmE+g==}
 
-  '@vitest/runner@4.0.8':
-    resolution: {integrity: sha512-mdY8Sf1gsM8hKJUQfiPT3pn1n8RF4QBcJYFslgWh41JTfrK1cbqY8whpGCFzBl45LN028g0njLCYm0d7XxSaQQ==}
+  '@vitest/runner@3.2.4':
+    resolution: {integrity: sha512-oukfKT9Mk41LreEW09vt45f8wx7DordoWUZMYdY/cyAk7w5TWkTRCNZYF7sX7n2wB7jyGAl74OxgwhPgKaqDMQ==}
 
-  '@vitest/snapshot@4.0.8':
-    resolution: {integrity: sha512-Nar9OTU03KGiubrIOFhcfHg8FYaRaNT+bh5VUlNz8stFhCZPNrJvmZkhsr1jtaYvuefYFwK2Hwrq026u4uPWCw==}
+  '@vitest/runner@4.0.12':
+    resolution: {integrity: sha512-hDlCIJWuwlcLumfukPsNfPDOJokTv79hnOlf11V+n7E14rHNPz0Sp/BO6h8sh9qw4/UjZiKyYpVxK2ZNi+3ceQ==}
+
+  '@vitest/snapshot@3.2.4':
+    resolution: {integrity: sha512-dEYtS7qQP2CjU27QBC5oUOxLE/v5eLkGqPE0ZKEIDGMs4vKWe7IjgLOeauHsR0D5YuuycGRO5oSRXnwnmA78fQ==}
+
+  '@vitest/snapshot@4.0.12':
+    resolution: {integrity: sha512-2jz9zAuBDUSbnfyixnyOd1S2YDBrZO23rt1bicAb6MA/ya5rHdKFRikPIDpBj/Dwvh6cbImDmudegnDAkHvmRQ==}
 
   '@vitest/spy@3.2.4':
     resolution: {integrity: sha512-vAfasCOe6AIK70iP5UD11Ac4siNUNJ9i/9PZ3NKx07sG6sUxeag1LWdNrMWeKKYBLlzuK+Gn65Yd5nyL6ds+nw==}
 
-  '@vitest/spy@4.0.8':
-    resolution: {integrity: sha512-nvGVqUunyCgZH7kmo+Ord4WgZ7lN0sOULYXUOYuHr55dvg9YvMz3izfB189Pgp28w0vWFbEEfNc/c3VTrqrXeA==}
+  '@vitest/spy@4.0.12':
+    resolution: {integrity: sha512-GZjI9PPhiOYNX8Nsyqdw7JQB+u0BptL5fSnXiottAUBHlcMzgADV58A7SLTXXQwcN1yZ6gfd1DH+2bqjuUlCzw==}
 
-  '@vitest/ui@4.0.8':
-    resolution: {integrity: sha512-F9jI5rSstNknPlTlPN2gcc4gpbaagowuRzw/OJzl368dvPun668Q182S8Q8P9PITgGCl5LAKXpzuue106eM4wA==}
+  '@vitest/ui@3.2.4':
+    resolution: {integrity: sha512-hGISOaP18plkzbWEcP/QvtRW1xDXF2+96HbEX6byqQhAUbiS5oH6/9JwW+QsQCIYON2bI6QZBF+2PvOmrRZ9wA==}
     peerDependencies:
-      vitest: 4.0.8
+      vitest: 3.2.4
+
+  '@vitest/ui@4.0.12':
+    resolution: {integrity: sha512-RCqeApCnbwd5IFvxk6OeKMXTvzHU/cVqY8HAW0gWk0yAO6wXwQJMKhDfDtk2ss7JCy9u7RNC3kyazwiaDhBA/g==}
+    peerDependencies:
+      vitest: 4.0.12
 
   '@vitest/utils@3.2.4':
     resolution: {integrity: sha512-fB2V0JFrQSMsCo9HiSq3Ezpdv4iYaXRG1Sx8edX3MwxfyNn83mKiGzOcH+Fkxt4MHxr3y42fQi1oeAInqgX2QA==}
 
-  '@vitest/utils@4.0.8':
-    resolution: {integrity: sha512-pdk2phO5NDvEFfUTxcTP8RFYjVj/kfLSPIN5ebP2Mu9kcIMeAQTbknqcFEyBcC4z2pJlJI9aS5UQjcYfhmKAow==}
+  '@vitest/utils@4.0.12':
+    resolution: {integrity: sha512-DVS/TLkLdvGvj1avRy0LSmKfrcI9MNFvNGN6ECjTUHWJdlcgPDOXhjMis5Dh7rBH62nAmSXnkPbE+DZ5YD75Rw==}
 
   '@volar/language-core@2.4.23':
     resolution: {integrity: sha512-hEEd5ET/oSmBC6pi1j6NaNYRWoAiDhINbT8rmwtINugR39loROSlufGdYMF9TaKGfz+ViGs1Idi3mAhnuPcoGQ==}
@@ -10557,6 +10843,10 @@ packages:
   base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
 
+  baseline-browser-mapping@2.8.19:
+    resolution: {integrity: sha512-zoKGUdu6vb2jd3YOq0nnhEDQVbPcHhco3UImJrv5dSkvxTc2pl2WjOPsjZXDwPDSl5eghIMuY3R6J9NDKF3KcQ==}
+    hasBin: true
+
   baseline-browser-mapping@2.8.28:
     resolution: {integrity: sha512-gYjt7OIqdM0PcttNYP2aVrr2G0bMALkBaoehD4BuRGjAOtipg0b6wHg1yNL+s5zSnLZZrGHOw4IrND8CD+3oIQ==}
     hasBin: true
@@ -10632,6 +10922,11 @@ packages:
     hasBin: true
     peerDependencies:
       zod: ^3.25.34
+
+  browserslist@4.26.3:
+    resolution: {integrity: sha512-lAUU+02RFBuCKQPj/P6NgjlbCnLBMp4UtgTx7vNHd3XSIJF87s9a5rA3aH2yw3GS9DqZAUbOtZdCCiZeVRqt0w==}
+    engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
+    hasBin: true
 
   browserslist@4.28.0:
     resolution: {integrity: sha512-tbydkR/CxfMwelN0vwdP/pLkDwyAASZ+VfWm4EOwlB6SWhx1sYnWLqo8N5j0rAzPfzfRaxt0mM/4wPU/Su84RQ==}
@@ -10718,8 +11013,11 @@ packages:
     resolution: {integrity: sha512-8WB3Jcas3swSvjIeA2yvCJ+Miyz5l1ZmB6HFb9R1317dt9LCQoswg/BGrmAmkWVEszSrrg4RwmO46qIm2OEnSA==}
     engines: {node: '>=16'}
 
-  caniuse-lite@1.0.30001754:
-    resolution: {integrity: sha512-x6OeBXueoAceOmotzx3PO4Zpt4rzpeIFsSr6AAePTZxSkXiYDUmpypEl7e2+8NCd9bD7bXjqyef8CJYPC1jfxg==}
+  caniuse-lite@1.0.30001751:
+    resolution: {integrity: sha512-A0QJhug0Ly64Ii3eIqHu5X51ebln3k4yTUkY1j8drqpWHVreg/VLijN48cZ1bYPiqOQuqpkIKnzr/Ul8V+p6Cw==}
+
+  caniuse-lite@1.0.30001755:
+    resolution: {integrity: sha512-44V+Jm6ctPj7R52Na4TLi3Zri4dWUljJd+RDm+j8LtNCc/ihLCT+X1TzoOAkRETEWqjuLnh9581Tl80FvK7jVA==}
 
   canonicalize@1.0.8:
     resolution: {integrity: sha512-0CNTVCLZggSh7bc5VkX5WWPWO+cyZbNd07IHIsSXLia/eAq+r836hgk+8BKoEh7949Mda87VUOitx5OddVj64A==}
@@ -10781,6 +11079,9 @@ packages:
 
   character-reference-invalid@2.0.1:
     resolution: {integrity: sha512-iBZ4F4wRbyORVsu0jPV7gXkOsGYjGHPmAyv+HiHG8gi5PtC9KI2j1+v8/tlibRvjoWX027ypmG/n0HtO5t7unw==}
+
+  chardet@2.1.0:
+    resolution: {integrity: sha512-bNFETTG/pM5ryzQ9Ad0lJOTa6HWD/YsScAR3EnCPZRPlQh77JocYktSHOUHelyhm8IARL+o4c4F1bP5KVOjiRA==}
 
   chardet@2.1.1:
     resolution: {integrity: sha512-PsezH1rqdV9VvyNhxxOW32/d75r01NY7TQCmOqomRo15ZSOKbpTFVsfjghxo6JloQUCGnH4k1LGu0R4yCLlWQQ==}
@@ -11400,8 +11701,11 @@ packages:
   electrodb@3.5.0:
     resolution: {integrity: sha512-msJyMTQmx6AC/otRKSre0rktE3E0RUw7ez9u2F25ZU4iXEqzxeu/OyRJcR53hh+jv4Fefi/3F9R+JopgIUZJHQ==}
 
-  electron-to-chromium@1.5.252:
-    resolution: {integrity: sha512-53uTpjtRgS7gjIxZ4qCgFdNO2q+wJt/Z8+xAvxbCqXPJrY6h7ighUkadQmNMXH96crtpa6gPFNP7BF4UBGDuaA==}
+  electron-to-chromium@1.5.237:
+    resolution: {integrity: sha512-icUt1NvfhGLar5lSWH3tHNzablaA5js3HVHacQimfP8ViEBOQv+L7DKEuHdbTZ0SKCO1ogTJTIL1Gwk9S6Qvcg==}
+
+  electron-to-chromium@1.5.254:
+    resolution: {integrity: sha512-DcUsWpVhv9svsKRxnSCZ86SjD+sp32SGidNB37KpqXJncp1mfUgKbHvBomE89WJDbfVKw1mdv5+ikrvd43r+Bg==}
 
   elevenlabs@1.59.0:
     resolution: {integrity: sha512-OVKOd+lxNya8h4Rn5fcjv00Asd+DGWfTT6opGrQ16sTI+1HwdLn/kYtjl8tRMhDXbNmksD/9SBRKjb9neiUuVg==}
@@ -11467,6 +11771,9 @@ packages:
 
   err-code@2.0.3:
     resolution: {integrity: sha512-2bmlRpNKBxT/CRmPOlyISQpNj+qSeYvcym/uT0Jx2bMOlKLtSy1ZmLuVxSEKKyor/N5yhvp/ZiG1oE3DEYMSFA==}
+
+  error-causes@3.0.2:
+    resolution: {integrity: sha512-i0B8zq1dHL6mM85FGoxaJnVtx6LD5nL2v0hlpGdntg5FOSyzQ46c9lmz5qx0xRS2+PWHGOHcYxGIBC5Le2dRMw==}
 
   error-stack-parser-es@1.0.5:
     resolution: {integrity: sha512-5qucVt2XcuGMcEGgWI7i+yZpmpByQ8J1lHhcL7PwqCwu9FPP3VUXzT4ltHe5i2z9dePwEHcDVOAfSnHsOlCXRA==}
@@ -12322,6 +12629,10 @@ packages:
       zod-openapi:
         optional: true
 
+  hono@4.10.4:
+    resolution: {integrity: sha512-YG/fo7zlU3KwrBL5vDpWKisLYiM+nVstBQqfr7gCPbSYURnNEP9BDxEMz8KfsDR9JX0lJWDRNc6nXX31v7ZEyg==}
+    engines: {node: '>=16.9.0'}
+
   hono@4.10.6:
     resolution: {integrity: sha512-BIdolzGpDO9MQ4nu3AUuDwHZZ+KViNm+EZ75Ae55eMXMqLVhDFqEMXxtUe9Qh8hjL+pIna/frs2j6Y2yD5Ua/g==}
     engines: {node: '>=16.9.0'}
@@ -12849,8 +13160,8 @@ packages:
   jose@5.6.3:
     resolution: {integrity: sha512-1Jh//hEEwMhNYPDDLwXHa2ePWgWiFNNUadVmguAAw2IJ6sj9mNxV5tGXJNqlMkJAybF6Lgw1mISDxTePP/187g==}
 
-  jose@6.1.1:
-    resolution: {integrity: sha512-GWSqjfOPf4cWOkBzw5THBjtGPhXKqYnfRBzh4Ni+ArTrQQ9unvmsA3oFLqaYKoKe5sjWmGu5wVKg9Ft1i+LQfg==}
+  jose@6.1.2:
+    resolution: {integrity: sha512-MpcPtHLE5EmztuFIqB0vzHAWJPpmN1E6L4oo+kze56LIs3MyXIj9ZHMDxqOvkP38gBR7K1v3jqd4WU2+nrfONQ==}
 
   joycon@3.1.1:
     resolution: {integrity: sha512-34wB/Y7MW7bzjKRjUKTa46I2Z7eV62Rkhva+KkopW7Qvv/OSWBqvkSY7vusOPrNuZcUG3tApvdVgNB8POj3SPw==}
@@ -13289,6 +13600,9 @@ packages:
     resolution: {integrity: sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ==}
     hasBin: true
 
+  magic-string@0.30.19:
+    resolution: {integrity: sha512-2N21sPY9Ws53PZvsEpVtNuSW+ScYbQdp4b9qUaL+9QkHUrGFKo56Lg9Emg5s9V/qrtNBmiR01sYhUOwu3H+VOw==}
+
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
 
@@ -13375,8 +13689,8 @@ packages:
     resolution: {integrity: sha512-aisnrDP4GNe06UcKFnV5bfMNPBUw4jsLGaWwWfnH3v02GnBuXX2MCVn5RbrWo0j3pczUilYblq7fQ7Nw2t5XKw==}
     engines: {node: '>= 0.8'}
 
-  memfs@4.50.0:
-    resolution: {integrity: sha512-N0LUYQMUA1yS5tJKmMtU9yprPm6ZIg24yr/OVv/7t6q0kKDIho4cBbXRi1XKttUmNYDYgF/q45qrKE/UhGO0CA==}
+  memfs@4.51.0:
+    resolution: {integrity: sha512-4zngfkVM/GpIhC8YazOsM6E8hoB33NP0BCESPOA6z7qaL6umPJNqkO8CNYaLV2FB2MV6H1O3x2luHHOSqppv+A==}
 
   memory-pager@1.5.0:
     resolution: {integrity: sha512-ZS4Bp4r/Zoeq6+NLJpP+0Zzm0pR8whtGPf1XExKLJBAczGMnSi3It14OiNCStjQjM6NU1okjQGSxgEZN8eBYKg==}
@@ -13825,6 +14139,9 @@ packages:
 
   node-ical@0.20.1:
     resolution: {integrity: sha512-NrXgzDJd6XcyX9kDMJVA3xYCZmntY7ghA2BOdBeYr3iu8tydHOAb+68jPQhF9V2CRQ0/386X05XhmLzQUN0+Hw==}
+
+  node-releases@2.0.26:
+    resolution: {integrity: sha512-S2M9YimhSjBSvYnlr5/+umAnPHE++ODwt5e2Ij6FoX45HA/s4vHdkDx1eax2pAPeAOqu4s9b7ppahsyEFdVqQA==}
 
   node-releases@2.0.27:
     resolution: {integrity: sha512-nmh3lCkYZ3grZvqcCH+fjmQ7X+H0OeZgP40OierEaAptX4XofMh5kwNbWh7lBduUzCcV/8kZ+NDLCwm2iorIlA==}
@@ -15389,6 +15706,9 @@ packages:
     resolution: {integrity: sha512-1tB5mhVo7U+ETBKNf92xT4hrQa3pm0MZ0PQvuDnWgAAGHDsfp4lPSpiS6psrSiet87wyGPh9ft6wmhOMQ0hDiw==}
     engines: {node: '>=14.16'}
 
+  strip-literal@3.1.0:
+    resolution: {integrity: sha512-8r3mkIM/2+PpjHoOtiAW8Rg3jJLHaV7xPwG+YRGrv6FP0wwk/toTpATxWYOW0BKdWwl82VT2tFYi5DlROa0Mxg==}
+
   strnum@1.1.2:
     resolution: {integrity: sha512-vrN+B7DBIoTTZjnPNewwhx6cBA/H+IS7rfW68n7XxC1y7uoiGQBxaKzqucGUgavX15dJgiGztLJ8vxuEzwqBdA==}
 
@@ -15442,6 +15762,15 @@ packages:
     resolution: {integrity: sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==}
     engines: {node: '>= 0.4'}
 
+  swagger-ui-dist@5.30.2:
+    resolution: {integrity: sha512-HWCg1DTNE/Nmapt+0m2EPXFwNKNeKK4PwMjkwveN/zn1cV2Kxi9SURd+m0SpdcSgWEK/O64sf8bzXdtUhigtHA==}
+
+  swagger-ui-express@5.0.1:
+    resolution: {integrity: sha512-SrNU3RiBGTLLmFU8GIJdOdanJTl4TOmT27tt3bWWHppqYmAZ6IDuEuBvMU6nZq0zLEe6b/1rACXCgLZqO6ZfrA==}
+    engines: {node: '>= v0.10.32'}
+    peerDependencies:
+      express: '>=4.0.0 || >=5.0.0-beta'
+
   swpm@2.6.0:
     resolution: {integrity: sha512-uhGq6+WHmZY/qP4nTE/LgvAnjQGizZLZtEtMfhswiboICDnEsiB7Ko/DSUiPQMHe0051g2gmjCbH/aflms0QVw==}
     engines: {node: '>=16'}
@@ -15483,6 +15812,9 @@ packages:
     resolution: {integrity: sha512-6A2rnmW5xZMdw11LYjhcI5846rt9pbLSabY5XPxo+XWdxwZaFEn47Go4NzFiHu9sNNmr/kXivP1vStfvMaK1GQ==}
     engines: {node: '>=14.0.0'}
     hasBin: true
+
+  tailwindcss@4.1.15:
+    resolution: {integrity: sha512-k2WLnWkYFkdpRv+Oby3EBXIyQC8/s1HOFMBUViwtAh6Z5uAozeUSMQlIsn/c6Q2iJzqG6aJT3wdPaRNj70iYxQ==}
 
   tailwindcss@4.1.17:
     resolution: {integrity: sha512-j9Ee2YjuQqYT9bbRTfTZht9W/ytp5H+jJpZKiYdP/bpnXARAuELt9ofP0lPnmHjbga7SNQIxdTAXCmtKVYjN+Q==}
@@ -15567,6 +15899,10 @@ packages:
   tinyglobby@0.2.15:
     resolution: {integrity: sha512-j2Zq4NyQYG5XMST4cbs02Ak8iJUdxRM0XI5QyxXuZOzKOINmWurp3smXu3y5wDcJrptwpSjgXHzIQxR0omXljQ==}
     engines: {node: '>=12.0.0'}
+
+  tinypool@1.1.1:
+    resolution: {integrity: sha512-Zba82s87IFq9A9XmjiX5uZA/ARWDrB03OHlq+Vw1fSdt0I+4/Kutwy8BP4Y/y/aORMo61FQ0vIb5j44vSo5Pkg==}
+    engines: {node: ^18.0.0 || >=20.0.0}
 
   tinyrainbow@2.0.0:
     resolution: {integrity: sha512-op4nsTR47R6p0vMUUoYl/a+ljLFVtlfaXkLQmqfLR1qHma1h/ysYk4hEXZ880bf2CYgTskvTa/e196Vd5dDQXw==}
@@ -15927,6 +16263,12 @@ packages:
   until-async@3.0.2:
     resolution: {integrity: sha512-IiSk4HlzAMqTUseHHe3VhIGyuFmN90zMTpD3Z3y8jeQbzLIq500MVM7Jq2vUAnTKAFPJrqwkzr6PoTcPhGcOiw==}
 
+  update-browserslist-db@1.1.3:
+    resolution: {integrity: sha512-UxhIZQ+QInVdunkDAaiazvvT/+fXL5Osr0JZlJulepYu6Jd7qJtDZjlur0emRlT71EN3ScPoE7gvsuIKKNavKw==}
+    hasBin: true
+    peerDependencies:
+      browserslist: '>= 4.21.0'
+
   update-browserslist-db@1.1.4:
     resolution: {integrity: sha512-q0SPT4xyU84saUX+tomz1WLkxUbuaJnR1xWt17M7fJtEJigJeWUNGUqrauFXsHnqev9y9JTRGwk13tFBuKby4A==}
     hasBin: true
@@ -16044,6 +16386,11 @@ packages:
   vfile@6.0.3:
     resolution: {integrity: sha512-KzIbH/9tXat2u30jf+smMwFCsno4wHVdNmzFyL+T/L3UGqqk6JKfVqOFOZEpZSHADH1k40ab6NUIXZq422ov3Q==}
 
+  vite-node@3.2.4:
+    resolution: {integrity: sha512-EbKSKh+bh1E1IFxeO0pg1n4dvoOTt0UDiXMd/qn++r98+jPO1xtJilvXldeuQ8giIB5IkpjCgMleHMNEsGH6pg==}
+    engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
+    hasBin: true
+
   vite-plugin-dts@4.5.4:
     resolution: {integrity: sha512-d4sOM8M/8z7vRXHHq/ebbblfaxENjogAAekcfcDCCwAyvGqnPrc7f4NZbvItS+g4WTgerW0xDwSz5qz11JT3vg==}
     peerDependencies:
@@ -16098,22 +16445,53 @@ packages:
       yaml:
         optional: true
 
-  vitest@4.0.8:
-    resolution: {integrity: sha512-urzu3NCEV0Qa0Y2PwvBtRgmNtxhj5t5ULw7cuKhIHh3OrkKTLlut0lnBOv9qe5OvbkMH2g38G7KPDCTpIytBVg==}
-    engines: {node: ^20.0.0 || ^22.0.0 || >=24.0.0}
+  vitest@3.2.4:
+    resolution: {integrity: sha512-LUCP5ev3GURDysTWiP47wRRUpLKMOfPh+yKTx3kVIEiu5KOMeqzpnYNsKyOoVrULivR8tLcks4+lga33Whn90A==}
+    engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
     hasBin: true
     peerDependencies:
       '@edge-runtime/vm': '*'
       '@types/debug': ^4.1.12
       '@types/node': 22.13.17
-      '@vitest/browser-playwright': 4.0.8
-      '@vitest/browser-preview': 4.0.8
-      '@vitest/browser-webdriverio': 4.0.8
-      '@vitest/ui': 4.0.8
+      '@vitest/browser': 3.2.4
+      '@vitest/ui': 3.2.4
       happy-dom: '*'
       jsdom: '*'
     peerDependenciesMeta:
       '@edge-runtime/vm':
+        optional: true
+      '@types/debug':
+        optional: true
+      '@types/node':
+        optional: true
+      '@vitest/browser':
+        optional: true
+      '@vitest/ui':
+        optional: true
+      happy-dom:
+        optional: true
+      jsdom:
+        optional: true
+
+  vitest@4.0.12:
+    resolution: {integrity: sha512-pmW4GCKQ8t5Ko1jYjC3SqOr7TUKN7uHOHB/XGsAIb69eYu6d1ionGSsb5H9chmPf+WeXt0VE7jTXsB1IvWoNbw==}
+    engines: {node: ^20.0.0 || ^22.0.0 || >=24.0.0}
+    hasBin: true
+    peerDependencies:
+      '@edge-runtime/vm': '*'
+      '@opentelemetry/api': ^1.9.0
+      '@types/debug': ^4.1.12
+      '@types/node': 22.13.17
+      '@vitest/browser-playwright': 4.0.12
+      '@vitest/browser-preview': 4.0.12
+      '@vitest/browser-webdriverio': 4.0.12
+      '@vitest/ui': 4.0.12
+      happy-dom: '*'
+      jsdom: '*'
+    peerDependenciesMeta:
+      '@edge-runtime/vm':
+        optional: true
+      '@opentelemetry/api':
         optional: true
       '@types/debug':
         optional: true
@@ -16520,20 +16898,13 @@ snapshots:
       '@vercel/oidc': 3.0.3
       zod: 3.25.76
 
-  '@ai-sdk/gateway@2.0.9(zod@4.1.12)':
-    dependencies:
-      '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.17(zod@4.1.12)
-      '@vercel/oidc': 3.0.3
-      zod: 4.1.12
-
   '@ai-sdk/google@1.2.22(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
       '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
       zod: 3.25.76
 
-  '@ai-sdk/google@2.0.39(zod@3.25.76)':
+  '@ai-sdk/google@2.0.40(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
       '@ai-sdk/provider-utils': 3.0.17(zod@3.25.76)
@@ -16599,6 +16970,12 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.12(zod@3.25.76)
       zod: 3.25.76
 
+  '@ai-sdk/openai@2.0.62(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.16(zod@3.25.76)
+      zod: 3.25.76
+
   '@ai-sdk/openai@2.0.69(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
@@ -16649,19 +17026,19 @@ snapshots:
       eventsource-parser: 3.0.6
       zod: 4.1.12
 
-  '@ai-sdk/provider-utils@3.0.17(zod@3.25.76)':
+  '@ai-sdk/provider-utils@3.0.16(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
       '@standard-schema/spec': 1.0.0
       eventsource-parser: 3.0.6
       zod: 3.25.76
 
-  '@ai-sdk/provider-utils@3.0.17(zod@4.1.12)':
+  '@ai-sdk/provider-utils@3.0.17(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
       '@standard-schema/spec': 1.0.0
       eventsource-parser: 3.0.6
-      zod: 4.1.12
+      zod: 3.25.76
 
   '@ai-sdk/provider-utils@3.0.3(zod@3.25.76)':
     dependencies:
@@ -17499,7 +17876,10 @@ snapshots:
       js-tokens: 4.0.0
       picocolors: 1.1.1
 
-  '@babel/compat-data@7.28.5': {}
+  '@babel/compat-data@7.28.4': {}
+
+  '@babel/compat-data@7.28.5':
+    optional: true
 
   '@babel/core@7.28.5':
     dependencies:
@@ -17535,9 +17915,9 @@ snapshots:
 
   '@babel/helper-compilation-targets@7.27.2':
     dependencies:
-      '@babel/compat-data': 7.28.5
+      '@babel/compat-data': 7.28.4
       '@babel/helper-validator-option': 7.27.1
-      browserslist: 4.28.0
+      browserslist: 4.26.3
       lru-cache: 5.1.1
       semver: 6.3.1
 
@@ -18002,6 +18382,14 @@ snapshots:
       '@babel/helper-plugin-utils': 7.27.1
     optional: true
 
+  '@babel/plugin-transform-optional-chaining@7.27.1(@babel/core@7.28.5)':
+    dependencies:
+      '@babel/core': 7.28.5
+      '@babel/helper-plugin-utils': 7.27.1
+      '@babel/helper-skip-transparent-expression-wrappers': 7.27.1
+    transitivePeerDependencies:
+      - supports-color
+
   '@babel/plugin-transform-optional-chaining@7.28.5(@babel/core@7.28.5)':
     dependencies:
       '@babel/core': 7.28.5
@@ -18009,6 +18397,7 @@ snapshots:
       '@babel/helper-skip-transparent-expression-wrappers': 7.27.1
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   '@babel/plugin-transform-parameters@7.27.7(@babel/core@7.28.5)':
     dependencies:
@@ -18326,7 +18715,7 @@ snapshots:
       '@changesets/should-skip-package': 0.1.2
       '@changesets/types': 6.1.0
       '@changesets/write': 0.4.0
-      '@inquirer/external-editor': 1.0.3(@types/node@22.13.17)
+      '@inquirer/external-editor': 1.0.2(@types/node@22.13.17)
       '@manypkg/get-packages': 1.1.3
       ansi-colors: 4.1.3
       ci-info: 3.9.0
@@ -18495,7 +18884,7 @@ snapshots:
   '@cloudflare/workerd-windows-64@1.20251109.0':
     optional: true
 
-  '@cloudflare/workers-types@4.20251111.0': {}
+  '@cloudflare/workers-types@4.20251117.0': {}
 
   '@codemirror/autocomplete@6.19.0':
     dependencies:
@@ -19315,7 +19704,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google/genai@1.29.1(@modelcontextprotocol/sdk@1.20.1)':
+  '@google/genai@1.28.0(@modelcontextprotocol/sdk@1.20.1)':
     dependencies:
       google-auth-library: 10.4.1
       ws: 8.18.3
@@ -19357,9 +19746,17 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react'
 
+  '@hono/node-server@1.19.6(hono@4.10.4)':
+    dependencies:
+      hono: 4.10.4
+
   '@hono/node-server@1.19.6(hono@4.10.6)':
     dependencies:
       hono: 4.10.6
+
+  '@hono/swagger-ui@0.5.2(hono@4.10.4)':
+    dependencies:
+      hono: 4.10.4
 
   '@hono/swagger-ui@0.5.2(hono@4.10.6)':
     dependencies:
@@ -19487,22 +19884,37 @@ snapshots:
       - supports-color
       - typescript
 
+  '@inquirer/ansi@1.0.1': {}
+
   '@inquirer/ansi@1.0.2': {}
 
   '@inquirer/checkbox@4.3.0(@types/node@22.13.17)':
     dependencies:
-      '@inquirer/ansi': 1.0.2
-      '@inquirer/core': 10.3.2(@types/node@22.13.17)
-      '@inquirer/figures': 1.0.15
-      '@inquirer/type': 3.0.10(@types/node@22.13.17)
+      '@inquirer/ansi': 1.0.1
+      '@inquirer/core': 10.3.0(@types/node@22.13.17)
+      '@inquirer/figures': 1.0.14
+      '@inquirer/type': 3.0.9(@types/node@22.13.17)
       yoctocolors-cjs: 2.1.3
     optionalDependencies:
       '@types/node': 22.13.17
 
   '@inquirer/confirm@5.1.19(@types/node@22.13.17)':
     dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.13.17)
-      '@inquirer/type': 3.0.10(@types/node@22.13.17)
+      '@inquirer/core': 10.3.0(@types/node@22.13.17)
+      '@inquirer/type': 3.0.9(@types/node@22.13.17)
+    optionalDependencies:
+      '@types/node': 22.13.17
+
+  '@inquirer/core@10.3.0(@types/node@22.13.17)':
+    dependencies:
+      '@inquirer/ansi': 1.0.1
+      '@inquirer/figures': 1.0.14
+      '@inquirer/type': 3.0.9(@types/node@22.13.17)
+      cli-width: 4.1.0
+      mute-stream: 2.0.0
+      signal-exit: 4.1.0
+      wrap-ansi: 6.2.0
+      yoctocolors-cjs: 2.1.3
     optionalDependencies:
       '@types/node': 22.13.17
 
@@ -19519,6 +19931,14 @@ snapshots:
     optionalDependencies:
       '@types/node': 22.13.17
 
+  '@inquirer/editor@4.2.21(@types/node@22.13.17)':
+    dependencies:
+      '@inquirer/core': 10.3.0(@types/node@22.13.17)
+      '@inquirer/external-editor': 1.0.2(@types/node@22.13.17)
+      '@inquirer/type': 3.0.9(@types/node@22.13.17)
+    optionalDependencies:
+      '@types/node': 22.13.17
+
   '@inquirer/editor@4.2.23(@types/node@22.13.17)':
     dependencies:
       '@inquirer/core': 10.3.2(@types/node@22.13.17)
@@ -19529,9 +19949,16 @@ snapshots:
 
   '@inquirer/expand@4.0.21(@types/node@22.13.17)':
     dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.13.17)
-      '@inquirer/type': 3.0.10(@types/node@22.13.17)
+      '@inquirer/core': 10.3.0(@types/node@22.13.17)
+      '@inquirer/type': 3.0.9(@types/node@22.13.17)
       yoctocolors-cjs: 2.1.3
+    optionalDependencies:
+      '@types/node': 22.13.17
+
+  '@inquirer/external-editor@1.0.2(@types/node@22.13.17)':
+    dependencies:
+      chardet: 2.1.0
+      iconv-lite: 0.7.0
     optionalDependencies:
       '@types/node': 22.13.17
 
@@ -19542,27 +19969,29 @@ snapshots:
     optionalDependencies:
       '@types/node': 22.13.17
 
+  '@inquirer/figures@1.0.14': {}
+
   '@inquirer/figures@1.0.15': {}
 
   '@inquirer/input@4.2.5(@types/node@22.13.17)':
     dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.13.17)
-      '@inquirer/type': 3.0.10(@types/node@22.13.17)
+      '@inquirer/core': 10.3.0(@types/node@22.13.17)
+      '@inquirer/type': 3.0.9(@types/node@22.13.17)
     optionalDependencies:
       '@types/node': 22.13.17
 
   '@inquirer/number@3.0.21(@types/node@22.13.17)':
     dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.13.17)
-      '@inquirer/type': 3.0.10(@types/node@22.13.17)
+      '@inquirer/core': 10.3.0(@types/node@22.13.17)
+      '@inquirer/type': 3.0.9(@types/node@22.13.17)
     optionalDependencies:
       '@types/node': 22.13.17
 
   '@inquirer/password@4.0.21(@types/node@22.13.17)':
     dependencies:
-      '@inquirer/ansi': 1.0.2
-      '@inquirer/core': 10.3.2(@types/node@22.13.17)
-      '@inquirer/type': 3.0.10(@types/node@22.13.17)
+      '@inquirer/ansi': 1.0.1
+      '@inquirer/core': 10.3.0(@types/node@22.13.17)
+      '@inquirer/type': 3.0.9(@types/node@22.13.17)
     optionalDependencies:
       '@types/node': 22.13.17
 
@@ -19570,7 +19999,7 @@ snapshots:
     dependencies:
       '@inquirer/checkbox': 4.3.0(@types/node@22.13.17)
       '@inquirer/confirm': 5.1.19(@types/node@22.13.17)
-      '@inquirer/editor': 4.2.23(@types/node@22.13.17)
+      '@inquirer/editor': 4.2.21(@types/node@22.13.17)
       '@inquirer/expand': 4.0.21(@types/node@22.13.17)
       '@inquirer/input': 4.2.5(@types/node@22.13.17)
       '@inquirer/number': 3.0.21(@types/node@22.13.17)
@@ -19583,32 +20012,36 @@ snapshots:
 
   '@inquirer/rawlist@4.1.9(@types/node@22.13.17)':
     dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.13.17)
-      '@inquirer/type': 3.0.10(@types/node@22.13.17)
+      '@inquirer/core': 10.3.0(@types/node@22.13.17)
+      '@inquirer/type': 3.0.9(@types/node@22.13.17)
       yoctocolors-cjs: 2.1.3
     optionalDependencies:
       '@types/node': 22.13.17
 
   '@inquirer/search@3.2.0(@types/node@22.13.17)':
     dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.13.17)
-      '@inquirer/figures': 1.0.15
-      '@inquirer/type': 3.0.10(@types/node@22.13.17)
+      '@inquirer/core': 10.3.0(@types/node@22.13.17)
+      '@inquirer/figures': 1.0.14
+      '@inquirer/type': 3.0.9(@types/node@22.13.17)
       yoctocolors-cjs: 2.1.3
     optionalDependencies:
       '@types/node': 22.13.17
 
   '@inquirer/select@4.4.0(@types/node@22.13.17)':
     dependencies:
-      '@inquirer/ansi': 1.0.2
-      '@inquirer/core': 10.3.2(@types/node@22.13.17)
-      '@inquirer/figures': 1.0.15
-      '@inquirer/type': 3.0.10(@types/node@22.13.17)
+      '@inquirer/ansi': 1.0.1
+      '@inquirer/core': 10.3.0(@types/node@22.13.17)
+      '@inquirer/figures': 1.0.14
+      '@inquirer/type': 3.0.9(@types/node@22.13.17)
       yoctocolors-cjs: 2.1.3
     optionalDependencies:
       '@types/node': 22.13.17
 
   '@inquirer/type@3.0.10(@types/node@22.13.17)':
+    optionalDependencies:
+      '@types/node': 22.13.17
+
+  '@inquirer/type@3.0.9(@types/node@22.13.17)':
     optionalDependencies:
       '@types/node': 22.13.17
 
@@ -19636,7 +20069,7 @@ snapshots:
   '@joshwooding/vite-plugin-react-docgen-typescript@0.6.1(typescript@5.9.3)(vite@7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1))':
     dependencies:
       glob: 10.4.5
-      magic-string: 0.30.21
+      magic-string: 0.30.19
       react-docgen-typescript: 2.4.0(typescript@5.9.3)
       vite: 7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1)
     optionalDependencies:
@@ -19967,7 +20400,7 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
-  '@mastra/core@1.0.0-beta.3(@mastra/observability@1.0.0-beta.0)(ai@5.0.97(zod@3.25.76))(openapi-types@12.1.3)(zod@3.25.76)':
+  '@mastra/core@1.0.0-beta.4(@mastra/observability@1.0.0-beta.0)(@tanstack/react-query@5.90.10(react@19.2.0))(ai@5.0.97(zod@3.25.76))(openapi-types@12.1.3)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(zod@3.25.76)':
     dependencies:
       '@a2a-js/sdk': 0.2.5
       '@ai-sdk/provider-utils-v5': '@ai-sdk/provider-utils@3.0.12(zod@3.25.76)'
@@ -19977,9 +20410,9 @@ snapshots:
       '@lukeed/uuid': 2.0.1
       '@mastra/schema-compat': 1.0.0-beta.0(zod@3.25.76)
       '@modelcontextprotocol/sdk': 1.20.1
-      '@openrouter/ai-sdk-provider-v5': '@openrouter/ai-sdk-provider@1.2.0(ai@5.0.97(zod@3.25.76))(zod@3.25.76)'
+      '@openrouter/ai-sdk-provider-v5': '@openrouter/ai-sdk-provider@1.2.3(@tanstack/react-query@5.90.10(react@19.2.0))(ai@5.0.97(zod@3.25.76))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(zod@3.25.76)'
       '@sindresorhus/slugify': 2.2.1
-      ai-v5: ai@5.0.76(zod@3.25.76)
+      ai-v5: ai@5.0.97(zod@3.25.76)
       dotenv: 16.6.1
       hono: 4.10.6
       hono-openapi: 0.4.8(hono@4.10.6)(openapi-types@12.1.3)(zod@3.25.76)
@@ -19991,7 +20424,7 @@ snapshots:
       radash: 12.1.1
       zod: 3.25.76
     optionalDependencies:
-      '@mastra/observability': 1.0.0-beta.0(@mastra/core@1.0.0-beta.3)
+      '@mastra/observability': 1.0.0-beta.0(@mastra/core@1.0.0-beta.4)
     transitivePeerDependencies:
       - '@hono/arktype-validator'
       - '@hono/effect-validator'
@@ -19999,24 +20432,27 @@ snapshots:
       - '@hono/valibot-validator'
       - '@hono/zod-validator'
       - '@sinclair/typebox'
+      - '@tanstack/react-query'
       - '@valibot/to-json-schema'
       - ai
       - arktype
       - effect
       - openapi-types
+      - react
+      - react-dom
       - supports-color
       - valibot
       - zod-openapi
 
-  '@mastra/observability@1.0.0-beta.0(@mastra/core@1.0.0-beta.3)':
+  '@mastra/observability@1.0.0-beta.0(@mastra/core@1.0.0-beta.4)':
     dependencies:
-      '@mastra/core': 1.0.0-beta.3(@mastra/observability@1.0.0-beta.0)(ai@5.0.97(zod@3.25.76))(openapi-types@12.1.3)(zod@3.25.76)
+      '@mastra/core': 1.0.0-beta.4(@mastra/observability@1.0.0-beta.0)(@tanstack/react-query@5.90.10(react@19.2.0))(ai@5.0.97(zod@3.25.76))(openapi-types@12.1.3)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(zod@3.25.76)
       zod: 3.25.76
 
   '@mastra/rag@1.3.1(@mastra/core@packages+core)(ai@4.3.19(react@19.2.0)(zod@3.25.76))(encoding@0.1.13)(zod@3.25.76)':
     dependencies:
       '@mastra/core': link:packages/core
-      '@paralleldrive/cuid2': 2.3.1
+      '@paralleldrive/cuid2': 2.3.0
       ai: 4.3.19(react@19.2.0)(zod@3.25.76)
       big.js: 7.0.1
       js-tiktoken: 1.0.21
@@ -20050,11 +20486,37 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
+  '@microsoft/api-extractor-model@7.31.1(@types/node@22.13.17)':
+    dependencies:
+      '@microsoft/tsdoc': 0.15.1
+      '@microsoft/tsdoc-config': 0.17.1
+      '@rushstack/node-core-library': 5.17.0(@types/node@22.13.17)
+    transitivePeerDependencies:
+      - '@types/node'
+
   '@microsoft/api-extractor-model@7.32.0(@types/node@22.13.17)':
     dependencies:
       '@microsoft/tsdoc': 0.16.0
       '@microsoft/tsdoc-config': 0.18.0
       '@rushstack/node-core-library': 5.18.0(@types/node@22.13.17)
+    transitivePeerDependencies:
+      - '@types/node'
+
+  '@microsoft/api-extractor@7.53.1(@types/node@22.13.17)':
+    dependencies:
+      '@microsoft/api-extractor-model': 7.31.1(@types/node@22.13.17)
+      '@microsoft/tsdoc': 0.15.1
+      '@microsoft/tsdoc-config': 0.17.1
+      '@rushstack/node-core-library': 5.17.0(@types/node@22.13.17)
+      '@rushstack/rig-package': 0.6.0
+      '@rushstack/terminal': 0.19.1(@types/node@22.13.17)
+      '@rushstack/ts-command-line': 5.1.1(@types/node@22.13.17)
+      lodash: 4.17.21
+      minimatch: 10.0.3
+      resolve: 1.22.11
+      semver: 7.5.4
+      source-map: 0.6.1
+      typescript: 5.9.3
     transitivePeerDependencies:
       - '@types/node'
 
@@ -20077,12 +20539,21 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
+  '@microsoft/tsdoc-config@0.17.1':
+    dependencies:
+      '@microsoft/tsdoc': 0.15.1
+      ajv: 8.12.0
+      jju: 1.4.0
+      resolve: 1.22.11
+
   '@microsoft/tsdoc-config@0.18.0':
     dependencies:
       '@microsoft/tsdoc': 0.16.0
       ajv: 8.12.0
       jju: 1.4.0
       resolve: 1.22.11
+
+  '@microsoft/tsdoc@0.15.1': {}
 
   '@microsoft/tsdoc@0.16.0': {}
 
@@ -20192,6 +20663,8 @@ snapshots:
   '@next/env@14.2.33': {}
 
   '@noble/hashes@1.8.0': {}
+
+  '@noble/hashes@2.0.1': {}
 
   '@node-rs/xxhash-android-arm-eabi@1.7.6':
     optional: true
@@ -20356,11 +20829,6 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 1.0.9
       '@ai-sdk/provider-utils': 2.1.10(zod@3.25.76)
-      zod: 3.25.76
-
-  '@openrouter/ai-sdk-provider@1.2.0(ai@5.0.97(zod@3.25.76))(zod@3.25.76)':
-    dependencies:
-      ai: 5.0.97(zod@3.25.76)
       zod: 3.25.76
 
   '@openrouter/ai-sdk-provider@1.2.3(@tanstack/react-query@5.90.10(react@19.2.0))(ai@5.0.97(zod@3.25.76))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(zod@3.25.76)':
@@ -21207,6 +21675,11 @@ snapshots:
       estree-walker: 2.0.2
       magic-string: 0.30.21
 
+  '@paralleldrive/cuid2@2.3.0':
+    dependencies:
+      '@noble/hashes': 2.0.1
+      error-causes: 3.0.2
+
   '@paralleldrive/cuid2@2.3.1':
     dependencies:
       '@noble/hashes': 1.8.0
@@ -21883,7 +22356,7 @@ snapshots:
 
   '@rollup/plugin-esm-shim@0.1.8(rollup@4.50.2)':
     dependencies:
-      magic-string: 0.30.21
+      magic-string: 0.30.19
       mlly: 1.8.0
     optionalDependencies:
       rollup: 4.50.2
@@ -21979,6 +22452,19 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.50.2':
     optional: true
 
+  '@rushstack/node-core-library@5.17.0(@types/node@22.13.17)':
+    dependencies:
+      ajv: 8.13.0
+      ajv-draft-04: 1.0.0(ajv@8.13.0)
+      ajv-formats: 3.0.1(ajv@8.13.0)
+      fs-extra: 11.3.2
+      import-lazy: 4.0.0
+      jju: 1.4.0
+      resolve: 1.22.11
+      semver: 7.5.4
+    optionalDependencies:
+      '@types/node': 22.13.17
+
   '@rushstack/node-core-library@5.18.0(@types/node@22.13.17)':
     dependencies:
       ajv: 8.13.0
@@ -22001,6 +22487,14 @@ snapshots:
       resolve: 1.22.11
       strip-json-comments: 3.1.1
 
+  '@rushstack/terminal@0.19.1(@types/node@22.13.17)':
+    dependencies:
+      '@rushstack/node-core-library': 5.17.0(@types/node@22.13.17)
+      '@rushstack/problem-matcher': 0.1.1(@types/node@22.13.17)
+      supports-color: 8.1.1
+    optionalDependencies:
+      '@types/node': 22.13.17
+
   '@rushstack/terminal@0.19.3(@types/node@22.13.17)':
     dependencies:
       '@rushstack/node-core-library': 5.18.0(@types/node@22.13.17)
@@ -22008,6 +22502,15 @@ snapshots:
       supports-color: 8.1.1
     optionalDependencies:
       '@types/node': 22.13.17
+
+  '@rushstack/ts-command-line@5.1.1(@types/node@22.13.17)':
+    dependencies:
+      '@rushstack/terminal': 0.19.1(@types/node@22.13.17)
+      '@types/argparse': 1.0.38
+      argparse: 1.0.10
+      string-argv: 0.3.2
+    transitivePeerDependencies:
+      - '@types/node'
 
   '@rushstack/ts-command-line@5.1.3(@types/node@22.13.17)':
     dependencies:
@@ -22017,6 +22520,8 @@ snapshots:
       string-argv: 0.3.2
     transitivePeerDependencies:
       - '@types/node'
+
+  '@scarf/scarf@1.4.0': {}
 
   '@sec-ant/readable-stream@0.4.1': {}
 
@@ -22405,7 +22910,7 @@ snapshots:
       '@storybook/builder-vite': 9.1.16(storybook@9.1.13(@testing-library/dom@10.4.1)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(prettier@3.6.2)(vite@7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1)))(vite@7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1))
       '@storybook/react': 9.1.16(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(storybook@9.1.13(@testing-library/dom@10.4.1)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(prettier@3.6.2)(vite@7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1)))(typescript@5.9.3)
       find-up: 7.0.0
-      magic-string: 0.30.21
+      magic-string: 0.30.19
       react: 19.2.0
       react-docgen: 8.0.2
       react-dom: 19.2.0(react@19.2.0)
@@ -22677,7 +23182,7 @@ snapshots:
   '@types/cookies@0.9.1':
     dependencies:
       '@types/connect': 3.4.38
-      '@types/express': 4.17.23
+      '@types/express': 5.0.5
       '@types/keygrip': 1.0.6
       '@types/node': 22.13.17
 
@@ -22731,11 +23236,24 @@ snapshots:
       '@types/range-parser': 1.2.7
       '@types/send': 1.2.0
 
+  '@types/express-serve-static-core@5.1.0':
+    dependencies:
+      '@types/node': 22.13.17
+      '@types/qs': 6.14.0
+      '@types/range-parser': 1.2.7
+      '@types/send': 1.2.0
+
   '@types/express@4.17.23':
     dependencies:
       '@types/body-parser': 1.19.6
       '@types/express-serve-static-core': 4.19.7
       '@types/qs': 6.14.0
+      '@types/serve-static': 1.15.9
+
+  '@types/express@5.0.5':
+    dependencies:
+      '@types/body-parser': 1.19.6
+      '@types/express-serve-static-core': 5.1.0
       '@types/serve-static': 1.15.9
 
   '@types/fs-extra@11.0.4':
@@ -22934,6 +23452,11 @@ snapshots:
     optional: true
 
   '@types/string-similarity@4.0.2': {}
+
+  '@types/swagger-ui-express@4.1.8':
+    dependencies:
+      '@types/express': 5.0.5
+      '@types/serve-static': 1.15.9
 
   '@types/tedious@4.0.14':
     dependencies:
@@ -23268,10 +23791,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@vitest/coverage-v8@4.0.8(vitest@4.0.8)':
+  '@vitest/coverage-v8@4.0.12(vitest@3.2.4)':
     dependencies:
       '@bcoe/v8-coverage': 1.0.2
-      '@vitest/utils': 4.0.8
+      '@vitest/utils': 4.0.12
       ast-v8-to-istanbul: 0.3.8
       debug: 4.4.3
       istanbul-lib-coverage: 3.2.2
@@ -23281,18 +23804,35 @@ snapshots:
       magicast: 0.5.1
       std-env: 3.10.0
       tinyrainbow: 3.0.3
-      vitest: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+      vitest: 3.2.4(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
     transitivePeerDependencies:
       - supports-color
 
-  '@vitest/eslint-plugin@1.3.23(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)(vitest@4.0.8)':
+  '@vitest/coverage-v8@4.0.12(vitest@4.0.12)':
+    dependencies:
+      '@bcoe/v8-coverage': 1.0.2
+      '@vitest/utils': 4.0.12
+      ast-v8-to-istanbul: 0.3.8
+      debug: 4.4.3
+      istanbul-lib-coverage: 3.2.2
+      istanbul-lib-report: 3.0.1
+      istanbul-lib-source-maps: 5.0.6
+      istanbul-reports: 3.2.0
+      magicast: 0.5.1
+      std-env: 3.10.0
+      tinyrainbow: 3.0.3
+      vitest: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@vitest/eslint-plugin@1.3.23(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)(vitest@4.0.12)':
     dependencies:
       '@typescript-eslint/scope-manager': 8.46.2
       '@typescript-eslint/utils': 8.46.2(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)
       eslint: 9.38.0(jiti@2.6.1)
     optionalDependencies:
       typescript: 5.9.3
-      vitest: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+      vitest: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -23304,12 +23844,12 @@ snapshots:
       chai: 5.3.3
       tinyrainbow: 2.0.0
 
-  '@vitest/expect@4.0.8':
+  '@vitest/expect@4.0.12':
     dependencies:
       '@standard-schema/spec': 1.0.0
       '@types/chai': 5.2.3
-      '@vitest/spy': 4.0.8
-      '@vitest/utils': 4.0.8
+      '@vitest/spy': 4.0.12
+      '@vitest/utils': 4.0.12
       chai: 6.2.1
       tinyrainbow: 3.0.3
 
@@ -23317,14 +23857,14 @@ snapshots:
     dependencies:
       '@vitest/spy': 3.2.4
       estree-walker: 3.0.3
-      magic-string: 0.30.21
+      magic-string: 0.30.19
     optionalDependencies:
       msw: 2.11.6(@types/node@22.13.17)(typescript@5.9.3)
       vite: 7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1)
 
-  '@vitest/mocker@4.0.8(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(vite@7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1))':
+  '@vitest/mocker@4.0.12(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(vite@7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1))':
     dependencies:
-      '@vitest/spy': 4.0.8
+      '@vitest/spy': 4.0.12
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
@@ -23335,18 +23875,30 @@ snapshots:
     dependencies:
       tinyrainbow: 2.0.0
 
-  '@vitest/pretty-format@4.0.8':
+  '@vitest/pretty-format@4.0.12':
     dependencies:
       tinyrainbow: 3.0.3
 
-  '@vitest/runner@4.0.8':
+  '@vitest/runner@3.2.4':
     dependencies:
-      '@vitest/utils': 4.0.8
+      '@vitest/utils': 3.2.4
+      pathe: 2.0.3
+      strip-literal: 3.1.0
+
+  '@vitest/runner@4.0.12':
+    dependencies:
+      '@vitest/utils': 4.0.12
       pathe: 2.0.3
 
-  '@vitest/snapshot@4.0.8':
+  '@vitest/snapshot@3.2.4':
     dependencies:
-      '@vitest/pretty-format': 4.0.8
+      '@vitest/pretty-format': 3.2.4
+      magic-string: 0.30.21
+      pathe: 2.0.3
+
+  '@vitest/snapshot@4.0.12':
+    dependencies:
+      '@vitest/pretty-format': 4.0.12
       magic-string: 0.30.21
       pathe: 2.0.3
 
@@ -23354,18 +23906,41 @@ snapshots:
     dependencies:
       tinyspy: 4.0.4
 
-  '@vitest/spy@4.0.8': {}
+  '@vitest/spy@4.0.12': {}
 
-  '@vitest/ui@4.0.8(vitest@4.0.8)':
+  '@vitest/ui@3.2.4(vitest@3.2.4)':
     dependencies:
-      '@vitest/utils': 4.0.8
+      '@vitest/utils': 3.2.4
+      fflate: 0.8.2
+      flatted: 3.3.3
+      pathe: 2.0.3
+      sirv: 3.0.2
+      tinyglobby: 0.2.15
+      tinyrainbow: 2.0.0
+      vitest: 3.2.4(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+    optional: true
+
+  '@vitest/ui@4.0.12(vitest@3.2.4)':
+    dependencies:
+      '@vitest/utils': 4.0.12
       fflate: 0.8.2
       flatted: 3.3.3
       pathe: 2.0.3
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 3.0.3
-      vitest: 4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+      vitest: 3.2.4(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+
+  '@vitest/ui@4.0.12(vitest@4.0.12)':
+    dependencies:
+      '@vitest/utils': 4.0.12
+      fflate: 0.8.2
+      flatted: 3.3.3
+      pathe: 2.0.3
+      sirv: 3.0.2
+      tinyglobby: 0.2.15
+      tinyrainbow: 3.0.3
+      vitest: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
   '@vitest/utils@3.2.4':
     dependencies:
@@ -23373,9 +23948,9 @@ snapshots:
       loupe: 3.2.1
       tinyrainbow: 2.0.0
 
-  '@vitest/utils@4.0.8':
+  '@vitest/utils@4.0.12':
     dependencies:
-      '@vitest/pretty-format': 4.0.8
+      '@vitest/pretty-format': 4.0.12
       tinyrainbow: 3.0.3
 
   '@volar/language-core@2.4.23':
@@ -23584,14 +24159,6 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.17(zod@3.25.76)
       '@opentelemetry/api': 1.9.0
       zod: 3.25.76
-
-  ai@5.0.93(zod@4.1.12):
-    dependencies:
-      '@ai-sdk/gateway': 2.0.9(zod@4.1.12)
-      '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.17(zod@4.1.12)
-      '@opentelemetry/api': 1.9.0
-      zod: 4.1.12
 
   ai@5.0.97(zod@3.25.76):
     dependencies:
@@ -23837,7 +24404,7 @@ snapshots:
   autoprefixer@10.4.22(postcss@8.5.6):
     dependencies:
       browserslist: 4.28.0
-      caniuse-lite: 1.0.30001754
+      caniuse-lite: 1.0.30001755
       fraction.js: 5.3.4
       normalize-range: 0.1.2
       picocolors: 1.1.1
@@ -23890,6 +24457,8 @@ snapshots:
   balanced-match@1.0.2: {}
 
   base64-js@1.5.1: {}
+
+  baseline-browser-mapping@2.8.19: {}
 
   baseline-browser-mapping@2.8.28: {}
 
@@ -24030,11 +24599,19 @@ snapshots:
       - '@aws-sdk/credential-provider-web-identity'
       - supports-color
 
+  browserslist@4.26.3:
+    dependencies:
+      baseline-browser-mapping: 2.8.19
+      caniuse-lite: 1.0.30001751
+      electron-to-chromium: 1.5.237
+      node-releases: 2.0.26
+      update-browserslist-db: 1.1.3(browserslist@4.26.3)
+
   browserslist@4.28.0:
     dependencies:
       baseline-browser-mapping: 2.8.28
-      caniuse-lite: 1.0.30001754
-      electron-to-chromium: 1.5.252
+      caniuse-lite: 1.0.30001755
+      electron-to-chromium: 1.5.254
       node-releases: 2.0.27
       update-browserslist-db: 1.1.4(browserslist@4.28.0)
 
@@ -24132,7 +24709,9 @@ snapshots:
 
   camelcase@8.0.0: {}
 
-  caniuse-lite@1.0.30001754: {}
+  caniuse-lite@1.0.30001751: {}
+
+  caniuse-lite@1.0.30001755: {}
 
   canonicalize@1.0.8: {}
 
@@ -24186,6 +24765,8 @@ snapshots:
   character-reference-invalid@1.1.4: {}
 
   character-reference-invalid@2.0.1: {}
+
+  chardet@2.1.0: {}
 
   chardet@2.1.1: {}
 
@@ -24793,7 +25374,9 @@ snapshots:
     transitivePeerDependencies:
       - '@aws-sdk/client-dynamodb'
 
-  electron-to-chromium@1.5.252: {}
+  electron-to-chromium@1.5.237: {}
+
+  electron-to-chromium@1.5.254: {}
 
   elevenlabs@1.59.0(encoding@0.1.13):
     dependencies:
@@ -24854,6 +25437,8 @@ snapshots:
 
   err-code@2.0.3:
     optional: true
+
+  error-causes@3.0.2: {}
 
   error-stack-parser-es@1.0.5: {}
 
@@ -26086,6 +26671,8 @@ snapshots:
       hono: 4.10.6
       zod: 3.25.76
 
+  hono@4.10.4: {}
+
   hono@4.10.6: {}
 
   hpagent@1.2.0: {}
@@ -26580,7 +27167,7 @@ snapshots:
 
   jose@5.6.3: {}
 
-  jose@6.1.1: {}
+  jose@6.1.2: {}
 
   joycon@3.1.1: {}
 
@@ -26614,7 +27201,7 @@ snapshots:
       '@babel/plugin-transform-class-properties': 7.27.1(@babel/core@7.28.5)
       '@babel/plugin-transform-modules-commonjs': 7.27.1(@babel/core@7.28.5)
       '@babel/plugin-transform-nullish-coalescing-operator': 7.27.1(@babel/core@7.28.5)
-      '@babel/plugin-transform-optional-chaining': 7.28.5(@babel/core@7.28.5)
+      '@babel/plugin-transform-optional-chaining': 7.27.1(@babel/core@7.28.5)
       '@babel/plugin-transform-private-methods': 7.27.1(@babel/core@7.28.5)
       '@babel/preset-flow': 7.27.1(@babel/core@7.28.5)
       '@babel/preset-typescript': 7.27.1(@babel/core@7.28.5)
@@ -27025,6 +27612,10 @@ snapshots:
 
   lz-string@1.5.0: {}
 
+  magic-string@0.30.19:
+    dependencies:
+      '@jridgewell/sourcemap-codec': 1.5.5
+
   magic-string@0.30.21:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
@@ -27234,7 +27825,7 @@ snapshots:
 
   media-typer@1.1.0: {}
 
-  memfs@4.50.0:
+  memfs@4.51.0:
     dependencies:
       '@jsonjoy.com/json-pack': 1.21.0(tslib@2.8.1)
       '@jsonjoy.com/util': 1.9.0(tslib@2.8.1)
@@ -27773,6 +28364,8 @@ snapshots:
       uuid: 10.0.0
     transitivePeerDependencies:
       - debug
+
+  node-releases@2.0.26: {}
 
   node-releases@2.0.27: {}
 
@@ -29565,6 +30158,10 @@ snapshots:
 
   strip-json-comments@5.0.3: {}
 
+  strip-literal@3.1.0:
+    dependencies:
+      js-tokens: 9.0.1
+
   strnum@1.1.2:
     optional: true
 
@@ -29615,6 +30212,15 @@ snapshots:
       has-flag: 4.0.0
 
   supports-preserve-symlinks-flag@1.0.0: {}
+
+  swagger-ui-dist@5.30.2:
+    dependencies:
+      '@scarf/scarf': 1.4.0
+
+  swagger-ui-express@5.0.1(express@5.1.0):
+    dependencies:
+      express: 5.1.0
+      swagger-ui-dist: 5.30.2
 
   swpm@2.6.0:
     dependencies:
@@ -29685,6 +30291,8 @@ snapshots:
     transitivePeerDependencies:
       - tsx
       - yaml
+
+  tailwindcss@4.1.15: {}
 
   tailwindcss@4.1.17: {}
 
@@ -29800,6 +30408,8 @@ snapshots:
       fdir: 6.5.0(picomatch@4.0.3)
       picomatch: 4.0.3
 
+  tinypool@1.1.1: {}
+
   tinyrainbow@2.0.0: {}
 
   tinyrainbow@3.0.3: {}
@@ -29888,6 +30498,35 @@ snapshots:
       strip-bom: 3.0.0
 
   tslib@2.8.1: {}
+
+  tsup@8.5.0(@microsoft/api-extractor@7.53.1(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1):
+    dependencies:
+      bundle-require: 5.1.0(esbuild@0.25.11)
+      cac: 6.7.14
+      chokidar: 4.0.3
+      consola: 3.4.2
+      debug: 4.4.3
+      esbuild: 0.25.11
+      fix-dts-default-cjs-exports: 1.0.1
+      joycon: 3.1.1
+      picocolors: 1.1.1
+      postcss-load-config: 6.0.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(yaml@2.8.1)
+      resolve-from: 5.0.0
+      rollup: 4.50.2
+      source-map: 0.8.0-beta.0
+      sucrase: 3.35.0
+      tinyexec: 0.3.2
+      tinyglobby: 0.2.15
+      tree-kill: 1.2.2
+    optionalDependencies:
+      '@microsoft/api-extractor': 7.53.1(@types/node@22.13.17)
+      postcss: 8.5.6
+      typescript: 5.9.3
+    transitivePeerDependencies:
+      - jiti
+      - supports-color
+      - tsx
+      - yaml
 
   tsup@8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1):
     dependencies:
@@ -30190,6 +30829,12 @@ snapshots:
   until-async@3.0.2:
     optional: true
 
+  update-browserslist-db@1.1.3(browserslist@4.26.3):
+    dependencies:
+      browserslist: 4.26.3
+      escalade: 3.2.0
+      picocolors: 1.1.1
+
   update-browserslist-db@1.1.4(browserslist@4.28.0):
     dependencies:
       browserslist: 4.28.0
@@ -30294,9 +30939,30 @@ snapshots:
       '@types/unist': 3.0.3
       vfile-message: 4.0.3
 
+  vite-node@3.2.4(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1):
+    dependencies:
+      cac: 6.7.14
+      debug: 4.4.3
+      es-module-lexer: 1.7.0
+      pathe: 2.0.3
+      vite: 7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1)
+    transitivePeerDependencies:
+      - '@types/node'
+      - jiti
+      - less
+      - lightningcss
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+      - tsx
+      - yaml
+
   vite-plugin-dts@4.5.4(@types/node@22.13.17)(rollup@4.50.2)(typescript@5.9.3)(vite@7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1)):
     dependencies:
-      '@microsoft/api-extractor': 7.55.0(@types/node@22.13.17)
+      '@microsoft/api-extractor': 7.53.1(@types/node@22.13.17)
       '@rollup/pluginutils': 5.3.0(rollup@4.50.2)
       '@volar/typescript': 2.4.23
       '@vue/language-core': 2.2.0(typescript@5.9.3)
@@ -30304,7 +30970,7 @@ snapshots:
       debug: 4.4.3
       kolorist: 1.8.0
       local-pkg: 1.1.2
-      magic-string: 0.30.21
+      magic-string: 0.30.19
       typescript: 5.9.3
     optionalDependencies:
       vite: 7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1)
@@ -30316,7 +30982,7 @@ snapshots:
   vite-plugin-lib-inject-css@2.2.2(vite@7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1)):
     dependencies:
       '@ast-grep/napi': 0.36.3
-      magic-string: 0.30.21
+      magic-string: 0.30.19
       picocolors: 1.1.1
       vite: 7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1)
 
@@ -30352,15 +31018,103 @@ snapshots:
       tsx: 4.20.6
       yaml: 2.8.1
 
-  vitest@4.0.8(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.8)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1):
+  vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1):
     dependencies:
-      '@vitest/expect': 4.0.8
-      '@vitest/mocker': 4.0.8(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(vite@7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1))
-      '@vitest/pretty-format': 4.0.8
-      '@vitest/runner': 4.0.8
-      '@vitest/snapshot': 4.0.8
-      '@vitest/spy': 4.0.8
-      '@vitest/utils': 4.0.8
+      '@types/chai': 5.2.3
+      '@vitest/expect': 3.2.4
+      '@vitest/mocker': 3.2.4(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(vite@7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1))
+      '@vitest/pretty-format': 3.2.4
+      '@vitest/runner': 3.2.4
+      '@vitest/snapshot': 3.2.4
+      '@vitest/spy': 3.2.4
+      '@vitest/utils': 3.2.4
+      chai: 5.3.3
+      debug: 4.4.3
+      expect-type: 1.2.2
+      magic-string: 0.30.19
+      pathe: 2.0.3
+      picomatch: 4.0.3
+      std-env: 3.10.0
+      tinybench: 2.9.0
+      tinyexec: 0.3.2
+      tinyglobby: 0.2.15
+      tinypool: 1.1.1
+      tinyrainbow: 2.0.0
+      vite: 7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1)
+      vite-node: 3.2.4(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/debug': 4.1.12
+      '@types/node': 22.13.17
+      '@vitest/ui': 3.2.4(vitest@3.2.4)
+      jsdom: 26.1.0
+    transitivePeerDependencies:
+      - jiti
+      - less
+      - lightningcss
+      - msw
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+      - tsx
+      - yaml
+
+  vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1):
+    dependencies:
+      '@types/chai': 5.2.3
+      '@vitest/expect': 3.2.4
+      '@vitest/mocker': 3.2.4(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(vite@7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1))
+      '@vitest/pretty-format': 3.2.4
+      '@vitest/runner': 3.2.4
+      '@vitest/snapshot': 3.2.4
+      '@vitest/spy': 3.2.4
+      '@vitest/utils': 3.2.4
+      chai: 5.3.3
+      debug: 4.4.3
+      expect-type: 1.2.2
+      magic-string: 0.30.19
+      pathe: 2.0.3
+      picomatch: 4.0.3
+      std-env: 3.10.0
+      tinybench: 2.9.0
+      tinyexec: 0.3.2
+      tinyglobby: 0.2.15
+      tinypool: 1.1.1
+      tinyrainbow: 2.0.0
+      vite: 7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1)
+      vite-node: 3.2.4(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/debug': 4.1.12
+      '@types/node': 22.13.17
+      '@vitest/ui': 4.0.12(vitest@3.2.4)
+      jsdom: 26.1.0
+    transitivePeerDependencies:
+      - jiti
+      - less
+      - lightningcss
+      - msw
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+      - tsx
+      - yaml
+
+  vitest@4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1):
+    dependencies:
+      '@vitest/expect': 4.0.12
+      '@vitest/mocker': 4.0.12(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))(vite@7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1))
+      '@vitest/pretty-format': 4.0.12
+      '@vitest/runner': 4.0.12
+      '@vitest/snapshot': 4.0.12
+      '@vitest/spy': 4.0.12
+      '@vitest/utils': 4.0.12
       debug: 4.4.3
       es-module-lexer: 1.7.0
       expect-type: 1.2.2
@@ -30375,9 +31129,10 @@ snapshots:
       vite: 7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1)
       why-is-node-running: 2.3.0
     optionalDependencies:
+      '@opentelemetry/api': 1.9.0
       '@types/debug': 4.1.12
       '@types/node': 22.13.17
-      '@vitest/ui': 4.0.8(vitest@4.0.8)
+      '@vitest/ui': 4.0.12(vitest@4.0.12)
       jsdom: 26.1.0
     transitivePeerDependencies:
       - jiti

@@ -83,10 +83,13 @@ const checkRedirects = async () => {
     }
 
     const cleanDestination = stripLocalePattern(destination);
-    const destinationUrl = `${baseUrl}${cleanDestination}`;
 
-    // Check if the destination file exists locally
-    const destinationOk = checkLocalFile(cleanDestination);
+    // Check if destination is already an absolute URL
+    const isAbsoluteUrl = /^https?:\/\//.test(cleanDestination);
+    const destinationUrl = isAbsoluteUrl ? cleanDestination : `${baseUrl}${cleanDestination}`;
+
+    // Check if the destination file exists locally (skip for external URLs)
+    const destinationOk = isAbsoluteUrl ? true : checkLocalFile(cleanDestination);
 
     if (destinationOk) {
       console.log('├──OK──', destinationUrl);

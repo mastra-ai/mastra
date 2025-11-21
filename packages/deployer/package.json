@@ -119,6 +119,7 @@
   },
   "devDependencies": {
     "@hono/node-server": "^1.19.6",
+    "@mastra/hono": "workspace:*",
     "@hono/swagger-ui": "^0.5.2",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",

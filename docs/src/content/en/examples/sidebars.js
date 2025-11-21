@@ -67,23 +67,6 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Memory",
-      collapsed: true,
-      items: [
-        {
-          type: "doc",
-          id: "memory/working-memory-template",
-          label: "Memory with Template",
-        },
-        {
-          type: "doc",
-          id: "memory/working-memory-schema",
-          label: "Memory with Schema",
-        },
-      ],
-    },
-    {
-      type: "category",
       label: "RAG",
       collapsed: true,
       items: [
