@@ -55,7 +55,6 @@ export class QdrantVector extends MastraVector {
       for (let i = 0; i < records.length; i += BATCH_SIZE) {
         const batch = records.slice(i, i + BATCH_SIZE);
         await this.client.upsert(indexName, {
-          // @ts-expect-error
           points: batch,
           wait: true,
         });
@@ -120,7 +119,11 @@ export class QdrantVector extends MastraVector {
       // Qdrant typically returns 409 for existing collection
       if (error?.status === 409 || (typeof message === 'string' && message.toLowerCase().includes('exists'))) {
         // Fetch collection info and check dimension
-        await this.validateExistingIndex(indexName, dimension, metric);
+        if (!namedVectors) {
+          await this.validateExistingIndex(indexName, dimension, metric);
+        } else {
+          this.logger.info(`Collection "${indexName}" already exists. Skipping validation for named vectors configuration.`);
+        }
         return;
       }
 
@@ -227,13 +230,29 @@ export class QdrantVector extends MastraVector {
     try {
       const { config, points_count } = await this.client.getCollection(indexName);
 
-      const distance = config.params.vectors?.distance as Schemas['Distance'];
-      return {
-        dimension: config.params.vectors?.size as number,
-        count: points_count || 0,
-        // @ts-expect-error
-        metric: Object.keys(DISTANCE_MAPPING).find(key => DISTANCE_MAPPING[key] === distance),
-      };
+      const vectors= config.params.vectors;
+       // Check if this is a named vectors collection (Record) or single vector config
+       const  isNamedVectors = vectors && typeof vectors === 'object' && !('size' in vectors);
+
+       if (isNamedVectors) {
+         const firstVectorName = Object.keys(vectors)[0];
+         const firstVector = vectors[firstVectorName];
+         const distance = firstVector?.distance as Schemas['Distance'];
+         return {
+          dimension: firstVector?.size as number,
+          count: points_count || 0,
+          // @ts-expect-error
+          metric: Object.keys(DISTANCE_MAPPING).find(key => DISTANCE_MAPPING[key] === distance),
+         }
+       } else {
+        const distance = (vectors as any)?.distance as Schemas['Distance'];
+        return {
+          dimension: (vectors as any)?.size as number,
+          count: points_count || 0,
+          // @ts-expect-error
+          metric: Object.keys(DISTANCE_MAPPING).find(key => DISTANCE_MAPPING[key] === distance),
+        };
+       }
     } catch (error) {
       throw new MastraError(
         {
@@ -273,7 +292,7 @@ export class QdrantVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+  async updateVector({ indexName, id, update, vectorName }: UpdateVectorParams & { vectorName?: string }): Promise<void> {
     try {
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');
@@ -291,6 +310,7 @@ export class QdrantVector extends MastraVector {
     }
 
     const pointId = this.parsePointId(id);
+    const wrappedVector = update.vector && vectorName ? { [vectorName]: update.vector } : update.vector;
 
     try {
       // Handle metadata-only update
@@ -306,7 +326,7 @@ export class QdrantVector extends MastraVector {
           points: [
             {
               id: pointId,
-              vector: update.vector,
+              vector: wrappedVector!,
             },
           ],
         });
@@ -317,7 +337,7 @@ export class QdrantVector extends MastraVector {
       if (update.vector && update.metadata) {
         const point = {
           id: pointId,
-          vector: update.vector,
+          vector: wrappedVector!,
           payload: update.metadata,
         };
 
