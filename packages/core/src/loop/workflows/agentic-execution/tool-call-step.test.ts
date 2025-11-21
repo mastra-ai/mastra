@@ -112,7 +112,8 @@ describe('createToolCallStep tool approval workflow', () => {
       },
     });
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Wait for flushMessagesBeforeSuspension to complete before suspend is called
+    await new Promise(resolve => setImmediate(resolve));
 
     expect(suspend).toHaveBeenCalledWith(
       {
