@@ -51,3 +51,37 @@ export const isWorkflowExecutionDataChunkType = (
     chunk.payload.type?.startsWith('data-')
   );
 };
+
+export const isAgentExecutionTextChunkType = (
+  chunk: any,
+): chunk is Omit<NetworkChunkType, 'payload'> & {
+  payload: { type: 'text-delta' | 'text-start'; payload?: { text: string } };
+} => {
+  return (
+    chunk &&
+    typeof chunk === 'object' &&
+    'type' in chunk &&
+    chunk.type?.startsWith('agent-execution-event-') &&
+    'payload' in chunk &&
+    typeof chunk.payload === 'object' &&
+    'type' in chunk.payload &&
+    (chunk.payload.type === 'text-delta' || chunk.payload.type === 'text-start')
+  );
+};
+
+export const isWorkflowExecutionTextChunkType = (
+  chunk: any,
+): chunk is Omit<NetworkChunkType, 'payload'> & {
+  payload: { type: 'text-delta' | 'text-start'; payload?: { text: string } };
+} => {
+  return (
+    chunk &&
+    typeof chunk === 'object' &&
+    'type' in chunk &&
+    chunk.type?.startsWith('workflow-execution-event-') &&
+    'payload' in chunk &&
+    typeof chunk.payload === 'object' &&
+    'type' in chunk.payload &&
+    (chunk.payload.type === 'text-delta' || chunk.payload.type === 'text-start')
+  );
+};
