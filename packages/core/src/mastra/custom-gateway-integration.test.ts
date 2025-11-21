@@ -9,9 +9,8 @@ import { RequestContext } from '../request-context';
 import { Mastra } from './index';
 
 class Gateway1 extends MastraModelGateway {
-  readonly id = 'gateway-1';
+  readonly id = 'g1';
   readonly name = 'gateway-1';
-  readonly prefix = 'g1';
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
     return {
@@ -19,7 +18,7 @@ class Gateway1 extends MastraModelGateway {
         name: 'Provider 1',
         models: ['model-1'],
         apiKeyEnvVar: 'G1_API_KEY',
-        gateway: 'gateway-1',
+        gateway: 'g1',
       },
     };
   }
@@ -47,9 +46,8 @@ class Gateway1 extends MastraModelGateway {
   }
 }
 class Gateway2 extends MastraModelGateway {
-  readonly id = 'gateway-2';
+  readonly id = 'g2';
   readonly name = 'gateway-2';
-  readonly prefix = 'g2';
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
     return {
@@ -57,7 +55,7 @@ class Gateway2 extends MastraModelGateway {
         name: 'Provider 2',
         models: ['model-2'],
         apiKeyEnvVar: 'G2_API_KEY',
-        gateway: 'gateway-2',
+        gateway: 'g2',
       },
     };
   }
@@ -462,15 +460,15 @@ describe('Mastra Custom Gateway Integration', () => {
       expect(gateways?.test.name).toBe('test-gateway');
     });
 
-    it('should use gateway name as key if no key provided', () => {
+    it('should use gateway ID as key if no key provided', () => {
       const mastra = new Mastra();
 
       const gateway = new Gateway2();
 
-      mastra.addGateway(gateway); // No key provided, should use gateway.name = 'gateway-2'
+      mastra.addGateway(gateway); // No key provided, should use gateway.id = 'g2'
 
       const gateways = mastra.listGateways();
-      expect(gateways?.['gateway-2']).toBe(gateway);
+      expect(gateways?.['g2']).toBe(gateway);
     });
   });
 
