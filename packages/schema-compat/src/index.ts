@@ -41,5 +41,3 @@ export { OpenAIReasoningSchemaCompatLayer } from './provider-compats/openai-reas
 
 export { type Schema } from './types';
 export { type JSONSchema7, jsonSchema } from './json-schema';
-
-export { zodToJsonSchema } from './zod-to-json';
