@@ -33,7 +33,7 @@ export async function fetchProvidersFromGateways(
           // This creates paths like: prefix/provider/model
 
           // NOTE: If the provider ID equals the gateway prefix, don't double the prefix.
-          // This is the case for the Azure gateway.
+          // This is the case for the AzureOpenAIGateway.
 
           const typeProviderId =
             gatewayPrefix && gatewayPrefix !== providerId ? `${gatewayPrefix}/${providerId}` : providerId;
