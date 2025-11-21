@@ -87,7 +87,19 @@ export class QdrantVector extends MastraVector {
     namedVectors,
   }: CreateIndexParams & { namedVectors?: Record<string, { size: number; distance: string }> }): Promise<void> {
     try {
-      if (!namedVectors) {
+      if (namedVectors) {
+        if (Object.keys(namedVectors).length === 0) {
+          throw new Error('namedVectors must contain at least one named vector configuration');
+        }
+        for (const [name, config] of Object.entries(namedVectors)) {
+          if (!Number.isInteger(config.size) || config.size <= 0) {
+            throw new Error(`Named vector "${name}": size must be a positive integer`);
+          }
+          if (!DISTANCE_MAPPING[config.distance]) {
+            throw new Error(`Named vector "${name}": invalid distance "${config.distance}". Must be one of: cosine, euclidean, dotproduct`);
+          }
+        }
+      } else {
         if (!Number.isInteger(dimension) || dimension <= 0) {
           throw new Error('Dimension must be a positive integer');
         }
@@ -252,6 +264,9 @@ export class QdrantVector extends MastraVector {
 
       if (isNamedVectors) {
         const firstVectorName = Object.keys(vectors)[0];
+        if (!firstVectorName) {
+          throw new Error(`Collection "${indexName}" has an empty named vectors configuration`);
+        }
         const firstVector = vectors[firstVectorName];
         const distance = firstVector?.distance as Schemas['Distance'];
         return {
