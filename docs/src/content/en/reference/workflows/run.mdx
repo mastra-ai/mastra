@@ -57,6 +57,12 @@ if (result.status === "suspended") {
       description: "Cancels the workflow execution",
       required: true,
     },
+    {
+      name: "restart",
+      type: "(options?: RestartOptions) => Promise<WorkflowResult>",
+      description: "Restarts the workflow execution from last active step",
+      required: true,
+    },
   ]}
 />
 
@@ -92,3 +98,4 @@ A workflow run's `status` indicates its current execution state. The possible va
 - [Run.start()](./run-methods/start)
 - [Run.resume()](./run-methods/resume)
 - [Run.cancel()](./run-methods/cancel)
+- [Run.restart()](./run-methods/restart)
