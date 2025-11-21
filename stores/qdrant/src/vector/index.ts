@@ -348,7 +348,7 @@ export class QdrantVector extends MastraVector {
         const { config } = await this.client.getCollection(indexName);
         const vectorsConfig = config.params.vectors;
         const isNamedVectors = vectorsConfig && typeof vectorsConfig === 'object' && !('size' in vectorsConfig);
-        
+
         if (!isNamedVectors || !(vectorName in vectorsConfig)) {
           throw new Error(`Vector name "${vectorName}" does not exist in collection "${indexName}"`);
         }
