@@ -83,10 +83,10 @@ const __dirname = path.dirname(__filename);
 const POPULAR_PROVIDERS = ['openai', 'anthropic', 'google', 'deepseek', 'groq', 'mistral', 'xai'];
 
 // Providers that are actually gateways (aggregate multiple model providers)
-const GATEWAY_PROVIDERS = ['netlify', 'openrouter', 'vercel', 'azure'];
+const GATEWAY_PROVIDERS = ['netlify', 'openrouter', 'vercel', 'azureopenai'];
 
-const MANUALLY_DOCUMENTED_PROVIDERS = ['azure'];
-const MANUALLY_DOCUMENTED_GATEWAYS = ['azure'];
+const MANUALLY_DOCUMENTED_PROVIDERS = ['azureopenai'];
+const MANUALLY_DOCUMENTED_GATEWAYS = ['azureopenai'];
 
 interface ProviderInfo {
   id: string;
