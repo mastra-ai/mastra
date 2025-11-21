@@ -112,6 +112,8 @@ describe('createToolCallStep tool approval workflow', () => {
       },
     });
 
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     expect(suspend).toHaveBeenCalledWith(
       {
         requireToolApproval: {

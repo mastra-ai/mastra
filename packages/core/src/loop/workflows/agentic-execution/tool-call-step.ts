@@ -94,9 +94,6 @@ export function createToolCallStep<
         const requireToolApproval = requestContext.get('__mastra_requireToolApproval');
         if (requireToolApproval || (tool as any).requireApproval) {
           if (!resumeData) {
-            // Flush messages before suspension to ensure they are persisted
-            await flushMessagesBeforeSuspension();
-
             controller.enqueue({
               type: 'tool-call-approval',
               runId,
@@ -107,6 +104,10 @@ export function createToolCallStep<
                 args: inputData.args,
               },
             });
+
+            // Flush messages before suspension to ensure they are persisted
+            await flushMessagesBeforeSuspension();
+
             return suspend(
               {
                 requireToolApproval: {
@@ -138,9 +139,6 @@ export function createToolCallStep<
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),
           suspend: async (suspendPayload: any) => {
-            // Flush messages before suspension to ensure they are persisted
-            await flushMessagesBeforeSuspension();
-
             controller.enqueue({
               type: 'tool-call-suspended',
               runId,
@@ -148,6 +146,8 @@ export function createToolCallStep<
               payload: { toolCallId: inputData.toolCallId, toolName: inputData.toolName, suspendPayload },
             });
 
+            // Flush messages before suspension to ensure they are persisted
+            await flushMessagesBeforeSuspension();
             return await suspend(
               {
                 toolCallSuspended: suspendPayload,
