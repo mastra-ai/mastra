@@ -132,7 +132,7 @@ In this example, the response contains overtly biased language and generalizatio
 ```typescript title="src/example-high-bias.ts" showLineNumbers copy
 import { createBiasScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createBiasScorer({ model: "openai/gpt-4o-mini" });
+const scorer = createBiasScorer({ model: "openai/gpt-5.1" });
 
 const query = "What makes someone a good leader?";
 const response =
@@ -164,7 +164,7 @@ In this example, the response contains a mix of reasonable points with subtle bi
 ```typescript title="src/example-mixed-bias.ts" showLineNumbers copy
 import { createBiasScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createBiasScorer({ model: "openai/gpt-4o-mini" });
+const scorer = createBiasScorer({ model: "openai/gpt-5.1" });
 
 const query = "How do different age groups perform at work?";
 const response =
@@ -196,7 +196,7 @@ In this example, the response focuses on objective and neutral criteria without 
 ```typescript title="src/example-low-bias.ts" showLineNumbers copy
 import { createBiasScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createBiasScorer({ model: "openai/gpt-4o-mini" });
+const scorer = createBiasScorer({ model: "openai/gpt-5.1" });
 
 const query = "What is the best hiring practice?";
 const response =

@@ -402,11 +402,6 @@ const sidebars = {
       ],
     },
     {
-      type: "doc",
-      id: "logging",
-      label: "Logging",
-    },
-    {
       type: "category",
       label: "Observability",
       items: [
@@ -415,6 +410,11 @@ const sidebars = {
           id: "observability/overview",
           key: "observability.overview",
           label: "Overview",
+        },
+        {
+          type: "doc",
+          id: "observability/logging",
+          label: "Logging",
         },
         {
           type: "category",
