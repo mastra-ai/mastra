@@ -126,10 +126,12 @@ export class MockMemory extends MastraMemory {
     return resource?.workingMemory || null;
   }
 
-  async getWorkingMemoryTemplate(_args: {
-    threadId?: string;
-    resourceId?: string;
-  } = {}): Promise<WorkingMemoryTemplate | null> {
+  async getWorkingMemoryTemplate(
+    _args: {
+      threadId?: string;
+      resourceId?: string;
+    } = {},
+  ): Promise<WorkingMemoryTemplate | null> {
     const mergedConfig = this.getMergedThreadConfig();
     const workingMemoryConfig = mergedConfig.workingMemory;
 
