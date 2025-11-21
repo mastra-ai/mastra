@@ -5,6 +5,7 @@ on:
     branches: [main, 0.x]
     paths:
       - 'client-sdks/react/**'
+      - 'client-sdks/client-js/**'
       - 'packages/core/**'
       - 'packages/server/**'
       - 'packages/deployer/**'

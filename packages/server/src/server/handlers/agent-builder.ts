@@ -595,6 +595,7 @@ export const STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
   bodySchema: streamLegacyAgentBuilderBodySchema,
+  responseSchema: streamResponseSchema,
   summary: '[DEPRECATED] Stream agent-builder action with legacy format',
   description:
     'Legacy endpoint for streaming agent-builder action execution. Use /api/agent-builder/:actionId/stream instead.',
