@@ -7,7 +7,7 @@ export interface VectorTestConfig {
   vector: MastraVector<any>;
   createIndex: (indexName: string) => Promise<void>;
   deleteIndex: (indexName: string) => Promise<void>;
-  waitForIndexing?: () => Promise<void>;
+  waitForIndexing?: (indexName: string) => Promise<void>;
   connect?: () => Promise<void>;
   disconnect?: () => Promise<void>;
 }

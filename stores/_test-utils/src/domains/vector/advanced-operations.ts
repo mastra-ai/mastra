@@ -11,14 +11,14 @@ export function createAdvancedOperationsTest({
   vector,
   createIndex,
   deleteIndex,
-  waitForIndexing = () => new Promise(resolve => setTimeout(resolve, 100)),
+  waitForIndexing = (indexName: string) => new Promise(resolve => setTimeout(resolve, 100)),
 }: VectorTestConfig) {
   describe.only('Advanced Vector Operations', () => {
     let testIndexName: string;
 
     beforeEach(async () => {
       // Create unique index name for each test to avoid index state pollution
-      testIndexName = `advanced_ops_test_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      testIndexName = `advanced-ops-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
       // Create fresh index for each test
       try {
@@ -27,7 +27,7 @@ export function createAdvancedOperationsTest({
         // Ignore if doesn't exist
       }
       await createIndex(testIndexName);
-      await waitForIndexing();
+      await waitForIndexing(testIndexName);
     });
 
     afterEach(async () => {
