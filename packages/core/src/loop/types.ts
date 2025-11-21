@@ -28,6 +28,7 @@ export type StreamInternal = {
   threadId?: string;
   resourceId?: string;
   memory?: any; // MastraMemory from memory/memory
+  threadExists?: boolean;
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {

@@ -112,7 +112,7 @@ describe('createToolCallStep tool approval workflow', () => {
       },
     });
 
-    // Wait for suspendWithMetadata to complete before suspend is called
+    // Wait for flushMessagesBeforeSuspension to complete before suspend is called
     await new Promise(resolve => setImmediate(resolve));
 
     expect(suspend).toHaveBeenCalledWith(

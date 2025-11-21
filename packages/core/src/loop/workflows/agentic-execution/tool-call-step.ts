@@ -25,13 +25,8 @@ export function createToolCallStep<
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
     execute: async ({ inputData, suspend, resumeData, requestContext }) => {
-      // Helper function to flush messages and store suspension state in thread metadata
-      const suspendWithMetadata = async (suspensionData?: {
-        toolCallId: string;
-        toolName: string;
-        args: Record<string, any>;
-        type: 'approval' | 'suspend';
-      }) => {
+      // Helper function to flush messages before suspension
+      const flushMessagesBeforeSuspension = async () => {
         const { saveQueueManager, memoryConfig, threadId, resourceId, memory } = _internal || {};
 
         if (!saveQueueManager || !threadId) {
@@ -39,73 +34,24 @@ export function createToolCallStep<
         }
 
         try {
-          // Flush all pending messages immediately
-          await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
-
-          // Update thread metadata with pending suspension data if provided
-          if (memory && suspensionData) {
-            let currentThread = await memory.getThreadById?.({ threadId });
-
-            if (!currentThread && resourceId) {
-              // Thread doesn't exist yet, create it now - this returns the thread with metadata
-              currentThread = await memory.createThread?.({
+          // Ensure thread exists before flushing messages
+          if (memory && !_internal.threadExists && resourceId) {
+            const thread = await memory.getThreadById?.({ threadId });
+            if (!thread) {
+              // Thread doesn't exist yet, create it now
+              await memory.createThread?.({
                 threadId,
                 resourceId,
                 memoryConfig,
               });
             }
-
-            if (currentThread) {
-              const currentMetadata = currentThread.metadata || {};
-              const pendingSuspensions = (currentMetadata.pendingSuspensions as Record<string, any>) || {};
-
-              await memory.updateThread({
-                id: threadId,
-                title: currentThread.title,
-                metadata: {
-                  ...currentMetadata,
-                  pendingSuspensions: {
-                    ...pendingSuspensions,
-                    [suspensionData.toolCallId]: {
-                      toolName: suspensionData.toolName,
-                      args: suspensionData.args,
-                      type: suspensionData.type,
-                    },
-                  },
-                },
-              });
-            }
+            _internal.threadExists = true;
           }
+
+          // Flush all pending messages immediately
+          await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
         } catch (error) {
-          console.error('Error during suspension with metadata:', error);
-        }
-      };
-
-      const clearSuspensionMetadata = async (toolCallId: string) => {
-        const { memory, threadId } = _internal || {};
-        if (!memory || !threadId) {
-          return;
-        }
-
-        try {
-          const thread = await memory.getThreadById({ threadId });
-          if (!thread) {
-            return;
-          }
-          const currentMetadata = thread?.metadata || {};
-          const pendingSuspensions = { ...((currentMetadata.pendingSuspensions as Record<string, any>) || {}) };
-          delete pendingSuspensions[toolCallId];
-
-          await memory.updateThread({
-            id: threadId,
-            title: thread?.title,
-            metadata: {
-              ...currentMetadata,
-              pendingSuspensions,
-            },
-          });
-        } catch (error) {
-          console.error('Error clearing suspension metadata:', error);
+          console.error('Error flushing messages before suspension:', error);
         }
       };
 
@@ -157,13 +103,8 @@ export function createToolCallStep<
               },
             });
 
-            // Flush messages and update thread metadata with pending approval
-            await suspendWithMetadata({
-              toolCallId: inputData.toolCallId,
-              toolName: inputData.toolName,
-              args: inputData.args,
-              type: 'approval',
-            });
+            // Flush messages before suspension to ensure they are persisted
+            await flushMessagesBeforeSuspension();
 
             return suspend(
               {
@@ -179,9 +120,6 @@ export function createToolCallStep<
               },
             );
           } else {
-            // Clear the pending suspension from thread metadata
-            await clearSuspensionMetadata(inputData.toolCallId);
-
             if (!resumeData.approved) {
               return {
                 result: 'Tool call was not approved by the user',
@@ -206,13 +144,9 @@ export function createToolCallStep<
               payload: { toolCallId: inputData.toolCallId, toolName: inputData.toolName, suspendPayload },
             });
 
-            // Flush messages and store suspension data in thread metadata
-            await suspendWithMetadata({
-              toolCallId: inputData.toolCallId,
-              toolName: inputData.toolName,
-              args: inputData.args,
-              type: 'suspend',
-            });
+            // Flush messages before suspension to ensure they are persisted
+            await flushMessagesBeforeSuspension();
+
             return await suspend(
               {
                 toolCallSuspended: suspendPayload,
@@ -227,11 +161,6 @@ export function createToolCallStep<
         };
 
         const result = await tool.execute(inputData.args, toolOptions);
-
-        // Clear pending suspension if this was a resumed execution
-        if (resumeData) {
-          await clearSuspensionMetadata(inputData.toolCallId);
-        }
 
         return { result, ...inputData };
       } catch (error) {

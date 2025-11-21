@@ -59,6 +59,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     threadId: _internal?.threadId,
     resourceId: _internal?.resourceId,
     memory: _internal?.memory,
+    threadExists: _internal?.threadExists,
   };
 
   let startTimestamp = internalToUse.now?.();
