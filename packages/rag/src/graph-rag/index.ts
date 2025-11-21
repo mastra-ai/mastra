@@ -204,7 +204,12 @@ export class GraphRAG {
   }
 
   // Perform random walk with restart
-  private randomWalkWithRestart(startNodeId: string, steps: number, restartProb: number): Map<string, number> {
+  private randomWalkWithRestart(
+    startNodeId: string, 
+    steps: number, 
+    restartProb: number,
+    allowedNodeIds?: Set<string>
+  ): Map<string, number> {
     const visits = new Map<string, number>();
     let currentNodeId = startNodeId;
 
@@ -219,7 +224,10 @@ export class GraphRAG {
       }
 
       // Get neighbors
-      const neighbors = this.getNeighbors(currentNodeId);
+      let neighbors = this.getNeighbors(currentNodeId);
+      if (allowedNodeIds) {
+        neighbors = neighbors.filter(n => allowedNodeIds.has(n.id));
+      }
       if (neighbors.length === 0) {
         currentNodeId = startNodeId;
         continue;
@@ -300,9 +308,12 @@ export class GraphRAG {
     const useFilter = filterEntries.length > 0;
     // For each top node, perform random walk
     for (const { node, similarity } of topNodes) {
-      const walkScores = useFilter
-        ? this.randomWalkWithRestartFiltered(node.id, randomWalkSteps, restartProb, filteredNodeIds)
-        : this.randomWalkWithRestart(node.id, randomWalkSteps, restartProb);
+      const walkScores = this.randomWalkWithRestart(
+        node.id,
+        randomWalkSteps,
+        restartProb,
+        useFilter ? filteredNodeIds : undefined
+      );
 
       // Combine dense retrieval score with graph score
       for (const [nodeId, walkScore] of walkScores) {
@@ -325,40 +336,5 @@ export class GraphRAG {
         metadata: item.node.metadata,
         score: item.score,
       }));
-  }
-
-  // New helper for random walk restricted to filtered nodes
-  private randomWalkWithRestartFiltered(
-    startNodeId: string,
-    steps: number,
-    restartProb: number,
-    allowedNodeIds: Set<string>,
-  ): Map<string, number> {
-    const visits = new Map<string, number>();
-    let currentNodeId = startNodeId;
-
-    for (let step = 0; step < steps; step++) {
-      visits.set(currentNodeId, (visits.get(currentNodeId) || 0) + 1);
-
-      if (Math.random() < restartProb) {
-        currentNodeId = startNodeId;
-        continue;
-      }
-      const neighbors = this.getNeighbors(currentNodeId).filter(n => allowedNodeIds.has(n.id));
-
-      if (neighbors.length === 0) {
-        currentNodeId = startNodeId;
-        continue;
-      }
-
-      currentNodeId = this.selectWeightedNeighbor(neighbors);
-    }
-
-    const totalVisits = Array.from(visits.values()).reduce((a, b) => a + b, 0);
-    const normalizedVisits = new Map<string, number>();
-    for (const [nodeId, count] of visits) {
-      normalizedVisits.set(nodeId, count / totalVisits);
-    }
-    return normalizedVisits;
   }
 }
