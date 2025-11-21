@@ -903,7 +903,7 @@ ${gatewaysList
   .map(g => {
     // Custom descriptions for manually documented gateways
     if (MANUALLY_DOCUMENTED_GATEWAYS.includes(g)) {
-      if (g === 'azure') {
+      if (g === 'azureopenai') {
         return `    <CardGridItem
       title="Azure OpenAI"
       description="Use your private Azure OpenAI deployments with associated deployment names"
