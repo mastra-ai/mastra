@@ -777,5 +777,39 @@ export function pgTests() {
         });
       });
     });
+
+    describe('TableMap overrides', () => {
+      let mapped: PostgresStore;
+      const conversationTable = 'conversation';
+      const chatTable = 'chat';
+
+      beforeAll(async () => {
+        mapped = new PostgresStore({ ...TEST_CONFIG, tableMap: { mastra_messages: chatTable, mastra_threads: conversationTable } });
+        await mapped.init();
+      });
+      afterAll(async () => {
+        try { await mapped.close(); } catch {}
+      });
+
+      it('writes and reads using physical names from tableMap', async () => {
+        const thread = createSampleThread();
+        await mapped.saveThread({ thread });
+
+        // Save two messages
+        await mapped.saveMessages({
+          messages: [
+            { id: crypto.randomUUID(), threadId: thread.id, resourceId: thread.resourceId, content: { format: 2, parts: [{ type: 'text', text: 'hi'}] }, role: 'user', createdAt: new Date() },
+            { id: crypto.randomUUID(), threadId: thread.id, resourceId: thread.resourceId, content: { format: 2, parts: [{ type: 'text', text: 'there'}] }, role: 'assistant', createdAt: new Date() },
+          ],
+        });
+
+        // Verify tables exist and rows are present in physical names
+        const threadRow = await mapped.db.oneOrNone(`SELECT id FROM "${conversationTable}" WHERE id = $1`, [thread.id]);
+        expect(threadRow?.id).toBe(thread.id);
+
+        const messageCount = await mapped.db.one<{ count: string }>(`SELECT COUNT(*) FROM "${chatTable}" WHERE thread_id = $1`, [thread.id]);
+        expect(Number(messageCount.count)).toBeGreaterThanOrEqual(2);
+      });
+    });
   });
 }
