@@ -59,6 +59,33 @@ describe('QdrantVector', () => {
       expect(vectorIds).toHaveLength(3);
     }, 50000);
 
+    it('should query using a named vector when `using` is provided', async () => {
+      const queryVector = [1, 2, 3];
+      const results = await qdrant.query({
+        indexName: testCollectionName,
+        queryVector,
+        topK: 2,
+        includeVector: true,
+        using: 'text',
+      });
+
+      expect(results).toBeDefined();
+      expect(results.length).toBeGreaterThan(0);
+    });
+
+    it('should fallback to default vector when `using` is not provided', async () => {
+      const queryVector = [1, 2, 3];
+      const results = await qdrant.query({
+        indexName: testCollectionName,
+        queryVector,
+        topK: 2,
+        includeVector: true,
+      });
+
+      expect(results).toBeDefined();
+      expect(results.length).toBeGreaterThan(0);
+    });
+
     it('should query vectors and return nearest neighbors', async () => {
       const queryVector = [1.0, 0.1, 0.1];
       const results = await qdrant.query({ indexName: testCollectionName, queryVector, topK: 3 });
