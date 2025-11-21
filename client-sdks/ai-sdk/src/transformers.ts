@@ -6,8 +6,10 @@ import type { ZodType } from 'zod';
 import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from './helpers';
 import {
   isAgentExecutionDataChunkType,
+  isAgentExecutionTextChunkType,
   isDataChunkType,
   isWorkflowExecutionDataChunkType,
+  isWorkflowExecutionTextChunkType,
   safeParseErrorObject,
 } from './utils';
 
@@ -712,6 +714,28 @@ export function transformNetwork(
       } as const;
     }
     default: {
+      // Handle sub-agent and sub-workflow text streaming
+      if (isAgentExecutionTextChunkType(payload) || isWorkflowExecutionTextChunkType(payload)) {
+        const innerPayload = payload.payload;
+
+        // Handle text-start events from sub-agents/workflows
+        if (innerPayload.type === 'text-start') {
+          return {
+            type: 'text-start',
+            id: payload.runId!,
+          } as const;
+        }
+
+        // Handle text-delta events from sub-agents/workflows
+        if (innerPayload.type === 'text-delta' && innerPayload.payload?.text) {
+          return {
+            type: 'text-delta',
+            id: payload.runId!,
+            delta: innerPayload.payload.text,
+          } as const;
+        }
+      }
+
       // return the chunk as is if it's not a known type
       if (isDataChunkType(payload)) {
         if (!('data' in payload)) {
