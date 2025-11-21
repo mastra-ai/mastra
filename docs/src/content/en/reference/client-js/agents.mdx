@@ -125,7 +125,7 @@ const response = await agent.generate({
 });
 
 // Use with stream
-const stream = await agent.stream({
+const result = await agent.stream({
   messages: "Change the background to green",
   clientTools: { colorChangeTool },
 });
