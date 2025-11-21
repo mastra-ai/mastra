@@ -253,6 +253,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/poe",
+          label: "Poe",
+        },
+        {
+          type: "doc",
           id: "providers/requesty",
           label: "Requesty",
         },

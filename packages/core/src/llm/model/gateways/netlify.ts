@@ -37,7 +37,7 @@ interface TokenData {
 export class NetlifyGateway extends MastraModelGateway {
   readonly id = 'netlify';
   readonly name = 'Netlify AI Gateway';
-  readonly prefix = 'netlify'; // All providers will be prefixed with "netlify/"
+  readonly prefix = undefined; // No prefix - netlify is the gateway itself
   private tokenCache = new InMemoryServerCache();
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
