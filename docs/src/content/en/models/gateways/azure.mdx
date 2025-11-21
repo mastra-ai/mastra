@@ -21,44 +21,94 @@ The deployment name is **specific to your Azure account** and chosen when you cr
 - `azureopenai/production-gpt-35-turbo`
 - `azureopenai/staging-gpt-4o`
 
-:::note About IDE Autocomplete
-When you configure optional Management API credentials (see below) and run `pnpm mastra dev` (or build the project), IDE autocomplete will show your actual deployment names from the generated `.d.ts` files.
-:::
+## Setup
+
+Create deployments in [Azure OpenAI Studio](https://oai.azure.com/). The resource name and API key are in Azure Portal under "Keys and Endpoint".
 
 ## Configuration
 
-Create one or more deployments in [Azure OpenAI Studio](https://oai.azure.com/), then configure your credentials:
+Instantiate the gateway and pass it to Mastra. Three configuration modes are available.
 
-```bash
-# Required - from Azure Portal "Keys and Endpoint"
-AZURE_RESOURCE_NAME=my-openai-resource
-AZURE_API_KEY=xxxxxxxxxxxxxxxxxxxxx
+### Static Deployments
 
-# Optional - API version (defaults to 2024-04-01-preview)
-OPENAI_API_VERSION=2024-04-01-preview
+Provide deployment names from Azure Portal.
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { AzureOpenAIGateway } from "@mastra/core/llm";
+
+export const mastra = new Mastra({
+  gateways: [
+    new AzureOpenAIGateway({
+      resourceName: "my-openai-resource",
+      apiKey: process.env.AZURE_API_KEY!,
+      deployments: ["gpt-4-prod", "gpt-35-turbo-dev"],
+    }),
+  ],
+});
 ```
 
-### IDE Autocomplete (Optional)
+### Dynamic Discovery
 
-The Azure gateway works without Management API credentials—you just need to know your deployment names.
-For IDE autocomplete with your actual deployment names, add Management API credentials and run dev mode:
+Provide Management API credentials. The gateway queries Azure Management API to list deployments.
 
-```bash
-# Service Principal credentials (requires "Cognitive Services User" role)
-AZURE_TENANT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-AZURE_CLIENT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-AZURE_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxxx
-AZURE_SUBSCRIPTION_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-AZURE_RESOURCE_GROUP=my-resource-group
+```typescript
+import { Mastra } from "@mastra/core";
+import { AzureOpenAIGateway } from "@mastra/core/llm";
+
+export const mastra = new Mastra({
+  gateways: [
+    new AzureOpenAIGateway({
+      resourceName: "my-openai-resource",
+      apiKey: process.env.AZURE_API_KEY!,
+      management: {
+        tenantId: process.env.AZURE_TENANT_ID!,
+        clientId: process.env.AZURE_CLIENT_ID!,
+        clientSecret: process.env.AZURE_CLIENT_SECRET!,
+        subscriptionId: process.env.AZURE_SUBSCRIPTION_ID!,
+        resourceGroup: "my-resource-group",
+      },
+    }),
+  ],
+});
 ```
 
-Run dev mode to generate types:
+The Service Principal requires "Cognitive Services User" role. See [Azure documentation](https://learn.microsoft.com/en-us/entra/identity-platform/howto-create-service-principal-portal).
 
-```bash
-pnpm mastra dev
+### Manual Deployment Names
+
+Provide resource name and API key only. Specify deployment names when creating agents. No IDE autocomplete.
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { AzureOpenAIGateway } from "@mastra/core/llm";
+
+export const mastra = new Mastra({
+  gateways: [
+    new AzureOpenAIGateway({
+      resourceName: "my-openai-resource",
+      apiKey: process.env.AZURE_API_KEY!,
+    }),
+  ],
+});
 ```
 
-See [Azure documentation](https://learn.microsoft.com/en-us/entra/identity-platform/howto-create-service-principal-portal) for Service Principal setup.
+## Configuration Reference
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `resourceName` | `string` | Yes | Azure OpenAI resource name |
+| `apiKey` | `string` | Yes | API key from "Keys and Endpoint" |
+| `apiVersion` | `string` | No | API version (default: `2024-04-01-preview`) |
+| `deployments` | `string[]` | No | Deployment names for static mode |
+| `management` | `object` | No | Management API credentials |
+| `management.tenantId` | `string` | Yes* | Azure AD tenant ID |
+| `management.clientId` | `string` | Yes* | Service Principal client ID |
+| `management.clientSecret` | `string` | Yes* | Service Principal secret |
+| `management.subscriptionId` | `string` | Yes* | Azure subscription ID |
+| `management.resourceGroup` | `string` | Yes* | Resource group name |
+
+\* Required if `management` is provided
 
 ## Usage
 

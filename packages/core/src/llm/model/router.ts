@@ -3,7 +3,6 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { parseModelRouterId } from './gateway-resolver.js';
-import { AzureOpenAIGateway } from './gateways/azure.js';
 import type { MastraModelGateway } from './gateways/base.js';
 import { findGatewayForModel } from './gateways/index.js';
 
@@ -19,11 +18,7 @@ function getStaticProvidersByGateway(name: string) {
   return Object.fromEntries(Object.entries(PROVIDER_REGISTRY).filter(([_provider, config]) => config.gateway === name));
 }
 
-export const defaultGateways = [
-  new NetlifyGateway(),
-  new ModelsDevGateway(getStaticProvidersByGateway(`models.dev`)),
-  new AzureOpenAIGateway(),
-];
+export const defaultGateways = [new NetlifyGateway(), new ModelsDevGateway(getStaticProvidersByGateway(`models.dev`))];
 
 /**
  * @deprecated Use defaultGateways instead. This export will be removed in a future version.

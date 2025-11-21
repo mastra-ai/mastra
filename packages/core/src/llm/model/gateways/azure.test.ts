@@ -1,39 +1,157 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { AzureOpenAIGateway } from './azure';
+import { AzureOpenAIGateway, type AzureOpenAIGatewayConfig } from './azure';
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch as any;
 
 describe('AzureOpenAIGateway', () => {
-  let gateway: AzureOpenAIGateway;
-
-  beforeEach(() => {
-    gateway = new AzureOpenAIGateway();
-    mockFetch.mockClear();
-
-    delete process.env.AZURE_TENANT_ID;
-    delete process.env.AZURE_CLIENT_ID;
-    delete process.env.AZURE_CLIENT_SECRET;
-    delete process.env.AZURE_SUBSCRIPTION_ID;
-    delete process.env.AZURE_RESOURCE_GROUP;
-    delete process.env.AZURE_RESOURCE_NAME;
-    delete process.env.AZURE_API_KEY;
-  });
-
   afterEach(() => {
     vi.clearAllMocks();
+    mockFetch.mockClear();
   });
 
-  describe('fetchProviders', () => {
-    const mockEnvVars = {
-      AZURE_TENANT_ID: 'tenant-123',
-      AZURE_CLIENT_ID: 'client-456',
-      AZURE_CLIENT_SECRET: 'secret-789',
-      AZURE_SUBSCRIPTION_ID: 'sub-abc',
-      AZURE_RESOURCE_GROUP: 'my-rg',
-      AZURE_RESOURCE_NAME: 'my-openai',
-    };
+  describe('Configuration Validation', () => {
+    it('should throw error if resourceName missing', () => {
+      expect(() => {
+        new AzureOpenAIGateway({
+          apiKey: 'test-key',
+          deployments: ['gpt-4'],
+        } as AzureOpenAIGatewayConfig);
+      }).toThrow('resourceName is required');
+    });
 
+    it('should throw error if apiKey missing', () => {
+      expect(() => {
+        new AzureOpenAIGateway({
+          resourceName: 'test-resource',
+          deployments: ['gpt-4'],
+        } as AzureOpenAIGatewayConfig);
+      }).toThrow('apiKey is required');
+    });
+
+    it('should allow neither deployments nor management (manual deployment names)', () => {
+      expect(() => {
+        new AzureOpenAIGateway({
+          resourceName: 'test-resource',
+          apiKey: 'test-key',
+        });
+      }).not.toThrow();
+    });
+
+    it('should warn if both deployments and management provided', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      new AzureOpenAIGateway({
+        resourceName: 'test-resource',
+        apiKey: 'test-key',
+        deployments: ['gpt-4'],
+        management: {
+          tenantId: 'tenant',
+          clientId: 'client',
+          clientSecret: 'secret',
+          subscriptionId: 'sub',
+          resourceGroup: 'rg',
+        },
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Both deployments and management credentials provided'),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('should throw error if management credentials incomplete', () => {
+      expect(() => {
+        new AzureOpenAIGateway({
+          resourceName: 'test-resource',
+          apiKey: 'test-key',
+          management: {
+            tenantId: 'tenant',
+            clientId: 'client',
+            // Missing clientSecret, subscriptionId, resourceGroup
+          } as any,
+        });
+      }).toThrow('Management credentials incomplete');
+    });
+
+    it('should validate all missing management fields', () => {
+      expect(() => {
+        new AzureOpenAIGateway({
+          resourceName: 'test-resource',
+          apiKey: 'test-key',
+          management: {} as any,
+        });
+      }).toThrow(/tenantId.*clientId.*clientSecret.*subscriptionId.*resourceGroup/);
+    });
+  });
+
+  describe('Static Deployments Mode', () => {
+    it('should return static deployments without API calls', async () => {
+      const gateway = new AzureOpenAIGateway({
+        resourceName: 'test-resource',
+        apiKey: 'test-key',
+        deployments: ['gpt-4-prod', 'gpt-35-turbo-dev'],
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers.azureopenai.models).toEqual(['gpt-4-prod', 'gpt-35-turbo-dev']);
+      expect(providers.azureopenai.name).toBe('Azure OpenAI');
+      expect(providers.azureopenai.gateway).toBe('azureopenai');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should use static deployments even if management provided', async () => {
+      const gateway = new AzureOpenAIGateway({
+        resourceName: 'test-resource',
+        apiKey: 'test-key',
+        deployments: ['gpt-4'],
+        management: {
+          tenantId: 'tenant',
+          clientId: 'client',
+          clientSecret: 'secret',
+          subscriptionId: 'sub',
+          resourceGroup: 'rg',
+        },
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers.azureopenai.models).toEqual(['gpt-4']);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should return empty array for empty deployments list', async () => {
+      const gateway = new AzureOpenAIGateway({
+        resourceName: 'test-resource',
+        apiKey: 'test-key',
+        deployments: [],
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      // Empty deployments array is treated as "no deployments mode"
+      expect(providers.azureopenai.models).toEqual([]);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('No Configuration Mode', () => {
+    it('should return empty models when neither deployments nor management provided', async () => {
+      const gateway = new AzureOpenAIGateway({
+        resourceName: 'test-resource',
+        apiKey: 'test-key',
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers.azureopenai.models).toEqual([]);
+      expect(providers.azureopenai.name).toBe('Azure OpenAI');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Discovery Mode', () => {
     const mockTokenResponse = {
       token_type: 'Bearer',
       expires_in: 3600,
@@ -45,33 +163,21 @@ describe('AzureOpenAIGateway', () => {
         {
           name: 'my-gpt4',
           properties: {
-            model: {
-              name: 'gpt-4',
-              version: '0613',
-              format: 'OpenAI',
-            },
+            model: { name: 'gpt-4', version: '0613', format: 'OpenAI' },
             provisioningState: 'Succeeded',
           },
         },
         {
           name: 'staging-gpt-4o',
           properties: {
-            model: {
-              name: 'gpt-4o',
-              version: '2024-05-13',
-              format: 'OpenAI',
-            },
+            model: { name: 'gpt-4o', version: '2024-05-13', format: 'OpenAI' },
             provisioningState: 'Succeeded',
           },
         },
         {
           name: 'creating-deployment',
           properties: {
-            model: {
-              name: 'gpt-35-turbo',
-              version: '0613',
-              format: 'OpenAI',
-            },
+            model: { name: 'gpt-35-turbo', version: '0613', format: 'OpenAI' },
             provisioningState: 'Creating', // Should be filtered out
           },
         },
@@ -79,83 +185,10 @@ describe('AzureOpenAIGateway', () => {
     };
 
     beforeEach(() => {
-      Object.assign(process.env, mockEnvVars);
+      mockFetch.mockClear();
     });
 
-    it('should fetch and parse deployments from Azure Management API', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockTokenResponse,
-      });
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockDeploymentsResponse,
-      });
-
-      const providers = await gateway.fetchProviders();
-
-      // Verify token endpoint was called
-      expect(mockFetch).toHaveBeenCalledWith(
-        'https://login.microsoftonline.com/tenant-123/oauth2/v2.0/token',
-        expect.objectContaining({
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-        }),
-      );
-
-      const tokenCallArgs = mockFetch.mock.calls.find(call => call[0].includes('login.microsoftonline.com'));
-      const requestBody = tokenCallArgs?.[1]?.body as string;
-      expect(requestBody).toContain('grant_type=client_credentials');
-      expect(requestBody).toContain('client_id=client-456');
-      expect(requestBody).toContain('client_secret=secret-789');
-      expect(requestBody).toContain('scope=https%3A%2F%2Fmanagement.azure.com%2F.default');
-
-      // Verify deployments endpoint was called
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining(
-          'https://management.azure.com/subscriptions/sub-abc/resourceGroups/my-rg/providers/Microsoft.CognitiveServices/accounts/my-openai/deployments',
-        ),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            Authorization: 'Bearer mock-access-token',
-          }),
-        }),
-      );
-
-      expect(providers).toBeDefined();
-      expect(providers['azureopenai']).toBeDefined();
-      expect(providers['azureopenai'].models).toContain('my-gpt4');
-      expect(providers['azureopenai'].models).toContain('staging-gpt-4o');
-      expect(providers['azureopenai'].models).not.toContain('creating-deployment'); // Filtered out
-    });
-
-    it('should return ProviderConfig with correct format', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockTokenResponse,
-      });
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockDeploymentsResponse,
-      });
-
-      const providers = await gateway.fetchProviders();
-
-      const azureConfig = providers['azureopenai'];
-      expect(azureConfig).toBeDefined();
-      expect(azureConfig.apiKeyEnvVar).toBe('AZURE_API_KEY');
-      expect(azureConfig.apiKeyHeader).toBe('api-key');
-      expect(azureConfig.name).toBe('Azure OpenAI');
-      expect(azureConfig.gateway).toBe('azureopenai');
-      expect(azureConfig.models.length).toBe(2); // Only 'Succeeded' deployments
-    });
-
-    it('should cache Azure AD token', async () => {
-      // First call - fetch token
+    it('should fetch token and deployments from Management API', async () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
@@ -166,265 +199,286 @@ describe('AzureOpenAIGateway', () => {
           json: async () => mockDeploymentsResponse,
         });
 
-      await gateway.fetchProviders();
-
-      // Second call - should use cached token
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockDeploymentsResponse,
+      const gateway = new AzureOpenAIGateway({
+        resourceName: 'test-resource',
+        apiKey: 'test-key',
+        management: {
+          tenantId: 'test-tenant',
+          clientId: 'test-client',
+          clientSecret: 'test-secret',
+          subscriptionId: 'test-sub',
+          resourceGroup: 'test-rg',
+        },
       });
 
-      await gateway.fetchProviders();
+      const providers = await gateway.fetchProviders();
 
-      // Token endpoint should only be called once (cached on second call)
-      const tokenCalls = mockFetch.mock.calls.filter(call => call[0].includes('login.microsoftonline.com'));
-      expect(tokenCalls.length).toBe(1);
+      // Verify token endpoint was called
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        }),
+      );
+
+      // Verify deployments endpoint was called
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/subscriptions/test-sub/resourceGroups/test-rg'),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer mock-access-token',
+          }),
+        }),
+      );
+
+      // Verify only "Succeeded" deployments returned
+      expect(providers.azureopenai.models).toEqual(['my-gpt4', 'staging-gpt-4o']);
+      expect(providers.azureopenai.models).not.toContain('creating-deployment');
     });
 
-    it('should refetch token when cached token is about to expire', async () => {
-      // First call - fetch token that expires in less than 60 seconds
-      const expiringTokenResponse = {
-        token_type: 'Bearer',
-        expires_in: 50,
-        access_token: 'expiring-token',
-      };
-
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => expiringTokenResponse,
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => mockDeploymentsResponse,
-        });
-
-      await gateway.fetchProviders();
-
-      // Second call - should fetch new token because cached one expires in <60s
-      const freshTokenResponse = {
-        token_type: 'Bearer',
-        expires_in: 3600,
-        access_token: 'fresh-token',
-      };
-
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => freshTokenResponse,
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => mockDeploymentsResponse,
-        });
-
-      await gateway.fetchProviders();
-
-      // Token endpoint should be called twice (not cached because token expires within 60 seconds)
-      const tokenCalls = mockFetch.mock.calls.filter(call => call[0].includes('login.microsoftonline.com'));
-      expect(tokenCalls.length).toBe(2);
-    });
-
-    it('should handle paginated deployment responses', async () => {
-      const firstPageResponse = {
+    it('should handle pagination when fetching deployments', async () => {
+      const page1Response = {
         value: [
           {
             name: 'deployment-1',
             properties: {
-              model: {
-                name: 'gpt-4',
-                version: '0613',
-                format: 'OpenAI',
-              },
-              provisioningState: 'Succeeded',
-            },
-          },
-          {
-            name: 'deployment-2',
-            properties: {
-              model: {
-                name: 'gpt-35-turbo',
-                version: '0613',
-                format: 'OpenAI',
-              },
+              model: { name: 'gpt-4', version: '0613', format: 'OpenAI' },
               provisioningState: 'Succeeded',
             },
           },
         ],
         nextLink:
-          'https://management.azure.com/subscriptions/sub-abc/resourceGroups/my-rg/providers/Microsoft.CognitiveServices/accounts/my-openai/deployments?api-version=2024-10-01&$skiptoken=abc123',
+          'https://management.azure.com/subscriptions/test-sub/resourceGroups/test-rg/providers/Microsoft.CognitiveServices/accounts/test-resource/deployments?api-version=2024-10-01&$skiptoken=abc',
       };
 
-      const secondPageResponse = {
+      const page2Response = {
         value: [
           {
-            name: 'deployment-3',
+            name: 'deployment-2',
             properties: {
-              model: {
-                name: 'gpt-4o',
-                version: '2024-05-13',
-                format: 'OpenAI',
-              },
+              model: { name: 'gpt-4o', version: '2024-05-13', format: 'OpenAI' },
               provisioningState: 'Succeeded',
             },
           },
-          {
-            name: 'deployment-4',
-            properties: {
-              model: {
-                name: 'text-embedding-ada-002',
-                version: '1',
-                format: 'OpenAI',
-              },
-              provisioningState: 'Creating', // Should be filtered out
-            },
-          },
         ],
-        // No nextLink - end of pagination
       };
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockTokenResponse,
-      });
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockTokenResponse,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => page1Response,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => page2Response,
+        });
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => firstPageResponse,
-      });
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => secondPageResponse,
+      const gateway = new AzureOpenAIGateway({
+        resourceName: 'test-resource',
+        apiKey: 'test-key',
+        management: {
+          tenantId: 'test-tenant',
+          clientId: 'test-client',
+          clientSecret: 'test-secret',
+          subscriptionId: 'test-sub',
+          resourceGroup: 'test-rg',
+        },
       });
 
       const providers = await gateway.fetchProviders();
 
-      const tokenCalls = mockFetch.mock.calls.filter(call => call[0].includes('login.microsoftonline.com'));
+      // Should have called fetch 3 times: 1 token + 2 deployment pages
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+      expect(providers.azureopenai.models).toEqual(['deployment-1', 'deployment-2']);
+    });
+
+    it('should return fallback config if token fetch fails', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const gateway = new AzureOpenAIGateway({
+        resourceName: 'test-resource',
+        apiKey: 'test-key',
+        management: {
+          tenantId: 'test-tenant',
+          clientId: 'test-client',
+          clientSecret: 'test-secret',
+          subscriptionId: 'test-sub',
+          resourceGroup: 'test-rg',
+        },
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers.azureopenai.models).toEqual([]);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Deployment discovery failed'), expect.anything());
+
+      warnSpy.mockRestore();
+    });
+
+    it('should return fallback config if deployments fetch fails', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockTokenResponse,
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 403,
+          text: async () => 'Forbidden',
+        });
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const gateway = new AzureOpenAIGateway({
+        resourceName: 'test-resource',
+        apiKey: 'test-key',
+        management: {
+          tenantId: 'test-tenant',
+          clientId: 'test-client',
+          clientSecret: 'test-secret',
+          subscriptionId: 'test-sub',
+          resourceGroup: 'test-rg',
+        },
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers.azureopenai.models).toEqual([]);
+      expect(warnSpy).toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
+  });
+
+  describe('Token Caching', () => {
+    const mockTokenResponse = {
+      token_type: 'Bearer',
+      expires_in: 3600,
+      access_token: 'mock-token',
+    };
+
+    const mockDeploymentsResponse = {
+      value: [
+        {
+          name: 'test-deployment',
+          properties: {
+            model: { name: 'gpt-4', version: '0613', format: 'OpenAI' },
+            provisioningState: 'Succeeded',
+          },
+        },
+      ],
+    };
+
+    it('should cache and reuse tokens', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockTokenResponse,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockDeploymentsResponse,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockDeploymentsResponse,
+        });
+
+      const gateway = new AzureOpenAIGateway({
+        resourceName: 'test-resource',
+        apiKey: 'test-key',
+        management: {
+          tenantId: 'test-tenant',
+          clientId: 'test-client',
+          clientSecret: 'test-secret',
+          subscriptionId: 'test-sub',
+          resourceGroup: 'test-rg',
+        },
+      });
+
+      // Call twice
+      await gateway.fetchProviders();
+      await gateway.fetchProviders();
+
+      // Token should be fetched only once (cached)
+      const tokenCalls = mockFetch.mock.calls.filter((call: any) => call[0].includes('login.microsoftonline.com'));
       expect(tokenCalls.length).toBe(1);
 
-      const deploymentCalls = mockFetch.mock.calls.filter(
-        call => call[0].includes('management.azure.com') && call[0].includes('/deployments'),
-      );
+      // Deployments should be fetched twice
+      const deploymentCalls = mockFetch.mock.calls.filter((call: any) => call[0].includes('deployments'));
       expect(deploymentCalls.length).toBe(2);
-
-      expect(deploymentCalls[1][0]).toBe(firstPageResponse.nextLink);
-
-      expect(providers['azureopenai'].models).toHaveLength(3);
-      expect(providers['azureopenai'].models).toContain('deployment-1');
-      expect(providers['azureopenai'].models).toContain('deployment-2');
-      expect(providers['azureopenai'].models).toContain('deployment-3');
-      expect(providers['azureopenai'].models).not.toContain('deployment-4');
-    });
-
-    it('should return graceful fallback when Management API credentials are missing', async () => {
-      delete process.env.AZURE_TENANT_ID;
-
-      const result = await gateway.fetchProviders();
-
-      expect(result).toMatchObject({
-        azureopenai: {
-          apiKeyEnvVar: 'AZURE_API_KEY',
-          models: [],
-          gateway: 'azureopenai',
-        },
-      });
-    });
-
-    it('should return graceful fallback on Azure AD authentication failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-        text: async () => 'Unauthorized',
-      });
-
-      const result = await gateway.fetchProviders();
-
-      expect(result).toMatchObject({
-        azureopenai: {
-          apiKeyEnvVar: 'AZURE_API_KEY',
-          models: [],
-          gateway: 'azureopenai',
-        },
-      });
-    });
-
-    it('should return graceful fallback on Management API fetch failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockTokenResponse,
-      });
-
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 403,
-        text: async () => 'Forbidden',
-      });
-
-      const result = await gateway.fetchProviders();
-
-      expect(result).toMatchObject({
-        azureopenai: {
-          apiKeyEnvVar: 'AZURE_API_KEY',
-          models: [],
-          gateway: 'azureopenai',
-        },
-      });
     });
   });
 
   describe('buildUrl', () => {
-    it('should return undefined (SDK handles URL construction)', () => {
-      const url = gateway.buildUrl('azureopenai/my-deployment');
+    it('should return undefined (Azure SDK constructs URLs internally)', () => {
+      const gateway = new AzureOpenAIGateway({
+        resourceName: 'test-resource',
+        apiKey: 'test-key',
+        deployments: ['gpt-4'],
+      });
+
+      const url = gateway.buildUrl('azureopenai/gpt-4', {});
       expect(url).toBeUndefined();
     });
   });
 
   describe('getApiKey', () => {
-    it('should return AZURE_API_KEY from environment', async () => {
-      process.env.AZURE_API_KEY = 'test-api-key';
+    it('should return the configured API key', async () => {
+      const gateway = new AzureOpenAIGateway({
+        resourceName: 'test-resource',
+        apiKey: 'my-test-key',
+        deployments: ['gpt-4'],
+      });
 
-      const apiKey = await gateway.getApiKey('azureopenai/my-deployment');
-
-      expect(apiKey).toBe('test-api-key');
-    });
-
-    it('should throw error when AZURE_API_KEY is missing', async () => {
-      delete process.env.AZURE_API_KEY;
-
-      await expect(gateway.getApiKey('azureopenai/my-deployment')).rejects.toThrow('Missing AZURE_API_KEY');
+      const apiKey = await gateway.getApiKey('gpt-4');
+      expect(apiKey).toBe('my-test-key');
     });
   });
 
   describe('resolveLanguageModel', () => {
-    it('should create Azure language model with deployment name', async () => {
-      process.env.AZURE_RESOURCE_NAME = 'my-resource';
-      process.env.AZURE_API_KEY = 'test-key';
+    it('should create language model with configured values', async () => {
+      const gateway = new AzureOpenAIGateway({
+        resourceName: 'test-resource',
+        apiKey: 'test-key',
+        apiVersion: '2024-04-01-preview',
+        deployments: ['gpt-4'],
+      });
 
-      await expect(
-        gateway.resolveLanguageModel({ modelId: 'my-gpt4', providerId: 'azureopenai', apiKey: 'test-key' }),
-      ).resolves.toBeDefined();
+      // Note: We can't fully test createAzure since it's from @ai-sdk/azure
+      // We just verify it doesn't throw
+      const model = await gateway.resolveLanguageModel({
+        modelId: 'gpt-4',
+        providerId: 'azureopenai',
+        apiKey: 'test-key',
+      });
+
+      expect(model).toBeDefined();
     });
 
-    it('should throw error when AZURE_RESOURCE_NAME is missing', async () => {
-      delete process.env.AZURE_RESOURCE_NAME;
+    it('should use default API version if not provided', async () => {
+      const gateway = new AzureOpenAIGateway({
+        resourceName: 'test-resource',
+        apiKey: 'test-key',
+        deployments: ['gpt-4'],
+        // No apiVersion provided
+      });
 
-      await expect(
-        gateway.resolveLanguageModel({
-          modelId: 'my-gpt4',
-          providerId: 'azureopenai',
-          apiKey: 'test-key',
-        }),
-      ).rejects.toThrow('Missing AZURE_RESOURCE_NAME');
-    });
+      const model = await gateway.resolveLanguageModel({
+        modelId: 'gpt-4',
+        providerId: 'azureopenai',
+        apiKey: 'test-key',
+      });
 
-    it('should use default API version when not specified', async () => {
-      process.env.AZURE_RESOURCE_NAME = 'my-resource';
-      delete process.env.OPENAI_API_VERSION;
-
-      await expect(
-        gateway.resolveLanguageModel({ modelId: 'my-gpt4', providerId: 'azureopenai', apiKey: 'test-key' }),
-      ).resolves.toBeDefined();
+      expect(model).toBeDefined();
+      // Default version is used internally
     });
   });
 });

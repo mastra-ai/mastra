@@ -5,19 +5,7 @@ import { AzureOpenAIGateway } from './azure.js';
 // Run with: pnpm test azure.integration.test.ts
 
 describe('AzureOpenAIGateway - Real API Integration', () => {
-  const gateway = new AzureOpenAIGateway();
-
-  const credentials = {
-    AZURE_TENANT_ID: process.env.AZURE_TENANT_ID,
-    AZURE_CLIENT_ID: process.env.AZURE_CLIENT_ID,
-    AZURE_CLIENT_SECRET: process.env.AZURE_CLIENT_SECRET,
-    AZURE_SUBSCRIPTION_ID: process.env.AZURE_SUBSCRIPTION_ID,
-    AZURE_RESOURCE_GROUP: process.env.AZURE_RESOURCE_GROUP,
-    AZURE_RESOURCE_NAME: process.env.AZURE_RESOURCE_NAME,
-    AZURE_API_KEY: process.env.AZURE_API_KEY,
-  };
-
-  const hasCredentials =
+  const hasManagementCreds =
     process.env.AZURE_TENANT_ID &&
     process.env.AZURE_CLIENT_ID &&
     process.env.AZURE_CLIENT_SECRET &&
@@ -26,13 +14,25 @@ describe('AzureOpenAIGateway - Real API Integration', () => {
     process.env.AZURE_RESOURCE_NAME &&
     process.env.AZURE_API_KEY;
 
-  const skipMessage = hasCredentials
+  const skipMessage = hasManagementCreds
     ? undefined
-    : `Skipping Azure integration tests - required credentials not found. Required credentials: ${Object.keys(credentials).join(', ')}`;
+    : 'Skipping Azure integration tests - required credentials not found. Required: AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_SUBSCRIPTION_ID, AZURE_RESOURCE_GROUP, AZURE_RESOURCE_NAME, AZURE_API_KEY';
 
-  it.skipIf(!hasCredentials)(
-    'should fetch real deployments from Azure Management API and validate shape',
+  it.skipIf(!hasManagementCreds)(
+    'should fetch real deployments from Azure Management API with discovery mode',
     async () => {
+      const gateway = new AzureOpenAIGateway({
+        resourceName: process.env.AZURE_RESOURCE_NAME!,
+        apiKey: process.env.AZURE_API_KEY!,
+        management: {
+          tenantId: process.env.AZURE_TENANT_ID!,
+          clientId: process.env.AZURE_CLIENT_ID!,
+          clientSecret: process.env.AZURE_CLIENT_SECRET!,
+          subscriptionId: process.env.AZURE_SUBSCRIPTION_ID!,
+          resourceGroup: process.env.AZURE_RESOURCE_GROUP!,
+        },
+      });
+
       const providers = await gateway.fetchProviders();
 
       expect(providers).toBeDefined();
@@ -46,9 +46,6 @@ describe('AzureOpenAIGateway - Real API Integration', () => {
       expect(providers['azureopenai']).toBeDefined();
 
       const azureProvider = providers['azureopenai'];
-
-      expect(azureProvider.apiKeyEnvVar, 'Provider azureopenai missing apiKeyEnvVar').toBeDefined();
-      expect(azureProvider.apiKeyEnvVar).toBe('AZURE_API_KEY');
 
       expect(azureProvider.apiKeyHeader, 'Provider azureopenai missing apiKeyHeader').toBeDefined();
       expect(azureProvider.apiKeyHeader).toBe('api-key');
@@ -72,9 +69,21 @@ describe('AzureOpenAIGateway - Real API Integration', () => {
     30000,
   );
 
-  it.skipIf(!hasCredentials)(
+  it.skipIf(!hasManagementCreds)(
     'should create language model with resolveLanguageModel',
     async () => {
+      const gateway = new AzureOpenAIGateway({
+        resourceName: process.env.AZURE_RESOURCE_NAME!,
+        apiKey: process.env.AZURE_API_KEY!,
+        management: {
+          tenantId: process.env.AZURE_TENANT_ID!,
+          clientId: process.env.AZURE_CLIENT_ID!,
+          clientSecret: process.env.AZURE_CLIENT_SECRET!,
+          subscriptionId: process.env.AZURE_SUBSCRIPTION_ID!,
+          resourceGroup: process.env.AZURE_RESOURCE_GROUP!,
+        },
+      });
+
       const providers = await gateway.fetchProviders();
       const deployments = providers['azureopenai'].models;
 
@@ -95,7 +104,7 @@ describe('AzureOpenAIGateway - Real API Integration', () => {
     30000,
   );
 
-  if (!hasCredentials) {
+  if (!hasManagementCreds) {
     it('should skip all tests when credentials are missing', () => {
       console.log(`\n${skipMessage}`);
     });
