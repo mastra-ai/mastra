@@ -42,7 +42,13 @@ export class QdrantVector extends MastraVector {
     this.client = new QdrantClient(qdrantParams);
   }
 
-  async upsert({ indexName, vectors, metadata, ids, vectorName }: UpsertVectorParams & { vectorName?: string }): Promise<string[]> {
+  async upsert({
+    indexName,
+    vectors,
+    metadata,
+    ids,
+    vectorName,
+  }: UpsertVectorParams & { vectorName?: string }): Promise<string[]> {
     const pointIds = ids || vectors.map(() => crypto.randomUUID());
 
     const records = vectors.map((vector, i) => ({
@@ -74,7 +80,12 @@ export class QdrantVector extends MastraVector {
     }
   }
 
-  async createIndex({ indexName, dimension, metric = 'cosine', namedVectors }: CreateIndexParams & { namedVectors?: Record<string, { size: number; distance: string }> }): Promise<void> {
+  async createIndex({
+    indexName,
+    dimension,
+    metric = 'cosine',
+    namedVectors,
+  }: CreateIndexParams & { namedVectors?: Record<string, { size: number; distance: string }> }): Promise<void> {
     try {
       if (!namedVectors) {
         if (!Number.isInteger(dimension) || dimension <= 0) {
@@ -99,13 +110,16 @@ export class QdrantVector extends MastraVector {
     try {
       // If namedVectors is provided, use it; otherwise use default vector config
       const vectorsConfig = namedVectors
-        ? Object.entries(namedVectors).reduce((acc, [name, config]) => {
-            acc[name] = {
-              size: config.size,
-              distance: DISTANCE_MAPPING[config.distance] || 'Cosine',
-            };
-            return acc;
-          }, {} as Record<string, { size: number; distance: Schemas['Distance'] }>)
+        ? Object.entries(namedVectors).reduce(
+            (acc, [name, config]) => {
+              acc[name] = {
+                size: config.size,
+                distance: DISTANCE_MAPPING[config.distance] || 'Cosine',
+              };
+              return acc;
+            },
+            {} as Record<string, { size: number; distance: Schemas['Distance'] }>,
+          )
         : {
             size: dimension,
             distance: DISTANCE_MAPPING[metric],
@@ -122,7 +136,9 @@ export class QdrantVector extends MastraVector {
         if (!namedVectors) {
           await this.validateExistingIndex(indexName, dimension, metric);
         } else {
-          this.logger.info(`Collection "${indexName}" already exists. Skipping validation for named vectors configuration.`);
+          this.logger.info(
+            `Collection "${indexName}" already exists. Skipping validation for named vectors configuration.`,
+          );
         }
         return;
       }
@@ -230,21 +246,21 @@ export class QdrantVector extends MastraVector {
     try {
       const { config, points_count } = await this.client.getCollection(indexName);
 
-      const vectors= config.params.vectors;
-       // Check if this is a named vectors collection (Record) or single vector config
-       const  isNamedVectors = vectors && typeof vectors === 'object' && !('size' in vectors);
+      const vectors = config.params.vectors;
+      // Check if this is a named vectors collection (Record) or single vector config
+      const isNamedVectors = vectors && typeof vectors === 'object' && !('size' in vectors);
 
-       if (isNamedVectors) {
-         const firstVectorName = Object.keys(vectors)[0];
-         const firstVector = vectors[firstVectorName];
-         const distance = firstVector?.distance as Schemas['Distance'];
-         return {
+      if (isNamedVectors) {
+        const firstVectorName = Object.keys(vectors)[0];
+        const firstVector = vectors[firstVectorName];
+        const distance = firstVector?.distance as Schemas['Distance'];
+        return {
           dimension: firstVector?.size as number,
           count: points_count || 0,
           // @ts-expect-error
           metric: Object.keys(DISTANCE_MAPPING).find(key => DISTANCE_MAPPING[key] === distance),
-         }
-       } else {
+        };
+      } else {
         const distance = (vectors as any)?.distance as Schemas['Distance'];
         return {
           dimension: (vectors as any)?.size as number,
@@ -252,7 +268,7 @@ export class QdrantVector extends MastraVector {
           // @ts-expect-error
           metric: Object.keys(DISTANCE_MAPPING).find(key => DISTANCE_MAPPING[key] === distance),
         };
-       }
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -292,7 +308,12 @@ export class QdrantVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector({ indexName, id, update, vectorName }: UpdateVectorParams & { vectorName?: string }): Promise<void> {
+  async updateVector({
+    indexName,
+    id,
+    update,
+    vectorName,
+  }: UpdateVectorParams & { vectorName?: string }): Promise<void> {
     try {
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');
