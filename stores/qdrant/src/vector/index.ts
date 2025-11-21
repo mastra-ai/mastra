@@ -51,6 +51,15 @@ export class QdrantVector extends MastraVector {
   }: UpsertVectorParams & { vectorName?: string }): Promise<string[]> {
     const pointIds = ids || vectors.map(() => crypto.randomUUID());
 
+    if (vectorName) {
+      const { config } = await this.client.getCollection(indexName);
+      const vectorsConfig = config.params.vectors;
+      const isNamedVectors = vectorsConfig && typeof vectorsConfig === 'object' && !('size' in vectorsConfig);
+
+      if (!isNamedVectors || !(vectorName in vectorsConfig)) {
+        throw new Error(`Vector name "${vectorName}" does not exist in collection "${indexName}"`);
+      }
+    }
     const records = vectors.map((vector, i) => ({
       id: pointIds[i],
       vector: vectorName ? { [vectorName]: vector } : vector,
