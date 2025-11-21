@@ -145,12 +145,7 @@ export const WorkflowTimeTravelForm = ({ stepKey, closeModal }: WorkflowTimeTrav
   } = useContext(WorkflowRunContext);
   const { requestContext } = usePlaygroundStore();
   const stepResult = result?.steps?.[stepKey];
-  const [resumeData, setResumeData] = useState(() => {
-    if (stepResult && 'resumePayload' in stepResult) {
-      return prettyJson(stepResult.resumePayload);
-    }
-    return prettyJson({});
-  });
+  const [resumeData, setResumeData] = useState(() => '{}');
   const [contextValue, setContextValue] = useState(() => '{}');
   const [nestedContextValue, setNestedContextValue] = useState(() => '{}');
   const [formError, setFormError] = useState<string | null>(null);
@@ -158,9 +153,9 @@ export const WorkflowTimeTravelForm = ({ stepKey, closeModal }: WorkflowTimeTrav
 
   const stepDefinition = workflow?.allSteps?.[stepKey];
 
-  const { schema: stepSchema, schemaError } = useMemo(() => {
+  const { schema: stepSchema } = useMemo(() => {
     if (!stepDefinition?.inputSchema) {
-      return { schema: z.record(z.string(), z.any()), schemaError: 'Step schema not available' };
+      return { schema: z.record(z.string(), z.any()) };
     }
 
     try {
@@ -168,33 +163,33 @@ export const WorkflowTimeTravelForm = ({ stepKey, closeModal }: WorkflowTimeTrav
       return { schema: resolveSerializedZodOutput(jsonSchemaToZod(parsed as any)), schemaError: null };
     } catch (err) {
       console.error('Failed to parse step schema', err);
-      return { schema: z.record(z.string(), z.any()), schemaError: 'Unable to read step schema' };
+      return { schema: z.record(z.string(), z.any()) };
     }
   }, [stepDefinition?.inputSchema]);
 
-  const resumePayload = stepResult && 'resumePayload' in stepResult ? stepResult.resumePayload : undefined;
+  // const resumePayload = stepResult && 'resumePayload' in stepResult ? stepResult.resumePayload : undefined;
 
-  useEffect(() => {
-    setResumeData(prettyJson(resumePayload ?? {}));
-  }, [resumePayload]);
+  // useEffect(() => {
+  //   setResumeData(prettyJson(resumePayload ?? {}));
+  // }, [resumePayload]);
 
-  useEffect(() => {
-    if (result?.steps) {
-      let newStepResult: Record<string, any> = {};
-      for (const stepId of Object.keys(result.steps)) {
-        if (stepId === stepKey) {
-          break;
-        }
-        newStepResult[stepId] = result.steps[stepId];
-      }
-      const stepEntries = Object.entries(newStepResult ?? {});
-      const contextEntries = stepEntries.filter(([key]) => !key.includes('.'));
-      const nestedEntries = stepEntries.filter(([key]) => key.includes('.'));
-      setContextValue(prettyJson(Object.fromEntries(contextEntries)));
-      const nestedStepContext = constructNestedStepContext(Object.fromEntries(nestedEntries));
-      setNestedContextValue(prettyJson(nestedStepContext));
-    }
-  }, [result?.steps, stepKey]);
+  // useEffect(() => {
+  //   if (result?.steps) {
+  //     let newStepResult: Record<string, any> = {};
+  //     for (const stepId of Object.keys(result.steps)) {
+  //       if (stepId === stepKey) {
+  //         break;
+  //       }
+  //       newStepResult[stepId] = result.steps[stepId];
+  //     }
+  //     const stepEntries = Object.entries(newStepResult ?? {});
+  //     const contextEntries = stepEntries.filter(([key]) => !key.includes('.'));
+  //     const nestedEntries = stepEntries.filter(([key]) => key.includes('.'));
+  //     setContextValue(prettyJson(Object.fromEntries(contextEntries)));
+  //     const nestedStepContext = constructNestedStepContext(Object.fromEntries(nestedEntries));
+  //     setNestedContextValue(prettyJson(nestedStepContext));
+  //   }
+  // }, [result?.steps, stepKey]);
 
   const ensureNestedPath = (root: Record<string, any>, path: string[]) => {
     let cursor = root;
@@ -218,27 +213,27 @@ export const WorkflowTimeTravelForm = ({ stepKey, closeModal }: WorkflowTimeTrav
 
       const { runId } = await createWorkflowRun({ workflowId, prevRunId });
 
-      const stepArr = stepKey.split('.');
-      if (stepArr.length === 1 && Object.keys(parsedContext)?.length > 0) {
-        parsedContext[stepKey] = {
-          status: 'running',
-          payload: data,
-        };
-      }
+      // const stepArr = stepKey.split('.');
+      // if (stepArr.length === 1 && Object.keys(parsedContext)?.length > 0) {
+      //   parsedContext[stepKey] = {
+      //     status: 'running',
+      //     payload: data,
+      //   };
+      // }
 
-      if (stepArr.length > 1 && Object.keys(parsedNestedContext)?.length > 0) {
-        const nestedParentPath = stepArr.slice(0, -1);
-        const leafKey = stepArr.at(-1);
-        const parent = nestedParentPath.length
-          ? ensureNestedPath(parsedNestedContext, nestedParentPath)
-          : parsedNestedContext;
-        if (leafKey) {
-          parent[leafKey] = {
-            status: 'running',
-            payload: data,
-          };
-        }
-      }
+      // if (stepArr.length > 1 && Object.keys(parsedNestedContext)?.length > 0) {
+      //   const nestedParentPath = stepArr.slice(0, -1);
+      //   const leafKey = stepArr.at(-1);
+      //   const parent = nestedParentPath.length
+      //     ? ensureNestedPath(parsedNestedContext, nestedParentPath)
+      //     : parsedNestedContext;
+      //   if (leafKey) {
+      //     parent[leafKey] = {
+      //       status: 'running',
+      //       payload: data,
+      //     };
+      //   }
+      // }
 
       const payload = {
         runId,
