@@ -607,6 +607,60 @@ describe('Gemini Model Compatibility Tests', () => {
   });
 
   describe('Gemini 3 Pro with tool calls', () => {
+    it('should preserve thought_signature metadata through tool call round-trip', async () => {
+      const weatherTool = createTool({
+        id: 'get-weather',
+        description: 'Gets the current weather for a location',
+        inputSchema: z.object({
+          location: z.string().describe('The city and state, e.g. San Francisco, CA'),
+        }),
+        outputSchema: z.object({
+          temperature: z.number(),
+          conditions: z.string(),
+        }),
+        execute: async () => {
+          return {
+            temperature: 72,
+            conditions: 'Sunny',
+          };
+        },
+      });
+
+      const agent = new Agent({
+        id: 'weather-gemini3-agent',
+        name: 'Weather Gemini3 Agent',
+        instructions: 'You are a helpful weather assistant. Use the get-weather tool to answer weather questions.',
+        model: GEMINI_3_PRO,
+        tools: { weatherTool },
+        memory,
+      });
+
+      // This should trigger a tool call, then process the result
+      const stream = await agent.stream('What is the weather in San Francisco?', {
+        maxSteps: 5,
+        threadId: 'tool-calls',
+        resourceId: 'gemini-3',
+      });
+
+      const result = await stream.getFullOutput();
+      expect(result).toBeDefined();
+      expect(result.request.body).toContain(`thoughtSignature`);
+      expect(result.text).toBeDefined();
+      expect(result.text.length).toBeGreaterThan(0);
+      expect(result.error).toBeUndefined();
+
+      const stream2 = await agent.stream('Whats the weather there now?', {
+        threadId: 'tool-calls',
+        resourceId: 'gemini-3',
+      });
+      const result2 = await stream2.getFullOutput();
+      expect(result2).toBeDefined();
+      expect(result2.request.body).toContain(`thoughtSignature`);
+      expect(result2.text).toBeDefined();
+      expect(result2.text.length).toBeGreaterThan(0);
+      expect(result2.error).toBeUndefined();
+    }, 30000);
+
     it('should handle multi-step tool calls with gemini 3 pro', async () => {
       const weatherTool = createTool({
         id: 'get-weather-multi',
@@ -644,6 +698,7 @@ describe('Gemini Model Compatibility Tests', () => {
       expect(result).toBeDefined();
       expect(result.text).toBeDefined();
       expect(result.text.length).toBeGreaterThan(0);
+      expect(result.error).toBeUndefined();
     }, 30000);
   });
 });
