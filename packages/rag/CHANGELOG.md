@@ -1,5 +1,23 @@
 # @mastra/rag
 
+## 1.3.5
+
+### Patch Changes
+
+- Fix invalid filter handling in vector queries and graph-rag searches. Invalid filter inputs now throw explicit errors instead of silently falling back to empty filters, preventing unintended unfiltered results. ([#10376](https://github.com/mastra-ai/mastra/pull/10376))
+
+- Updated dependencies [[`880f12b`](https://github.com/mastra-ai/mastra/commit/880f12bb45a3d49faf8d22969744ffb6e01c66fd)]:
+  - @mastra/core@0.24.5
+
+## 1.3.5-alpha.0
+
+### Patch Changes
+
+- Fix invalid filter handling in vector queries and graph-rag searches. Invalid filter inputs now throw explicit errors instead of silently falling back to empty filters, preventing unintended unfiltered results. ([#10376](https://github.com/mastra-ai/mastra/pull/10376))
+
+- Updated dependencies [[`880f12b`](https://github.com/mastra-ai/mastra/commit/880f12bb45a3d49faf8d22969744ffb6e01c66fd)]:
+  - @mastra/core@0.24.5-alpha.0
+
 ## 1.3.4
 
 ### Patch Changes

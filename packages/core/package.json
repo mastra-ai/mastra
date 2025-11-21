@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.24.3",
+  "version": "0.24.5",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -191,7 +191,7 @@
   "dependencies": {
     "@a2a-js/sdk": "~0.2.4",
     "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.33",
-    "@ai-sdk/google-v5": "npm:@ai-sdk/google@2.0.23",
+    "@ai-sdk/google-v5": "npm:@ai-sdk/google@2.0.40",
     "@ai-sdk/mistral-v5": "npm:@ai-sdk/mistral@2.0.23",
     "@ai-sdk/openai-compatible-v5": "npm:@ai-sdk/openai-compatible@1.0.22",
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.53",

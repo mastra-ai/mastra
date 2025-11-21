@@ -1,5 +1,6 @@
 import type { ToolSet } from 'ai-v5';
 import z from 'zod';
+import type { MastraMessageV2 } from '../../../agent/message-list';
 import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type { ChunkType } from '../../../stream/types';
@@ -41,24 +42,30 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
             rest.controller.enqueue(chunk);
           });
 
-          rest.messageList.add(
-            {
-              id: toolResultMessageId,
-              role: 'tool',
-              content: errorResults.map(toolCall => {
+          const msg: MastraMessageV2 = {
+            id: toolResultMessageId!,
+            role: 'assistant' as const,
+            content: {
+              format: 2,
+              parts: errorResults.map(toolCallErrorResult => {
                 return {
-                  type: 'tool-result',
-                  args: toolCall.args,
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  result: {
-                    tool_execution_error: toolCall.error?.message ?? toolCall.error,
+                  type: 'tool-invocation' as const,
+                  toolInvocation: {
+                    state: 'result' as const,
+                    toolCallId: toolCallErrorResult.toolCallId,
+                    toolName: toolCallErrorResult.toolName,
+                    args: toolCallErrorResult.args,
+                    result: toolCallErrorResult.error?.message ?? toolCallErrorResult.error,
                   },
+                  ...(toolCallErrorResult.providerMetadata
+                    ? { providerMetadata: toolCallErrorResult.providerMetadata }
+                    : {}),
                 };
               }),
             },
-            'response',
-          );
+            createdAt: new Date(),
+          };
+          rest.messageList.add(msg, 'response');
         }
 
         initialResult.stepResult.isContinued = false;
@@ -93,22 +100,29 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
 
           const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
 
-          rest.messageList.add(
-            {
-              id: toolResultMessageId,
-              role: 'tool',
-              content: inputData.map(toolCall => {
+          const toolResultMessage: MastraMessageV2 = {
+            id: toolResultMessageId!,
+            role: 'assistant' as const,
+            content: {
+              format: 2,
+              parts: inputData.map(toolCall => {
                 return {
-                  type: 'tool-result',
-                  args: toolCall.args,
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  result: toolCall.result,
+                  type: 'tool-invocation' as const,
+                  toolInvocation: {
+                    state: 'result' as const,
+                    toolCallId: toolCall.toolCallId,
+                    toolName: toolCall.toolName,
+                    args: toolCall.args,
+                    result: toolCall.result,
+                  },
+                  ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
                 };
               }),
             },
-            'response',
-          );
+            createdAt: new Date(),
+          };
+
+          rest.messageList.add(toolResultMessage, 'response');
         }
 
         return {
