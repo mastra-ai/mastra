@@ -85,7 +85,7 @@ Create `src/app/api/chat/route.ts`:
 ```ts title="src/app/api/chat/route.ts"
 import { mastra } from "@/mastra";
 import { NextResponse } from "next/server";
-import { toAISdkFormat } from "@mastra/ai-sdk";
+import { toAISdkStream } from "@mastra/ai-sdk";
 import { convertMessages } from "@mastra/core/agent";
 import { createUIMessageStreamResponse } from "ai";
 
@@ -102,7 +102,7 @@ export async function POST(req: Request) {
   });
 
   return createUIMessageStreamResponse({
-    stream: toAISdkFormat(stream, { from: "agent" }),
+    stream: toAISdkStream(stream, { from: "agent" }),
   })
 }
 
