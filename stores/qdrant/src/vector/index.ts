@@ -96,7 +96,9 @@ export class QdrantVector extends MastraVector {
             throw new Error(`Named vector "${name}": size must be a positive integer`);
           }
           if (!DISTANCE_MAPPING[config.distance]) {
-            throw new Error(`Named vector "${name}": invalid distance "${config.distance}". Must be one of: cosine, euclidean, dotproduct`);
+            throw new Error(
+              `Named vector "${name}": invalid distance "${config.distance}". Must be one of: cosine, euclidean, dotproduct`,
+            );
           }
         }
       } else {
