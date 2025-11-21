@@ -25,6 +25,7 @@ const DISTANCE_MAPPING: Record<string, Schemas['Distance']> = {
 };
 
 type QdrantQueryVectorParams = QueryVectorParams<QdrantVectorFilter>;
+type QdrantQueryWithNamedVectorParams = QdrantQueryVectorParams & { using?: string };
 
 export class QdrantVector extends MastraVector {
   protected client: QdrantClient;
@@ -134,7 +135,7 @@ export class QdrantVector extends MastraVector {
     filter,
     includeVector = false,
     using,
-  }: QdrantQueryVectorParams & {using ? : string}): Promise<QueryResult[]> {
+  }: QdrantQueryWithNamedVectorParams): Promise<QueryResult[]> {
     const translatedFilter = this.transformFilter(filter) ?? {};
 
     try {
@@ -151,13 +152,17 @@ export class QdrantVector extends MastraVector {
 
       return results.map(match => {
         let vector: number[] = [];
-        if (includeVector) {
+        if (includeVector && match.vector != null) {
           if (Array.isArray(match.vector)) {
-            // If it's already an array of numbers
             vector = match.vector as number[];
-          } else if (typeof match.vector === 'object' && match.vector !== null) {
-            // If it's an object with vector data
-            vector = Object.values(match.vector).filter(v => typeof v === 'number');
+          } else if (typeof match.vector === 'object') {
+            const named = match.vector as Record<string, unknown>;
+            const maybeNamed = using && Array.isArray(named[using]) ? (named[using] as unknown[]) : undefined;
+            if (maybeNamed) {
+              vector = maybeNamed.filter((v): v is number => typeof v === 'number');
+            } else {
+              vector = Object.values(named).filter((v): v is number => typeof v === 'number');
+            }
           }
         }
 
