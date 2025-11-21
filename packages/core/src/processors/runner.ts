@@ -401,6 +401,7 @@ export class ProcessorRunner {
         mutations = messageList.stopRecording();
 
         if (result) {
+          const check = messageList.makeMessageSourceChecker();
           // Clear and re-add since processor worked with array. clear all messages, the new result array is all messages in the list (new input but also any messages added by other processors, memory for ex)
           messageList.clear.all.db();
 
@@ -419,7 +420,9 @@ export class ProcessorRunner {
 
           // Add non-system messages normally
           if (nonSystemMessages.length > 0) {
-            messageList.add(nonSystemMessages, 'input');
+            for (const message of nonSystemMessages) {
+              messageList.add(message, check.getSource(message) || 'input');
+            }
           }
 
           processableMessages = nonSystemMessages;

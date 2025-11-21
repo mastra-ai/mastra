@@ -267,6 +267,29 @@ export class MessageList {
     return this;
   }
 
+  public makeMessageSourceChecker(): {
+    memory: Set<string>;
+    input: Set<string>;
+    output: Set<string>;
+    getSource: (message: MastraDBMessage) => MessageSource | null;
+  } {
+    const sources = {
+      memory: new Set(Array.from(this.memoryMessages.values()).map(m => m.id)),
+      output: new Set(Array.from(this.newResponseMessages.values()).map(m => m.id)),
+      input: new Set(Array.from(this.newUserMessages.values()).map(m => m.id)),
+    };
+
+    return {
+      ...sources,
+      getSource: (msg: MastraDBMessage) => {
+        if (sources.memory.has(msg.id)) return 'memory';
+        if (sources.input.has(msg.id)) return 'input';
+        if (sources.output.has(msg.id)) return 'response';
+        return null;
+      },
+    };
+  }
+
   public getLatestUserContent(): string | null {
     const currentUserMessages = this.all.core().filter(m => m.role === 'user');
     const content = currentUserMessages.at(-1)?.content;
