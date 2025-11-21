@@ -88,20 +88,17 @@ export class ProcessorRunner {
     tracingContext?: TracingContext,
     runtimeContext?: RequestContext,
   ): Promise<MessageList> {
-    // Get all new messages (both user input and assistant response) that should be processed
-    // This matches what main does with drainUnsavedMessages()
-    const allNewMessages = messageList.get.all.db().filter(m => messageList.isNewMessage(m));
-
-    let processableMessages: MastraDBMessage[] = [...allNewMessages];
-
-    const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
-      messages: processableMessages,
-      abort: () => {
-        throw new TripWire('Tripwire triggered');
-      },
-    };
-
     for (const [index, processor] of this.outputProcessors.entries()) {
+      const allNewMessages = messageList.get.response.db();
+      let processableMessages: MastraDBMessage[] = [...allNewMessages];
+
+      const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
+        messages: processableMessages,
+        abort: () => {
+          throw new TripWire('Tripwire triggered');
+        },
+      };
+
       const abort = (reason?: string): never => {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`);
       };
@@ -159,16 +156,15 @@ export class ProcessorRunner {
       } else {
         messageList.clear.response.db();
         processableMessages = result || [];
+        if (processableMessages.length > 0) {
+          messageList.add(processableMessages, 'response');
+        }
       }
 
       processorSpan?.end({
         output: processableMessages,
         attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
       });
-    }
-
-    if (processableMessages.length > 0) {
-      messageList.add(processableMessages, 'response');
     }
 
     return messageList;
@@ -328,22 +324,15 @@ export class ProcessorRunner {
     tracingContext?: TracingContext,
     runtimeContext?: RequestContext,
   ): Promise<MessageList> {
-    // Get ALL current messages (including those added by previous processors with different sources)
-    let processableMessages: MastraDBMessage[] = messageList.get.all.db();
-
-    const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
-      messages: processableMessages,
-      abort: () => {
-        throw new TripWire('Tripwire triggered');
-      },
-    };
-
     for (const [index, processor] of this.inputProcessors.entries()) {
-      const abort = (reason?: string): never => {
-        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`);
-      };
+      let processableMessages: MastraDBMessage[] = messageList.get.input.db();
 
-      ctx.abort = abort;
+      const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
+        messages: processableMessages,
+        abort: (reason?: string): never => {
+          throw new TripWire(reason || `Tripwire triggered by ${processor.id}`);
+        },
+      };
 
       // Use the processInput method if available
       const processMethod = processor.processInput?.bind(processor);
@@ -409,7 +398,7 @@ export class ProcessorRunner {
         mutations = messageList.stopRecording();
 
         // Clear and re-add since processor worked with array. array response is entire list
-        messageList.clear.all.db();
+        messageList.clear.input.db();
 
         // Separate system messages from other messages since they need different handling
         const systemMessages = result.filter(m => m.role === 'system');
@@ -429,7 +418,7 @@ export class ProcessorRunner {
           messageList.add(nonSystemMessages, 'input');
         }
 
-        processableMessages = result || [];
+        processableMessages = nonSystemMessages;
       }
 
       processorSpan?.end({
