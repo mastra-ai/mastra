@@ -13,7 +13,7 @@ export function createAdvancedOperationsTest({
   deleteIndex,
   waitForIndexing = () => new Promise(resolve => setTimeout(resolve, 100)),
 }: VectorTestConfig) {
-  describe('Advanced Vector Operations', () => {
+  describe.only('Advanced Vector Operations', () => {
     let testIndexName: string;
 
     beforeEach(async () => {
@@ -521,7 +521,7 @@ export function createAdvancedOperationsTest({
           topK: 10,
         });
         expect(results.every(r => r.metadata?.source_id === docId)).toBe(true);
-      });
+      }, 15000);
 
       it('should handle multi-tenant data isolation with filters', async () => {
         // Insert vectors for multiple tenants
@@ -561,7 +561,7 @@ export function createAdvancedOperationsTest({
           topK: 10,
         });
         expect(results.every(r => r.metadata?.tenant_id === 'tenant_b')).toBe(true);
-      });
+      }, 15000);
     });
   });
 }

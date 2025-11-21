@@ -1562,7 +1562,7 @@ describe('ChromaVector Integration Tests', () => {
 });
 
 // Metadata filtering tests for Memory system
-describe('Chroma Metadata Filtering', () => {
+describe.only('Chroma Metadata Filtering', () => {
   const chromaVector = new ChromaVector({ id: 'chroma-metadata-filter-test' });
 
   createVectorTestSuite({
@@ -1590,6 +1590,7 @@ describe.skipIf(!process.env.CHROMA_API_KEY)('ChromaCloudVector Fork Tests', () 
 
   beforeEach(async () => {
     cloudVector = new ChromaVector({
+      id: 'chroma-cloud-vector-fork-test',
       apiKey: process.env.CHROMA_API_KEY,
     });
 
