@@ -1,4 +1,5 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
+import { ErrorDomain, MastraError } from '@mastra/core/error';
 import { parseMemoryRuntimeContext } from '@mastra/core/memory';
 import type { TracingContext } from '@mastra/core/observability';
 import type { Processor } from '@mastra/core/processors';
@@ -39,7 +40,7 @@ export class MessageHistory implements Processor {
     tracingContext?: TracingContext;
     runtimeContext?: RequestContext;
   }): Promise<MessageList | MastraDBMessage[]> {
-    const { messages, messageList } = args;
+    const { messageList } = args;
 
     // Get memory context from RequestContext
     const memoryContext = parseMemoryRuntimeContext(args.runtimeContext);
@@ -62,12 +63,14 @@ export class MessageHistory implements Processor {
       return msg.role !== 'system';
     });
 
-    // 3. Merge with incoming messages (avoiding duplicates by ID)
-    const messageIds = new Set(messages.map((m: MastraDBMessage) => m.id).filter(Boolean));
+    // 3. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)
+    // This includes messages added by previous processors like SemanticRecall
+    const existingMessages = messageList.get.all.db();
+    const messageIds = new Set(existingMessages.map((m: MastraDBMessage) => m.id).filter(Boolean));
     const uniqueHistoricalMessages = filteredMessages.filter((m: MastraDBMessage) => !m.id || !messageIds.has(m.id));
 
     // Reverse to chronological order (oldest first) since we fetched DESC
-    const chronologicalMessages = uniqueHistoricalMessages.reverse();
+    const chronologicalMessages = this.filterIncompleteToolCalls(uniqueHistoricalMessages.reverse());
 
     if (chronologicalMessages.length === 0) {
       return messageList;
@@ -85,68 +88,84 @@ export class MessageHistory implements Processor {
     return messageList;
   }
 
+  private filterIncompleteToolCalls(messages: MastraDBMessage[]): MastraDBMessage[] {
+    return messages
+      .map(m => {
+        if (m.role === `assistant`) {
+          const assistant = {
+            ...m,
+            content: {
+              ...m.content,
+              parts: m.content.parts
+                .map(p => {
+                  if (
+                    p.type === `tool-invocation` &&
+                    (p.toolInvocation.state === `call` || p.toolInvocation.state === `partial-call`)
+                  ) {
+                    return null;
+                  }
+                  return p;
+                })
+                .filter((p): p is NonNullable<typeof p> => Boolean(p)),
+            },
+          };
+
+          if (assistant.content.parts.length === 0) return null;
+          return assistant;
+        }
+        return m;
+      })
+      .filter((m): m is NonNullable<typeof m> => Boolean(m));
+  }
+
   async processOutputResult(args: {
     messages: MastraDBMessage[];
-    messageList?: MessageList;
+    messageList: MessageList;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
     runtimeContext?: RequestContext;
-  }): Promise<MastraDBMessage[]> {
-    const { messages } = args;
+  }): Promise<MessageList> {
+    const { messageList } = args;
 
     // Get memory context from RequestContext
     const memoryContext = parseMemoryRuntimeContext(args.runtimeContext);
     const threadId = memoryContext?.thread?.id;
 
     if (!threadId) {
-      console.error(`no thread id`);
-      return messages;
+      throw new MastraError({
+        category: 'USER',
+        domain: ErrorDomain.STORAGE,
+        id: 'MESSAGE_HISTORY_MISSING_THREAD_ID',
+        text: 'MessageHistory processor requires a threadId in runtime context. Ensure memory is configured with a thread ID when calling agent.generate().',
+      });
     }
 
-    // 1. Only save new user messages and new response messages
-    // Filter out system messages, context messages, and memory messages
-    const messagesToSave = messages.filter(m => {
-      if (m.role === 'system') return false;
-      // If messageList is available, only save messages that are in newUserMessages or newResponseMessages
-      // if (messageList) {
-      //   return messageList.isNewMessage(m);
-      // }
-      // Fallback: if no messageList, save all non-system messages (backward compatibility)
-      return true;
-    });
+    const newInput = messageList.get.input.db();
+    const newOutput = messageList.get.response.db();
+    const messagesToSave = [...newInput, ...newOutput];
 
     if (messagesToSave.length === 0) {
-      return messages;
+      return messageList;
     }
 
-    // 3. Save to storage
-    try {
-      await this.storage.saveMessages({
-        messages: messagesToSave,
+    const filtered = this.filterIncompleteToolCalls(messagesToSave);
+    await this.storage.saveMessages({
+      messages: filtered,
+    });
+
+    const thread = await this.storage.getThreadById({ threadId });
+    if (thread) {
+      await this.storage.updateThread({
+        id: threadId,
+        title: thread.title || '',
+        metadata: {
+          ...thread.metadata,
+          updatedAt: new Date(),
+          lastMessageAt: new Date(),
+        },
       });
-    } catch (error) {
-      console.warn('Failed to save messages:', error);
-      return messages;
     }
 
-    // 4. Update thread metadata
-    try {
-      const thread = await this.storage.getThreadById({ threadId });
-      if (thread) {
-        await this.storage.updateThread({
-          id: threadId,
-          title: thread.title || '',
-          metadata: {
-            ...thread.metadata,
-            updatedAt: new Date(),
-            lastMessageAt: new Date(),
-          },
-        });
-      }
-    } catch (error) {
-      console.warn('Failed to update thread metadata:', error);
-    }
-
-    return messages;
+    return messageList;
   }
 }
