@@ -309,12 +309,7 @@ export class GraphRAG {
 
     // For each top node, perform random walk
     for (const { node, similarity } of topNodes) {
-      const walkScores = this.randomWalkWithRestart(
-        node.id,
-        randomWalkSteps,
-        restartProb,
-        allowedNodeIds,
-      );
+      const walkScores = this.randomWalkWithRestart(node.id, randomWalkSteps, restartProb, allowedNodeIds);
 
       // Combine dense retrieval score with graph score
       for (const [nodeId, walkScore] of walkScores) {
