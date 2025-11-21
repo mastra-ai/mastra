@@ -315,4 +315,3 @@ describe('messageMetadata', () => {
     expect(callArgs.part).toHaveProperty('type');
   });
 });
-
