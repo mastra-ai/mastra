@@ -1,7 +1,9 @@
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
+import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { ModelRouterLanguageModel } from './router';
-import type { MastraModelConfig, MastraLanguageModel, OpenAICompatibleConfig } from './shared.types';
+import type { MastraModelConfig, OpenAICompatibleConfig, MastraLanguageModel } from './shared.types';
 
 /**
  * Type guard to check if a model config is an OpenAICompatibleConfig object
@@ -72,8 +74,23 @@ export async function resolveModelConfig(
   requestContext: RequestContext = new RequestContext(),
   mastra?: Mastra,
 ): Promise<MastraLanguageModel> {
+  // If it's a function, resolve it first
+  if (typeof modelConfig === 'function') {
+    modelConfig = await modelConfig({ requestContext, mastra });
+  }
+
+  // Filter out custom language model instances
+  // TODO need a better trick, maybme symbol
+  if (modelConfig instanceof ModelRouterLanguageModel || modelConfig instanceof AISDKV5LanguageModel) {
+    return modelConfig;
+  }
+
   // If it's already a LanguageModel, return it
   if (typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) {
+    if (modelConfig.specificationVersion === 'v2') {
+      return new AISDKV5LanguageModel(modelConfig as LanguageModelV2);
+    }
+
     return modelConfig;
   }
 
@@ -83,15 +100,6 @@ export async function resolveModelConfig(
   // If it's a string (magic string like "openai/gpt-4o") or OpenAICompatibleConfig, create ModelRouterLanguageModel
   if (typeof modelConfig === 'string' || isOpenAICompatibleObjectConfig(modelConfig)) {
     return new ModelRouterLanguageModel(modelConfig, customGateways);
-  }
-
-  // If it's a function, resolve it first
-  if (typeof modelConfig === 'function') {
-    const fromDynamic = await modelConfig({ requestContext, mastra });
-    if (typeof fromDynamic === 'string' || isOpenAICompatibleObjectConfig(fromDynamic)) {
-      return new ModelRouterLanguageModel(fromDynamic, customGateways);
-    }
-    return fromDynamic;
   }
 
   throw new Error('Invalid model configuration provided');

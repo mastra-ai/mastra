@@ -10,11 +10,10 @@ The `SystemPromptScrubber` is an **output processor** that detects and handles s
 ## Usage example
 
 ```typescript copy
-import { openai } from "@ai-sdk/openai";
 import { SystemPromptScrubber } from "@mastra/core/processors";
 
 const processor = new SystemPromptScrubber({
-  model: openai("gpt-4.1-nano"),
+  model: "openai/gpt-4.1-nano",
   strategy: "redact",
   redactionMethod: "mask",
   includeDetections: true
@@ -131,7 +130,7 @@ import { BatchPartsProcessor, SystemPromptScrubber } from "@mastra/core/processo
 export const agent = new Agent({
   name: "scrubbed-agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   outputProcessors: [
     // Batch stream parts first to reduce LLM calls
     new BatchPartsProcessor({
