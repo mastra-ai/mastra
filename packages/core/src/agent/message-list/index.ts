@@ -3003,9 +3003,11 @@ export class MessageList {
       if (message.role !== `assistant`) continue;
       for (const [index, part] of message.parts.entries()) {
         if (!AIV5.isToolUIPart(part)) continue;
+        const nextPart = message.parts.at(index + 1);
         // If we don't insert step-start between tools and other parts, AIV5.convertToModelMessages will incorrectly add extra tool parts in the wrong order
         // ex: ui message with parts: [tool-result, text] becomes [assistant-message-with-both-parts, tool-result-message], when it should become [tool-call-message, tool-result-message, text-message]
-        if (message.parts.at(index + 1)?.type !== `step-start`) {
+        // However, we should NOT add step-start between consecutive tool parts (parallel tool calls)
+        if (nextPart && nextPart.type !== `step-start` && !AIV5.isToolUIPart(nextPart)) {
           message.parts.splice(index + 1, 0, { type: 'step-start' });
         }
       }

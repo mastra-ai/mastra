@@ -5,8 +5,8 @@
   "devDependencies": {
     "@changesets/cli": "^2.29.7",
     "@types/node": "22.13.17",
-    "@vitest/coverage-v8": "^4.0.8",
-    "@vitest/ui": "^4.0.8",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
     "changesets-changelog-github-local": "^1.0.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.1.6",

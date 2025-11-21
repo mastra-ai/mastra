@@ -11,6 +11,7 @@ import {
   mcpServerToolPathParams,
   executeToolBodySchema,
   listMcpServersQuerySchema,
+  getMcpServerDetailQuerySchema,
   listMcpServersResponseSchema,
   serverDetailSchema,
 } from '../schemas/mcp';
@@ -238,11 +239,12 @@ export const GET_MCP_SERVER_DETAIL_ROUTE = createRoute({
   path: '/api/mcp/v0/servers/:id',
   responseType: 'json',
   pathParamSchema: mcpServerDetailPathParams,
+  queryParamSchema: getMcpServerDetailQuerySchema,
   responseSchema: serverDetailSchema,
   summary: 'Get MCP server details',
   description: 'Returns detailed information about a specific MCP server',
   tags: ['MCP'],
-  handler: async ({ mastra, id }: RuntimeContext & { id: string }) => {
+  handler: async ({ mastra, id, version }: RuntimeContext & { id: string; version?: string }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
@@ -253,7 +255,16 @@ export const GET_MCP_SERVER_DETAIL_ROUTE = createRoute({
       throw new HTTPException(404, { message: `MCP server with ID '${id}' not found` });
     }
 
-    return server.getServerDetail();
+    const serverDetail = server.getServerDetail();
+
+    // If a specific version was requested, check if it matches
+    if (version && serverDetail.version_detail.version !== version) {
+      throw new HTTPException(404, {
+        message: `MCP server with ID '${id}' found, but not version '${version}'. Available version: ${serverDetail.version_detail.version}`,
+      });
+    }
+
+    return serverDetail;
   },
 });
 
