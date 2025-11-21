@@ -428,17 +428,43 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     }
   }
 
-  async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams): Promise<void> {
-    throw new MastraError({
-      id: 'STORAGE_TURBOBUFFER_VECTOR_DELETE_VECTORS_NOT_SUPPORTED',
-      text: 'deleteVectors is not yet implemented for Turbopuffer vector store',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      details: {
-        indexName,
-        ...(filter && { filter: JSON.stringify(filter) }),
-        ...(ids && { idsCount: ids.length }),
-      },
-    });
+  async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams<TurbopufferVectorFilter>): Promise<void> {
+    if (filter) {
+      throw new MastraError({
+        id: 'STORAGE_TURBOBUFFER_VECTOR_DELETE_BY_FILTER_NOT_SUPPORTED',
+        text: 'Turbopuffer vector store does not support deleting by filter.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: {
+          indexName,
+        },
+      });
+    }
+
+    try {
+      const namespace = this.client.namespace(indexName);
+
+      if (ids && ids.length > 0) {
+        // The turbopuffer SDK has a limit of 1000 IDs per delete request.
+        const batchSize = 1000;
+        for (let i = 0; i < ids.length; i += batchSize) {
+          const batch = ids.slice(i, i + batchSize);
+          await namespace.delete({ ids: batch });
+        }
+      }
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_TURBOBUFFER_VECTOR_DELETE_VECTORS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            ...(ids && { idsCount: ids.length }),
+          },
+        },
+        error,
+      );
+    }
   }
 }

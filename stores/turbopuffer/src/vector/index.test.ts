@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createVectorTestSuite } from '@internal/storage-test-utils';
 
 import type { TurbopufferVectorFilter } from './filter';
 import { TurbopufferVector } from './';
@@ -1045,5 +1046,22 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
       });
       expect(results.length).toBeGreaterThan(0);
     });
+  });
+
+  createVectorTestSuite({
+    vector: new TurbopufferVector({
+      id: 'turbopuffer-test-vector',
+      apiKey: TURBOPUFFER_API_KEY!,
+      baseUrl: 'https://gcp-us-central1.turbopuffer.com',
+    }),
+    createIndex: async (indexName: string) => {
+      await vectorDB.createIndex({ indexName, dimension: 4 });
+    },
+    deleteIndex: async (indexName: string) => {
+      await vectorDB.deleteIndex({ indexName });
+    },
+    waitForIndexing: async (indexName: string) => {
+      await waitUntilVectorsIndexed(vectorDB, indexName, 3);
+    },
   });
 });
