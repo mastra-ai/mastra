@@ -205,10 +205,10 @@ export class GraphRAG {
 
   // Perform random walk with restart
   private randomWalkWithRestart(
-    startNodeId: string, 
-    steps: number, 
+    startNodeId: string,
+    steps: number,
     restartProb: number,
-    allowedNodeIds?: Set<string>
+    allowedNodeIds?: Set<string>,
   ): Map<string, number> {
     const visits = new Map<string, number>();
     let currentNodeId = startNodeId;
@@ -312,7 +312,7 @@ export class GraphRAG {
         node.id,
         randomWalkSteps,
         restartProb,
-        useFilter ? filteredNodeIds : undefined
+        useFilter ? filteredNodeIds : undefined,
       );
 
       // Combine dense retrieval score with graph score
