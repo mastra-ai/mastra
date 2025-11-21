@@ -41,7 +41,7 @@ import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils'
 import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
-import type { Workflow } from '../workflows';
+import type { Workflow, WorkflowResult } from '../workflows';
 import { AgentLegacyHandler } from './agent-legacy';
 import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
 import { MessageList } from './message-list';
@@ -1664,6 +1664,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       for (const [agentName, agent] of Object.entries(agents)) {
         const agentInputSchema = z.object({
           prompt: z.string().describe('The prompt to send to the agent'),
+          threadId: z.string().optional().describe('Thread ID for conversation continuity for memory messages'),
+          resourceId: z.string().optional().describe('Resource/user identifier for memory messages'),
+          instructions: z.string().optional().describe('Custom instructions to override agent defaults'),
+          maxSteps: z.number().optional().describe('Maximum number of execution steps for the sub-agent'),
         });
 
         const agentOutputSchema = z.object({
@@ -1680,7 +1684,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           inputSchema: agentInputSchema,
           outputSchema: agentOutputSchema,
           mastra: this.#mastra,
-          // BREAKING CHANGE v1.0: New tool signature - first param is inputData, second is context
           // manually wrap agent tools with tracing, so that we can pass the
           // current tool span onto the agent to maintain continuity of the trace
           execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {
@@ -1694,17 +1697,21 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               });
 
               let result: any;
+              const slugify = await import(`@sindresorhus/slugify`);
+              const subAgentThreadId = inputData.threadId || context?.mastra?.generateId() || randomUUID();
+              const subAgentResourceId =
+                inputData.resourceId || context?.mastra?.generateId() || `${slugify.default(this.id)}-${agentName}`;
 
               if ((methodType === 'generate' || methodType === 'generateLegacy') && modelVersion === 'v2') {
                 if (!agent.hasOwnMemory() && this.#memory) {
                   agent.__setMemory(this.#memory);
                 }
-                const subAgentThreadId = randomUUID();
-                const slugify = await import(`@sindresorhus/slugify`); // this is an esm package, need to dynamic import incase we're running in cjs
-                const subAgentResourceId = `${slugify.default(this.id)}-${agentName}`;
+
                 const generateResult = await agent.generate(inputData.prompt, {
                   requestContext,
                   tracingContext: context?.tracingContext,
+                  ...(inputData.instructions && { instructions: inputData.instructions }),
+                  ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
                   ...(resourceId && threadId
                     ? {
                         memory: {
@@ -1725,13 +1732,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 if (!agent.hasOwnMemory() && this.#memory) {
                   agent.__setMemory(this.#memory);
                 }
-                const subAgentThreadId = randomUUID();
-                const slugify = await import(`@sindresorhus/slugify`); // this is an esm package, need to dynamic import incase we're running in cjs
-                const subAgentResourceId = `${slugify.default(this.id)}-${agentName}`;
 
                 const streamResult = await agent.stream(inputData.prompt, {
                   requestContext,
                   tracingContext: context?.tracingContext,
+                  ...(inputData.instructions && { instructions: inputData.instructions }),
+                  ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
                   ...(resourceId && threadId
                     ? {
                         memory: {
@@ -1742,11 +1748,16 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                     : {}),
                 });
 
-                // Collect full text
                 let fullText = '';
                 for await (const chunk of streamResult.fullStream) {
                   if (context?.writer) {
-                    await context.writer.write(chunk);
+                    // Data chunks from writer.custom() should bubble up directly without wrapping
+                    if (chunk.type.startsWith('data-')) {
+                      // Write data chunks directly to original stream to bubble up
+                      await context.writer.custom(chunk as any);
+                    } else {
+                      await context.writer.write(chunk);
+                    }
                   }
 
                   if (chunk.type === 'text-delta') {
@@ -1756,7 +1767,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
                 result = { text: fullText, subAgentThreadId, subAgentResourceId };
               } else {
-                // streamLegacy
                 const streamResult = await agent.streamLegacy(inputData.prompt, {
                   requestContext,
                   tracingContext: context?.tracingContext,
@@ -1765,7 +1775,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 let fullText = '';
                 for await (const chunk of streamResult.fullStream) {
                   if (context?.writer) {
-                    await context.writer.write(chunk);
+                    // Data chunks from writer.custom() should bubble up directly without wrapping
+                    if (chunk.type.startsWith('data-')) {
+                      // Write data chunks directly to original stream to bubble up
+                      await context.writer.custom(chunk as any);
+                    } else {
+                      await context.writer.write(chunk);
+                    }
                   }
 
                   if (chunk.type === 'text-delta') {
@@ -1847,13 +1863,26 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     const workflows = await this.listWorkflows({ requestContext });
     if (Object.keys(workflows).length > 0) {
       for (const [workflowName, workflow] of Object.entries(workflows)) {
+        const extendedInputSchema = z.object({
+          inputData: workflow.inputSchema,
+          ...(workflow.stateSchema ? { initialState: workflow.stateSchema } : {}),
+        });
+
         const toolObj = createTool({
           id: `workflow-${workflowName}`,
           description: workflow.description || `Workflow: ${workflowName}`,
-          inputSchema: workflow.inputSchema,
-          outputSchema: z.object({ result: workflow.outputSchema, runId: z.string() }),
+          inputSchema: extendedInputSchema,
+          outputSchema: z.union([
+            z.object({
+              result: workflow.outputSchema,
+              runId: z.string().describe('Unique identifier for the workflow run'),
+            }),
+            z.object({
+              runId: z.string().describe('Unique identifier for the workflow run'),
+              error: z.string().describe('Error message if workflow execution failed'),
+            }),
+          ]),
           mastra: this.#mastra,
-          // BREAKING CHANGE v1.0: New tool signature - first param is inputData, second is context
           // manually wrap workflow tools with tracing, so that we can pass the
           // current tool span onto the workflow to maintain continuity of the trace
           execute: async (inputData, context) => {
@@ -1869,16 +1898,20 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
               const run = await workflow.createRun();
 
-              let result: any;
+              const { initialState, inputData: workflowInputData } = inputData;
+
+              let result: WorkflowResult<any, any, any, any> | undefined = undefined;
+
               if (methodType === 'generate' || methodType === 'generateLegacy') {
                 result = await run.start({
-                  inputData: inputData,
+                  inputData: workflowInputData,
                   requestContext,
                   tracingContext: context?.tracingContext,
+                  ...(initialState && { initialState }),
                 });
               } else if (methodType === 'streamLegacy') {
                 const streamResult = run.streamLegacy({
-                  inputData: inputData,
+                  inputData: workflowInputData,
                   requestContext,
                   tracingContext: context?.tracingContext,
                 });
@@ -1893,11 +1926,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
                 result = await streamResult.getWorkflowState();
               } else if (methodType === 'stream') {
-                // TODO: add support for format
                 const streamResult = run.stream({
-                  inputData: inputData,
+                  inputData: workflowInputData,
                   requestContext,
                   tracingContext: context?.tracingContext,
+                  ...(initialState && { initialState }),
                 });
 
                 if (context?.writer) {
@@ -1907,11 +1940,27 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 result = await streamResult.result;
               }
 
-              // Extract the actual result from the workflow execution
-              // Workflow returns { status, steps, result: actualOutput }
-              const workflowOutput = result?.result || result;
-
-              return { result: workflowOutput, runId: run.runId };
+              if (result?.status === 'success') {
+                const workflowOutput = result?.result || result;
+                return { result: workflowOutput, runId: run.runId };
+              } else if (result?.status === 'failed') {
+                const workflowOutputError = result?.error;
+                return {
+                  error: workflowOutputError?.message || String(workflowOutputError) || 'Workflow execution failed',
+                  runId: run.runId,
+                };
+              } else if (result?.status === 'suspended') {
+                return {
+                  error: `Workflow ended with status: "suspended". This is not currently handled in the basic agent workflow tool transformation. To achieve this you'll need to write your own tool that uses a workflow internally.`,
+                  runId: run.runId,
+                };
+              } else {
+                // This is to satisfy the execute fn's return value for typescript
+                return {
+                  error: `Workflow should never reach this path, workflow returned no status`,
+                  runId: run.runId,
+                };
+              }
             } catch (err) {
               const mastraError = new MastraError(
                 {

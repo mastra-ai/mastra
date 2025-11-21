@@ -19,6 +19,7 @@ dist/
 openapi-ts-error*
 
 .mastra
+*.db*
 memory.db
 memory.db-*
 

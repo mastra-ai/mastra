@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.0.0-beta.3",
+  "version": "1.0.0-beta.4",
   "description": "",
   "type": "module",
   "files": [
@@ -38,6 +38,16 @@
       "require": {
         "types": "./dist/server/handlers/*.d.ts",
         "default": "./dist/server/handlers/*.cjs"
+      }
+    },
+    "./server-adapter": {
+      "import": {
+        "types": "./dist/server/server-adapter/index.d.ts",
+        "default": "./dist/server/server-adapter/index.js"
+      },
+      "require": {
+        "types": "./dist/server/server-adapter/index.d.ts",
+        "default": "./dist/server/server-adapter/index.cjs"
       }
     },
     "./a2a/store": {
@@ -96,5 +106,8 @@
   },
   "engines": {
     "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "hono": "^4.10.5"
   }
 }

@@ -47,6 +47,7 @@ export function getWorkflowInfo(workflow: Workflow): WorkflowInfo {
     stepGraph: workflow.serializedStepGraph,
     inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
     outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
+    options: workflow.options,
   };
 }
 

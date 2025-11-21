@@ -188,7 +188,7 @@ import { runEvals } from "@mastra/core/evals";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
-const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o-mini" });
+const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-5.1" });
 
 const result = await runEvals({
   data: [
@@ -226,7 +226,7 @@ import { runEvals } from "@mastra/core/evals";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
-const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o-mini" });
+const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-5.1" });
 
 const result = await runEvals({
   data: [
@@ -264,7 +264,7 @@ import { runEvals } from "@mastra/core/evals";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
-const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o-mini" });
+const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-5.1" });
 
 const result = await runEvals({
   data: [
@@ -302,7 +302,7 @@ import { runEvals } from "@mastra/core/evals";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
-const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o-mini" });
+const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-5.1" });
 
 const result = await runEvals({
   data: [
@@ -342,7 +342,7 @@ import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
 describe("Agent Consistency Tests", () => {
-  const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o-mini" });
+  const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-5.1" });
 
   it("should provide accurate factual answers", async () => {
     const result = await runEvals({
@@ -402,7 +402,7 @@ import { myAgent } from "./agent";
 
 // Configure for strict exact matching with high scale
 const strictScorer = createAnswerSimilarityScorer({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     exactMatchBonus: 0.5, // Higher bonus for exact matches
     contradictionPenalty: 2.0, // Very strict on contradictions
@@ -413,7 +413,7 @@ const strictScorer = createAnswerSimilarityScorer({
 
 // Configure for lenient semantic matching
 const lenientScorer = createAnswerSimilarityScorer({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     semanticThreshold: 0.6, // Lower threshold for semantic matches
     contradictionPenalty: 0.5, // More forgiving on minor contradictions
