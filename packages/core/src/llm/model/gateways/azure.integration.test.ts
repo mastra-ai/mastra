@@ -63,8 +63,6 @@ describe('AzureOpenAIGateway - Real API Integration', () => {
       expect(azureProvider.models, 'Provider azureopenai missing models').toBeDefined();
       expect(Array.isArray(azureProvider.models)).toBe(true);
       expect(azureProvider.models.length).toBeGreaterThan(0);
-
-      // Note: We assert models.length > 0 because the resource must have at least one deployment to pass the test
     },
     30000,
   );
@@ -87,7 +85,6 @@ describe('AzureOpenAIGateway - Real API Integration', () => {
       const providers = await gateway.fetchProviders();
       const deployments = providers['azureopenai'].models;
 
-      // Verify there is at least one deployment available
       expect(deployments.length).toBeGreaterThan(0);
 
       const deploymentName = deployments[0];

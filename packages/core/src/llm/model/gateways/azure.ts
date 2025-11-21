@@ -33,88 +33,16 @@ interface CachedToken {
   expiresAt: number;
 }
 
-/**
- * Configuration for Azure OpenAI Gateway
- */
 export interface AzureOpenAIGatewayConfig {
-  /**
-   * Azure OpenAI resource name (e.g., 'my-openai-resource')
-   * Used to construct the API endpoint: https://{resourceName}.openai.azure.com/
-   *
-   * @required
-   */
   resourceName: string;
-
-  /**
-   * API key for Azure OpenAI data plane operations
-   * Found in Azure Portal → Your OpenAI Resource → Keys and Endpoint
-   *
-   * @required
-   */
   apiKey: string;
-
-  /**
-   * Azure OpenAI API version
-   *
-   * @optional
-   * @default '2024-04-01-preview'
-   */
   apiVersion?: string;
-
-  /**
-   * Static list of deployment names
-   * Use this for production when you know your deployments in advance
-   *
-   * @optional
-   * @example ['gpt-4-prod', 'gpt-35-turbo-dev']
-   */
   deployments?: string[];
-
-  /**
-   * Azure Management API credentials for deployment discovery
-   * Required if not providing static deployments list
-   *
-   * @optional
-   */
   management?: {
-    /**
-     * Azure AD tenant ID (Directory ID)
-     * Found in Azure Portal → Azure Active Directory → Properties
-     *
-     * @required
-     */
     tenantId: string;
-
-    /**
-     * Service Principal application (client) ID
-     * Found in Azure Portal → App Registrations → Your App → Overview
-     *
-     * @required
-     */
     clientId: string;
-
-    /**
-     * Service Principal client secret
-     * Created in Azure Portal → App Registrations → Your App → Certificates & secrets
-     *
-     * @required
-     */
     clientSecret: string;
-
-    /**
-     * Azure subscription ID
-     * Found in Azure Portal → Subscriptions
-     *
-     * @required
-     */
     subscriptionId: string;
-
-    /**
-     * Resource group name containing the Azure OpenAI resource
-     * Found in Azure Portal → Your OpenAI Resource → Overview
-     *
-     * @required
-     */
     resourceGroup: string;
   };
 }
@@ -131,7 +59,6 @@ export class AzureOpenAIGateway extends MastraModelGateway {
   }
 
   private validateConfig(): void {
-    // Validate required fields
     if (!this.config.resourceName) {
       throw new MastraError({
         id: 'AZURE_GATEWAY_INVALID_CONFIG',
@@ -150,7 +77,6 @@ export class AzureOpenAIGateway extends MastraModelGateway {
       });
     }
 
-    // Check if both modes are provided (warn but allow)
     const hasDeployments = this.config.deployments && this.config.deployments.length > 0;
     const hasManagement = this.config.management !== undefined;
 
@@ -160,37 +86,16 @@ export class AzureOpenAIGateway extends MastraModelGateway {
       );
     }
 
-    // Validate management credentials if provided
     if (hasManagement) {
-      const { tenantId, clientId, clientSecret, subscriptionId, resourceGroup } = this.config.management!;
-      const missing = [];
-      if (!tenantId) missing.push('tenantId');
-      if (!clientId) missing.push('clientId');
-      if (!clientSecret) missing.push('clientSecret');
-      if (!subscriptionId) missing.push('subscriptionId');
-      if (!resourceGroup) missing.push('resourceGroup');
-
-      if (missing.length > 0) {
-        throw new MastraError({
-          id: 'AZURE_GATEWAY_INVALID_CONFIG',
-          domain: 'LLM',
-          category: 'UNKNOWN',
-          text: `Management credentials incomplete. Missing: ${missing.join(', ')}. Required fields: tenantId, clientId, clientSecret, subscriptionId, resourceGroup.`,
-        });
-      }
+      this.getManagementCredentials(this.config.management!);
     }
-
-    // Note: If neither deployments nor management is provided, we allow it
-    // The user can still use Azure OpenAI by manually specifying deployment names
-    // They just won't get autocomplete in their IDE
   }
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
-    // Static mode: use provided deployments
     if (this.config.deployments && this.config.deployments.length > 0) {
       return {
         azureopenai: {
-          apiKeyEnvVar: [], // Not used with constructor config
+          apiKeyEnvVar: [],
           apiKeyHeader: 'api-key',
           name: 'Azure OpenAI',
           models: this.config.deployments,
@@ -200,10 +105,7 @@ export class AzureOpenAIGateway extends MastraModelGateway {
       };
     }
 
-    // Discovery mode: fetch from Management API
     if (!this.config.management) {
-      // No deployments and no management config - return empty models
-      // User can still use Azure OpenAI by manually specifying deployment names
       return {
         azureopenai: {
           apiKeyEnvVar: [],
@@ -233,7 +135,7 @@ export class AzureOpenAIGateway extends MastraModelGateway {
 
       return {
         azureopenai: {
-          apiKeyEnvVar: [], // Not used with constructor config
+          apiKeyEnvVar: [],
           apiKeyHeader: 'api-key',
           name: 'Azure OpenAI',
           models: deployments.map(d => d.name),
@@ -248,7 +150,6 @@ export class AzureOpenAIGateway extends MastraModelGateway {
         '\nReturning fallback configuration. Azure OpenAI can still be used by manually specifying deployment names.',
       );
 
-      // Return fallback configuration with empty models
       return {
         azureopenai: {
           apiKeyEnvVar: [],
@@ -358,7 +259,6 @@ export class AzureOpenAIGateway extends MastraModelGateway {
 
     const allDeployments: AzureDeployment[] = [];
 
-    // Follow pagination links until no more pages
     while (url) {
       const response = await fetch(url, {
         headers: {
@@ -379,26 +279,21 @@ export class AzureOpenAIGateway extends MastraModelGateway {
 
       const data = (await response.json()) as AzureDeploymentsResponse;
 
-      // Accumulate deployments from this page
       allDeployments.push(...data.value);
 
-      // Move to next page if available
       url = data.nextLink;
     }
 
-    // Filter after collecting all pages
     const successfulDeployments = allDeployments.filter(d => d.properties.provisioningState === 'Succeeded');
 
     return successfulDeployments;
   }
 
-  // Azure SDK constructs URLs internally
   buildUrl(_routerId: string, _envVars?: typeof process.env): undefined {
     return undefined;
   }
 
   async getApiKey(_modelId: string): Promise<string> {
-    // Return config value directly (already validated in constructor)
     return this.config.apiKey;
   }
 
