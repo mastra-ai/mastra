@@ -241,7 +241,7 @@ export class GraphRAG {
 
   /**
    * Query the graph with a dense embedding and optional metadata filter.
-   * 
+   *
    * @param query - The embedding vector to query.
    * @param topK - Number of top results to return.
    * @param randomWalkSteps - Steps for random walk reranking.
@@ -260,7 +260,7 @@ export class GraphRAG {
     topK?: number;
     randomWalkSteps?: number;
     restartProb?: number;
-    filter?: Partial<GraphNode['metadata']>
+    filter?: Partial<GraphNode['metadata']>;
   }): RankedNode[] {
     if (!query || query.length !== this.dimension) {
       throw new Error(`Query embedding must have dimension ${this.dimension}`);
@@ -277,9 +277,7 @@ export class GraphRAG {
 
     const filterEntries = Object.entries(filter ?? {});
     const matchesFilter = (node: GraphNode) =>
-      filterEntries.length === 0
-        ? true
-        : filterEntries.every(([key, value]) => node.metadata?.[key] === value);
+      filterEntries.length === 0 ? true : filterEntries.every(([key, value]) => node.metadata?.[key] === value);
 
     const nodesToSearch = Array.from(this.nodes.values()).filter(matchesFilter);
 
@@ -292,11 +290,9 @@ export class GraphRAG {
     // Sort by similarity
     similarities.sort((a, b) => b.similarity - a.similarity);
     const topNodes = similarities.slice(0, topK);
-    
+
     // Re-rank using random walk, but only over filtered nodes
-    const filteredNodeIds = new Set(
-      nodesToSearch.map(n => n.id)
-    );
+    const filteredNodeIds = new Set(nodesToSearch.map(n => n.id));
 
     // Re-ranks nodes using random walk with restart
     const rerankedNodes = new Map<string, { node: GraphNode; score: number }>();
