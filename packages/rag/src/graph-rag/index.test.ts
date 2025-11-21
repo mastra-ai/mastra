@@ -220,14 +220,14 @@ describe('GraphRAG', () => {
 
     it('should return empty array when no nodes match the filter', () => {
       const graph = new GraphRAG(3);
-      
+
       graph.addNode({
         id: '1',
         content: 'Node 1',
         embedding: [1, 2, 3],
         metadata: { type: 'a' },
       });
-      
+
       const results = graph.query({
         query: [1, 2, 3],
         topK: 10,
@@ -235,7 +235,7 @@ describe('GraphRAG', () => {
         restartProb: 0.2,
         filter: { type: 'nonexistent' },
       });
-      
+
       expect(results.length).toBe(0);
     });
 
@@ -298,25 +298,25 @@ describe('GraphRAG', () => {
     it('should not include unfiltered neighbors in the final results', () => {
       const graph = new GraphRAG(3);
 
-      graph.addNode({ 
-        id: '1', 
-        content: 'Node 1', 
-        embedding: [1, 2, 3], 
-        metadata: { type: 'a' } 
+      graph.addNode({
+        id: '1',
+        content: 'Node 1',
+        embedding: [1, 2, 3],
+        metadata: { type: 'a' },
       });
 
-      graph.addNode({ 
-        id: '2', 
-        content: 'Node 2', 
-        embedding: [4, 5, 6], 
-        metadata: { type: 'b' } 
+      graph.addNode({
+        id: '2',
+        content: 'Node 2',
+        embedding: [4, 5, 6],
+        metadata: { type: 'b' },
       });
 
-      graph.addEdge({ 
-        source: '1', 
-        target: '2', 
-        weight: 1, 
-        type: 'semantic' 
+      graph.addEdge({
+        source: '1',
+        target: '2',
+        weight: 1,
+        type: 'semantic',
       });
 
       const results = graph.query({

@@ -251,7 +251,7 @@ export class GraphRAG {
     topK?: number;
     randomWalkSteps?: number;
     restartProb?: number;
-    filter?: Record<string, any>
+    filter?: Record<string, any>;
   }): RankedNode[] {
     if (!query || query.length !== this.dimension) {
       throw new Error(`Query embedding must have dimension ${this.dimension}`);
@@ -286,11 +286,15 @@ export class GraphRAG {
     const topNodes = similarities.slice(0, topK);
 
     const matchesFilter = (node: GraphNode) =>
-        Object.entries(filter || {}).every(([key, value]) => node.metadata?.[key] === value);
+      Object.entries(filter || {}).every(([key, value]) => node.metadata?.[key] === value);
 
     // Re-rank using random walk, but only over filtered nodes
-    const filteredNodeIds = new Set(Array.from(this.nodes.values()).filter(matchesFilter).map(n => n.id));
-    
+    const filteredNodeIds = new Set(
+      Array.from(this.nodes.values())
+        .filter(matchesFilter)
+        .map(n => n.id),
+    );
+
     // Re-ranks nodes using random walk with restart
     const rerankedNodes = new Map<string, { node: GraphNode; score: number }>();
 
@@ -320,13 +324,13 @@ export class GraphRAG {
         score: item.score,
       }));
   }
-  
+
   // New helper for random walk restricted to filtered nodes
   private randomWalkWithRestartFiltered(
     startNodeId: string,
     steps: number,
     restartProb: number,
-    allowedNodeIds: Set<string>
+    allowedNodeIds: Set<string>,
   ): Map<string, number> {
     const visits = new Map<string, number>();
     let currentNodeId = startNodeId;
@@ -338,8 +342,7 @@ export class GraphRAG {
         currentNodeId = startNodeId;
         continue;
       }
-      const neighbors = this.getNeighbors(currentNodeId)
-        .filter(n => allowedNodeIds.has(n.id));
+      const neighbors = this.getNeighbors(currentNodeId).filter(n => allowedNodeIds.has(n.id));
 
       if (neighbors.length === 0) {
         currentNodeId = startNodeId;
@@ -356,5 +359,4 @@ export class GraphRAG {
     }
     return normalizedVisits;
   }
-
 }
