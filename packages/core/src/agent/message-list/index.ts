@@ -1262,6 +1262,11 @@ export class MessageList {
     } else if (messageSource === `response`) {
       this.newResponseMessages.add(messageV2);
       this.newResponseMessagesPersisted.add(messageV2);
+      if (this.newUserMessages.has(messageV2)) {
+        // this can happen if the client sends a client side tool back. that will be added as new user input
+        // to make sure we're not double tracking it we need to remove it from input if we add to response
+        this.newUserMessages.delete(messageV2);
+      }
     } else if (messageSource === `input`) {
       this.newUserMessages.add(messageV2);
       this.newUserMessagesPersisted.add(messageV2);
