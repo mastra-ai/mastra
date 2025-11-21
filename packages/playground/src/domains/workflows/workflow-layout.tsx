@@ -49,7 +49,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
       : undefined;
 
   return (
-    <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId!}>
+    <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId!} initialRunId={runId}>
       <MainContentLayout>
         <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId!} runId={runId} />
         <MainContentContent isDivided={true} hasLeftServiceColumn={true}>

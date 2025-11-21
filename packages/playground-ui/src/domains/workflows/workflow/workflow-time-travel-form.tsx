@@ -8,7 +8,7 @@ import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Braces, ChevronDown, CopyIcon, Loader2 } from 'lucide-react';
+import { Braces, ChevronDown, CopyIcon, EyeIcon, EyeOffIcon, Loader2 } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { formatJSON, isValidJson } from '@/lib/formatting';
 import jsonSchemaToZod from 'json-schema-to-zod';
@@ -43,16 +43,20 @@ const JsonField = ({
   value,
   onChange,
   helperText,
+  exampleCode,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   helperText?: string;
+  exampleCode?: string;
 }) => {
   const theme = useCodemirrorTheme();
   const { handleCopy } = useCopyToClipboard({ text: value });
+  const { handleCopy: handleCopyExample } = useCopyToClipboard({ text: exampleCode ?? '{}' });
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [isExampleOpen, setIsExampleOpen] = useState(false);
 
   const handleFormat = async () => {
     setFieldError(null);
@@ -74,8 +78,38 @@ const JsonField = ({
   };
 
   return (
-    <Collapsible className="border border-border1 rounded-lg bg-surface3" open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger asChild>
+    <>
+      {isExampleOpen && (
+        <div className="border border-border1 rounded-lg bg-surface3 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <Txt as="p" variant="ui-sm" className="text-icon3">
+              Example {label}
+            </Txt>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={handleCopyExample}
+                  className={buttonClass}
+                  aria-label="Copy example JSON"
+                >
+                  <Icon>
+                    <CopyIcon />
+                  </Icon>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Copy example JSON</TooltipContent>
+            </Tooltip>
+          </div>
+          <CodeMirror
+            value={exampleCode}
+            theme={theme}
+            extensions={[jsonLanguage]}
+            className="h-[150px] w-full overflow-y-scroll bg-surface3 rounded-lg overflow-scroll p-3"
+          />
+        </div>
+      )}
+      <Collapsible className="border border-border1 rounded-lg bg-surface3" open={isOpen} onOpenChange={setIsOpen}>
         <div className="flex items-center justify-between w-full px-3">
           <div>
             <Txt as="label" variant="ui-md" className="text-icon3">
@@ -108,29 +142,52 @@ const JsonField = ({
               </TooltipTrigger>
               <TooltipContent>Copy JSON</TooltipContent>
             </Tooltip>
-            <Icon className={cn('transition-transform', isOpen ? 'rotate-0' : '-rotate-90')}>
-              <ChevronDown />
-            </Icon>
+            {exampleCode && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => setIsExampleOpen(!isExampleOpen)}
+                    className={buttonClass}
+                    aria-label={isExampleOpen ? `Hide example JSON` : `View example JSON`}
+                  >
+                    <Icon>{isExampleOpen ? <EyeOffIcon /> : <EyeIcon />}</Icon>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>View example JSON</TooltipContent>
+              </Tooltip>
+            )}
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className={buttonClass}
+                aria-label={isOpen ? `Collapse ${label}` : `Expand ${label}`}
+              >
+                <Icon className={cn('transition-transform', isOpen ? 'rotate-0' : '-rotate-90')}>
+                  <ChevronDown />
+                </Icon>
+              </button>
+            </CollapsibleTrigger>
           </div>
         </div>
-      </CollapsibleTrigger>
 
-      <CollapsibleContent className="space-y-2">
-        <CodeMirror
-          value={value}
-          onChange={onChange}
-          theme={theme}
-          extensions={[jsonLanguage]}
-          className="h-[260px] overflow-y-scroll bg-surface3 rounded-lg overflow-hidden p-3"
-        />
+        <CollapsibleContent className="space-y-2">
+          <CodeMirror
+            value={value}
+            onChange={onChange}
+            theme={theme}
+            extensions={[jsonLanguage]}
+            className="h-[260px] overflow-y-scroll bg-surface3 rounded-lg overflow-hidden p-3"
+          />
 
-        {fieldError && (
-          <Txt variant="ui-sm" className="text-accent2">
-            {fieldError}
-          </Txt>
-        )}
-      </CollapsibleContent>
-    </Collapsible>
+          {fieldError && (
+            <Txt variant="ui-sm" className="text-accent2">
+              {fieldError}
+            </Txt>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
+    </>
   );
 };
 
@@ -167,41 +224,6 @@ export const WorkflowTimeTravelForm = ({ stepKey, closeModal }: WorkflowTimeTrav
     }
   }, [stepDefinition?.inputSchema]);
 
-  // const resumePayload = stepResult && 'resumePayload' in stepResult ? stepResult.resumePayload : undefined;
-
-  // useEffect(() => {
-  //   setResumeData(prettyJson(resumePayload ?? {}));
-  // }, [resumePayload]);
-
-  // useEffect(() => {
-  //   if (result?.steps) {
-  //     let newStepResult: Record<string, any> = {};
-  //     for (const stepId of Object.keys(result.steps)) {
-  //       if (stepId === stepKey) {
-  //         break;
-  //       }
-  //       newStepResult[stepId] = result.steps[stepId];
-  //     }
-  //     const stepEntries = Object.entries(newStepResult ?? {});
-  //     const contextEntries = stepEntries.filter(([key]) => !key.includes('.'));
-  //     const nestedEntries = stepEntries.filter(([key]) => key.includes('.'));
-  //     setContextValue(prettyJson(Object.fromEntries(contextEntries)));
-  //     const nestedStepContext = constructNestedStepContext(Object.fromEntries(nestedEntries));
-  //     setNestedContextValue(prettyJson(nestedStepContext));
-  //   }
-  // }, [result?.steps, stepKey]);
-
-  const ensureNestedPath = (root: Record<string, any>, path: string[]) => {
-    let cursor = root;
-    for (const segment of path) {
-      if (!cursor[segment] || typeof cursor[segment] !== 'object') {
-        cursor[segment] = {};
-      }
-      cursor = cursor[segment];
-    }
-    return cursor;
-  };
-
   const handleSubmit = async (data: Record<string, any>) => {
     setFormError(null);
     setIsSubmitting(true);
@@ -212,28 +234,6 @@ export const WorkflowTimeTravelForm = ({ stepKey, closeModal }: WorkflowTimeTrav
       const parsedNestedContext = nestedContextValue.trim() ? JSON.parse(nestedContextValue) : {};
 
       const { runId } = await createWorkflowRun({ workflowId, prevRunId });
-
-      // const stepArr = stepKey.split('.');
-      // if (stepArr.length === 1 && Object.keys(parsedContext)?.length > 0) {
-      //   parsedContext[stepKey] = {
-      //     status: 'running',
-      //     payload: data,
-      //   };
-      // }
-
-      // if (stepArr.length > 1 && Object.keys(parsedNestedContext)?.length > 0) {
-      //   const nestedParentPath = stepArr.slice(0, -1);
-      //   const leafKey = stepArr.at(-1);
-      //   const parent = nestedParentPath.length
-      //     ? ensureNestedPath(parsedNestedContext, nestedParentPath)
-      //     : parsedNestedContext;
-      //   if (leafKey) {
-      //     parent[leafKey] = {
-      //       status: 'running',
-      //       payload: data,
-      //     };
-      //   }
-      // }
 
       const payload = {
         runId,
@@ -286,13 +286,37 @@ export const WorkflowTimeTravelForm = ({ stepKey, closeModal }: WorkflowTimeTrav
               label="Context (JSON)"
               value={contextValue}
               onChange={setContextValue}
-              helperText="Only include top level steps (no nested workflow steps)."
+              helperText="Only include top level steps (no nested workflow steps) that are required in the time travel execution."
+              exampleCode={prettyJson({
+                stepId: {
+                  status: 'success',
+                  payload: {
+                    value: 'test value',
+                  },
+                  output: {
+                    value: 'test output',
+                  },
+                },
+              })}
             />
             <JsonField
               label="Nested Step Context (JSON)"
               value={nestedContextValue}
               onChange={setNestedContextValue}
-              helperText="Includes nested workflow steps."
+              helperText="Includes nested workflow steps that are required in the time travel execution."
+              exampleCode={prettyJson({
+                nestedWorkflowId: {
+                  stepId: {
+                    status: 'success',
+                    payload: {
+                      value: 'test value',
+                    },
+                    output: {
+                      value: 'test output',
+                    },
+                  },
+                },
+              })}
             />
             {formError && (
               <Txt variant="ui-sm" className="text-accent2">
