@@ -2,7 +2,7 @@ import { join } from 'path';
 import process from 'process';
 import { Deployer } from '@mastra/deployer';
 import { DepsService } from '@mastra/deployer/services';
-import { move, writeJson } from 'fs-extra/esm';
+import fsExtra, { move, writeJson } from 'fs-extra/esm';
 
 export class NetlifyDeployer extends Deployer {
   constructor() {
@@ -32,6 +32,24 @@ export class NetlifyDeployer extends Deployer {
     await super.prepare(outputDirectory);
   }
 
+  private async writeNetlifyToml(rootDir = process.cwd()): Promise<void> {
+    const netlifyTomlContent = `[build]
+  command = "bun run build"
+  publish = ".netlify/v1/functions"
+
+[functions]
+  directory = ".netlify/v1/functions"
+  node_bundler = "none"
+  included_files = [".netlify/v1/functions/**"]
+
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200`;
+
+    await fsExtra.outputFile(join(rootDir, 'netlify.toml'), netlifyTomlContent);
+  }
+
   async bundle(
     entryFile: string,
     outputDirectory: string,
@@ -55,6 +73,8 @@ export class NetlifyDeployer extends Deployer {
         },
       ],
     });
+
+    await this.writeNetlifyToml();
 
     await move(join(outputDirectory, '.netlify', 'v1'), join(process.cwd(), '.netlify', 'v1'), {
       overwrite: true,
