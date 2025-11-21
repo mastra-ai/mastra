@@ -118,7 +118,7 @@ async function startService(
 
   console.log(`[TEST] Starting ${name} from ${serviceDir}`);
 
-  const childProcess = spawn('pnpm', ['run', 'start:test'], {
+  const childProcess = spawn('pnpm', ['run', 'start'], {
     cwd: serviceDir,
     env: {
       ...process.env,
@@ -267,7 +267,7 @@ describe('Hono Multi-Service Integration Tests', () => {
     async () => {
       console.log('[TEST] Making request to service-one /chain endpoint');
 
-      const response = await fetch(`http://localhost:${SERVICE_ONE_PORT}/chain`);
+      const response = await fetch(`http://localhost:${SERVICE_ONE_PORT}/chain?test=propegate`);
       const data = await response.json();
 
       console.log('[TEST] Response:', JSON.stringify(data, null, 2));
@@ -348,7 +348,7 @@ describe('Hono Multi-Service Integration Tests', () => {
     'should maintain parent-child span relationships',
     { skip: !process.env.OPENAI_API_KEY, timeout: 45000 },
     async () => {
-      const response = await fetch(`http://localhost:${SERVICE_ONE_PORT}/chain`);
+      const response = await fetch(`http://localhost:${SERVICE_ONE_PORT}/chain?test=parent-child`);
       const data = await response.json();
 
       const responseStr = JSON.stringify(data);

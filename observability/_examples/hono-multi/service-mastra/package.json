@@ -5,23 +5,26 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "start:test": "tsx src/index.ts",
-    "start": "node --import=../instrumentation/src/index.ts dist/index.js",
-    "build": "tsc",
+    "start": "mastra build --dir src --debug && node --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs",
+    "build": "mastra build --dir src --debug",
     "lint": "prettier --check '**/*.{js,ts}'",
     "lint:fix": "prettier --write '**/*.{js,ts}'"
   },
   "dependencies": {
     "@hono/node-server": "^1.15.1",
+    "@hono/otel": "^1.0.1",
     "@mastra/core": "workspace:*",
     "@mastra/hono-multi-instrumentation": "workspace:*",
     "@mastra/observability": "workspace:*",
     "@mastra/otel-bridge": "workspace:*",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/instrumentation": "^0.208.0",
+    "@opentelemetry/semantic-conventions": "^1.38.0",
     "dotenv": "^17.2.0",
     "hono": "^4.10.1"
   },
   "devDependencies": {
+    "mastra": "workspace:*",
     "@types/node": "^20.19.0",
     "prettier": "^3.6.2",
     "tsx": "^4.19.2",

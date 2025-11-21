@@ -5,15 +5,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "start:test": "tsx src/index.ts",
-    "start": "node --import=../instrumentation/src/index.ts dist/index.js",
+    "start": "tsx --import=../instrumentation/src/index.ts --import=@opentelemetry/instrumentation/hook.mjs src/index.ts",
     "build": "tsc",
     "lint": "prettier --check '**/*.{js,ts}'",
     "lint:fix": "prettier --write '**/*.{js,ts}'"
   },
   "dependencies": {
-    "@hono/node-server": "^1.15.1",
+    "@hono/node-server": "^1.19.5",
+    "@hono/otel": "^1.0.1",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/instrumentation": "^0.208.0",
     "@mastra/hono-multi-instrumentation": "workspace:*",
     "hono": "^4.10.1"
   },

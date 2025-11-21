@@ -1,67 +1,50 @@
-/**
- * Shared OpenTelemetry instrumentation for hono-multi example services
- *
- * Configures OTEL to export traces to Arize Phoenix running locally.
- */
-
-import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
-import { resourceFromAttributes } from '@opentelemetry/resources';
+import { SEMRESATTRS_PROJECT_NAME } from '@arizeai/openinference-semantic-conventions';
+import { DiagConsoleLogger, DiagLogLevel, diag } from '@opentelemetry/api';
+import { W3CTraceContextPropagator } from '@opentelemetry/core';
+import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
+import { UndiciInstrumentation } from '@opentelemetry/instrumentation-undici';
+import { defaultResource, resourceFromAttributes } from '@opentelemetry/resources';
 import { NodeSDK } from '@opentelemetry/sdk-node';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
+import { ArizeOpenInferenceOTLPTraceExporter } from './arize-exporter';
 
-// Enable diagnostic logging for debugging
-diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
+export const httpInstrumentation = new HttpInstrumentation({});
+export const fetchInstrumentation = new UndiciInstrumentation({});
 
-let sdk: NodeSDK | null = null;
+let sdk: NodeSDK | undefined;
 
-/**
- * Initialize and start OpenTelemetry instrumentation
- *
- * Exports traces to Arize Phoenix at http://localhost:6006
- */
-export function startTelemetry(serviceName: string): void {
-  if (sdk) {
-    console.warn('[Telemetry] SDK already initialized');
-    return;
-  }
+const PROJECT_NAME = process.env.ARIZE_PROJECT_NAME || 'tracing-exp';
 
-  sdk = new NodeSDK({
-    resource: resourceFromAttributes({
-      [ATTR_SERVICE_NAME]: serviceName,
-    }),
-    traceExporter: new OTLPTraceExporter({
-      // Arize Phoenix gRPC OTLP endpoint
-      url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4317',
-    }),
-    instrumentations: [
-      getNodeAutoInstrumentations({
-        // Disable noisy instrumentations
-        '@opentelemetry/instrumentation-fs': {
-          enabled: false,
-        },
+export const startTelemetry = async (): Promise<NodeSDK> => {
+  diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
+
+  const openTelemetrySDK = new NodeSDK({
+    resource: defaultResource().merge(
+      resourceFromAttributes({
+        [ATTR_SERVICE_NAME]: PROJECT_NAME,
+        [SEMRESATTRS_PROJECT_NAME]: PROJECT_NAME,
       }),
+    ),
+    spanProcessors: [
+      new BatchSpanProcessor(
+        new ArizeOpenInferenceOTLPTraceExporter({
+          endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4317',
+        }),
+      ),
     ],
+    instrumentations: [httpInstrumentation, fetchInstrumentation],
+    textMapPropagator: new W3CTraceContextPropagator(),
   });
+  openTelemetrySDK.start();
 
-  sdk.start();
-  console.log(`[Telemetry] Started for service: ${serviceName}`);
-}
+  return Promise.resolve(openTelemetrySDK);
+};
 
-/**
- * Gracefully shutdown OpenTelemetry instrumentation
- */
-export async function stopTelemetry(): Promise<void> {
-  if (!sdk) {
-    return;
-  }
+export const stopTelemetry = async () => {
+  if (!sdk) return;
 
-  try {
-    await sdk.shutdown();
-    console.log('[Telemetry] Shutdown complete');
-    sdk = null;
-  } catch (error) {
-    console.error('[Telemetry] Error during shutdown:', error);
-  }
-}
+  await sdk.shutdown();
+
+  sdk = undefined;
+};
