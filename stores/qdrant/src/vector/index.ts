@@ -344,6 +344,15 @@ export class QdrantVector extends MastraVector {
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');
       }
+      if (vectorName) {
+        const { config } = await this.client.getCollection(indexName);
+        const vectorsConfig = config.params.vectors;
+        const isNamedVectors = vectorsConfig && typeof vectorsConfig === 'object' && !('size' in vectorsConfig);
+        
+        if (!isNamedVectors || !(vectorName in vectorsConfig)) {
+          throw new Error(`Vector name "${vectorName}" does not exist in collection "${indexName}"`);
+        }
+      }
     } catch (validationError) {
       throw new MastraError(
         {
