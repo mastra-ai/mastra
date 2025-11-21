@@ -360,7 +360,7 @@ export class MastraClientModelOutput<OUTPUT extends OutputSchema = undefined> {
         };
         break;
 
-      case 'finish':
+      case 'finish': {
         const finishPayload = chunk.payload as any;
         // Usage can be in payload.usage or payload.stepResult.usage
         if (finishPayload.usage) {
@@ -370,13 +370,15 @@ export class MastraClientModelOutput<OUTPUT extends OutputSchema = undefined> {
         }
         this.#delayedPromises.finishReason.resolve(finishPayload.stepResult?.reason);
         break;
+      }
 
-      case 'error':
+      case 'error': {
         const errorPayload = chunk.payload as any;
         const error = new Error(String(errorPayload.error || errorPayload));
         this.#error = error;
         this.#delayedPromises.finishReason.reject(error);
         break;
+      }
     }
   }
 
