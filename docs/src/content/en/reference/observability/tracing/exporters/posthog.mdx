@@ -1,13 +1,13 @@
 ---
-title: "Reference: PosthogExporter | Observability | Mastra Docs"
-description: PostHog exporter for AI Tracing
+title: "Reference: PosthogExporter | Observability"
+description: PostHog exporter for Tracing
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # PosthogExporter
 
-Sends AI tracing data to PostHog's LLM Analytics platform.
+Sends Tracing data to PostHog for AI observability and analytics.
 
 ## Constructor
 
@@ -38,7 +38,7 @@ Extends `BaseExporterConfig`, which includes:
     {
       name: "apiKey",
       type: "string",
-      description: "PostHog project API key (required)",
+      description: "PostHog project API key",
       required: true,
     },
     {
@@ -74,7 +74,7 @@ Extends `BaseExporterConfig`, which includes:
     {
       name: "enablePrivacyMode",
       type: "boolean",
-      description: "Exclude input/output from LLM events (default: false)",
+      description: "Exclude input/output from generation events (default: false)",
       required: false,
     },
     {
@@ -94,7 +94,7 @@ Extends `BaseExporterConfig`, which includes:
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
-Exports a tracing event to PostHog as a structured event.
+Exports a tracing event to PostHog.
 
 ### shutdown
 
@@ -102,7 +102,7 @@ Exports a tracing event to PostHog as a structured event.
 async shutdown(): Promise<void>
 ```
 
-Flushes pending batched events and shuts down the PostHog client. **Critical for serverless environments.**
+Flushes pending batched events and shuts down the PostHog client.
 
 ## Usage
 
@@ -113,121 +113,20 @@ const exporter = new PosthogExporter({
   apiKey: process.env.POSTHOG_API_KEY!,
   host: "https://us.i.posthog.com",
   serverless: true,
-  enablePrivacyMode: false,
 });
 ```
 
 ## Span Type Mapping
 
-| Mastra Span Type           | PostHog Event Type | Notes                              |
-| -------------------------- | ------------------ | ---------------------------------- |
-| `MODEL_GENERATION`         | `$ai_generation`   | Full LLM call with tokens          |
-| `MODEL_STEP`               | `$ai_generation`   | Individual step within generation  |
-| `MODEL_CHUNK`              | `$ai_span`         | Streaming chunk (operation)        |
-| `TOOL_CALL`                | `$ai_span`         | Function/tool execution            |
-| `MCP_TOOL_CALL`            | `$ai_span`         | MCP tool execution                 |
-| `PROCESSOR_RUN`            | `$ai_span`         | Input/output processing            |
-| `AGENT_RUN`                | `$ai_span`         | Agent execution                    |
-| `WORKFLOW_RUN`             | `$ai_span`         | Workflow execution                 |
-| `WORKFLOW_*` (all)         | `$ai_span`         | Workflow operations                |
-| `GENERIC`                  | `$ai_span`         | Custom operations                  |
-
-## Event Properties
-
-### Common Properties (All Events)
-
-| Property           | Type      | Description                      |
-| ------------------ | --------- | -------------------------------- |
-| `$ai_trace_id`     | `string`  | Trace identifier                 |
-| `$ai_parent_id`    | `string`  | Parent span ID (if child)        |
-| `$ai_latency`      | `number`  | Duration in seconds              |
-| `$ai_is_error`     | `boolean` | Error flag                       |
-| `$ai_session_id`   | `string`  | Session identifier (optional)    |
-
-### LLM Generation Properties (`$ai_generation`)
-
-| Property                  | Type            | Description                           |
-| ------------------------- | --------------- | ------------------------------------- |
-| `$ai_generation_id`       | `string`        | Generation identifier                 |
-| `$ai_model`               | `string`        | Model name (e.g., "gpt-4o")           |
-| `$ai_provider`            | `string`        | Provider (e.g., "openai")             |
-| `$ai_input`               | `Message[]`     | Input messages (unless privacy mode)  |
-| `$ai_output_choices`      | `Message[]`     | Output messages (unless privacy mode) |
-| `$ai_input_tokens`        | `number`        | Input token count                     |
-| `$ai_output_tokens`       | `number`        | Output token count                    |
-| `$ai_total_tokens`        | `number`        | Total token count                     |
-| `$ai_temperature`         | `number`        | Temperature parameter                 |
-| `$ai_max_tokens`          | `number`        | Max tokens parameter                  |
-| `$ai_stream`              | `boolean`       | Streaming flag                        |
-| `reasoning_tokens`        | `number`        | Reasoning tokens (v5 models)          |
-| `cached_input_tokens`     | `number`        | Cached input tokens (v5 models)       |
-
-### Span Properties (`$ai_span`)
-
-| Property              | Type     | Description                    |
-| --------------------- | -------- | ------------------------------ |
-| `$ai_span_id`         | `string` | Span identifier                |
-| `$ai_span_name`       | `string` | Operation name                 |
-| `$ai_input_state`     | `any`    | Input data/parameters          |
-| `$ai_output_state`    | `any`    | Output/result data             |
-| `chunk_type`          | `string` | Chunk type (MODEL_CHUNK only)  |
-| `chunk_sequence_number` | `number` | Chunk sequence (MODEL_CHUNK only) |
-
-## Message Format
-
-LLM input/output are structured as message arrays:
-
-```typescript
-interface PostHogMessage {
-  role: 'user' | 'assistant' | 'system' | 'tool';
-  content: Array<{
-    type: string;
-    text?: string;
-    [key: string]: unknown;
-  }>;
-}
-```
-
-Example:
-```json
-{
-  "$ai_input": [
-    {
-      "role": "user",
-      "content": [{ "type": "text", "text": "Hello!" }]
-    }
-  ],
-  "$ai_output_choices": [
-    {
-      "role": "assistant",
-      "content": [{ "type": "text", "text": "Hi there!" }]
-    }
-  ]
-}
-```
-
-## Distinct ID Resolution
-
-The exporter determines the PostHog `distinctId` (user identifier) using this priority:
-
-1. `span.metadata.userId` - Span-level user ID
-2. `traceData.distinctId` - Cached from root span
-3. `config.defaultDistinctId` - Config fallback
-4. `"anonymous"` - Final fallback
-
-## Serverless Configuration
-
-When `serverless: true`:
-- `flushAt`: 10 (vs default 20)
-- `flushInterval`: 2000ms (vs default 10000ms)
-
-This configuration balances data safety with API efficiency for high-volume streaming events (MODEL_CHUNK). Always call `shutdown()` before function termination.
-
-## Privacy Mode
-
-When `enablePrivacyMode: true`:
-- `$ai_input` and `$ai_output_choices` are excluded from `$ai_generation` events
-- Token counts, latency, model info, and errors are still captured
-- `$ai_span` events are unaffected (tool calls, etc. still include input/output)
-
-This enables compliance tracking without storing sensitive conversation data.
+| Mastra Span Type    | PostHog Event Type |
+| ------------------- | ------------------ |
+| `MODEL_GENERATION`  | `$ai_generation`   |
+| `MODEL_STEP`        | `$ai_generation`   |
+| `MODEL_CHUNK`       | `$ai_span`         |
+| `TOOL_CALL`         | `$ai_span`         |
+| `MCP_TOOL_CALL`     | `$ai_span`         |
+| `PROCESSOR_RUN`     | `$ai_span`         |
+| `AGENT_RUN`         | `$ai_span`         |
+| `WORKFLOW_RUN`      | `$ai_span`         |
+| All other workflows | `$ai_span`         |
+| `GENERIC`           | `$ai_span`         |
