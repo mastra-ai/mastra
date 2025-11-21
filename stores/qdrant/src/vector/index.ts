@@ -155,13 +155,15 @@ export class QdrantVector extends MastraVector {
         if (includeVector && match.vector != null) {
           if (Array.isArray(match.vector)) {
             vector = match.vector as number[];
-          } else if (typeof match.vector === 'object') {
+          } else if (typeof match.vector === 'object' && match.vector !== null) {
             const named = match.vector as Record<string, unknown>;
-            const maybeNamed = using && Array.isArray(named[using]) ? (named[using] as unknown[]) : undefined;
-            if (maybeNamed) {
-              vector = maybeNamed.filter((v): v is number => typeof v === 'number');
-            } else {
-              vector = Object.values(named).filter((v): v is number => typeof v === 'number');
+            const sourceArray: unknown[] | undefined =
+             using && Array.isArray(named[using])
+              ? (named[using] as unknown[])
+              : (Object.values(named).find(v => Array.isArray(v)) as unknown[] | undefined);
+
+            if (sourceArray) {
+              vector = sourceArray.filter((v): v is number => typeof v === 'number');
             }
           }
         }
