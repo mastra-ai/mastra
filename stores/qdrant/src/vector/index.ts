@@ -146,7 +146,7 @@ export class QdrantVector extends MastraVector {
           filter: translatedFilter,
           with_payload: true,
           with_vector: includeVector,
-          ...(using ? {using} : {}),
+          ...(using ? { using } : {}),
         })
       ).points;
 
@@ -158,9 +158,9 @@ export class QdrantVector extends MastraVector {
           } else if (typeof match.vector === 'object' && match.vector !== null) {
             const named = match.vector as Record<string, unknown>;
             const sourceArray: unknown[] | undefined =
-             using && Array.isArray(named[using])
-              ? (named[using] as unknown[])
-              : (Object.values(named).find(v => Array.isArray(v)) as unknown[] | undefined);
+              using && Array.isArray(named[using])
+                ? (named[using] as unknown[])
+                : (Object.values(named).find(v => Array.isArray(v)) as unknown[] | undefined);
 
             if (sourceArray) {
               vector = sourceArray.filter((v): v is number => typeof v === 'number');
