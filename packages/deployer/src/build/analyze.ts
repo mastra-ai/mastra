@@ -3,8 +3,8 @@ import * as babel from '@babel/core';
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import type { OutputAsset, OutputChunk } from 'rollup';
-import { join } from 'node:path';
-import { validate } from '../validator/validate';
+import { basename, join } from 'node:path';
+import { validate, ValidationError } from '../validator/validate';
 import { getBundlerOptions } from './bundlerOptions';
 import { checkConfigExport } from './babel/check-config-export';
 import { getWorkspaceInformation, type WorkspacePackageInfo } from '../bundler/workspaceDependencies';
@@ -15,7 +15,10 @@ import { getPackageInfo } from 'local-pkg';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { findNativePackageModule } from './utils';
 
-type ErrorId = 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND' | 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD';
+type ErrorId =
+  | 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND'
+  | 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD'
+  | 'DEPLOYER_ANALYZE_TYPE_ERROR';
 
 function throwExternalDependencyError({
   errorId,
@@ -44,6 +47,92 @@ export const mastra = new Mastra({
   }
 })`,
   });
+}
+
+function validateError(err: ValidationError | Error, file: OutputChunk, logger: IMastraLogger) {
+  let moduleName: string | undefined | null = null;
+  let errorConfig: {
+    id: ErrorId;
+    messagePrefix: string;
+  } | null = null;
+
+  if (err instanceof ValidationError) {
+    if (err.type === 'TypeError') {
+      moduleName = basename(file.name);
+      errorConfig = {
+        id: 'DEPLOYER_ANALYZE_TYPE_ERROR',
+        messagePrefix: `Mastra wasn't able to bundle ${moduleName}, might be an older commonJS module. Please add`,
+      };
+    } else if (err.type === 'ModuleNotFoundError') {
+      moduleName = basename(file.name);
+      const missingModule = err.info.moduleName as string;
+
+      errorConfig = {
+        id: 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND',
+        messagePrefix: `Mastra wasn't able to build your project, We couldn't load "${missingModule}" from "${moduleName}". Please add`,
+      };
+    }
+  }
+
+  if (err.message.includes('No native build was found')) {
+    moduleName = basename(file.name);
+    errorConfig = {
+      id: 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD',
+      messagePrefix: 'We found a binary dependency in your bundle but we cannot bundle it yet. Please add',
+    };
+  }
+
+  if (errorConfig && moduleName) {
+    throwExternalDependencyError({
+      errorId: errorConfig.id,
+      moduleName: moduleName!,
+      packageName: moduleName!,
+      messagePrefix: errorConfig.messagePrefix,
+    });
+  }
+
+  // if (moduleName && errorConfig) {
+  //   const pkgInfo = await getPackageInfo(moduleName);
+  //   const packageName = pkgInfo?.packageJson?.name;
+
+  //   if (packageName) {
+  //     throwExternalDependencyError({
+  //       errorId: errorConfig.id,
+  //       moduleName,
+  //       packageName,
+  //       messagePrefix: errorConfig.messagePrefix,
+  //     });
+  //   } else {
+  //     logger.debug(`Could not determine the module name for file ${file.fileName}`);
+  //   }
+  // }
+}
+
+async function validateFile(root: string, file: OutputChunk, logger: IMastraLogger) {
+  try {
+    if (!file.isDynamicEntry && file.isEntry) {
+      // validate if the chunk is actually valid, a failsafe to make sure bundling didn't make any mistakes
+      await validate(join(root, file.fileName));
+    }
+  } catch (err) {
+    let errorToHandle = err;
+    if (
+      err instanceof ValidationError &&
+      err.type === 'ReferenceError' &&
+      (err.message.startsWith('__dirname') || err.message.startsWith('__filename'))
+    ) {
+      try {
+        await validate(join(root, file.fileName), true);
+        errorToHandle = null;
+      } catch (err) {
+        errorToHandle = err;
+      }
+    }
+
+    if (errorToHandle instanceof Error) {
+      validateError(errorToHandle, file, logger);
+    }
+  }
 }
 
 /**
@@ -96,62 +185,13 @@ async function validateOutput(
       continue;
     }
 
-    try {
-      logger.debug(`Validating if ${file.fileName} is a valid module.`);
-      if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
-        result.dependencies.set(reverseVirtualReferenceMap.get(file.name)!, file.fileName);
-      }
-
-      if (!file.isDynamicEntry && file.isEntry) {
-        // validate if the chunk is actually valid, a failsafe to make sure bundling didn't make any mistakes
-        await validate(join(projectRoot, file.fileName));
-      }
-    } catch (err) {
-      if (err instanceof Error) {
-        let moduleName: string | undefined | null = null;
-        let errorConfig: {
-          id: ErrorId;
-          messagePrefix: string;
-        } | null = null;
-
-        if (err.message.includes('[ERR_MODULE_NOT_FOUND]')) {
-          // This is the preferred way to get the module name that caused the issue
-          const moduleIdName = file.moduleIds.length >= 2 ? file.moduleIds[file.moduleIds.length - 2] : undefined;
-          // For some reason some virtual modules are quite sparse on their details, so name (e.g. '.mastra/.build/puppeteer') is a good enough fallback
-          const fallbackName = file.name.split('/').pop();
-
-          moduleName = moduleIdName ?? fallbackName;
-          errorConfig = {
-            id: 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND',
-            messagePrefix: "Mastra wasn't able to build your project. Please add",
-          };
-        } else if (err.message.includes('Error: No native build was found for ')) {
-          moduleName = findNativePackageModule(file.moduleIds);
-          errorConfig = {
-            id: 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD',
-            messagePrefix: 'We found a binary dependency in your bundle. Please add',
-          };
-        }
-
-        if (moduleName && errorConfig) {
-          const pkgInfo = await getPackageInfo(moduleName);
-          const packageName = pkgInfo?.packageJson?.name;
-
-          if (packageName) {
-            throwExternalDependencyError({
-              errorId: errorConfig.id,
-              moduleName,
-              packageName,
-              messagePrefix: errorConfig.messagePrefix,
-            });
-          } else {
-            logger.debug(`Could not determine the module name for file ${file.fileName}`);
-          }
-        }
-
-        logger.debug(`Error while validating module ${file.fileName}: ${err.message}`);
-      }
+    logger.debug(`Validating if ${file.fileName} is a valid module.`);
+    if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
+      result.dependencies.set(reverseVirtualReferenceMap.get(file.name)!, file.fileName);
     }
+
+    // validate if the chunk is actually valid, a failsafe to make sure bundling didn't make any mistakes
+    await validateFile(projectRoot, file, logger);
   }
 
   return result;
