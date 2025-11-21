@@ -925,6 +925,148 @@ importers:
         specifier: ^2.0.0
         version: 2.1.9(@types/node@22.13.17)(@vitest/ui@4.0.9(vitest@4.0.9))(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))
 
+  observability/_examples/hono-multi:
+    devDependencies:
+      '@types/node':
+        specifier: 22.13.17
+        version: 22.13.17
+      dotenv:
+        specifier: ^17.2.0
+        version: 17.2.3
+      specifier-resolution-node:
+        specifier: ^1.1.4
+        version: 1.1.4
+      ts-node:
+        specifier: ^10.9.2
+        version: 10.9.2(@types/node@22.13.17)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@22.13.17)(@vitest/ui@4.0.9(vitest@4.0.9))(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@22.13.17)(typescript@5.9.3))
+
+  observability/_examples/hono-multi/instrumentation:
+    dependencies:
+      '@opentelemetry/api':
+        specifier: ^1.9.0
+        version: 1.9.0
+      '@opentelemetry/auto-instrumentations-node':
+        specifier: ^0.67.0
+        version: 0.67.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))
+      '@opentelemetry/exporter-trace-otlp-grpc':
+        specifier: ^0.208.0
+        version: 0.208.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/instrumentation':
+        specifier: ^0.208.0
+        version: 0.208.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resources':
+        specifier: ^2.2.0
+        version: 2.2.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-node':
+        specifier: ^0.208.0
+        version: 0.208.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/semantic-conventions':
+        specifier: ^1.38.0
+        version: 1.38.0
+    devDependencies:
+      '@types/node':
+        specifier: 22.13.17
+        version: 22.13.17
+      prettier:
+        specifier: ^3.6.2
+        version: 3.6.2
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
+  observability/_examples/hono-multi/service-mastra:
+    dependencies:
+      '@hono/node-server':
+        specifier: ^1.15.1
+        version: 1.19.6(hono@4.10.6)
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      '@mastra/hono-multi-instrumentation':
+        specifier: workspace:*
+        version: link:../instrumentation
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../../../mastra
+      '@mastra/otel-bridge':
+        specifier: workspace:*
+        version: link:../../../otel-bridge
+      dotenv:
+        specifier: ^17.2.0
+        version: 17.2.3
+      hono:
+        specifier: ^4.10.1
+        version: 4.10.6
+    devDependencies:
+      '@types/node':
+        specifier: 22.13.17
+        version: 22.13.17
+      prettier:
+        specifier: ^3.6.2
+        version: 3.6.2
+      tsx:
+        specifier: ^4.19.2
+        version: 4.20.6
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
+  observability/_examples/hono-multi/service-one:
+    dependencies:
+      '@hono/node-server':
+        specifier: ^1.15.1
+        version: 1.19.6(hono@4.10.6)
+      '@mastra/hono-multi-instrumentation':
+        specifier: workspace:*
+        version: link:../instrumentation
+      hono:
+        specifier: ^4.10.1
+        version: 4.10.6
+    devDependencies:
+      '@types/node':
+        specifier: 22.13.17
+        version: 22.13.17
+      prettier:
+        specifier: ^3.6.2
+        version: 3.6.2
+      tsx:
+        specifier: ^4.19.2
+        version: 4.20.6
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
+  observability/_examples/hono-multi/service-two:
+    dependencies:
+      '@hono/node-server':
+        specifier: ^1.15.1
+        version: 1.19.6(hono@4.10.6)
+      '@mastra/hono-multi-instrumentation':
+        specifier: workspace:*
+        version: link:../instrumentation
+      hono:
+        specifier: ^4.10.1
+        version: 4.10.6
+    devDependencies:
+      '@types/node':
+        specifier: 22.13.17
+        version: 22.13.17
+      prettier:
+        specifier: ^3.6.2
+        version: 3.6.2
+      tsx:
+        specifier: ^4.19.2
+        version: 4.20.6
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
   observability/_test-utils:
     devDependencies:
       '@mastra/core':

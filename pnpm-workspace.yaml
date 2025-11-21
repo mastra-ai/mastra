@@ -12,6 +12,7 @@ packages:
   - auth/*
   - observability/*
   - observability/_examples/*
+  - observability/_examples/hono-multi/*
   - explorations/longmemeval
   - explorations/agent-builder-gh-repro
 

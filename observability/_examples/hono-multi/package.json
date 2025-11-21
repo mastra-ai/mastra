@@ -1,0 +1,32 @@
+{
+  "name": "@mastra/hono-multi-example",
+  "version": "0.1.0",
+  "description": "Multi-service distributed tracing example with Mastra, Hono, and Arize Phoenix",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:one": "cd service-one && pnpm dev",
+    "dev:two": "cd service-two && pnpm dev",
+    "dev:mastra": "cd service-mastra && pnpm dev",
+    "build": "pnpm --filter \"@mastra/hono-multi-*\" build",
+    "lint": "pnpm --filter \"@mastra/hono-multi-*\" lint",
+    "lint:fix": "pnpm --filter \"@mastra/hono-multi-*\" lint:fix",
+    "test": "vitest run",
+    "test:watch": "vitest watch"
+  },
+  "keywords": [
+    "mastra",
+    "opentelemetry",
+    "distributed-tracing",
+    "hono",
+    "arize-phoenix"
+  ],
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "dotenv": "^17.2.0",
+    "specifier-resolution-node": "^1.1.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2",
+    "vitest": "^2.0.0"
+  }
+}

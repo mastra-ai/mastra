@@ -1,0 +1,26 @@
+{
+  "name": "@mastra/hono-multi-instrumentation",
+  "version": "0.1.0",
+  "description": "Shared OpenTelemetry instrumentation for hono-multi example",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "lint": "prettier --check '**/*.{js,ts}'",
+    "lint:fix": "prettier --write '**/*.{js,ts}'"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.67.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.208.0",
+    "@opentelemetry/instrumentation": "^0.208.0",
+    "@opentelemetry/resources": "^2.2.0",
+    "@opentelemetry/sdk-node": "^0.208.0",
+    "@opentelemetry/semantic-conventions": "^1.38.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2"
+  }
+}

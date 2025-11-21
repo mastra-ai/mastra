@@ -1,0 +1,26 @@
+{
+  "name": "@mastra/hono-multi-service-two",
+  "version": "0.1.0",
+  "description": "Service Two - Intermediate service for hono-multi example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start:test": "tsx src/index.ts",
+    "start": "node --import=../instrumentation/src/index.ts dist/index.js",
+    "build": "tsc",
+    "lint": "prettier --check '**/*.{js,ts}'",
+    "lint:fix": "prettier --write '**/*.{js,ts}'"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.15.1",
+    "@mastra/hono-multi-instrumentation": "workspace:*",
+    "hono": "^4.10.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "prettier": "^3.6.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.2"
+  }
+}
