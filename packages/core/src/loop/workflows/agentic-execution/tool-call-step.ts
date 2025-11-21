@@ -44,10 +44,8 @@ export function createToolCallStep<
                 resourceId,
                 memoryConfig,
               });
-              _internal.threadExists = true;
-            } else {
-              _internal.threadExists = true;
             }
+            _internal.threadExists = true;
           }
 
           // Flush all pending messages immediately
