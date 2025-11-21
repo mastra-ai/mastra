@@ -1409,7 +1409,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       });
 
       try {
-        messageList = await runner.runOutputProcessors(messageList, tracingContext);
+        messageList = await runner.runOutputProcessors(messageList, tracingContext, requestContext);
       } catch (e) {
         if (e instanceof TripWire) {
           tripwireTriggered = true;
