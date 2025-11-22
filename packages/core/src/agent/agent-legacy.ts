@@ -30,7 +30,7 @@ import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { MessageList } from './message-list';
 import type { MastraDBMessage, MessageListInput, UIMessageWithMetadata } from './message-list/index';
-import { SaveQueueManager } from './save-queue';
+
 import type {
   AgentGenerateOptions,
   AgentStreamOptions,
@@ -134,11 +134,8 @@ export interface AgentLegacyCapabilities {
   };
   /** Save step messages */
   saveStepMessages(args: {
-    saveQueueManager: SaveQueueManager;
     result: any;
     messageList: MessageList;
-    threadId?: string;
-    memoryConfig?: MemoryConfig;
     runId: string;
   }): Promise<void>;
   /** Convert instructions to string */
@@ -196,7 +193,6 @@ export class AgentLegacyHandler {
     toolsets,
     clientTools,
     requestContext,
-    saveQueueManager,
     writableStream,
     methodType,
     tracingContext,
@@ -212,7 +208,6 @@ export class AgentLegacyHandler {
     runId?: string;
     messages: MessageListInput;
     requestContext: RequestContext;
-    saveQueueManager: SaveQueueManager;
     writableStream?: WritableStream<ChunkType>;
     methodType: 'generate' | 'stream';
     tracingContext?: TracingContext;
@@ -512,8 +507,9 @@ export class AgentLegacyHandler {
               });
             }
 
-            // Parallelize title generation and message saving
-            const promises: Promise<any>[] = [saveQueueManager.flushMessages(messageList, threadId, memoryConfig)];
+            // Message saving is now handled by MessageHistory output processor
+            // Only parallelize title generation if needed
+            const promises: Promise<any>[] = [];
 
             // Add title generation to promises if needed
             if (thread.title?.startsWith('New Thread')) {
@@ -545,9 +541,11 @@ export class AgentLegacyHandler {
               }
             }
 
-            await Promise.all(promises);
+            if (promises.length > 0) {
+              await Promise.all(promises);
+            }
           } catch (e) {
-            await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
+            // Message saving is handled by MessageHistory output processor
             if (e instanceof MastraError) {
               agentSpan?.error({ error: e });
               throw e;
@@ -705,10 +703,6 @@ export class AgentLegacyHandler {
     const llm = await this.capabilities.getLLM({ requestContext });
 
     const memory = await this.capabilities.getMemory({ requestContext });
-    const saveQueueManager = new SaveQueueManager({
-      logger: this.capabilities.logger as any,
-      memory,
-    });
 
     const { before, after } = this.__primitive({
       messages,
@@ -721,7 +715,6 @@ export class AgentLegacyHandler {
       toolsets,
       clientTools,
       requestContext,
-      saveQueueManager,
       writableStream,
       methodType,
       tracingContext,
@@ -768,11 +761,8 @@ export class AgentLegacyHandler {
               }
 
               await this.capabilities.saveStepMessages({
-                saveQueueManager,
                 result: props,
                 messageList,
-                threadId,
-                memoryConfig,
                 runId,
               });
             }

@@ -46,7 +46,6 @@ import { AgentLegacyHandler } from './agent-legacy';
 import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
-import { SaveQueueManager } from './save-queue';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
@@ -2167,26 +2166,19 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * @internal
    */
   private async saveStepMessages({
-    saveQueueManager,
     result,
     messageList,
-    threadId,
-    memoryConfig,
     runId,
   }: {
-    saveQueueManager: SaveQueueManager;
     result: any;
     messageList: MessageList;
-    threadId?: string;
-    memoryConfig?: MemoryConfig;
     runId?: string;
   }) {
     try {
       messageList.add(result.response.messages, 'response');
-      await saveQueueManager.batchMessages(messageList, threadId, memoryConfig);
+      // Message saving is now handled by MessageHistory output processor
     } catch (e) {
-      await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
-      this.logger.error('Error saving memory on step finish', {
+      this.logger.error('Error adding messages on step finish', {
         error: e,
         runId,
       });
@@ -2451,11 +2443,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const memory = await this.getMemory({ requestContext });
 
-    const saveQueueManager = new SaveQueueManager({
-      logger: this.logger,
-      memory,
-    });
-
     if (process.env.NODE_ENV !== 'test') {
       this.logger.debug(`[Agents:${this.name}] - Starting generation`, { runId });
     }
@@ -2494,7 +2481,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       instructions,
       memoryConfig,
       memory,
-      saveQueueManager,
       returnScorerData: options.returnScorerData,
       requireToolApproval: options.requireToolApproval,
       resumeContext,
@@ -2526,7 +2512,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     messageList,
     threadExists,
     structuredOutput = false,
-    saveQueueManager,
     overrideScorers,
   }: AgentExecuteOnFinishOptions) {
     const resToLog = {
@@ -2594,10 +2579,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           });
         }
 
-        // Parallelize title generation and message saving
-        const promises: Promise<any>[] = [saveQueueManager.flushMessages(messageList, threadId, memoryConfig)];
-
-        // Add title generation to promises if needed
+        // Generate title if needed
+        // Note: Message saving is now handled by MessageHistory output processor
         if (thread.title?.startsWith('New Thread')) {
           const config = memory.getMergedThreadConfig(memoryConfig);
           const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
@@ -2609,31 +2592,25 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           } = this.resolveTitleGenerationConfig(config.generateTitle);
 
           if (shouldGenerate && userMessage) {
-            promises.push(
-              this.genTitle(
-                userMessage,
-                requestContext,
-                { currentSpan: agentSpan },
-                titleModel,
-                titleInstructions,
-              ).then(title => {
-                if (title) {
-                  return memory.createThread({
-                    threadId: thread.id,
-                    resourceId,
-                    memoryConfig,
-                    title,
-                    metadata: thread.metadata,
-                  });
-                }
-              }),
+            const title = await this.genTitle(
+              userMessage,
+              requestContext,
+              { currentSpan: agentSpan },
+              titleModel,
+              titleInstructions,
             );
+            if (title) {
+              await memory.createThread({
+                threadId: thread.id,
+                resourceId,
+                memoryConfig,
+                title,
+                metadata: thread.metadata,
+              });
+            }
           }
         }
-
-        await Promise.all(promises);
       } catch (e) {
-        await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
         if (e instanceof MastraError) {
           throw e;
         }

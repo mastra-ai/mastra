@@ -38,7 +38,6 @@ import type { Workflow } from '../workflows';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
-import type { SaveQueueManager } from './save-queue';
 
 export type { MastraDBMessage, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
@@ -372,7 +371,6 @@ export type AgentExecuteOnFinishOptions = {
   messageList: MessageList;
   threadExists: boolean;
   structuredOutput?: boolean;
-  saveQueueManager: SaveQueueManager;
   overrideScorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
 };
 

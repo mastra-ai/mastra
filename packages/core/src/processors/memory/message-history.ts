@@ -129,8 +129,9 @@ export class MessageHistory implements Processor {
     // Get memory context from RequestContext
     const memoryContext = parseMemoryRuntimeContext(args.runtimeContext);
     const threadId = memoryContext?.thread?.id;
+    const readOnly = memoryContext?.memoryConfig?.readOnly;
 
-    if (!threadId) {
+    if (!threadId || readOnly) {
       return messageList;
     }
 
@@ -143,9 +144,9 @@ export class MessageHistory implements Processor {
     }
 
     const filtered = this.filterIncompleteToolCalls(messagesToSave);
-    await this.storage.saveMessages({
-      messages: filtered,
-    });
+    
+    // Persist messages directly to storage
+    await this.storage.saveMessages({ messages: filtered });
 
     const thread = await this.storage.getThreadById({ threadId });
     if (thread) {
