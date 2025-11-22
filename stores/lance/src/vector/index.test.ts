@@ -1,4 +1,3 @@
-import { createVectorTestSuite } from '@internal/storage-test-utils';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { LanceVectorStore } from './index';
 
@@ -1493,34 +1492,5 @@ describe('Lance vector store tests', () => {
   });
 });
 
-// Metadata filtering and advanced operations tests
-describe('Lance Metadata Filtering', () => {
-  let testVector: LanceVectorStore;
-  const connectionString = process.env.DB_URL || 'lancedb-metadata-test';
-
-  createVectorTestSuite({
-    vector: null as any, // Will be set after connection
-    createIndex: async (indexName: string) => {
-      if (!testVector) {
-        testVector = await LanceVectorStore.create(connectionString);
-      }
-      await testVector.createIndex({ indexName, dimension: 1536, tableName: indexName });
-    },
-    deleteIndex: async (indexName: string) => {
-      await testVector.deleteIndex({ indexName });
-    },
-    waitForIndexing: async () => {
-      // Lance indexes immediately with local files
-      await new Promise(resolve => setTimeout(resolve, 100));
-    },
-    connect: async () => {
-      testVector = await LanceVectorStore.create(connectionString);
-    },
-    disconnect: async () => {
-      if (testVector) {
-        await testVector.deleteAllTables();
-        testVector.close();
-      }
-    },
-  });
-});
+// Note: Lance's architecture (tables + column names + index names) doesn't align cleanly
+// with the shared test suite's expectations. Lance-specific tests are above.

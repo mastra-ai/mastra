@@ -325,7 +325,7 @@ export function createAdvancedOperationsTest(config: VectorTestConfig) {
         expect(user2Vectors.length).toBe(2);
       });
 
-      it.only('should update vectors with complex filter', async () => {
+      it('should update vectors with complex filter', async () => {
         await config.vector.upsert({
           indexName: testIndexName,
           vectors: [createVector(1), createVector(4), createVector(7), createVector(2)],
