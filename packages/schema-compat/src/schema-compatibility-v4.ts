@@ -9,6 +9,7 @@ import {
   ZodDate,
   ZodDefault,
   ZodNull,
+  ZodNullable,
 } from 'zod/v4';
 import type { ZodAny, ZodType } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
@@ -64,6 +65,7 @@ export const SUPPORTED_ZOD_TYPES = [
   'ZodDate',
   'ZodAny',
   'ZodDefault',
+  'ZodNullable',
 ] as const;
 
 /**
@@ -203,6 +205,13 @@ export class SchemaCompatLayer {
    */
   isNull(v: ZodAny | ZodNull): v is ZodNull {
     return v instanceof ZodNull;
+  }
+
+  /**
+   * Type guard for nullable Zod types
+   */
+  isNullable(v: ZodAny | ZodNullable<any>): v is ZodNullable<any> {
+    return v instanceof ZodNullable;
   }
 
   /**

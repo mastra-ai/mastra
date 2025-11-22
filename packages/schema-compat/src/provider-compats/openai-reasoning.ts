@@ -4,7 +4,7 @@ import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ModelInformation } from '../types';
-import { isOptional, isObj, isArr, isUnion, isDefault, isNumber, isString, isDate } from '../zodTypes';
+import { isOptional, isObj, isArr, isUnion, isDefault, isNumber, isString, isDate, isNullable } from '../zodTypes';
 
 export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
@@ -40,8 +40,38 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
   processZodType(value: ZodTypeV4): ZodTypeV4;
   processZodType(value: ZodTypeV3 | ZodTypeV4): ZodTypeV3 | ZodTypeV4 {
     if (isOptional(z)(value)) {
-      const innerZodType = this.processZodType(value._def.innerType);
-      return innerZodType.nullable();
+      // For OpenAI reasoning models strict mode, convert .optional() to .nullable()
+      const innerType = '_def' in value ? value._def.innerType : (value as any)._zod?.def?.innerType;
+
+      if (innerType) {
+        // If inner is nullable, just process and return it (strips the optional wrapper)
+        if (isNullable(z)(innerType)) {
+          return this.processZodType(innerType);
+        }
+
+        // Otherwise, process inner and make it nullable
+        const processedInner = this.processZodType(innerType);
+        return processedInner.nullable();
+      }
+
+      return value;
+    } else if (isNullable(z)(value)) {
+      // Handle nullable: if inner is optional, strip it
+      // This converts .optional().nullable() -> .nullable()
+      const innerType = '_def' in value ? value._def.innerType : (value as any)._zod?.def?.innerType;
+      if (innerType && isOptional(z)(innerType)) {
+        const innerInnerType = '_def' in innerType ? innerType._def.innerType : (innerType as any)._zod?.def?.innerType;
+        if (innerInnerType) {
+          const processedInnerInner = this.processZodType(innerInnerType);
+          return processedInnerInner.nullable();
+        }
+      }
+      // Otherwise process inner and re-wrap with nullable
+      if (innerType) {
+        const processedInner = this.processZodType(innerType);
+        return processedInner.nullable();
+      }
+      return value;
     } else if (isObj(z)(value)) {
       return this.defaultZodObjectHandler(value, { passthrough: false });
     } else if (isArr(z)(value)) {

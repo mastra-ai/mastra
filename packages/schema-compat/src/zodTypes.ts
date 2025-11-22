@@ -54,3 +54,9 @@ export function isDefault<Z extends typeof zV4>(z: Z): (v: any) => v is zV4.ZodD
 export function isDefault<Z extends typeof zV3 | typeof zV4>(z: Z) {
   return (v: any): v is Z['ZodDefault'] => v instanceof z['ZodDefault'];
 }
+
+export function isNullable<Z extends typeof zV3>(z: Z): (v: any) => v is zV3.ZodNullable<any>;
+export function isNullable<Z extends typeof zV4>(z: Z): (v: any) => v is zV4.ZodNullable;
+export function isNullable<Z extends typeof zV3 | typeof zV4>(z: Z) {
+  return (v: any): v is Z['ZodNullable'] => v instanceof z['ZodNullable'];
+}
