@@ -153,11 +153,7 @@ export class MessageHistory implements Processor {
       await this.storage.updateThread({
         id: threadId,
         title: thread.title || '',
-        metadata: {
-          ...thread.metadata,
-          updatedAt: new Date(),
-          lastMessageAt: new Date(),
-        },
+        metadata: thread.metadata || {},
       });
     }
 

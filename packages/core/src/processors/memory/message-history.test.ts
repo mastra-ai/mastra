@@ -523,7 +523,9 @@ describe('MessageHistory', () => {
         },
       ];
 
+      const messageList = new MessageList().add(messages, `input`);
       const result = await processor.processOutputResult({
+        messageList,
         messages,
         abort: ((reason?: string) => {
           throw new Error(reason || 'Aborted');
@@ -641,7 +643,9 @@ describe('MessageHistory', () => {
         },
       ];
 
+      const messageList = new MessageList().add(messages, `input`);
       await processor.processOutputResult({
+        messageList,
         messages,
         abort: ((reason?: string) => {
           throw new Error(reason || 'Aborted');
@@ -678,22 +682,20 @@ describe('MessageHistory', () => {
         },
       ];
 
+      const messageList = new MessageList().add(messages, `input`);
+
       await processor.processOutputResult({
         messages,
         abort: ((reason?: string) => {
           throw new Error(reason || 'Aborted');
         }) as (reason?: string) => never,
         runtimeContext: createRuntimeContextWithMemory('thread-1'),
+        messageList,
       });
 
       expect(mockStorage.updateThread).toHaveBeenCalledWith({
         id: 'thread-1',
         title: 'Test Thread',
-        metadata: expect.objectContaining({
-          createdAt: expect.any(Date),
-          updatedAt: expect.any(Date),
-          lastMessageAt: expect.any(Date),
-        }),
       });
     });
 
@@ -723,12 +725,14 @@ describe('MessageHistory', () => {
 
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
+      const messageList = new MessageList().add(messages, `input`);
       const result = await processor.processOutputResult({
         messages,
         abort: ((reason?: string) => {
           throw new Error(reason || 'Aborted');
         }) as (reason?: string) => never,
         runtimeContext: createRuntimeContextWithMemory('thread-1'),
+        messageList,
       });
 
       expect(result).toEqual(messages);
@@ -764,12 +768,14 @@ describe('MessageHistory', () => {
 
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
+      const messageList = new MessageList().add(messages, `input`);
       const result = await processor.processOutputResult({
         messages,
         abort: ((reason?: string) => {
           throw new Error(reason || 'Aborted');
         }) as (reason?: string) => never,
         runtimeContext: createRuntimeContextWithMemory('thread-1'),
+        messageList,
       });
 
       // Should still save messages and return them
@@ -799,7 +805,9 @@ describe('MessageHistory', () => {
         },
       ];
 
+      const messageList = new MessageList().add(messages, `input`);
       const result = await processor.processOutputResult({
+        messageList,
         messages,
         abort: ((reason?: string) => {
           throw new Error(reason || 'Aborted');
@@ -835,7 +843,9 @@ describe('MessageHistory', () => {
         },
       ];
 
+      const messageList = new MessageList().add(messages, `input`);
       const result = await processor.processOutputResult({
+        messageList,
         messages,
         abort: ((reason?: string) => {
           throw new Error(reason || 'Aborted');
@@ -872,7 +882,9 @@ describe('MessageHistory', () => {
         },
       ];
 
+      const messageList = new MessageList().add(messages, `input`);
       await processor.processOutputResult({
+        messageList,
         messages,
         abort: ((reason?: string) => {
           throw new Error(reason || 'Aborted');
