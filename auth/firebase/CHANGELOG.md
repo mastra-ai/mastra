@@ -1,5 +1,17 @@
 # @mastra/auth-firebase
 
+## 0.10.7
+
+### Patch Changes
+
+- Allow provider to pass through options to the auth config ([#10290](https://github.com/mastra-ai/mastra/pull/10290))
+
+## 0.10.7-alpha.0
+
+### Patch Changes
+
+- Allow provider to pass through options to the auth config ([#10290](https://github.com/mastra-ai/mastra/pull/10290))
+
 ## 0.10.6
 
 ### Patch Changes

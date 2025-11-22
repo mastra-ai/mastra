@@ -424,7 +424,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           await new Promise(resolve => setTimeout(resolve, 1000));
           const resumeStream = await agentOne.declineToolCall({ runId: stream.runId, toolCallId });
           for await (const _chunk of resumeStream.fullStream) {
-            console.log(_chunk);
+            // console.log(_chunk);
           }
 
           const toolResults = await resumeStream.toolResults;

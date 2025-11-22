@@ -1,5 +1,63 @@
 # @mastra/core
 
+## 0.24.5
+
+### Patch Changes
+
+- Fix parallel tool call handling for Gemini models ([#10371](https://github.com/mastra-ai/mastra/pull/10371))
+  - Fix addStartStepPartsForAIV5 to prevent step-start parts from being inserted between consecutive tool parts (parallel tool calls)
+  - This ensures parallel tool calls maintain correct order and preserve thought_signature metadata on the first tool call as required by Gemini API
+
+## 0.24.5-alpha.0
+
+### Patch Changes
+
+- Fix parallel tool call handling for Gemini models ([#10371](https://github.com/mastra-ai/mastra/pull/10371))
+  - Fix addStartStepPartsForAIV5 to prevent step-start parts from being inserted between consecutive tool parts (parallel tool calls)
+  - This ensures parallel tool calls maintain correct order and preserve thought_signature metadata on the first tool call as required by Gemini API
+
+## 0.24.4
+
+### Patch Changes
+
+- Fix providerMetadata preservation for Gemini function calls ([#10365](https://github.com/mastra-ai/mastra/pull/10365))
+  - Convert stream chunks directly to MastraMessageV2 format in loop steps to preserve providerMetadata
+  - Add message-level providerMetadata support to MastraMessageContentV2 and V3 types
+  - Fix sanitizeV5UIMessages filtering to match original 0.x behavior
+  - Hydrate threadId and resourceId from memoryInfo when missing
+  - Update test utilities for 0.x compatibility
+
+## 0.24.4-alpha.0
+
+### Patch Changes
+
+- Fix providerMetadata preservation for Gemini function calls ([#10365](https://github.com/mastra-ai/mastra/pull/10365))
+  - Convert stream chunks directly to MastraMessageV2 format in loop steps to preserve providerMetadata
+  - Add message-level providerMetadata support to MastraMessageContentV2 and V3 types
+  - Fix sanitizeV5UIMessages filtering to match original 0.x behavior
+  - Hydrate threadId and resourceId from memoryInfo when missing
+  - Update test utilities for 0.x compatibility
+
+## 0.24.3
+
+### Patch Changes
+
+- Allow provider to pass through options to the auth config ([#10290](https://github.com/mastra-ai/mastra/pull/10290))
+
+- Fix deprecation warning when agent network executes workflows by using `.fullStream` instead of iterating `WorkflowRunOutput` directly ([#10306](https://github.com/mastra-ai/mastra/pull/10306))
+
+- Fix generate toolResults and mismatch in provider tool names ([#10297](https://github.com/mastra-ai/mastra/pull/10297))
+
+## 0.24.3-alpha.0
+
+### Patch Changes
+
+- Allow provider to pass through options to the auth config ([#10290](https://github.com/mastra-ai/mastra/pull/10290))
+
+- Fix deprecation warning when agent network executes workflows by using `.fullStream` instead of iterating `WorkflowRunOutput` directly ([#10306](https://github.com/mastra-ai/mastra/pull/10306))
+
+- Fix generate toolResults and mismatch in provider tool names ([#10297](https://github.com/mastra-ai/mastra/pull/10297))
+
 ## 0.24.2
 
 ### Patch Changes
