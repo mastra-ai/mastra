@@ -19,7 +19,7 @@ export function createAdvancedOperationsTest({
 
     beforeEach(async () => {
       // Create unique index name for each test to avoid index state pollution
-      testIndexName = `advanced-ops-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      testIndexName = `advancedopstest${Date.now()}${Math.random().toString(36).substring(7)}`;
 
       // Create fresh index for each test
       try {
