@@ -481,6 +481,41 @@ describe('MongoDBVector Integration Tests', () => {
     });
   });
 
+  describe('Nested embedding path support', () => {
+    const indexName = 'nested_embedding_test_' + Date.now();
+
+    beforeAll(async () => {
+      await createIndexAndWait(vectorDB, indexName, 4, 'cosine');
+    });
+
+    afterAll(async () => {
+      await deleteIndexAndWait(vectorDB, indexName);
+    });
+
+    it('should upsert and query vectors stored at nested path', async () => {
+      const vectors = [[1, 0, 0, 0]];
+      const metadata = [{ label: 'nested-test' }];
+      const embeddingPath = 'text.contentEmbedding';
+
+      const ids = await vectorDB.upsert({ indexName, vectors, metadata, embeddingPath });
+      expect(ids).toHaveLength(1);
+
+      await new Promise(r => setTimeout(r, 5000));
+
+      const results = await vectorDB.query({
+        indexName,
+        queryVector: vectors[0],
+        topK: 1,
+        embeddingPath,
+        includeVector: true,
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.metadata).toEqual(metadata[0]);
+      expect(results[0]?.vector).toEqual(vectors[0]);
+    });
+  });
+
   describe('Error Handling', () => {
     it('should handle non-existent index queries', async () => {
       await expect(vectorDB.query({ indexName: 'non-existent-index', queryVector: [1, 2, 3] })).rejects.toThrow();
