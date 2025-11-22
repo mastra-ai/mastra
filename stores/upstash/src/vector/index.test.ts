@@ -1206,7 +1206,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
   });
 
   // Metadata filtering and advanced operations tests
-  describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_TOKEN)(
+  (process.env.UPSTASH_VECTOR_URL && process.env.UPSTASH_VECTOR_TOKEN ? describe : describe.skip)(
     'Upstash Metadata Filtering',
     () => {
       const url = process.env.UPSTASH_VECTOR_URL!;
