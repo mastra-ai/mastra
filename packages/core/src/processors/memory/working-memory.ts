@@ -90,56 +90,50 @@ export class WorkingMemory implements InputProcessor {
       return messageList;
     }
 
-    try {
-      // Determine scope (default to 'resource')
-      const scope = this.options.scope || 'resource';
+    // Determine scope (default to 'resource')
+    const scope = this.options.scope || 'resource';
 
-      // Retrieve working memory based on scope
-      let workingMemoryData: string | null = null;
+    // Retrieve working memory based on scope
+    let workingMemoryData: string | null = null;
 
-      if (scope === 'thread' && threadId) {
-        // Get thread-scoped working memory
-        const thread = await this.options.storage.getThreadById({ threadId });
-        workingMemoryData = (thread?.metadata?.workingMemory as string) || null;
-      } else if (scope === 'resource' && resourceId) {
-        // Get resource-scoped working memory
-        const resource = await this.options.storage.getResourceById({ resourceId });
-        workingMemoryData = resource?.workingMemory || null;
-      }
+    if (scope === 'thread' && threadId) {
+      // Get thread-scoped working memory
+      const thread = await this.options.storage.getThreadById({ threadId });
+      workingMemoryData = (thread?.metadata?.workingMemory as string) || null;
+    } else if (scope === 'resource' && resourceId) {
+      // Get resource-scoped working memory
+      const resource = await this.options.storage.getResourceById({ resourceId });
+      workingMemoryData = resource?.workingMemory || null;
+    }
 
-      // Get template (use template provider if available, then provided template, then default)
-      let template: WorkingMemoryTemplate;
-      if (this.options.templateProvider) {
-        const dynamicTemplate = await this.options.templateProvider.getWorkingMemoryTemplate({
-          memoryConfig: memoryContext.memoryConfig,
-        });
-        template = dynamicTemplate ||
-          this.options.template || {
-            format: 'markdown' as const,
-            content: this.defaultWorkingMemoryTemplate,
-          };
-      } else {
-        template = this.options.template || {
+    // Get template (use template provider if available, then provided template, then default)
+    let template: WorkingMemoryTemplate;
+    if (this.options.templateProvider) {
+      const dynamicTemplate = await this.options.templateProvider.getWorkingMemoryTemplate({
+        memoryConfig: memoryContext.memoryConfig,
+      });
+      template = dynamicTemplate ||
+        this.options.template || {
           format: 'markdown' as const,
           content: this.defaultWorkingMemoryTemplate,
         };
-      }
-
-      // Format working memory instruction
-      const instruction = this.options.useVNext
-        ? this.getWorkingMemoryToolInstructionVNext({ template, data: workingMemoryData })
-        : this.getWorkingMemoryToolInstruction({ template, data: workingMemoryData });
-
-      // If we have a MessageList, add working memory to it with source: 'memory'
-      if (instruction) {
-        messageList.addSystem(instruction, 'memory');
-      }
-      return messageList;
-    } catch (error) {
-      // On error, return original messages
-      this.logger?.error('WorkingMemory processor error:', { error });
-      return messageList;
+    } else {
+      template = this.options.template || {
+        format: 'markdown' as const,
+        content: this.defaultWorkingMemoryTemplate,
+      };
     }
+
+    // Format working memory instruction
+    const instruction = this.options.useVNext
+      ? this.getWorkingMemoryToolInstructionVNext({ template, data: workingMemoryData })
+      : this.getWorkingMemoryToolInstruction({ template, data: workingMemoryData });
+
+    // If we have a MessageList, add working memory to it with source: 'memory'
+    if (instruction) {
+      messageList.addSystem(instruction, 'memory');
+    }
+    return messageList;
   }
 
   private generateEmptyFromSchema(schema: any): Record<string, any> | null {
