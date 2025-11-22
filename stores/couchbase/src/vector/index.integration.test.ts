@@ -4,7 +4,6 @@
 
 import { execSync } from 'child_process';
 import { randomUUID } from 'crypto';
-import { createVectorTestSuite } from '@internal/storage-test-utils';
 import axios from 'axios';
 import type { Cluster, Bucket, Scope, Collection } from 'couchbase';
 import { connect } from 'couchbase';
@@ -731,56 +730,5 @@ describe('Integration Testing CouchbaseVector', async () => {
         await new Promise(resolve => setTimeout(resolve, 5000));
       }
     }, 50000);
-  });
-});
-
-// Metadata filtering and advanced operations tests
-describe('Couchbase Metadata Filtering', () => {
-  let testVector: CouchbaseVector;
-
-  createVectorTestSuite({
-    vector: null as any, // Will be set after connection
-    createIndex: async (indexName: string) => {
-      if (!testVector) {
-        testVector = new CouchbaseVector({
-          id: 'couchbase-metadata-test',
-          connectionString,
-          username,
-          password,
-          bucketName: test_bucketName,
-          scopeName: test_scopeName,
-          collectionName: test_collectionName,
-        });
-      }
-      await testVector.createIndex({ indexName, dimension: 1536 });
-      // Wait for index to be fully created
-      await new Promise(resolve => setTimeout(resolve, 5000));
-    },
-    deleteIndex: async (indexName: string) => {
-      await testVector.deleteIndex({ indexName });
-      await new Promise(resolve => setTimeout(resolve, 5000));
-    },
-    waitForIndexing: async () => {
-      // Couchbase FTS indexing can take time
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    },
-    connect: async () => {
-      testVector = new CouchbaseVector({
-        id: 'couchbase-metadata-test',
-        connectionString,
-        username,
-        password,
-        bucketName: test_bucketName,
-        scopeName: test_scopeName,
-        collectionName: test_collectionName,
-      });
-      // Ensure connected
-      await testVector.getCluster();
-    },
-    disconnect: async () => {
-      if (testVector) {
-        await testVector.disconnect();
-      }
-    },
   });
 });

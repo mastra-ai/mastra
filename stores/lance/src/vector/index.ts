@@ -758,7 +758,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         id: 'STORAGE_LANCE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
-        text: 'No update data provided',
+        text: 'No updates provided',
         details: { indexName },
       });
     }

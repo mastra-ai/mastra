@@ -344,7 +344,9 @@ export class CouchbaseVector extends MastraVector {
       const dimensions =
         index.params.mapping?.types?.[`${this.scopeName}.${this.collectionName}`]?.properties?.embedding?.fields?.[0]
           ?.dims;
+
       const count = -1; // Not added support yet for adding a count of documents covered by an index
+
       const metric = index.params.mapping?.types?.[`${this.scopeName}.${this.collectionName}`]?.properties?.embedding
         ?.fields?.[0]?.similarity as CouchbaseMetric;
       return {
@@ -405,116 +407,49 @@ export class CouchbaseVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector(params: UpdateVectorParams): Promise<void> {
-    const { update } = params;
-
-    // Validate mutually exclusive parameters
-    if ('id' in params && 'filter' in params && params.id && params.filter) {
+  async updateVector({ id, update }: UpdateVectorParams): Promise<void> {
+    if (!id) {
       throw new MastraError({
         id: 'COUCHBASE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
-        text: 'id and filter are mutually exclusive',
-        details: {},
-      });
-    }
-
-    if (!('id' in params || 'filter' in params) || (!params.id && !params.filter)) {
-      throw new MastraError({
-        id: 'COUCHBASE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        text: 'Either id or filter must be provided',
-        details: {},
-      });
-    }
-
-    if (!update.vector && !update.metadata) {
-      throw new MastraError({
-        id: 'COUCHBASE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        text: 'No update data provided',
+        text: 'id is required for Couchbase updateVector',
         details: {},
       });
     }
 
     try {
+      if (!update.vector && !update.metadata) {
+        throw new Error('No updates provided');
+      }
       if (update.vector && this.vector_dimension && update.vector.length !== this.vector_dimension) {
         throw new Error('Vector dimension mismatch');
       }
-
       const collection = await this.getCollection();
 
-      if ('id' in params && params.id) {
-        // Update by ID
-        const id = params.id;
-
-        // Check if document exists
-        try {
-          await collection.get(id);
-        } catch (err: any) {
-          if (err.code === 13 || err.message?.includes('document not found')) {
-            throw new Error(`Vector with id ${id} does not exist`);
-          }
-          throw err;
+      // Check if document exists
+      try {
+        await collection.get(id);
+      } catch (err: any) {
+        if (err.code === 13 || err.message?.includes('document not found')) {
+          throw new Error(`Vector with id ${id} does not exist`);
         }
-
-        const specs: MutateInSpec[] = [];
-        if (update.vector) specs.push(MutateInSpec.replace('embedding', update.vector));
-        if (update.metadata) specs.push(MutateInSpec.replace('metadata', update.metadata));
-
-        await collection.mutateIn(id, specs);
-      } else if ('filter' in params && params.filter) {
-        // Update by filter - not directly supported, need to query first
-        const filter = params.filter;
-
-        if (Object.keys(filter).length === 0) {
-          throw new MastraError({
-            id: 'COUCHBASE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            text: 'Cannot update with empty filter',
-            details: {},
-          });
-        }
-
-        // Query to find matching documents
-        const cluster = await this.getCluster();
-        const scope = await this.getScope();
-
-        // Build N1QL query to find matching documents
-        const whereConditions = Object.entries(filter).map(([key, value]) => {
-          if (typeof value === 'string') {
-            return `metadata.${key} = "${value}"`;
-          }
-          return `metadata.${key} = ${JSON.stringify(value)}`;
-        });
-
-        const query = `SELECT META().id FROM \`${this.bucketName}\`.\`${this.scopeName}\`.\`${this.collectionName}\` WHERE ${whereConditions.join(' AND ')}`;
-
-        const result = await cluster.query(query);
-        const ids = result.rows.map((row: any) => row.id);
-
-        // Update each matching document
-        for (const id of ids) {
-          const specs: MutateInSpec[] = [];
-          if (update.vector) specs.push(MutateInSpec.replace('embedding', update.vector));
-          if (update.metadata) specs.push(MutateInSpec.replace('metadata', update.metadata));
-
-          await collection.mutateIn(id, specs);
-        }
+        throw err;
       }
+
+      const specs: MutateInSpec[] = [];
+      if (update.vector) specs.push(MutateInSpec.replace('embedding', update.vector));
+      if (update.metadata) specs.push(MutateInSpec.replace('metadata', update.metadata));
+
+      await collection.mutateIn(id, specs);
     } catch (error) {
-      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: 'COUCHBASE_VECTOR_UPDATE_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            ...('id' in params && params.id && { id: params.id }),
-            ...('filter' in params && params.filter && { filter: JSON.stringify(params.filter) }),
+            ...(id && { id }),
             hasVectorUpdate: !!update.vector,
             hasMetadataUpdate: !!update.metadata,
           },
@@ -562,105 +497,17 @@ export class CouchbaseVector extends MastraVector {
   }
 
   async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams): Promise<void> {
-    // Validate mutually exclusive parameters
-    if (ids && filter) {
-      throw new MastraError({
-        id: 'COUCHBASE_VECTOR_DELETE_VECTORS_INVALID_ARGS',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        text: 'ids and filter are mutually exclusive',
-        details: { indexName },
-      });
-    }
-
-    if (!ids && !filter) {
-      throw new MastraError({
-        id: 'COUCHBASE_VECTOR_DELETE_VECTORS_INVALID_ARGS',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        text: 'Either filter or ids must be provided',
-        details: { indexName },
-      });
-    }
-
-    // Validate non-empty arrays and objects
-    if (ids && ids.length === 0) {
-      throw new MastraError({
-        id: 'COUCHBASE_VECTOR_DELETE_VECTORS_INVALID_ARGS',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        text: 'Cannot delete with empty ids array',
-        details: { indexName },
-      });
-    }
-
-    if (filter && Object.keys(filter).length === 0) {
-      throw new MastraError({
-        id: 'COUCHBASE_VECTOR_DELETE_VECTORS_INVALID_ARGS',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        text: 'Cannot delete with empty filter',
-        details: { indexName },
-      });
-    }
-
-    try {
-      const collection = await this.getCollection();
-      let idsToDelete: string[] = [];
-
-      if (ids) {
-        idsToDelete = ids;
-      } else if (filter) {
-        // Query to find matching documents
-        const cluster = await this.getCluster();
-
-        // Build N1QL query to find matching documents
-        const whereConditions = Object.entries(filter).map(([key, value]) => {
-          if (typeof value === 'string') {
-            return `metadata.${key} = "${value}"`;
-          }
-          return `metadata.${key} = ${JSON.stringify(value)}`;
-        });
-
-        const query = `SELECT META().id FROM \`${this.bucketName}\`.\`${this.scopeName}\`.\`${this.collectionName}\` WHERE ${whereConditions.join(' AND ')}`;
-
-        const result = await cluster.query(query);
-        idsToDelete = result.rows.map((row: any) => row.id);
-      }
-
-      // If no IDs to delete, return early
-      if (idsToDelete.length === 0) {
-        this.logger.info(`No vectors matched the criteria for deletion in ${indexName}`);
-        return;
-      }
-
-      // Delete each document
-      for (const id of idsToDelete) {
-        try {
-          await collection.remove(id);
-        } catch (err: any) {
-          // Ignore "document not found" errors
-          if (err.code !== 13 && !err.message?.includes('document not found')) {
-            throw err;
-          }
-        }
-      }
-    } catch (error) {
-      if (error instanceof MastraError) throw error;
-      throw new MastraError(
-        {
-          id: 'COUCHBASE_VECTOR_DELETE_VECTORS_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            indexName,
-            ...(filter && { filter: JSON.stringify(filter) }),
-            ...(ids && { idsCount: ids.length }),
-          },
-        },
-        error,
-      );
-    }
+    throw new MastraError({
+      id: 'COUCHBASE_VECTOR_DELETE_VECTORS_NOT_SUPPORTED',
+      text: 'deleteVectors is not yet implemented for Couchbase vector store',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      details: {
+        indexName,
+        ...(filter && { filter: JSON.stringify(filter) }),
+        ...(ids && { idsCount: ids.length }),
+      },
+    });
   }
 
   async disconnect() {
