@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.24.6-alpha.0
+
+### Patch Changes
+
+- Fix Azure Foundry rate limit handling for -1 values ([#10411](https://github.com/mastra-ai/mastra/pull/10411))
+
 ## 0.24.5
 
 ### Patch Changes

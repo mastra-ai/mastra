@@ -1,5 +1,14 @@
 # @mastra/rag
 
+## 1.3.6-alpha.0
+
+### Patch Changes
+
+- Add metadata filtering support a GraphRag (#10352) ([#10403](https://github.com/mastra-ai/mastra/pull/10403))
+
+- Updated dependencies [[`a45b0f0`](https://github.com/mastra-ai/mastra/commit/a45b0f0cd19eab1fe4deceae3abf029442c22f74)]:
+  - @mastra/core@0.24.6-alpha.0
+
 ## 1.3.5
 
 ### Patch Changes

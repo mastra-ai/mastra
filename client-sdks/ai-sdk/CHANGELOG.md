@@ -1,5 +1,14 @@
 # @mastra/ai-sdk
 
+## 1.0.2-alpha.0
+
+### Patch Changes
+
+- Add support for tool-call-approval and tool-call-suspended events in chatRoute ([#10360](https://github.com/mastra-ai/mastra/pull/10360))
+
+- Updated dependencies [[`a45b0f0`](https://github.com/mastra-ai/mastra/commit/a45b0f0cd19eab1fe4deceae3abf029442c22f74)]:
+  - @mastra/core@0.24.6-alpha.0
+
 ## 1.0.1
 
 ### Patch Changes
