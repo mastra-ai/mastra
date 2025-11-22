@@ -40,7 +40,7 @@
     "@ai-sdk/provider": "^2.0.0",
     "ai": "^5.0.76",
     "ai-v4": "npm:ai@4.3.19",
-    "fastembed": "^1.14.4"
+    "fastembed": "^2.0.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
