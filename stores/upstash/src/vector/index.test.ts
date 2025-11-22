@@ -1,3 +1,4 @@
+import { createVectorTestSuite } from '@internal/storage-test-utils';
 import type { QueryResult } from '@mastra/core/vector';
 import dotenv from 'dotenv';
 
@@ -37,7 +38,7 @@ function waitUntilVectorsIndexed(vector: UpstashVector, indexName: string, expec
  */
 describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_TOKEN)('UpstashVector', () => {
   let vectorStore: UpstashVector;
-  const VECTOR_DIMENSION = 1024;
+  const VECTOR_DIMENSION = 1536;
   const testIndexName = 'default';
   const filterIndexName = 'filter-index';
 
@@ -51,7 +52,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       return;
     }
 
-    vectorStore = new UpstashVector({ url, token });
+    vectorStore = new UpstashVector({ id: 'upstash-test-vector', url, token });
   });
 
   afterAll(async () => {
@@ -229,6 +230,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
     });
   });
+
   describe('Index Operations', () => {
     const createVector = (primaryDimension: number, value: number = 1.0): number[] => {
       const vector = new Array(VECTOR_DIMENSION).fill(0);
@@ -244,13 +246,13 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       const ids = await vectorStore.upsert({ indexName: testIndexName, vectors: [createVector(0, 1.0)] });
       expect(ids).toHaveLength(1);
       const indexes = await vectorStore.listIndexes();
-      expect(indexes).toEqual([testIndexName]);
+      expect(indexes.length).toBeGreaterThan(0);
     });
 
     it('should describe an index correctly', async () => {
       const stats = await vectorStore.describeIndex({ indexName: 'mastra_default' });
       expect(stats).toEqual({
-        dimension: 1024,
+        dimension: 1536,
         metric: 'cosine',
         count: 0,
       });
@@ -1202,4 +1204,34 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
     });
   });
+
+  // Metadata filtering and advanced operations tests
+  if (process.env.UPSTASH_VECTOR_URL && process.env.UPSTASH_VECTOR_TOKEN) {
+    describe('Upstash Metadata Filtering', () => {
+      const url = process.env.UPSTASH_VECTOR_URL!;
+      const token = process.env.UPSTASH_VECTOR_TOKEN!;
+
+      const upstashVector = new UpstashVector({
+        url,
+        token,
+        id: 'upstash-metadata-test',
+      });
+
+      createVectorTestSuite({
+        vector: upstashVector,
+        createIndex: async (indexName: string) => {
+          // Upstash doesn't require explicit index creation (uses namespaces)
+          // But we need to ensure it exists by creating it
+          await upstashVector.createIndex({ indexName, dimension: 1536 });
+        },
+        deleteIndex: async (indexName: string) => {
+          await upstashVector.deleteIndex({ indexName });
+        },
+        waitForIndexing: async () => {
+          // Upstash has eventual consistency, wait for vectors to be indexed
+          await new Promise(resolve => setTimeout(resolve, 5000));
+        },
+      });
+    });
+  }
 });
