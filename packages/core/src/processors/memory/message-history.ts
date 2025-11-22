@@ -69,7 +69,7 @@ export class MessageHistory implements Processor {
     const uniqueHistoricalMessages = filteredMessages.filter((m: MastraDBMessage) => !m.id || !messageIds.has(m.id));
 
     // Reverse to chronological order (oldest first) since we fetched DESC
-    const chronologicalMessages = this.filterIncompleteToolCalls(uniqueHistoricalMessages.reverse());
+    const chronologicalMessages = uniqueHistoricalMessages.reverse();
 
     if (chronologicalMessages.length === 0) {
       return messageList;
