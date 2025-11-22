@@ -144,7 +144,7 @@ export class MessageHistory implements Processor {
     }
 
     const filtered = this.filterIncompleteToolCalls(messagesToSave);
-    
+
     // Persist messages directly to storage
     await this.storage.saveMessages({ messages: filtered });
 

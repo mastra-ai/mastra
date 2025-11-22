@@ -133,11 +133,7 @@ export interface AgentLegacyCapabilities {
     instructions?: DynamicArgument<string>;
   };
   /** Save step messages */
-  saveStepMessages(args: {
-    result: any;
-    messageList: MessageList;
-    runId: string;
-  }): Promise<void>;
+  saveStepMessages(args: { result: any; messageList: MessageList; runId: string }): Promise<void>;
   /** Convert instructions to string */
   convertInstructionsToString(instructions: AgentInstructions): string;
   /** Options for tracing policy */
