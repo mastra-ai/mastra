@@ -1,8 +1,8 @@
+import type { Processor } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { ErrorDomain, MastraError } from '../../error';
 import { parseMemoryRuntimeContext } from '../../memory';
 import type { TracingContext } from '../../observability';
-import type { Processor } from '..';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 
@@ -132,12 +132,7 @@ export class MessageHistory implements Processor {
     const threadId = memoryContext?.thread?.id;
 
     if (!threadId) {
-      throw new MastraError({
-        category: 'USER',
-        domain: ErrorDomain.STORAGE,
-        id: 'MESSAGE_HISTORY_MISSING_THREAD_ID',
-        text: 'MessageHistory processor requires a threadId in runtime context. Ensure memory is configured with a thread ID when calling agent.generate().',
-      });
+      return messageList;
     }
 
     const newInput = messageList.get.input.db();
