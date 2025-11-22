@@ -38,6 +38,7 @@
     "build:watch": "pnpm build --watch",
     "test:integration": "cd integration-tests && pnpm run test",
     "test:unit": "pnpm vitest run ./src/*",
+    "test:processors": "echo 'processors have moved into main. we can delete this command after the pr it came in on is merged.'",
     "test": "pnpm test:integration && pnpm test:unit",
     "lint": "eslint ."
   },
