@@ -23,7 +23,7 @@
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "lint": "eslint .",
     "coverage": "vitest run --coverage",
-    "pretest": "docker compose up -d",
+    "pretest": "node scripts/start-docker.js",
     "test": "vitest run",
     "posttest": "docker compose down -v"
   },
