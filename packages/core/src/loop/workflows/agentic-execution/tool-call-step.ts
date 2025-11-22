@@ -25,6 +25,61 @@ export function createToolCallStep<
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
     execute: async ({ inputData, suspend, resumeData, requestContext }) => {
+      // Helper function to add tool approval metadata to the assistant message
+      const addToolApprovalMetadata = (toolCallId: string, toolName: string, args: unknown) => {
+        // Find the last assistant message in the response (which should contain this tool call)
+        const responseMessages = messageList.get.response.db();
+        const lastAssistantMessage = [...responseMessages].reverse().find(msg => msg.role === 'assistant');
+
+        if (lastAssistantMessage) {
+          // Add metadata to indicate this tool call is pending approval
+          const metadata = (lastAssistantMessage.content.metadata || {}) as Record<string, any>;
+          metadata.pendingToolApprovals = metadata.pendingToolApprovals || {};
+          metadata.pendingToolApprovals[toolCallId] = {
+            toolName,
+            args,
+            type: 'approval',
+            runId, // Store the runId so we can resume after page refresh
+          };
+          lastAssistantMessage.content.metadata = metadata;
+        }
+      };
+
+      // Helper function to remove tool approval metadata after approval/decline
+      const removeToolApprovalMetadata = async (toolCallId: string) => {
+        const { saveQueueManager, memoryConfig, threadId } = _internal || {};
+
+        if (!saveQueueManager || !threadId) {
+          return;
+        }
+
+        // Find and update the assistant message to remove approval metadata
+        // At this point, messages have been persisted, so we look in all messages
+        const allMessages = messageList.get.all.db();
+        const lastAssistantMessage = [...allMessages].reverse().find(msg => msg.role === 'assistant');
+
+        if (lastAssistantMessage) {
+          const metadata = lastAssistantMessage.content.metadata as Record<string, any> | undefined;
+          const pendingToolApprovals = metadata?.pendingToolApprovals as Record<string, any> | undefined;
+
+          if (pendingToolApprovals) {
+            delete pendingToolApprovals[toolCallId];
+
+            // If no more pending suspensions, remove the whole object
+            if (Object.keys(pendingToolApprovals).length === 0) {
+              delete metadata!.pendingToolApprovals;
+            }
+
+            // Flush to persist the metadata removal
+            try {
+              await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
+            } catch (error) {
+              console.error('Error removing tool approval metadata:', error);
+            }
+          }
+        }
+      };
+
       // Helper function to flush messages before suspension
       const flushMessagesBeforeSuspension = async () => {
         const { saveQueueManager, memoryConfig, threadId, resourceId, memory } = _internal || {};
@@ -103,6 +158,9 @@ export function createToolCallStep<
               },
             });
 
+            // Add approval metadata to message before persisting
+            addToolApprovalMetadata(inputData.toolCallId, inputData.toolName, inputData.args);
+
             // Flush messages before suspension to ensure they are persisted
             await flushMessagesBeforeSuspension();
 
@@ -120,6 +178,9 @@ export function createToolCallStep<
               },
             );
           } else {
+            // Remove approval metadata since we're resuming (either approved or declined)
+            await removeToolApprovalMetadata(inputData.toolCallId);
+
             if (!resumeData.approved) {
               return {
                 result: 'Tool call was not approved by the user',

@@ -1,7 +1,7 @@
 import { ModelSettings } from './types';
 import { useMastraClient } from '@/mastra-client-context';
 import { UIMessage } from '@ai-sdk/react';
-import { MastraUIMessage } from '../lib/ai-sdk';
+import { ExtendedMastraUIMessage, MastraUIMessage } from '../lib/ai-sdk';
 import { MastraClient } from '@mastra/client-js';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
@@ -43,11 +43,26 @@ export type NetworkArgs = SharedArgs & {
 };
 
 export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
-  const _currentRunId = useRef<string | undefined>(undefined);
+  // Extract runId from any pending suspensions in initial messages
+  const extractRunIdFromMessages = (messages: ExtendedMastraUIMessage[]): string | undefined => {
+    for (const message of messages) {
+      const pendingToolApprovals = message.metadata?.pendingToolApprovals as Record<string, any> | undefined;
+      if (pendingToolApprovals) {
+        const suspensionData = Object.values(pendingToolApprovals)[0];
+        if (suspensionData?.runId) {
+          return suspensionData.runId;
+        }
+      }
+    }
+    return undefined;
+  };
+
+  const initialMessages = initializeMessages?.() || [];
+  const initialRunId = extractRunIdFromMessages(initialMessages);
+
+  const _currentRunId = useRef<string | undefined>(initialRunId);
   const _onChunk = useRef<((chunk: ChunkType) => Promise<void>) | undefined>(undefined);
-  const [messages, setMessages] = useState<MastraUIMessage[]>(() =>
-    resolveInitialMessages(initializeMessages?.() || []),
-  );
+  const [messages, setMessages] = useState<MastraUIMessage[]>(() => resolveInitialMessages(initialMessages));
   const [toolCallApprovals, setToolCallApprovals] = useState<{
     [toolCallId: string]: { status: 'approved' | 'declined' };
   }>({});
@@ -146,7 +161,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
 
     const agent = clientWithAbort.getAgent(agentId);
 
-    const runId = agentId;
+    const runId = threadId ? `${agentId}-${threadId}` : agentId;
 
     const response = await agent.stream({
       messages: coreUserMessages,
@@ -206,6 +221,8 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
 
     const agent = clientWithAbort.getAgent(agentId);
 
+    const runId = threadId ? `${agentId}-${threadId}` : agentId;
+
     const response = await agent.network({
       messages: coreUserMessages,
       maxSteps,
@@ -218,7 +235,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
         topK,
         topP,
       },
-      runId: agentId,
+      runId,
       requestContext,
       ...(threadId ? { thread: threadId, resourceId: agentId } : {}),
     });
