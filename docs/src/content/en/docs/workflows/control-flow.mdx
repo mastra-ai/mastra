@@ -112,6 +112,70 @@ export const testWorkflow = createWorkflow({
 
 > 📹 Watch: How to run steps in parallel and optimize your Mastra workflow → [YouTube (3 minutes)](https://youtu.be/GQJxve5Hki4)
 
+### Output structure
+
+When steps run in parallel, the output is an object where each key is the step's `id` and the value is that step's output. This allows you to access each parallel step's result independently.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  id: "format-step",
+  inputSchema: z.object({ message: z.string() }),
+  outputSchema: z.object({ formatted: z.string() }),
+  execute: async ({ inputData }) => ({
+    formatted: inputData.message.toUpperCase()
+  })
+});
+
+const step2 = createStep({
+  id: "count-step",
+  inputSchema: z.object({ message: z.string() }),
+  outputSchema: z.object({ count: z.number() }),
+  execute: async ({ inputData }) => ({
+    count: inputData.message.length
+  })
+});
+
+const step3 = createStep({
+  id: "combine-step",
+  // The inputSchema must match the structure of parallel outputs
+  inputSchema: z.object({
+    "format-step": z.object({ formatted: z.string() }),
+    "count-step": z.object({ count: z.number() })
+  }),
+  outputSchema: z.object({ result: z.string() }),
+  execute: async ({ inputData }) => {
+    // Access each parallel step's output by its id
+    const formatted = inputData["format-step"].formatted;
+    const count = inputData["count-step"].count;
+    return {
+      result: `${formatted} (${count} characters)`
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  id: "parallel-output-example",
+  inputSchema: z.object({ message: z.string() }),
+  outputSchema: z.object({ result: z.string() })
+})
+  .parallel([step1, step2])
+  .then(step3)
+  .commit();
+
+// When executed with { message: "hello" }
+// The parallel output structure will be:
+// {
+//   "format-step": { formatted: "HELLO" },
+//   "count-step": { count: 5 }
+// }
+```
+
+**Key points:**
+- Each parallel step's output is keyed by its `id`
+- All parallel steps execute simultaneously
+- The next step receives an object containing all parallel step outputs
+- You must define the `inputSchema` of the following step to match this structure
+
 ## Conditional logic with `.branch()`
 
 Use `.branch()` to choose which step to run based on a condition. All steps in a branch need the same `inputSchema` and `outputSchema` because branching requires consistent schemas so workflows can follow different paths.
@@ -158,6 +222,85 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
+### Output structure
+
+When using conditional branching, only one branch executes based on which condition evaluates to `true` first. The output structure is similar to `.parallel()`, where the result is keyed by the executed step's `id`.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  id: "initial-step",
+  inputSchema: z.object({ value: z.number() }),
+  outputSchema: z.object({ value: z.number() }),
+  execute: async ({ inputData }) => inputData
+});
+
+const highValueStep = createStep({
+  id: "high-value-step",
+  inputSchema: z.object({ value: z.number() }),
+  outputSchema: z.object({ result: z.string() }),
+  execute: async ({ inputData }) => ({
+    result: `High value: ${inputData.value}`
+  })
+});
+
+const lowValueStep = createStep({
+  id: "low-value-step",
+  inputSchema: z.object({ value: z.number() }),
+  outputSchema: z.object({ result: z.string() }),
+  execute: async ({ inputData }) => ({
+    result: `Low value: ${inputData.value}`
+  })
+});
+
+const finalStep = createStep({
+  id: "final-step",
+  // The inputSchema must account for either branch's output
+  inputSchema: z.object({
+    "high-value-step": z.object({ result: z.string() }).optional(),
+    "low-value-step": z.object({ result: z.string() }).optional()
+  }),
+  outputSchema: z.object({ message: z.string() }),
+  execute: async ({ inputData }) => {
+    // Only one branch will have executed
+    const result = inputData["high-value-step"]?.result || 
+                   inputData["low-value-step"]?.result;
+    return { message: result };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  id: "branch-output-example",
+  inputSchema: z.object({ value: z.number() }),
+  outputSchema: z.object({ message: z.string() })
+})
+  .then(step1)
+  .branch([
+    [async ({ inputData }) => inputData.value > 10, highValueStep],
+    [async ({ inputData }) => inputData.value <= 10, lowValueStep]
+  ])
+  .then(finalStep)
+  .commit();
+
+// When executed with { value: 15 }
+// Only the high-value-step executes, output structure:
+// {
+//   "high-value-step": { result: "High value: 15" }
+// }
+
+// When executed with { value: 5 }
+// Only the low-value-step executes, output structure:
+// {
+//   "low-value-step": { result: "Low value: 5" }
+// }
+```
+
+**Key points:**
+- Only one branch executes based on condition evaluation order
+- The output is keyed by the executed step's `id`
+- Subsequent steps should handle all possible branch outputs
+- Use optional fields in the `inputSchema` when the next step needs to handle multiple possible branches
+- Conditions are evaluated in the order they're defined
+
 ## Input data mapping
 
 When using `.then()`, `.parallel()`, or `.branch()`, it is sometimes necessary to transform the output of a previous step to match the input of the next. In these cases you can use `.map()` to access the `inputData` and transform it to create a suitable data shape for the next step.
@@ -187,6 +330,43 @@ The `.map()` method provides additional helper functions for more complex mappin
 - [`getStepResult()`](/reference/workflows/workflow-methods/map#using-getstepresult): Access a specific step's full output
 - [`getInitData()`](/reference/workflows/workflow-methods/map#using-getinitdata): Access the workflow's initial input data
 - [`mapVariable()`](/reference/workflows/workflow-methods/map#using-mapvariable): Use declarative object syntax to extract and rename fields
+
+### Parallel and Branch outputs
+
+When working with `.parallel()` or `.branch()` outputs, you can use `.map()` to transform the data structure before passing it to the next step. This is especially useful when you need to flatten or restructure the output.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+export const testWorkflow = createWorkflow({...})
+  .parallel([step1, step2])
+  .map(async ({ inputData }) => {
+    // Transform the parallel output structure
+    return {
+      combined: `${inputData["step1"].value} - ${inputData["step2"].value}`
+    };
+  })
+  .then(nextStep)
+  .commit();
+```
+
+You can also use the helper functions provided by `.map()`:
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+export const testWorkflow = createWorkflow({...})
+  .branch([
+    [condition1, stepA],
+    [condition2, stepB]
+  ])
+  .map(async ({ inputData, getStepResult }) => {
+    // Access specific step results
+    const stepAResult = getStepResult("stepA");
+    const stepBResult = getStepResult("stepB");
+    
+    // Return the result from whichever branch executed
+    return stepAResult || stepBResult;
+  })
+  .then(nextStep)
+  .commit();
+```
 
 ## Looping steps
 
