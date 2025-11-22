@@ -66,7 +66,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
   private static setNestedField(obj: any, path: string, value: any) {
     if (!path || path.trim() === '') {
-      throw new Error('Path cannot be empty')
+      throw new Error('Path cannot be empty');
     }
     const keys = path.split('.');
     let o: any = obj;
@@ -570,8 +570,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         await this.validateVectorDimensions([update.vector], stats.dimension);
         const effectivePath = embeddingPath || this.embeddingFieldName;
         MongoDBVector.setNestedField(updateDoc, effectivePath, update.vector);
-    }
-    
+      }
+
       if (update.metadata) {
         // Normalize metadata in updates too
         const normalizedMeta = Object.keys(update.metadata).reduce(
