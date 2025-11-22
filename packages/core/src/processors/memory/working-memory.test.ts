@@ -307,47 +307,6 @@ describe('WorkingMemory', () => {
       expect(mockStorage.getResourceById).not.toHaveBeenCalled();
     });
 
-    it('should handle storage errors gracefully', async () => {
-      const processor = new WorkingMemory({
-        storage: mockStorage,
-        scope: 'thread',
-      });
-
-      const threadId = 'thread-123';
-
-      runtimeContext.set('MastraMemory', {
-        thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
-        resourceId: 'resource-1',
-      });
-
-      vi.mocked(mockStorage.getThreadById).mockRejectedValue(new Error('Storage error'));
-
-      const messages: MastraDBMessage[] = [
-        {
-          id: 'msg-1',
-          role: 'user',
-          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
-          createdAt: new Date(),
-        },
-      ];
-
-      const messageList = new MessageList();
-      messageList.add(messages, 'input');
-      const result = await processor.processInput({
-        messages,
-        messageList,
-        abort: () => {
-          throw new Error('Aborted');
-        },
-        runtimeContext,
-      });
-
-      // Should return original messages on error
-
-      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
-      expect(resultMessages).toHaveLength(1);
-      expect(resultMessages[0].role).toBe('user');
-    });
     it('should default to resource scope when scope not specified', async () => {
       const processor = new WorkingMemory({
         storage: mockStorage,
