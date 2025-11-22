@@ -776,6 +776,65 @@ export function pgTests() {
           expect(() => new PostgresStore(validConfig).pgp).toThrow(/PostgresStore: Store is not initialized/);
         });
       });
+
+      describe('Duplicate database object warning', () => {
+        it('should not emit duplicate database object warning when multiple stores use same connection config', async () => {
+          // Capture console.warn and process.stderr.write to check for the duplicate database object warning
+          // pg-promise may use either mechanism to emit warnings
+          const warnings: string[] = [];
+          const originalWarn = console.warn;
+          const originalStderrWrite = process.stderr.write;
+          
+          console.warn = (...args: any[]) => {
+            const message = args.map(arg => (typeof arg === 'string' ? arg : String(arg))).join(' ');
+            warnings.push(message);
+            originalWarn(...args);
+          };
+
+          // Also capture stderr in case pg-promise writes directly to it
+          process.stderr.write = ((chunk: any, ...args: any[]) => {
+            const message = chunk?.toString() || '';
+            if (message.includes('WARNING') || message.includes('duplicate')) {
+              warnings.push(message);
+            }
+            return originalStderrWrite.call(process.stderr, chunk, ...args);
+          }) as typeof process.stderr.write;
+
+          try {
+            // Create multiple PostgresStore instances with the same connection config
+            // This simulates the Next.js HMR scenario or suspend/resume across routes
+            // The issue occurs when the same connection string is used to create multiple database objects
+            const store1 = new PostgresStore(TEST_CONFIG);
+            const store2 = new PostgresStore(TEST_CONFIG);
+            const store3 = new PostgresStore(TEST_CONFIG);
+
+            // Initialize all stores - each creates a new pgPromise() instance and database object
+            // pg-promise tracks database objects globally and warns when the same connection config is reused
+            await store1.init();
+            await store2.init();
+            await store3.init();
+
+            // Check if the duplicate database object warning was emitted
+            // The warning message from pg-promise is: "WARNING: Creating a duplicate database object for the same connection."
+            const duplicateWarning = warnings.find(warning =>
+              warning.includes('Creating a duplicate database object for the same connection') ||
+              warning.includes('duplicate database object'),
+            );
+
+            // This test should fail initially (reproducing the bug)
+            // After the fix, this assertion should pass - no warning should be emitted
+            expect(duplicateWarning).toBeUndefined();
+
+            // Cleanup
+            await store1.close();
+            await store2.close();
+            await store3.close();
+          } finally {
+            console.warn = originalWarn;
+            process.stderr.write = originalStderrWrite;
+          }
+        });
+      });
     });
   });
 }
