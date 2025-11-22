@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: otel-bridge-postgres
+    environment:
+      POSTGRES_DB: stories_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: otel-bridge-jaeger
+    ports:
+      - "16686:16686"  # UI
+      - "4317:4317"    # OTEL gRPC receiver
+      - "4318:4318"    # OTEL HTTP receiver
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+
+volumes:
+  postgres_data:

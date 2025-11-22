@@ -1,0 +1,38 @@
+{
+  "name": "examples-otel-bridge",
+  "type": "module",
+  "private": true,
+  "version": "0.0.1",
+  "description": "OpenTelemetry bridge example - Fastify API with PostgreSQL",
+  "scripts": {
+    "install-deps": "pnpm install --ignore-workspace",
+    "dev": "tsx watch src/server.ts",
+    "db:migrate": "tsx src/scripts/migrate.ts",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f"
+  },
+  "dependencies": {
+    "@fastify/static": "^6.12.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.62.1",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.203.0",
+    "@opentelemetry/instrumentation-fastify": "^0.40.0",
+    "@opentelemetry/instrumentation-pg": "^0.42.0",
+    "@opentelemetry/resources": "^2.0.1",
+    "@opentelemetry/sdk-node": "^0.203.0",
+    "@opentelemetry/sdk-trace-node": "^2.0.1",
+    "@opentelemetry/semantic-conventions": "^1.36.0",
+    "drizzle-orm": "^0.28.0",
+    "fastify": "^4.24.0",
+    "pg": "^8.11.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/pg": "^8.11.0",
+    "typescript": "^5.3.0",
+    "tsx": "^4.7.0"
+  },
+  "packageManager": "pnpm@10.9.0+sha512.0486e394640d3c1fb3c9d43d49cf92879ff74f8516959c235308f5a8f62e2e19528a65cdc2a3058f587cde71eba3d5b56327c8c33a97e4c4051ca48a10ca2d5f"
+}
