@@ -462,6 +462,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   downloadRetries,
   downloadConcurrency,
   processorStates,
+  requestContext,
   methodType,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
@@ -608,6 +609,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
             isLLMExecutionStep: true,
             tracingContext,
             processorStates,
+            requestContext,
           },
         });
 

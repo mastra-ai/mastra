@@ -182,6 +182,16 @@ export interface ProcessorRunAttributes extends AIBaseAttributes {
   processorType: 'input' | 'output';
   /** Processor index in the agent */
   processorIndex?: number;
+  /** MessageList mutations performed by this processor */
+  messageListMutations?: Array<{
+    type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
+    source?: string;
+    count?: number;
+    ids?: string[];
+    text?: string;
+    tag?: string;
+    message?: any;
+  }>;
 }
 
 /**

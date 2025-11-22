@@ -570,6 +570,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   self.messageList = await self.processorRunner.runOutputProcessors(
                     self.messageList,
                     options.tracingContext,
+                    self.#options.requestContext,
                   );
                   const outputText = self.messageList.get.response.aiV4
                     .core()

@@ -73,6 +73,7 @@ export function createPrepareToolsStep<
         tracingContext: { currentSpan: agentSpan },
         writableStream: options.writableStream,
         methodType,
+        memoryConfig: options.memory?.options,
       });
 
       return {

@@ -107,6 +107,18 @@ describe('Output Processor Memory Persistence Integration', () => {
   it('should persist PII-redacted messages to memory using generate', async () => {
     // Create a mock model that returns PII data
     const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
+        warnings: [],
+        content: [
+          {
+            type: 'text',
+            text: 'Contact me at john.doe@example.com or call 555-123-4567. My SSN: 123-45-6789.',
+          },
+        ],
+      }),
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           {
@@ -149,7 +161,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     expect(returnedAssistantMsg).toBeDefined();
 
     // content is an array in v5 response format
-    const textPart = returnedAssistantMsg.content.find((part: any) => part.type === 'text');
+    const content = returnedAssistantMsg!.content as any[];
+    const textPart = content.find((part: any) => part.type === 'text');
     expect(textPart).toBeDefined();
     const redactedText = textPart.text;
 
@@ -190,6 +203,18 @@ describe('Output Processor Memory Persistence Integration', () => {
   it('should persist PII-redacted messages to memory using stream', async () => {
     // Create a mock model that returns PII data
     const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
+        warnings: [],
+        content: [
+          {
+            type: 'text',
+            text: 'Contact me at john.doe@example.com or call 555-123-4567. My SSN: 123-45-6789.',
+          },
+        ],
+      }),
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           {
@@ -232,7 +257,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     expect(returnedAssistantMsg).toBeDefined();
 
     // content is an array in v5 response format
-    const textPart = returnedAssistantMsg.content.find((part: any) => part.type === 'text');
+    const content = returnedAssistantMsg!.content as any[];
+    const textPart = content.find((part: any) => part.type === 'text');
     expect(textPart).toBeDefined();
     const redactedText = textPart.text;
 
@@ -376,6 +402,18 @@ describe('Output Processor Memory Persistence Integration', () => {
     }
 
     const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+        warnings: [],
+        content: [
+          {
+            type: 'text',
+            text: 'This is a test message',
+          },
+        ],
+      }),
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           {
@@ -415,7 +453,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     // Verify processors were applied in order: first prefix, then uppercase
     const chainedAssistantMsg = result.response?.messages?.find((m: any) => m.role === 'assistant');
     expect(chainedAssistantMsg).toBeDefined();
-    const chainedTextPart = chainedAssistantMsg.content.find((p: any) => p.type === 'text');
+    const chainedContent = chainedAssistantMsg!.content as any[];
+    const chainedTextPart = chainedContent.find((p: any) => p.type === 'text');
     expect(chainedTextPart).toBeDefined();
     expect(chainedTextPart.text).toBe('[WARNING] THIS IS A TEST MESSAGE');
 
@@ -500,6 +539,18 @@ describe('Output Processor Memory Persistence Integration', () => {
     }
 
     const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 5, outputTokens: 8, totalTokens: 13 },
+        warnings: [],
+        content: [
+          {
+            type: 'text',
+            text: 'Your card number is 4532-1234-5678-9012',
+          },
+        ],
+      }),
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           {
@@ -539,7 +590,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     // Verify the response has redacted card number in parts
     const refreshAssistantMsg = result.response?.messages?.find((m: any) => m.role === 'assistant');
     expect(refreshAssistantMsg).toBeDefined();
-    const refreshTextPart = refreshAssistantMsg.content.find((p: any) => p.type === 'text');
+    const refreshContent = refreshAssistantMsg!.content as any[];
+    const refreshTextPart = refreshContent.find((p: any) => p.type === 'text');
     expect(refreshTextPart).toBeDefined();
     expect(refreshTextPart.text).toBe('Your card number is [CARD_REDACTED]');
 

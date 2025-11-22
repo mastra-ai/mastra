@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { google } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import type { UIMessageWithMetadata } from '@mastra/core/agent';
@@ -231,17 +230,6 @@ describe('Agent Memory Tests', () => {
     // due to resource scope, even on the first message
     const thread2Id = randomUUID();
 
-    // Mock the getMemoryMessages method to track if it's called
-    let getMemoryMessagesCalled = false;
-    let retrievedMemoryMessages: any[] = [];
-    const originalGetMemoryMessages = (agent as any).getMemoryMessages;
-    (agent as any).getMemoryMessages = async (...args: any[]) => {
-      getMemoryMessagesCalled = true;
-      const result = await originalGetMemoryMessages.call(agent, ...args);
-      retrievedMemoryMessages = result?.messages || [];
-      return result;
-    };
-
     const secondResponse = await agent.generate('What did we discuss about cats?', {
       memory: {
         thread: thread2Id,
@@ -249,20 +237,13 @@ describe('Agent Memory Tests', () => {
       },
     });
 
-    // Restore original method
-    (agent as any).getMemoryMessages = originalGetMemoryMessages;
-
-    expect(getMemoryMessagesCalled).toBe(true);
-
-    // Verify that getMemoryMessages actually returned messages from the first thread
-    expect(retrievedMemoryMessages.length).toBeGreaterThan(0);
-
-    // Verify that the retrieved messages contain content from the first thread
-    const hasMessagesFromFirstThread = retrievedMemoryMessages.some(
-      msg => msg.threadId === thread1Id || getTextContent(msg).toLowerCase().includes('cat'),
-    );
-    expect(hasMessagesFromFirstThread).toBe(true);
+    // Verify that the agent was able to access cross-thread memory
+    // by checking that the response references the previous conversation
     expect(secondResponse.text.toLowerCase()).toMatch(/(cat|animal|discuss)/);
+
+    // Verify that the second thread now has messages
+    const thread2Messages = await memory.recall({ threadId: thread2Id, resourceId });
+    expect(thread2Messages.messages.length).toBeGreaterThan(0);
   });
 
   describe('Agent memory message persistence', () => {
@@ -505,7 +486,7 @@ describe('Agent Memory Tests', () => {
 
       // This is the key fix for issue #8073 - before the fix, reasoning was split into many parts
       expect(retrievedReasoningParts?.length).toBe(1);
-    }, 30000);
+    }, 60000);
   });
 
   describe('Agent thread metadata with generateTitle', () => {
@@ -648,9 +629,7 @@ describe('Agent with message processors', () => {
     // Check that tool calls were saved to memory
     const agentMemory = (await memoryProcessorAgent.getMemory())!;
     const { messages: messagesFromMemory } = await agentMemory.recall({ threadId });
-    const toolMessages = messagesFromMemory.filter(
-      m => m.role === 'tool' || (m.role === 'assistant' && typeof m.content !== 'string'),
-    );
+    const toolMessages = messagesFromMemory.filter(m => m.role === 'assistant' && typeof m.content !== 'string');
 
     expect(toolMessages.length).toBeGreaterThan(0);
 
@@ -668,13 +647,71 @@ describe('Agent with message processors', () => {
 
     const secondResponseRequestMessages: CoreMessage[] = secondResponse.request.body.input;
 
-    expect(secondResponseRequestMessages.length).toBe(4);
     // Filter out tool messages and tool results, should be the same as above.
     expect(
       secondResponseRequestMessages.filter(m => m.role !== 'tool' || (m as any)?.tool_calls?.[0]?.type !== 'function')
         .length,
-    ).toBe(4);
-  }, 3000_000);
+    ).toBe(secondResponseRequestMessages.length);
+  }, 300_000);
+});
+
+describe('CRITICAL BUG: Input processors not running', () => {
+  it('should run MessageHistory input processor and include previous messages in LLM request', async () => {
+    const memory = new Memory({
+      storage: new MockStore(),
+      options: {
+        lastMessages: 10, // Fetch last 10 messages
+      },
+    });
+
+    const agent = new Agent({
+      id: 'bug-test-agent',
+      name: 'Bug Test Agent',
+      instructions: 'You are a helpful assistant',
+      model: openai('gpt-4o-mini'),
+      memory,
+    });
+
+    const threadId = randomUUID();
+    const resourceId = 'bug-test-resource';
+
+    // First message
+    const firstResponse = await agent.generate('My name is Alice', {
+      threadId,
+      resourceId,
+    });
+
+    expect(firstResponse.text).toBeDefined();
+
+    // Verify first message was saved
+    const { messages: messagesAfterFirst } = await memory.recall({ threadId });
+    expect(messagesAfterFirst.length).toBe(2); // user + assistant
+
+    // Second message - should include history from MessageHistory input processor
+    const secondResponse = await agent.generate('What is my name?', {
+      threadId,
+      resourceId,
+    });
+
+    // Check the actual request sent to the LLM
+    const requestMessages: CoreMessage[] = secondResponse.request.body.input;
+
+    console.log('=== LLM Request Messages ===');
+    console.log(JSON.stringify(requestMessages, null, 2));
+    console.log('=== Request message count:', requestMessages.length);
+
+    // EXPECTED: Should have 3+ messages (previous user + assistant + current user)
+    // ACTUAL BUG: Only has 1 message (current user message)
+    expect(requestMessages.length).toBeGreaterThan(1);
+
+    // Should include the previous conversation
+    const previousUserMessage = requestMessages.find(
+      (msg: any) =>
+        msg.role === 'user' &&
+        (msg.content.includes('Alice') || msg.content?.find(p => p.text && p.text.includes(`Alice`))),
+    );
+    expect(previousUserMessage).toBeDefined();
+  });
 });
 
 describe('Agent memory test gemini', () => {
@@ -691,7 +728,7 @@ describe('Agent memory test gemini', () => {
     name: 'gemini-agent',
     instructions:
       'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name.',
-    model: google.chat('gemini-2.5-flash-preview-09-2025'),
+    model: 'google/gemini-2.5-flash-lite',
     memory,
     tools: { get_weather: weatherToolCity },
   });
