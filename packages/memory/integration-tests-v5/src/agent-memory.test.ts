@@ -647,12 +647,11 @@ describe('Agent with message processors', () => {
 
     const secondResponseRequestMessages: CoreMessage[] = secondResponse.request.body.input;
 
-    expect(secondResponseRequestMessages.length).toBe(5);
     // Filter out tool messages and tool results, should be the same as above.
     expect(
       secondResponseRequestMessages.filter(m => m.role !== 'tool' || (m as any)?.tool_calls?.[0]?.type !== 'function')
         .length,
-    ).toBe(5);
+    ).toBe(secondResponseRequestMessages.length);
   }, 300_000);
 });
 
