@@ -400,8 +400,8 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
           // Get index stats to know dimensions for dummy vector
           const stats = await this.describeIndex({ indexName });
 
-          // Create a dummy vector (all zeros) for querying
-          const dummyVector = new Array(stats.dimension).fill(0);
+          // Create a normalized dummy vector for querying (avoid zero vector for cosine similarity)
+          const dummyVector = new Array(stats.dimension).fill(1 / Math.sqrt(stats.dimension));
 
           // Query with large topK to get all matching vectors
           // Pinecone's max topK is 10000
@@ -546,8 +546,8 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
           // Get index stats to know dimensions for dummy vector
           const stats = await this.describeIndex({ indexName });
 
-          // Create a dummy vector (all zeros) for querying
-          const dummyVector = new Array(stats.dimension).fill(0);
+          // Create a normalized dummy vector for querying (avoid zero vector for cosine similarity)
+          const dummyVector = new Array(stats.dimension).fill(1 / Math.sqrt(stats.dimension));
 
           // Query with large topK to get all matching vectors
           // Pinecone's max topK is 10000
