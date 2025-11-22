@@ -306,6 +306,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
         const updateDoc: Partial<MongoDBDocument> = {};
         const effectiveEmbeddingPath = embeddingPath || this.embeddingFieldName;
+        if (embeddingPath && embeddingPath !== this.embeddingFieldName) {
+          throw new Error(
+            `embeddingPath "${embeddingPath}" must match the indexed path "${this.embeddingFieldName}"`
+          );
+        }
         MongoDBVector.setNestedField(updateDoc, effectiveEmbeddingPath, vector);
         MongoDBVector.setNestedField(updateDoc, this.metadataFieldName, normalizedMeta);
 
@@ -370,6 +375,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       }
 
       const vectorPath = embeddingPath || this.embeddingFieldName;
+      if (embeddingPath && embeddingPath !== this.embeddingFieldName) {
+        throw new Error(
+          `embeddingPath "${embeddingPath}" must match the indexed path "${this.embeddingFieldName}"`
+        );
+      }
       const vectorSearch: Document = {
         index: indexNameInternal,
         queryVector: queryVector,
@@ -552,7 +562,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           {} as Record<string, any>,
         );
 
-        updateDoc[this.metadataFieldName] = normalizedMeta;
+        MongoDBVector.setNestedField(updateDoc, this.metadataFieldName, normalizedMeta);
       }
 
       await collection.findOneAndUpdate({ _id: id }, { $set: updateDoc });
