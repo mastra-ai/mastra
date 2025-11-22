@@ -62,8 +62,21 @@ export class QdrantVector extends MastraVector {
     const pointIds = ids || vectors.map(() => crypto.randomUUID());
 
     if (vectorName) {
-      await this.validateVectorName(indexName, vectorName);
+      try {
+        await this.validateVectorName(indexName, vectorName);
+      } catch (validationError) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_QDRANT_VECTOR_UPSERT_INVALID_ARGS',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName, vectorName },
+          },
+          validationError,
+        );
+      }
     }
+
     const records = vectors.map((vector, i) => ({
       id: pointIds[i],
       vector: vectorName ? { [vectorName]: vector } : vector,
