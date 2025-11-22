@@ -112,6 +112,9 @@ describe('createToolCallStep tool approval workflow', () => {
       },
     });
 
+    // Wait for flushMessagesBeforeSuspension to complete before suspend is called
+    await new Promise(resolve => setImmediate(resolve));
+
     expect(suspend).toHaveBeenCalledWith(
       {
         requireToolApproval: {

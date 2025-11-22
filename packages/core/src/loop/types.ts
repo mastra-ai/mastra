@@ -23,6 +23,12 @@ export type StreamInternal = {
   now?: () => number;
   generateId?: IdGenerator;
   currentDate?: () => Date;
+  saveQueueManager?: any; // SaveQueueManager from agent/save-queue
+  memoryConfig?: any; // MemoryConfig from memory/types
+  threadId?: string;
+  resourceId?: string;
+  memory?: any; // MastraMemory from memory/memory
+  threadExists?: boolean;
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
