@@ -1,5 +1,21 @@
 # @mastra/pg
 
+## 0.0.2-beta.0
+
+### Patch Changes
+
+- Extract routing from @deployer/server into server adapter packages. ([#10263](https://github.com/mastra-ai/mastra/pull/10263))
+  New packages:
+  - @mastra/express
+  - @mastra/hono
+
+  These packages support mastra server routes on express and hono respectively.
+  Better abstractions will be built on top of these packages in the near future, enabling users to easily attach mastra routes to any existing server framework.
+
+- Updated dependencies [[`d3e89dd`](https://github.com/mastra-ai/mastra/commit/d3e89dd4fc31ae2804c4c7bd3e98113d069cf780), [`c456e01`](https://github.com/mastra-ai/mastra/commit/c456e0149e3c176afcefdbd9bb1d2c5917723725), [`a97003a`](https://github.com/mastra-ai/mastra/commit/a97003aa1cf2f4022a41912324a1e77263b326b8), [`00123ba`](https://github.com/mastra-ai/mastra/commit/00123ba96dc9e5cd0b110420ebdba56d8f237b25), [`651e772`](https://github.com/mastra-ai/mastra/commit/651e772eb1475fb13e126d3fcc01751297a88214), [`b61b93f`](https://github.com/mastra-ai/mastra/commit/b61b93f9e058b11dd2eec169853175d31dbdd567), [`c63fbba`](https://github.com/mastra-ai/mastra/commit/c63fbba1afdd61a01a994b7a69e52c9881baeaeb), [`9e67002`](https://github.com/mastra-ai/mastra/commit/9e67002b52c9be19936c420a489dbee9c5fd6a78), [`35edc49`](https://github.com/mastra-ai/mastra/commit/35edc49ac0556db609189641d6341e76771b81fc)]:
+  - @mastra/server@1.0.0-beta.5
+  - @mastra/core@1.0.0-beta.5
+
 ## 0.17.5
 
 ### Patch Changes

@@ -1,5 +1,58 @@
 # @mastra/core
 
+## 1.0.0-beta.5
+
+### Patch Changes
+
+- Add new deleteVectors, updateVector by filter ([#10408](https://github.com/mastra-ai/mastra/pull/10408))
+
+- Fix Azure Foundry rate limit handling for -1 values ([#10409](https://github.com/mastra-ai/mastra/pull/10409))
+
+- Update MockMemory to work with new storage API changes. MockMemory now properly implements all abstract MastraMemory methods. This includes proper thread management, message saving with MessageList conversion, working memory operations with scope support, and resource listing. ([#10368](https://github.com/mastra-ai/mastra/pull/10368))
+
+  Add Zod v4 support for working memory schemas. Memory implementations now check for Zod v4's built-in `.toJsonSchema()` method before falling back to the `zodToJsonSchema` compatibility function, improving performance and forward compatibility while maintaining backward compatibility with Zod v3.
+
+  Add Gemini 3 Pro test coverage in agent-gemini.test.ts to validate the latest Gemini model integration.
+
+- Ensures that data chunks written via `writer.custom()` always bubble up directly to the top-level stream, even when nested in sub-agents. This allows tools to emit custom progress updates, metrics, and other data that can be consumed at any level of the agent hierarchy. ([#10309](https://github.com/mastra-ai/mastra/pull/10309))
+  - **Added bubbling logic in sub-agent execution**: When sub-agents execute, data chunks (chunks with type starting with `data-`) are detected and written via `writer.custom()` instead of `writer.write()`, ensuring they bubble up directly without being wrapped in `tool-output` chunks.
+  - **Added comprehensive tests**:
+    - Test for `writer.custom()` with direct tool execution
+    - Test for `writer.custom()` with sub-agent tools (nested execution)
+    - Test for mixed usage of `writer.write()` and `writer.custom()` in the same tool
+
+  When a sub-agent's tool uses `writer.custom()` to write data chunks, those chunks appear in the sub-agent's stream. The parent agent's execution logic now detects these chunks and uses `writer.custom()` to bubble them up directly, preserving their structure and making them accessible at the top level.
+
+  This ensures that:
+  - Data chunks from tools always appear directly in the stream (not wrapped)
+  - Data chunks bubble up correctly through nested agent hierarchies
+  - Regular chunks continue to be wrapped in `tool-output` as expected
+
+- Update agent workflow and sub-agent tool transformations to accept more input arguments. ([#10278](https://github.com/mastra-ai/mastra/pull/10278))
+
+  These tools now accept the following
+
+  ```
+  workflowTool.execute({ inputData, initialState }, context)
+
+  agentTool.execute({ prompt, threadId, resourceId, instructions, maxSteps }, context)
+  ```
+
+  Workflow tools now also properly return errors when the workflow run fails
+
+  ```
+  const workflowResult = await workflowTool.execute({ inputData, initialState }, context)
+
+  console.log(workflowResult.error) // error msg if error
+  console.log(workflowResult.result) // result of the workflow if success
+  ```
+
+  Workflows passed to agents do not properly handle suspend/resume`, they only handle success or error.
+
+- Fix working memory zod to json schema conversion to use schema-compat zodtoJsonSchema fn. ([#10391](https://github.com/mastra-ai/mastra/pull/10391))
+
+- Fixes parallel tool call issue with Gemini 3 Pro by preventing step-start parts from being inserted between consecutive tool parts in the `addStartStepPartsForAIV5` function. This ensures that the AI SDK's `convertToModelMessages` correctly preserves the order of parallel tool calls and maintains the `thought_signature` on the first tool call as required by Gemini's API. ([#10372](https://github.com/mastra-ai/mastra/pull/10372))
+
 ## 1.0.0-beta.4
 
 ### Patch Changes

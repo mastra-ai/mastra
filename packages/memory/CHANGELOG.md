@@ -1,5 +1,22 @@
 # @mastra/memory
 
+## 1.0.0-beta.2
+
+### Patch Changes
+
+- Add new deleteVectors, updateVector by filter ([#10408](https://github.com/mastra-ai/mastra/pull/10408))
+
+- Update MockMemory to work with new storage API changes. MockMemory now properly implements all abstract MastraMemory methods. This includes proper thread management, message saving with MessageList conversion, working memory operations with scope support, and resource listing. ([#10368](https://github.com/mastra-ai/mastra/pull/10368))
+
+  Add Zod v4 support for working memory schemas. Memory implementations now check for Zod v4's built-in `.toJsonSchema()` method before falling back to the `zodToJsonSchema` compatibility function, improving performance and forward compatibility while maintaining backward compatibility with Zod v3.
+
+  Add Gemini 3 Pro test coverage in agent-gemini.test.ts to validate the latest Gemini model integration.
+
+- Fix working memory zod to json schema conversion to use schema-compat zodtoJsonSchema fn. ([#10391](https://github.com/mastra-ai/mastra/pull/10391))
+
+- Updated dependencies [[`c456e01`](https://github.com/mastra-ai/mastra/commit/c456e0149e3c176afcefdbd9bb1d2c5917723725), [`a97003a`](https://github.com/mastra-ai/mastra/commit/a97003aa1cf2f4022a41912324a1e77263b326b8), [`00123ba`](https://github.com/mastra-ai/mastra/commit/00123ba96dc9e5cd0b110420ebdba56d8f237b25), [`651e772`](https://github.com/mastra-ai/mastra/commit/651e772eb1475fb13e126d3fcc01751297a88214), [`b61b93f`](https://github.com/mastra-ai/mastra/commit/b61b93f9e058b11dd2eec169853175d31dbdd567), [`9e67002`](https://github.com/mastra-ai/mastra/commit/9e67002b52c9be19936c420a489dbee9c5fd6a78), [`35edc49`](https://github.com/mastra-ai/mastra/commit/35edc49ac0556db609189641d6341e76771b81fc)]:
+  - @mastra/core@1.0.0-beta.5
+
 ## 1.0.0-beta.1
 
 ### Patch Changes

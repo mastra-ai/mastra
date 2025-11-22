@@ -1,5 +1,45 @@
 # @mastra/ai-sdk
 
+## 1.0.0-beta.4
+
+### Patch Changes
+
+- Added `messageMetadata` and `onError` options to `toAISdkV5Stream`, enabling you to attach custom metadata to stream chunks and handle errors during stream conversion. ([#10313](https://github.com/mastra-ai/mastra/pull/10313))
+
+  #### messageMetadata
+
+  Attach custom metadata to start and finish chunks by providing a function that receives the current stream part:
+
+  ```typescript
+  const stream = toAISdkV5Stream(agentStream, {
+    from: 'agent',
+    messageMetadata: ({ part }) => ({
+      timestamp: Date.now(),
+      sessionId: 'session-123',
+      partType: part.type,
+    }),
+  });
+  ```
+
+  #### onError
+
+  Customize error handling during stream conversion:
+
+  ```typescript
+  const stream = toAISdkV5Stream(agentStream, {
+    from: 'agent',
+    onError: error => {
+      console.error('Stream error:', error);
+      return JSON.stringify({ error: error.message });
+    },
+  });
+  ```
+
+- Add support for tool-call-approval and tool-call-suspended events in chatRoute ([#10205](https://github.com/mastra-ai/mastra/pull/10205))
+
+- Updated dependencies [[`c456e01`](https://github.com/mastra-ai/mastra/commit/c456e0149e3c176afcefdbd9bb1d2c5917723725), [`a97003a`](https://github.com/mastra-ai/mastra/commit/a97003aa1cf2f4022a41912324a1e77263b326b8), [`00123ba`](https://github.com/mastra-ai/mastra/commit/00123ba96dc9e5cd0b110420ebdba56d8f237b25), [`651e772`](https://github.com/mastra-ai/mastra/commit/651e772eb1475fb13e126d3fcc01751297a88214), [`b61b93f`](https://github.com/mastra-ai/mastra/commit/b61b93f9e058b11dd2eec169853175d31dbdd567), [`9e67002`](https://github.com/mastra-ai/mastra/commit/9e67002b52c9be19936c420a489dbee9c5fd6a78), [`35edc49`](https://github.com/mastra-ai/mastra/commit/35edc49ac0556db609189641d6341e76771b81fc)]:
+  - @mastra/core@1.0.0-beta.5
+
 ## 1.0.0-beta.3
 
 ### Patch Changes
