@@ -15,9 +15,8 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 
 class MyCustomGateway extends MastraModelGateway {
-  readonly id = 'my-custom-gateway';
+  readonly id = 'custom';
   readonly name = 'My Custom Gateway';
-  readonly prefix = 'custom';
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
     return {
@@ -66,24 +65,12 @@ class MyCustomGateway extends MastraModelGateway {
     {
       name: 'id',
       type: 'string',
-      description: 'Unique identifier for the gateway. Used for versioning and identification.',
+      description: 'Unique identifier for the gateway. This ID is used as the prefix for all providers from this gateway (e.g., "netlify/anthropic"). Exception: models.dev is a provider registry and doesn\'t use a prefix.',
     },
     {
       name: 'name',
       type: 'string',
       description: 'Human-readable name for the gateway.',
-    },
-  ]}
-/>
-
-## Optional Properties
-
-<PropertiesTable
-  content={[
-    {
-      name: 'prefix',
-      type: 'string | undefined',
-      description: 'Optional prefix for provider IDs. If set, all providers from this gateway will be prefixed (e.g., "netlify/openai"). Registry gateways typically don\'t have a prefix.',
     },
   ]}
 />
@@ -217,15 +204,14 @@ Returns the gateway's unique identifier.
 
 ## Model ID Format
 
-When a gateway has a prefix, models are accessed using this format:
+For true gateways, the gateway ID is used as a prefix and models are accessed using this format:
 
 ```
-[prefix]/[provider]/[model]
+[gateway-id]/[provider]/[model]
 ```
 
 Examples:
-- With prefix `'custom'`: `'custom/my-provider/model-1'`
-- Without prefix: `'my-provider/model-1'`
+- Gateway with `id = 'custom'`: `'custom/my-provider/model-1'`
 
 ## Built-in Implementations
 

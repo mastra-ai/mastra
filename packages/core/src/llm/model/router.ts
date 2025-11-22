@@ -81,7 +81,9 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     // Resolve gateway once using the normalized ID
     this.gateway = findGatewayForModel(normalizedConfig.id, [...(customGateways || []), ...defaultGateways]);
     // Extract provider from id if present
-    const parsed = parseModelRouterId(normalizedConfig.id, this.gateway.prefix);
+    // Gateway ID is used as prefix (except for models.dev which is a provider registry)
+    const gatewayPrefix = this.gateway.id === 'models.dev' ? undefined : this.gateway.id;
+    const parsed = parseModelRouterId(normalizedConfig.id, gatewayPrefix);
 
     this.provider = parsed.providerId || 'openai-compatible';
 
@@ -118,9 +120,10 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       };
     }
 
+    const gatewayPrefix = this.gateway.id === 'models.dev' ? undefined : this.gateway.id;
     const model = await this.resolveLanguageModel({
       apiKey,
-      ...parseModelRouterId(this.config.routerId, this.gateway.prefix),
+      ...parseModelRouterId(this.config.routerId, gatewayPrefix),
     });
 
     const aiSDKV5Model = new AISDKV5LanguageModel(model);
@@ -153,9 +156,10 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       };
     }
 
+    const gatewayPrefix = this.gateway.id === 'models.dev' ? undefined : this.gateway.id;
     const model = await this.resolveLanguageModel({
       apiKey,
-      ...parseModelRouterId(this.config.routerId, this.gateway.prefix),
+      ...parseModelRouterId(this.config.routerId, gatewayPrefix),
     });
 
     const aiSDKV5Model = new AISDKV5LanguageModel(model);
