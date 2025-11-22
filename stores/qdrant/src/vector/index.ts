@@ -229,7 +229,17 @@ export class QdrantVector extends MastraVector {
   async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
     try {
       await this.client.deleteCollection(indexName);
-    } catch (error) {
+    } catch (error: any) {
+      // If the collection doesn't exist, treat it as a no-op (already deleted)
+      const errorMessage = error?.message || error?.toString() || '';
+      if (
+        error?.status === 404 ||
+        errorMessage.toLowerCase().includes('not found') ||
+        errorMessage.toLowerCase().includes('not exist')
+      ) {
+        this.logger.info(`Collection ${indexName} does not exist, treating as already deleted`);
+        return;
+      }
       throw new MastraError(
         {
           id: 'STORAGE_QDRANT_VECTOR_DELETE_INDEX_FAILED',
@@ -360,8 +370,9 @@ export class QdrantVector extends MastraVector {
             })),
           );
 
-          offset = scrollResult.next_page_offset;
-        } while (offset !== null && offset !== undefined);
+          const nextOffset = scrollResult.next_page_offset;
+          offset = typeof nextOffset === 'string' || typeof nextOffset === 'number' ? nextOffset : undefined;
+        } while (offset !== undefined);
 
         if (matchingPoints.length === 0) {
           // No vectors to update - this is not an error
@@ -556,9 +567,9 @@ export class QdrantVector extends MastraVector {
         }
       } else if (filter) {
         // Delete by filter
-        const translatedFilter = this.transformFilter(filter);
+        const translatedFilter = this.transformFilter(filter) ?? {};
         await this.client.delete(indexName, {
-          filter: translatedFilter,
+          filter: translatedFilter as any,
           wait: true,
         });
       }

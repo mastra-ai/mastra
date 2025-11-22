@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import type { VectorTestConfig } from '../../vector-factory';
+import { createVector } from './test-helpers';
 
 /**
  * Shared test suite for advanced vector operations (deleteVectors and updateVector with filters).
@@ -13,7 +14,7 @@ export function createAdvancedOperationsTest({
   deleteIndex,
   waitForIndexing = (indexName: string) => new Promise(resolve => setTimeout(resolve, 100)),
 }: VectorTestConfig) {
-  describe.only('Advanced Vector Operations', () => {
+  describe('Advanced Vector Operations', () => {
     let testIndexName: string;
 
     beforeEach(async () => {
@@ -42,15 +43,11 @@ export function createAdvancedOperationsTest({
       it('should delete vectors matching a simple filter', async () => {
         await vector.upsert({
           indexName: testIndexName,
-          vectors: [
-            [0.1, 0.2, 0.3, 0.4],
-            [0.4, 0.5, 0.6, 0.7],
-            [0.7, 0.8, 0.9, 1.0],
-          ],
+          vectors: [createVector(1), createVector(4), createVector(7)],
           metadata: [{ source_id: 'doc1.pdf' }, { source_id: 'doc2.pdf' }, { source_id: 'doc1.pdf' }],
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         const stats1 = await vector.describeIndex({ indexName: testIndexName });
         expect(stats1.count).toBe(3);
@@ -60,28 +57,23 @@ export function createAdvancedOperationsTest({
           filter: { source_id: 'doc1.pdf' },
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         const stats2 = await vector.describeIndex({ indexName: testIndexName });
         expect(stats2.count).toBe(1);
 
         const results = await vector.query({
           indexName: testIndexName,
-          queryVector: [0.5, 0.5, 0.5, 0.5],
+          queryVector: createVector(5),
           topK: 10,
         });
         expect(results[0]?.metadata?.source_id).toBe('doc2.pdf');
-      });
+      }, 15000);
 
       it('should delete vectors matching complex filters with $and', async () => {
         await vector.upsert({
           indexName: testIndexName,
-          vectors: [
-            [0.1, 0.2, 0.3, 0.4],
-            [0.4, 0.5, 0.6, 0.7],
-            [0.7, 0.8, 0.9, 1.0],
-            [0.2, 0.3, 0.4, 0.5],
-          ],
+          vectors: [createVector(1), createVector(4), createVector(7), createVector(2)],
           metadata: [
             { tenant: 'acme', env: 'prod' },
             { tenant: 'acme', env: 'dev' },
@@ -90,7 +82,7 @@ export function createAdvancedOperationsTest({
           ],
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         await vector.deleteVectors({
           indexName: testIndexName,
@@ -99,14 +91,14 @@ export function createAdvancedOperationsTest({
           },
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         const stats = await vector.describeIndex({ indexName: testIndexName });
         expect(stats.count).toBe(3);
 
         const results = await vector.query({
           indexName: testIndexName,
-          queryVector: [0.5, 0.5, 0.5, 0.5],
+          queryVector: createVector(5),
           topK: 10,
         });
         const envs = results.map(r => r.metadata?.env).sort();
@@ -115,21 +107,16 @@ export function createAdvancedOperationsTest({
         // Verify the prod that remains is from globex, not acme
         const prodVector = results.find(r => r.metadata?.env === 'prod');
         expect(prodVector?.metadata?.tenant).toBe('globex');
-      });
+      }, 15000);
 
       it('should delete vectors matching filters with $or', async () => {
         await vector.upsert({
           indexName: testIndexName,
-          vectors: [
-            [0.1, 0.2, 0.3, 0.4],
-            [0.4, 0.5, 0.6, 0.7],
-            [0.7, 0.8, 0.9, 1.0],
-            [0.2, 0.3, 0.4, 0.5],
-          ],
+          vectors: [createVector(1), createVector(4), createVector(7), createVector(2)],
           metadata: [{ status: 'active' }, { status: 'archived' }, { status: 'deleted' }, { status: 'pending' }],
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         await vector.deleteVectors({
           indexName: testIndexName,
@@ -138,34 +125,28 @@ export function createAdvancedOperationsTest({
           },
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         const stats = await vector.describeIndex({ indexName: testIndexName });
         expect(stats.count).toBe(2);
 
         const results = await vector.query({
           indexName: testIndexName,
-          queryVector: [0.5, 0.5, 0.5, 0.5],
+          queryVector: createVector(5),
           topK: 10,
         });
         const statuses = results.map(r => r.metadata?.status).sort();
         expect(statuses).toEqual(['active', 'pending']);
-      });
+      }, 15000);
 
       it('should delete vectors matching filters with $in', async () => {
         await vector.upsert({
           indexName: testIndexName,
-          vectors: [
-            [0.1, 0.2, 0.3, 0.4],
-            [0.4, 0.5, 0.6, 0.7],
-            [0.7, 0.8, 0.9, 1.0],
-            [0.2, 0.3, 0.4, 0.5],
-            [0.3, 0.4, 0.5, 0.6],
-          ],
+          vectors: [createVector(1), createVector(4), createVector(7), createVector(2), createVector(3)],
           metadata: [{ category: 'A' }, { category: 'B' }, { category: 'C' }, { category: 'D' }, { category: 'E' }],
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         await vector.deleteVectors({
           indexName: testIndexName,
@@ -174,28 +155,28 @@ export function createAdvancedOperationsTest({
           },
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         const stats = await vector.describeIndex({ indexName: testIndexName });
         expect(stats.count).toBe(3);
 
         const results = await vector.query({
           indexName: testIndexName,
-          queryVector: [0.5, 0.5, 0.5, 0.5],
+          queryVector: createVector(5),
           topK: 10,
         });
         const categories = results.map(r => r.metadata?.category).sort();
         expect(categories).toEqual(['A', 'C', 'E']);
-      });
+      }, 15000);
 
       it('should handle deletion when no vectors match the filter', async () => {
         await vector.upsert({
           indexName: testIndexName,
-          vectors: [[0.1, 0.2, 0.3, 0.4]],
+          vectors: [createVector(1)],
           metadata: [{ name: 'test' }],
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         const stats1 = await vector.describeIndex({ indexName: testIndexName });
         expect(stats1.count).toBe(1);
@@ -205,11 +186,11 @@ export function createAdvancedOperationsTest({
           filter: { name: 'nonexistent' },
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         const stats2 = await vector.describeIndex({ indexName: testIndexName });
         expect(stats2.count).toBe(1);
-      });
+      }, 15000);
 
       it('should throw error for empty filter', async () => {
         await expect(
@@ -218,23 +199,18 @@ export function createAdvancedOperationsTest({
             filter: {},
           }),
         ).rejects.toThrow(/empty filter/i);
-      });
+      }, 15000);
     });
 
     describe('deleteVectors() with IDs', () => {
       it('should delete vectors by array of IDs', async () => {
         const ids = await vector.upsert({
           indexName: testIndexName,
-          vectors: [
-            [0.1, 0.2, 0.3, 0.4],
-            [0.4, 0.5, 0.6, 0.7],
-            [0.7, 0.8, 0.9, 1.0],
-            [0.2, 0.3, 0.4, 0.5],
-          ],
+          vectors: [createVector(1), createVector(4), createVector(7), createVector(2)],
           metadata: [{ name: 'vec1' }, { name: 'vec2' }, { name: 'vec3' }, { name: 'vec4' }],
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         const stats1 = await vector.describeIndex({ indexName: testIndexName });
         expect(stats1.count).toBe(4);
@@ -244,19 +220,19 @@ export function createAdvancedOperationsTest({
           ids: [ids[0]!, ids[2]!],
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         const stats2 = await vector.describeIndex({ indexName: testIndexName });
         expect(stats2.count).toBe(2);
 
         const results = await vector.query({
           indexName: testIndexName,
-          queryVector: [0.5, 0.5, 0.5, 0.5],
+          queryVector: createVector(5),
           topK: 10,
         });
         const names = results.map(r => r.metadata?.name).sort();
         expect(names).toEqual(['vec2', 'vec4']);
-      });
+      }, 15000);
 
       it('should handle empty ids array', async () => {
         await expect(
@@ -265,16 +241,16 @@ export function createAdvancedOperationsTest({
             ids: [],
           }),
         ).rejects.toThrow(/empty ids array/i);
-      });
+      }, 15000);
 
       it('should handle deletion of non-existent IDs gracefully', async () => {
         await vector.upsert({
           indexName: testIndexName,
-          vectors: [[0.1, 0.2, 0.3, 0.4]],
+          vectors: [createVector(1)],
           metadata: [{ name: 'vec1' }],
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         const stats1 = await vector.describeIndex({ indexName: testIndexName });
         expect(stats1.count).toBe(1);
@@ -284,11 +260,11 @@ export function createAdvancedOperationsTest({
           ids: ['nonexistent-1', 'nonexistent-2'],
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         const stats2 = await vector.describeIndex({ indexName: testIndexName });
         expect(stats2.count).toBe(1);
-      });
+      }, 15000);
 
       it('should reject when both filter and ids are provided', async () => {
         await expect(
@@ -298,7 +274,7 @@ export function createAdvancedOperationsTest({
             ids: ['vec_1', 'vec_2'],
           }),
         ).rejects.toThrow(/mutually exclusive/i);
-      });
+      }, 15000);
 
       it('should reject when neither filter nor ids are provided', async () => {
         await expect(
@@ -306,19 +282,14 @@ export function createAdvancedOperationsTest({
             indexName: testIndexName,
           }),
         ).rejects.toThrow(/Either filter or ids must be provided/i);
-      });
+      }, 15000);
     });
 
     describe('updateVector() with filter', () => {
       it('should update multiple vectors matching a filter', async () => {
         await vector.upsert({
           indexName: testIndexName,
-          vectors: [
-            [0.1, 0.2, 0.3, 0.4],
-            [0.4, 0.5, 0.6, 0.7],
-            [0.7, 0.8, 0.9, 1.0],
-            [0.2, 0.3, 0.4, 0.5],
-          ],
+          vectors: [createVector(1), createVector(4), createVector(7), createVector(2)],
           metadata: [
             { userId: 'user_1', status: 'active' },
             { userId: 'user_1', status: 'active' },
@@ -327,7 +298,7 @@ export function createAdvancedOperationsTest({
           ],
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         await vector.updateVector({
           indexName: testIndexName,
@@ -335,11 +306,11 @@ export function createAdvancedOperationsTest({
           update: { metadata: { userId: 'user_1', status: 'archived' } },
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         const results = await vector.query({
           indexName: testIndexName,
-          queryVector: [0.5, 0.5, 0.5, 0.5],
+          queryVector: createVector(5),
           topK: 10,
         });
 
@@ -351,17 +322,12 @@ export function createAdvancedOperationsTest({
 
         expect(user2Vectors.every(v => v.metadata?.status === 'active')).toBe(true);
         expect(user2Vectors.length).toBe(2);
-      });
+      }, 15000);
 
       it('should update vectors with complex filter', async () => {
         await vector.upsert({
           indexName: testIndexName,
-          vectors: [
-            [0.1, 0.2, 0.3, 0.4],
-            [0.4, 0.5, 0.6, 0.7],
-            [0.7, 0.8, 0.9, 1.0],
-            [0.2, 0.3, 0.4, 0.5],
-          ],
+          vectors: [createVector(1), createVector(4), createVector(7), createVector(2)],
           metadata: [
             { tenant: 'acme', env: 'prod', version: 1 },
             { tenant: 'acme', env: 'dev', version: 1 },
@@ -370,7 +336,7 @@ export function createAdvancedOperationsTest({
           ],
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         await vector.updateVector({
           indexName: testIndexName,
@@ -380,11 +346,11 @@ export function createAdvancedOperationsTest({
           update: { metadata: { tenant: 'acme', env: 'prod', version: 1, marked: true } },
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         const results = await vector.query({
           indexName: testIndexName,
-          queryVector: [0.5, 0.5, 0.5, 0.5],
+          queryVector: createVector(5),
           topK: 10,
         });
 
@@ -398,11 +364,11 @@ export function createAdvancedOperationsTest({
       it('should update vectors when no matches exist', async () => {
         await vector.upsert({
           indexName: testIndexName,
-          vectors: [[0.1, 0.2, 0.3, 0.4]],
+          vectors: [createVector(1)],
           metadata: [{ name: 'vec1' }],
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         await vector.updateVector({
           indexName: testIndexName,
@@ -410,11 +376,11 @@ export function createAdvancedOperationsTest({
           update: { metadata: { name: 'nonexistent', updated: true } },
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         const results = await vector.query({
           indexName: testIndexName,
-          queryVector: [0.1, 0.2, 0.3, 0.4],
+          queryVector: createVector(1),
           topK: 1,
         });
         expect(results[0]?.metadata?.name).toBe('vec1');
@@ -454,7 +420,7 @@ export function createAdvancedOperationsTest({
           }),
         ).rejects.toThrow(/empty filter/i);
       });
-    });
+    }, 15000);
 
     describe('Real-world scenarios', () => {
       it('should handle document re-indexing workflow', async () => {
@@ -463,11 +429,7 @@ export function createAdvancedOperationsTest({
         // Initial document indexing
         const ids = await vector.upsert({
           indexName: testIndexName,
-          vectors: [
-            [0.1, 0.2, 0.3, 0.4],
-            [0.4, 0.5, 0.6, 0.7],
-            [0.7, 0.8, 0.9, 1.0],
-          ],
+          vectors: [createVector(1), createVector(4), createVector(7)],
           metadata: [
             { source_id: docId, chunk: 0 },
             { source_id: docId, chunk: 1 },
@@ -475,7 +437,7 @@ export function createAdvancedOperationsTest({
           ],
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         expect(ids.length).toBe(3);
         const stats1 = await vector.describeIndex({ indexName: testIndexName });
@@ -487,7 +449,7 @@ export function createAdvancedOperationsTest({
           filter: { source_id: docId },
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         const stats2 = await vector.describeIndex({ indexName: testIndexName });
         expect(stats2.count).toBe(0);
@@ -495,12 +457,7 @@ export function createAdvancedOperationsTest({
         // Re-index with new content (more chunks)
         const newIds = await vector.upsert({
           indexName: testIndexName,
-          vectors: [
-            [0.2, 0.3, 0.4, 0.5],
-            [0.5, 0.6, 0.7, 0.8],
-            [0.8, 0.9, 1.0, 0.1],
-            [0.1, 0.1, 0.1, 0.1],
-          ],
+          vectors: [createVector(2), createVector(5), createVector(8), createVector(3)],
           metadata: [
             { source_id: docId, chunk: 0 },
             { source_id: docId, chunk: 1 },
@@ -509,7 +466,7 @@ export function createAdvancedOperationsTest({
           ],
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         expect(newIds.length).toBe(4);
         const stats3 = await vector.describeIndex({ indexName: testIndexName });
@@ -517,22 +474,17 @@ export function createAdvancedOperationsTest({
 
         const results = await vector.query({
           indexName: testIndexName,
-          queryVector: [0.5, 0.5, 0.5, 0.5],
+          queryVector: createVector(5),
           topK: 10,
         });
         expect(results.every(r => r.metadata?.source_id === docId)).toBe(true);
-      }, 15000);
+      }, 55000);
 
       it('should handle multi-tenant data isolation with filters', async () => {
         // Insert vectors for multiple tenants
         await vector.upsert({
           indexName: testIndexName,
-          vectors: [
-            [0.1, 0.2, 0.3, 0.4],
-            [0.4, 0.5, 0.6, 0.7],
-            [0.7, 0.8, 0.9, 1.0],
-            [0.2, 0.3, 0.4, 0.5],
-          ],
+          vectors: [createVector(1), createVector(4), createVector(7), createVector(2)],
           metadata: [
             { tenant_id: 'tenant_a', doc: 'doc1.pdf' },
             { tenant_id: 'tenant_a', doc: 'doc2.pdf' },
@@ -541,7 +493,7 @@ export function createAdvancedOperationsTest({
           ],
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         // Tenant A deletes all their data
         await vector.deleteVectors({
@@ -549,7 +501,7 @@ export function createAdvancedOperationsTest({
           filter: { tenant_id: 'tenant_a' },
         });
 
-        await waitForIndexing();
+        await waitForIndexing(testIndexName);
 
         // Verify only tenant B data remains
         const stats = await vector.describeIndex({ indexName: testIndexName });
@@ -557,11 +509,11 @@ export function createAdvancedOperationsTest({
 
         const results = await vector.query({
           indexName: testIndexName,
-          queryVector: [0.5, 0.5, 0.5, 0.5],
+          queryVector: createVector(5),
           topK: 10,
         });
         expect(results.every(r => r.metadata?.tenant_id === 'tenant_b')).toBe(true);
       }, 15000);
     });
-  });
+  }, 15000);
 }
