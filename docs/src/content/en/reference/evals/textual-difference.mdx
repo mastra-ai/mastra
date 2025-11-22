@@ -1,115 +1,59 @@
 ---
-title: "Reference: TextualDifferenceMetric | Evals"
-description: Documentation for the Textual Difference Metric in Mastra, which measures textual differences between strings using sequence matching.
+title: "Reference: Textual Difference Scorer | Evals"
+description: Documentation for the Textual Difference Scorer in Mastra, which measures textual differences between strings using sequence matching.
 ---
 
-# TextualDifferenceMetric
+# Textual Difference Scorer
 
-:::info Scorers
-This documentation refers to the legacy evals API. For the latest scorer features, see [Scorers](/docs/scorers/overview).
-:::
+The `createTextualDifferenceScorer()` function uses sequence matching to measure the textual differences between two strings. It provides detailed information about changes, including the number of operations needed to transform one text into another.
 
-The `TextualDifferenceMetric` class uses sequence matching to measure the textual differences between two strings. It provides detailed information about changes, including the number of operations needed to transform one text into another.
+## Parameters
 
-## Basic Usage
+The `createTextualDifferenceScorer()` function does not take any options.
 
-```typescript
-import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
 
-const metric = new TextualDifferenceMetric();
-
-const result = await metric.measure(
-  "The quick brown fox",
-  "The fast brown fox",
-);
-
-console.log(result.score); // Similarity ratio from 0-1
-console.log(result.info); // Detailed change metrics
-```
-
-## measure() Parameters
+## .run() Returns
 
 <PropertiesTable
   content={[
     {
-      name: "input",
+      name: "runId",
       type: "string",
-      description: "The original text to compare against",
-      isOptional: false,
+      description: "The id of the run (optional).",
     },
     {
-      name: "output",
-      type: "string",
-      description: "The text to evaluate for differences",
-      isOptional: false,
+      name: "analyzeStepResult",
+      type: "object",
+      description:
+        "Object with difference metrics: { confidence: number, changes: number, lengthDiff: number }",
     },
-  ]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
     {
       name: "score",
       type: "number",
-      description: "Similarity ratio (0-1) where 1 indicates identical texts",
-    },
-    {
-      name: "info",
-      description: "Detailed metrics about the differences",
-      properties: [
-        {
-          type: "number",
-          parameters: [
-            {
-              name: "confidence",
-              type: "number",
-              description:
-                "Confidence score based on length difference between texts (0-1)",
-            },
-          ],
-        },
-        {
-          type: "number",
-          parameters: [
-            {
-              name: "ratio",
-              type: "number",
-              description: "Raw similarity ratio between the texts",
-            },
-          ],
-        },
-        {
-          type: "number",
-          parameters: [
-            {
-              name: "changes",
-              type: "number",
-              description:
-                "Number of change operations (insertions, deletions, replacements)",
-            },
-          ],
-        },
-        {
-          type: "number",
-          parameters: [
-            {
-              name: "lengthDiff",
-              type: "number",
-              description:
-                "Normalized difference in length between input and output (0-1)",
-            },
-          ],
-        },
-      ],
+      description: "Similarity ratio (0-1) where 1 indicates identical texts.",
     },
   ]}
 />
 
+`.run()` returns a result in the following shape:
+
+```typescript
+{
+  runId: string,
+  analyzeStepResult: {
+    confidence: number,
+    ratio: number,
+    changes: number,
+    lengthDiff: number
+  },
+  score: number
+}
+```
+
 ## Scoring Details
 
-The metric calculates several measures:
+The scorer calculates several measures:
 
 - **Similarity Ratio**: Based on sequence matching between texts (0-1)
 - **Changes**: Count of non-matching operations needed
@@ -122,7 +66,6 @@ The metric calculates several measures:
    - Performs sequence matching between input and output
    - Counts the number of change operations required
    - Measures length differences
-
 2. Calculates metrics:
    - Computes similarity ratio
    - Determines confidence score
@@ -132,40 +75,56 @@ Final score: `(similarity_ratio * confidence) * scale`
 
 ### Score interpretation
 
-(0 to scale, default 0-1)
+A textual difference score between 0 and 1:
 
-- 1.0: Identical texts - no differences
-- 0.7-0.9: Minor differences - few changes needed
-- 0.4-0.6: Moderate differences - significant changes
-- 0.1-0.3: Major differences - extensive changes
-- 0.0: Completely different texts
+- **1.0**: Identical texts – no differences detected.
+- **0.7–0.9**: Minor differences – few changes needed.
+- **0.4–0.6**: Moderate differences – noticeable changes required.
+- **0.1–0.3**: Major differences – extensive changes needed.
+- **0.0**: Completely different texts.
 
-## Example with Analysis
+## Example
 
-```typescript
-import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+Measure textual differences between expected and actual agent outputs:
 
-const metric = new TextualDifferenceMetric();
+```typescript title="src/example-textual-difference.ts" showLineNumbers copy
+import { runEvals } from "@mastra/core/evals";
+import { createTextualDifferenceScorer } from "@mastra/evals/scorers/prebuilt";
+import { myAgent } from "./agent";
 
-const result = await metric.measure(
-  "Hello world! How are you?",
-  "Hello there! How is it going?",
-);
+const scorer = createTextualDifferenceScorer();
 
-// Example output:
-// {
-//   score: 0.65,
-//   info: {
-//     confidence: 0.95,
-//     ratio: 0.65,
-//     changes: 2,
-//     lengthDiff: 0.05
-//   }
-// }
+const result = await runEvals({
+  data: [
+    {
+      input: "Summarize the concept of recursion",
+      groundTruth:
+        "Recursion is when a function calls itself to solve a problem by breaking it into smaller subproblems.",
+    },
+    {
+      input: "What is the capital of France?",
+      groundTruth: "The capital of France is Paris.",
+    },
+  ],
+  scorers: [scorer],
+  target: myAgent,
+  onItemComplete: ({ scorerResults }) => {
+    console.log({
+      score: scorerResults[scorer.id].score,
+      groundTruth: scorerResults[scorer.id].groundTruth,
+    });
+  },
+});
+
+console.log(result.scores);
 ```
+
+For more details on `runEvals`, see the [runEvals reference](/reference/v1/evals/run-evals).
+
+To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overview#adding-scorers-to-agents) guide.
 
 ## Related
 
-- [Content Similarity Metric](./content-similarity)
-- [Completeness Metric](./completeness)
-- [Keyword Coverage Metric](./keyword-coverage)
+- [Content Similarity Scorer](./content-similarity)
+- [Completeness Scorer](./completeness)
+- [Keyword Coverage Scorer](./keyword-coverage)
