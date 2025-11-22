@@ -30,6 +30,10 @@ interface MongoDBQueryVectorParams extends QueryVectorParams<MongoDBVectorFilter
   embeddingPath?: string;
 }
 
+export interface MongoDBUpdateVectorParams extends UpdateVectorParams {
+  embeddingPath?: string;
+}
+
 export interface MongoDBIndexReadyParams {
   indexName: string;
   timeoutMs?: number;
@@ -60,6 +64,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   };
 
   private static setNestedField(obj: any, path: string, value: any) {
+    if (!path || path.trim() === '') {
+      throw new Error('Path cannot be empty')
+    }
     const keys = path.split('.');
     let o: any = obj;
     for (let i = 0; i < keys.length - 1; i++) {
@@ -296,7 +303,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         );
 
         const updateDoc: Partial<MongoDBDocument> = {};
-        MongoDBVector.setNestedField(updateDoc, this.embeddingFieldName, vector);
+        const effectiveEmbeddingPath = embeddingPath || this.embeddingFieldName;
+        MongoDBVector.setNestedField(updateDoc, effectiveEmbeddingPath, vector);
         MongoDBVector.setNestedField(updateDoc, this.metadataFieldName, normalizedMeta);
 
         if (doc !== undefined) {
@@ -397,7 +405,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
             score: 1,
             metadata: `$${this.metadataFieldName}`,
             document: `$${this.documentFieldName}`,
-            ...(includeVector && { vector: `$${this.embeddingFieldName}` }),
+            ...(includeVector && { vector: `$${vectorPath}` }),
           },
         },
       ];
@@ -515,7 +523,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+  async updateVector({ indexName, id, update, embeddingPath }: MongoDBUpdateVectorParams): Promise<void> {
     try {
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');
@@ -527,9 +535,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       if (update.vector) {
         const stats = await this.describeIndex({ indexName });
         await this.validateVectorDimensions([update.vector], stats.dimension);
-        updateDoc[this.embeddingFieldName] = update.vector;
-      }
-
+        const effectivePath = embeddingPath || this.embeddingFieldName;
+        MongoDBVector.setNestedField(updateDoc, effectivePath, update.vector);
+    }
+    
       if (update.metadata) {
         // Normalize metadata in updates too
         const normalizedMeta = Object.keys(update.metadata).reduce(
