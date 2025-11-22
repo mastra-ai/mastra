@@ -300,19 +300,20 @@ export class QdrantVector extends MastraVector {
         return {
           dimension: firstVector?.size as number,
           count: points_count || 0,
-          metric: (
-            Object.keys(DISTANCE_MAPPING).find(key => DISTANCE_MAPPING[key] === distance) || 'cosine'
-          ) as 'cosine' | 'euclidean' | 'dotproduct',
+          metric: (Object.keys(DISTANCE_MAPPING).find(key => DISTANCE_MAPPING[key] === distance) || 'cosine') as
+            | 'cosine'
+            | 'euclidean'
+            | 'dotproduct',
         };
       } else {
         const distance = (vectors as any)?.distance as Schemas['Distance'];
         return {
           dimension: (vectors as any)?.size as number,
           count: points_count || 0,
-          metric: (
-            Object.keys(DISTANCE_MAPPING).find(key => DISTANCE_MAPPING[key] === distance) || 'cosine'
-          ) as 'cosine' | 'euclidean' | 'dotproduct',
-
+          metric: (Object.keys(DISTANCE_MAPPING).find(key => DISTANCE_MAPPING[key] === distance) || 'cosine') as
+            | 'cosine'
+            | 'euclidean'
+            | 'dotproduct',
         };
       }
     } catch (error) {
