@@ -1174,7 +1174,6 @@ export class MessageList {
     }
     // If the last message is an assistant message and the new message is also an assistant message, merge them together and update tool calls with results
     const shouldAppendToLastAssistantMessage =
-      !shouldReplace &&
       latestMessage?.role === 'assistant' &&
       messageV2.role === 'assistant' &&
       latestMessage.threadId === messageV2.threadId &&

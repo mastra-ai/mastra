@@ -163,6 +163,7 @@ export class ProcessorRunner {
           }
           processableMessages = result || [];
           for (const message of result) {
+            messageList.removeByIds([message.id]);
             messageList.add(message, check.getSource(message) || 'response');
           }
         }
@@ -429,6 +430,7 @@ export class ProcessorRunner {
           // Add non-system messages normally
           if (nonSystemMessages.length > 0) {
             for (const message of nonSystemMessages) {
+              messageList.removeByIds([message.id]);
               messageList.add(message, check.getSource(message) || 'input');
             }
           }
