@@ -91,6 +91,8 @@ export class ProcessorRunner {
     for (const [index, processor] of this.outputProcessors.entries()) {
       const allNewMessages = messageList.get.response.db();
       let processableMessages: MastraDBMessage[] = [...allNewMessages];
+      const idsBeforeProcessing = processableMessages.map(m => m.id);
+      const check = messageList.makeMessageSourceChecker();
 
       const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
         messages: processableMessages,
@@ -151,16 +153,18 @@ export class ProcessorRunner {
           });
         }
         if (mutations.length > 0) {
-          processableMessages = result.get.all.db();
+          processableMessages = result.get.response.db();
         }
       } else {
         if (result) {
-          messageList.clear.response.db();
+          const deletedIds = idsBeforeProcessing.filter(i => !result.some(m => m.id === i));
+          if (deletedIds.length) {
+            messageList.removeByIds(deletedIds);
+          }
           processableMessages = result || [];
-        }
-
-        if (processableMessages.length > 0) {
-          messageList.add(processableMessages, 'response');
+          for (const message of result) {
+            messageList.add(message, check.getSource(message) || 'response');
+          }
         }
       }
 
@@ -329,6 +333,8 @@ export class ProcessorRunner {
   ): Promise<MessageList> {
     for (const [index, processor] of this.inputProcessors.entries()) {
       let processableMessages: MastraDBMessage[] = messageList.get.input.db();
+      const inputIds = processableMessages.map(m => m.id);
+      const check = messageList.makeMessageSourceChecker();
 
       const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
         messages: processableMessages,
@@ -394,16 +400,18 @@ export class ProcessorRunner {
         if (mutations.length > 0) {
           // Processor returned a MessageList - it has been modified in place
           // Update processableMessages to reflect ALL current messages for next processor
-          processableMessages = messageList.get.all.db();
+          processableMessages = messageList.get.input.db();
         }
       } else {
         // Processor returned an array - stop recording before clear/add (that's just internal plumbing)
         mutations = messageList.stopRecording();
 
         if (result) {
-          const check = messageList.makeMessageSourceChecker();
           // Clear and re-add since processor worked with array. clear all messages, the new result array is all messages in the list (new input but also any messages added by other processors, memory for ex)
-          messageList.clear.all.db();
+          const deletedIds = inputIds.filter(i => !result.some(m => m.id === i));
+          if (deletedIds.length) {
+            messageList.removeByIds(deletedIds);
+          }
 
           // Separate system messages from other messages since they need different handling
           const systemMessages = result.filter(m => m.role === 'system');
