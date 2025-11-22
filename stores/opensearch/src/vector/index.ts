@@ -324,12 +324,34 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
   async updateVector(params: UpdateVectorParams<OpenSearchVectorFilter>): Promise<void> {
     const { indexName, update } = params;
 
+    // Validate mutually exclusive parameters
+    if ('id' in params && 'filter' in params && params.id && params.filter) {
+      throw new MastraError({
+        id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'id and filter are mutually exclusive',
+        details: { indexName },
+      });
+    }
+
     if (!update.vector && !update.metadata) {
       throw new MastraError({
         id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_NO_UPDATES',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'No updates provided',
+        details: { indexName },
+      });
+    }
+
+    // Validate empty filter
+    if ('filter' in params && params.filter && Object.keys(params.filter).length === 0) {
+      throw new MastraError({
+        id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Cannot update with empty filter',
         details: { indexName },
       });
     }
@@ -530,16 +552,85 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
   }
 
   async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams<OpenSearchVectorFilter>): Promise<void> {
-    throw new MastraError({
-      id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_VECTORS_NOT_SUPPORTED',
-      text: 'deleteVectors is not yet implemented for OpenSearch vector store',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      details: {
-        indexName,
-        ...(filter && { filter: JSON.stringify(filter) }),
-        ...(ids && { idsCount: ids.length }),
-      },
-    });
+    // Validate mutually exclusive parameters
+    if (ids && filter) {
+      throw new MastraError({
+        id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'ids and filter are mutually exclusive',
+        details: { indexName },
+      });
+    }
+
+    if (!ids && !filter) {
+      throw new MastraError({
+        id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Either filter or ids must be provided',
+        details: { indexName },
+      });
+    }
+
+    // Validate non-empty arrays and objects
+    if (ids && ids.length === 0) {
+      throw new MastraError({
+        id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Cannot delete with empty ids array',
+        details: { indexName },
+      });
+    }
+
+    if (filter && Object.keys(filter).length === 0) {
+      throw new MastraError({
+        id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Cannot delete with empty filter',
+        details: { indexName },
+      });
+    }
+
+    try {
+      if (ids) {
+        // Delete by IDs using bulk API
+        const bulkBody = ids.flatMap(id => [{ delete: { _index: indexName, _id: id } }]);
+
+        await this.client.bulk({
+          body: bulkBody,
+          refresh: true,
+        });
+      } else if (filter) {
+        // Delete by filter using delete_by_query
+        const translator = new OpenSearchFilterTranslator();
+        const translatedFilter = translator.translate(filter);
+
+        await this.client.deleteByQuery({
+          index: indexName,
+          body: {
+            query: (translatedFilter as any) || { match_all: {} },
+          },
+          refresh: true,
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_VECTORS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            ...(filter && { filter: JSON.stringify(filter) }),
+            ...(ids && { idsCount: ids.length }),
+          },
+        },
+        error,
+      );
+    }
   }
 }
