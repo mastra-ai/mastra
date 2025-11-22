@@ -125,6 +125,7 @@ export abstract class MastraStorage extends MastraBase {
     observabilityInstance?: boolean;
     indexManagement?: boolean;
     listScoresBySpan?: boolean;
+    locking?: boolean;
   } {
     return {
       selectByIncludeResourceScope: false,
@@ -135,6 +136,7 @@ export abstract class MastraStorage extends MastraBase {
       observabilityInstance: false,
       indexManagement: false,
       listScoresBySpan: false,
+      locking: false,
     };
   }
 
@@ -417,6 +419,88 @@ export abstract class MastraStorage extends MastraBase {
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       record: data,
     });
+  }
+
+  /**
+   * Attempts to acquire a distributed lock for a workflow run. Defaults to true (no-op)
+   * if the underlying storage domain doesn't implement locking.
+   */
+  async tryAcquireWorkflowRunLock({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<boolean> {
+    try {
+      if (this.stores?.workflows?.tryAcquireRunLock) {
+        return await this.stores.workflows.tryAcquireRunLock({ workflowName, runId });
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Releases a lock previously acquired for a workflow run. No-op by default.
+   */
+  async releaseWorkflowRunLock({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<void> {
+    try {
+      if (this.stores?.workflows?.releaseRunLock) {
+        await this.stores.workflows.releaseRunLock({ workflowName, runId });
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  /**
+   * Heartbeat/renew a workflow run lock (if supported)
+   */
+  async renewWorkflowRunLock({
+    workflowName,
+    runId,
+    ttlMs,
+  }: {
+    workflowName: string;
+    runId: string;
+    ttlMs?: number;
+  }): Promise<boolean> {
+    try {
+      if (this.stores?.workflows?.renewRunLock) {
+        return await this.stores.workflows.renewRunLock({ workflowName, runId, ttlMs });
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Retrieve lock info (if supported)
+   */
+  async getWorkflowRunLock({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<{ holder?: string; expiresAt?: number; backend?: string } | null> {
+    try {
+      if (this.stores?.workflows?.getRunLock) {
+        return await this.stores.workflows.getRunLock({ workflowName, runId });
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   abstract updateWorkflowResults({

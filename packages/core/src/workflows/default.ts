@@ -1920,6 +1920,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       requestContextObj[key] = value;
     });
 
+    // Retrieve lock info to attach fencing token for exactly-once guarantees
+    let fencingToken: string | undefined = undefined;
+    try {
+      const lockInfo = await this.mastra?.getStorage()?.getWorkflowRunLock({
+        workflowName: workflowId,
+        runId,
+      });
+      fencingToken = lockInfo?.holder;
+    } catch {}
+
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
       workflowName: workflowId,
       runId,
@@ -1938,6 +1948,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         result,
         error,
         requestContext: requestContextObj,
+        fencingToken,
         // @ts-ignore
         timestamp: Date.now(),
       },

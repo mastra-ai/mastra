@@ -2423,8 +2423,32 @@ export class Run<
 
     const traceId = workflowSpan?.externalTraceId;
 
-    const executionResultPromise = this.executionEngine
-      .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TState, TInput, TOutput, TSteps>>({
+    // Attempt to acquire a run lock to prevent concurrent resumes
+    const storage = this.#mastra?.getStorage();
+    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+    if (storage?.supports?.locking) {
+      const acquired = await storage.tryAcquireWorkflowRunLock({
+        workflowName: this.workflowId,
+        runId: this.runId,
+      });
+      if (acquired === false) {
+        throw new Error(
+          `Could not acquire lock for workflow run ${this.workflowId}/${this.runId}. Another worker may be processing it.`,
+        );
+      }
+      // Start automatic heartbeat if supported
+      const heartbeatIntervalMs = 10 * 60 * 1000; // 10 minutes
+      const heartbeatTtlMs = 30 * 60 * 1000; // extend to 30 minutes
+      heartbeatTimer = setInterval(() => {
+        storage
+          .renewWorkflowRunLock({ workflowName: this.workflowId, runId: this.runId, ttlMs: heartbeatTtlMs })
+          .catch(() => {});
+      }, heartbeatIntervalMs);
+    }
+
+    try {
+      const executionResultPromise = this.executionEngine
+        .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
         runId: this.runId,
         resourceId: this.resourceId,
@@ -2463,21 +2487,35 @@ export class Run<
         outputOptions: params.outputOptions,
         writableStream: params.writableStream,
       })
-      .then(result => {
-        if (!params.isVNext && result.status !== 'suspended') {
-          this.closeStreamAction?.().catch(() => {});
-        }
-        result.traceId = traceId;
+        .then(async result => {
+          if (!params.isVNext && result.status !== 'suspended') {
+            this.closeStreamAction?.().catch(() => {});
+          }
+          result.traceId = traceId;
+          return result;
+        });
+
+      this.executionResults = executionResultPromise;
+
+      const result = await executionResultPromise.then(result => {
+        this.streamOutput?.updateResults(result as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>);
         return result;
       });
 
-    this.executionResults = executionResultPromise;
-
-    return executionResultPromise.then(result => {
-      this.streamOutput?.updateResults(result as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>);
-
       return result;
-    });
+    } finally {
+      // Stop heartbeat first
+      if (heartbeatTimer) {
+        try {
+          clearInterval(heartbeatTimer);
+        } catch {}
+      }
+      try {
+        if (storage?.supports?.locking) {
+          await storage.releaseWorkflowRunLock({ workflowName: this.workflowId, runId: this.runId });
+        }
+      } catch {}
+    }
   }
 
   protected async _restart({
@@ -2568,6 +2606,29 @@ export class Run<
 
     const traceId = workflowSpan?.externalTraceId;
 
+    // Attempt to acquire a run lock to prevent concurrent restarts
+    const storage = this.#mastra?.getStorage();
+    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+    if (storage?.supports?.locking) {
+      const acquired = await storage.tryAcquireWorkflowRunLock({
+        workflowName: this.workflowId,
+        runId: this.runId,
+      });
+      if (acquired === false) {
+        throw new Error(
+          `Could not acquire lock for workflow run ${this.workflowId}/${this.runId}. Another worker may be processing it.`,
+        );
+      }
+      // Start automatic heartbeat
+      const heartbeatIntervalMs = 10 * 60 * 1000; // 10 minutes
+      const heartbeatTtlMs = 30 * 60 * 1000; // extend to 30 minutes
+      heartbeatTimer = setInterval(() => {
+        storage
+          .renewWorkflowRunLock({ workflowName: this.workflowId, runId: this.runId, ttlMs: heartbeatTtlMs })
+          .catch(() => {});
+      }, heartbeatIntervalMs);
+    }
+
     const result = await this.executionEngine.execute<
       z.infer<TState>,
       z.infer<TInput>,
@@ -2601,12 +2662,24 @@ export class Run<
       workflowSpan,
     });
 
-    if (result.status !== 'suspended') {
-      this.cleanup?.();
-    }
+      if (result.status !== 'suspended') {
+        this.cleanup?.();
+      }
 
-    result.traceId = traceId;
-    return result;
+      result.traceId = traceId;
+      return result;
+    } finally {
+      if (heartbeatTimer) {
+        try {
+          clearInterval(heartbeatTimer);
+        } catch {}
+      }
+      try {
+        if (storage?.supports?.locking) {
+          await storage.releaseWorkflowRunLock({ workflowName: this.workflowId, runId: this.runId });
+        }
+      } catch {}
+    }
   }
 
   protected async _timeTravel<TInputSchema extends z.ZodType<any>>({

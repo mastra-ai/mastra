@@ -117,6 +117,21 @@ export class PostgresStore extends MastraStorage {
 
       await super.init();
 
+      // Ensure run locks metadata table exists (used for TTL/heartbeats + fencing token)
+      try {
+        await this.#db!.none(
+          `CREATE TABLE IF NOT EXISTS ${this.schema}.mastra_run_locks (
+            workflow_name TEXT NOT NULL,
+            run_id TEXT NOT NULL,
+            holder TEXT NOT NULL,
+            expires_at BIGINT NOT NULL,
+            PRIMARY KEY (workflow_name, run_id)
+          )`,
+        );
+      } catch (e) {
+        console.warn('Failed creating mastra_run_locks table (locks still work via advisory locks):', e);
+      }
+
       // Create automatic performance indexes by default
       // This is done after table creation and is safe to run multiple times
       try {
@@ -163,6 +178,7 @@ export class PostgresStore extends MastraStorage {
       observabilityInstance: true,
       indexManagement: true,
       listScoresBySpan: true,
+      locking: true,
     };
   }
 

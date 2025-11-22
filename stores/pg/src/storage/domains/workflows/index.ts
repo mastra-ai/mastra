@@ -2,7 +2,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import type { IDatabase } from 'pg-promise';
+import type { IDatabase, IConnected } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
 import { getTableName } from '../utils';
 
@@ -30,6 +30,7 @@ export class WorkflowsPG extends WorkflowsStorage {
   public client: IDatabase<{}>;
   private operations: StoreOperationsPG;
   private schema: string;
+  #locks: Map<string, IConnected<{}>> = new Map();
 
   constructor({
     client,
@@ -44,6 +45,85 @@ export class WorkflowsPG extends WorkflowsStorage {
     this.client = client;
     this.operations = operations;
     this.schema = schema;
+  }
+
+  #key(workflowName: string, runId: string) {
+    return `${workflowName}::${runId}`;
+  }
+
+  async tryAcquireRunLock({ workflowName, runId }: { workflowName: string; runId: string }): Promise<boolean> {
+    // Acquire advisory lock on a dedicated connection and keep it until release
+    const cn = await this.client.connect();
+    try {
+      const res = await cn.one<{ ok: boolean }>(
+        `SELECT pg_try_advisory_lock(hashtext($1), hashtext($2)) as ok`,
+        [workflowName, runId],
+      );
+      if (res.ok) {
+        this.#locks.set(this.#key(workflowName, runId), cn);
+        const holder = (await import('node:crypto')).randomUUID();
+        const expires = Date.now() + 30 * 60 * 1000;
+        await cn.none(
+          `INSERT INTO ${this.schema}.mastra_run_locks (workflow_name, run_id, holder, expires_at)
+           VALUES ($1,$2,$3,$4)
+           ON CONFLICT (workflow_name, run_id) DO UPDATE SET holder = EXCLUDED.holder, expires_at = EXCLUDED.expires_at`,
+          [workflowName, runId, holder, expires],
+        );
+        return true;
+      } else {
+        cn.done();
+        return false;
+      }
+    } catch (e) {
+      try {
+        cn.done();
+      } catch {}
+      return false;
+    }
+  }
+
+  async releaseRunLock({ workflowName, runId }: { workflowName: string; runId: string }): Promise<void> {
+    const key = this.#key(workflowName, runId);
+    const cn = this.#locks.get(key);
+    if (!cn) return;
+    try {
+      await cn.one(`SELECT pg_advisory_unlock(hashtext($1), hashtext($2)) as unlocked`, [workflowName, runId]);
+    } catch {}
+    try {
+      cn.done();
+    } catch {}
+    this.#locks.delete(key);
+    try {
+      await this.client.none(`DELETE FROM ${this.schema}.mastra_run_locks WHERE workflow_name = $1 AND run_id = $2`, [
+        workflowName,
+        runId,
+      ]);
+    } catch {}
+  }
+
+  async renewRunLock({ workflowName, runId, ttlMs }: { workflowName: string; runId: string; ttlMs?: number }) {
+    const ttl = ttlMs ?? 30 * 60 * 1000;
+    try {
+      await this.client.none(
+        `UPDATE ${this.schema}.mastra_run_locks SET expires_at = $3 WHERE workflow_name = $1 AND run_id = $2`,
+        [workflowName, runId, Date.now() + ttl],
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async getRunLock({ workflowName, runId }: { workflowName: string; runId: string }) {
+    try {
+      const row = await this.client.oneOrNone(
+        `SELECT holder, expires_at as "expiresAt" FROM ${this.schema}.mastra_run_locks WHERE workflow_name = $1 AND run_id = $2`,
+        [workflowName, runId],
+      );
+      return row ? { holder: row.holder, expiresAt: Number(row.expiresAt), backend: 'postgres' } : null;
+    } catch {
+      return null;
+    }
   }
 
   updateWorkflowResults(
@@ -95,6 +175,23 @@ export class WorkflowsPG extends WorkflowsStorage {
     snapshot: WorkflowRunState;
   }): Promise<void> {
     try {
+      // CAS: if fencingToken is present, verify it matches current holder in metadata table
+      if (snapshot?.fencingToken) {
+        const meta = await this.client.oneOrNone(
+          `SELECT holder FROM ${this.schema}.mastra_run_locks WHERE workflow_name = $1 AND run_id = $2`,
+          [workflowName, runId],
+        );
+        if (!meta || meta.holder !== snapshot.fencingToken) {
+          throw new MastraError(
+            {
+              id: 'MASTRA_STORAGE_PG_STORE_CAS_MISMATCH',
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+            },
+            new Error('CAS_MISMATCH: lock token does not match current holder'),
+          );
+        }
+      }
       const now = new Date().toISOString();
       await this.client.none(
         `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")

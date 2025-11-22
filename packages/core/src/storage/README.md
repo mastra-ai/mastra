@@ -151,3 +151,29 @@ const snapshot = await storage.loadWorkflowSnapshot({
   runId: 'run-123',
 });
 ```
+
+## Distributed Locks (optional)
+
+To prevent multiple app instances from resuming/restarting the same workflow run concurrently, Mastra Storage exposes optional run-lock hooks:
+
+```typescript
+// Acquire a lock
+const acquired = await storage.tryAcquireWorkflowRunLock({ workflowName: 'my-workflow', runId: 'run-123' });
+if (!acquired) throw new Error('Another worker holds the lock');
+
+// Heartbeat (engine calls this automatically)
+await storage.renewWorkflowRunLock({ workflowName: 'my-workflow', runId: 'run-123', ttlMs: 30 * 60_000 });
+
+// Optional: inspect lock
+const info = await storage.getWorkflowRunLock({ workflowName: 'my-workflow', runId: 'run-123' });
+
+// Release when done
+await storage.releaseWorkflowRunLock({ workflowName: 'my-workflow', runId: 'run-123' });
+```
+
+Backends can implement these using their native primitives (current implementation status):
+- PostgreSQL: advisory locks (e.g., `SELECT pg_try_advisory_lock(hashtext(workflowName || ':' || runId))` and `SELECT pg_advisory_unlock(...)`).
+- InMemory: a simple in-process set (best effort within a single process only).
+- Other adapters: not currently enforcing locks/CAS. For production multi-instance deployments, use Postgres; otherwise, run a single instance.
+
+Mastra’s engine calls acquire + automatic heartbeats during restart/resume and releases in a finally block. If your backend doesn’t implement a lock, these hooks behave as no-ops; do not run multiple instances against such backends.
