@@ -26,12 +26,13 @@ import { SpanRecord } from '@mastra/core/storage';
 import { getSpanInfo, useTraceInfo } from './helpers';
 import { SpanDialog } from './span-dialog';
 import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
-import { UISpan } from '../types';
-import { TraceTimelineLegend } from './trace-timeline-legend';
+import { type UISpan, type UISpanState } from '../types';
+import { TraceTimelineTools } from './trace-timeline-tools';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
 import { Button } from '@/components/ui/elements/buttons';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { SpanTabs } from './span-tabs';
+import { set } from 'zod';
 
 type TraceDialogProps = {
   traceSpans?: SpanRecord[];
@@ -75,6 +76,26 @@ export function TraceDialog({
   const selectedSpan = traceSpans.find(span => span.spanId === selectedSpanId);
   const traceInfo = useTraceInfo(traceDetails);
   const [spanScoresPage, setSpanScoresPage] = useState(0);
+  const [orderedSpans, setOrderedSpans] = useState<UISpanState[] | undefined>();
+  const [searchPhrase, setSearchPhrase] = useState<string>('');
+  const [fadedSpanTypes, setFadedSpanTypes] = useState<string[]>([]);
+  const [featuredSpanIds, setFeaturedSpanIds] = useState<string[]>([]);
+  const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (searchPhrase.trim() === '') {
+      setFeaturedSpanIds([]);
+      return;
+    }
+
+    const lowerCaseSearch = searchPhrase.toLowerCase();
+
+    const newFeaturedSpanIds = traceSpans
+      .filter(span => span.name.toLowerCase().includes(lowerCaseSearch))
+      .map(span => span.spanId);
+
+    setFeaturedSpanIds(newFeaturedSpanIds);
+  }, [searchPhrase]);
 
   useEffect(() => {
     if (initialSpanId) {
@@ -112,6 +133,17 @@ export function TraceDialog({
     return flattenSpans(hierarchicalSpans);
   }, [hierarchicalSpans]);
 
+  useEffect(() => {
+    if (orderedSpans === undefined) {
+      const spansOrder = flatSpans?.map(span => ({
+        spanId: span.id,
+        expanded: false,
+      }));
+
+      setOrderedSpans(spansOrder);
+    }
+  }, [flatSpans]);
+
   const { data: spanScoresData, isLoading: isLoadingSpanScoresData } = useTraceSpanScores({
     traceId: traceId,
     spanId: selectedSpanId || flatSpans?.[0]?.id,
@@ -119,9 +151,13 @@ export function TraceDialog({
   });
 
   const handleSpanClick = (id: string) => {
-    setSelectedSpanId(id);
-    setSpanDialogDefaultTab('details');
-    setDialogIsOpen(true);
+    if (selectedSpanId === id) {
+      setSelectedSpanId(undefined);
+    } else {
+      setSelectedSpanId(id);
+      setSpanDialogDefaultTab('details');
+      setDialogIsOpen(true);
+    }
   };
 
   const handleToScoring = () => {
@@ -147,8 +183,17 @@ export function TraceDialog({
     }
   };
 
-  const selectedSpanInfo = getSpanInfo({ span: selectedSpan, withTraceId: !combinedView, withSpanId: combinedView });
+  const handleLegendClick = (type: string) => {
+    setFadedSpanTypes(prev => {
+      if (prev.includes(type)) {
+        return prev.filter(t => t !== type);
+      } else {
+        return [...prev, type];
+      }
+    });
+  };
 
+  const selectedSpanInfo = getSpanInfo({ span: selectedSpan, withTraceId: !combinedView, withSpanId: combinedView });
   const toNextSpan = getToNextEntryFn({ entries: flatSpans, id: selectedSpanId, update: setSelectedSpanId });
   const toPreviousSpan = getToPreviousEntryFn({ entries: flatSpans, id: selectedSpanId, update: setSelectedSpanId });
 
@@ -214,14 +259,25 @@ export function TraceDialog({
                     <Section.Heading>
                       <ListTreeIcon /> Timeline
                     </Section.Heading>
-                    <TraceTimelineLegend spans={traceSpans} />
                   </Section.Header>
+
+                  <TraceTimelineTools
+                    spans={traceSpans}
+                    fadedTypes={fadedSpanTypes}
+                    onLegendClick={handleLegendClick}
+                    searchPhrase={searchPhrase}
+                    onSearchPhraseChange={setSearchPhrase}
+                  />
 
                   <TraceTimeline
                     hierarchicalSpans={hierarchicalSpans}
                     onSpanClick={handleSpanClick}
                     selectedSpanId={selectedSpanId}
                     isLoading={isLoadingSpans}
+                    fadedTypes={fadedSpanTypes}
+                    expandedSpanIds={expandedSpanIds}
+                    setExpandedSpanIds={setExpandedSpanIds}
+                    featuredSpanIds={featuredSpanIds}
                   />
                 </Section>
               </Sections>
@@ -285,7 +341,7 @@ export function TraceDialog({
           onClose={() => {
             navigate(computeTraceLink(traceId || ''));
             setDialogIsOpen(false);
-            setSelectedSpanId(undefined);
+            //   setSelectedSpanId(undefined);
           }}
           onNext={toNextSpan}
           onPrevious={toPreviousSpan}
