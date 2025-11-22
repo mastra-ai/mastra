@@ -17,6 +17,7 @@ interface DynamicFormProps<T extends z.ZodSchema> {
   submitButtonLabel?: string;
   className?: string;
   readOnly?: boolean;
+  children?: React.ReactNode;
 }
 
 function isEmptyZodObject(schema: unknown): boolean {
@@ -39,6 +40,7 @@ export function DynamicForm<T extends z.ZodSchema>({
   submitButtonLabel,
   className,
   readOnly,
+  children,
 }: DynamicFormProps<T>) {
   const isNotZodObject = !(schema instanceof ZodObject);
   if (!schema) {
@@ -89,6 +91,7 @@ export function DynamicForm<T extends z.ZodSchema>({
       Label: ({ value }) => <Label className="text-sm font-normal">{value}</Label>,
     },
     withSubmit: true,
+    children,
   };
 
   return <AutoForm {...formProps} readOnly={readOnly} />;

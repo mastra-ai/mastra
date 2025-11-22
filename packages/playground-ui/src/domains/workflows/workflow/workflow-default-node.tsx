@@ -48,7 +48,6 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
     isForEach,
   } = data;
 
-  const fullLabel = parentWorkflowName ? `${parentWorkflowName}.${label}` : label;
   const stepKey = parentWorkflowName ? `${parentWorkflowName}.${stepId || label}` : stepId || label;
 
   const step = steps[stepKey];
@@ -157,6 +156,7 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
           error={step?.error}
           mapConfig={mapConfig}
           status={step?.status}
+          stepKey={stepKey}
         />
       </div>
 

@@ -63,7 +63,7 @@ export const WorkflowBadge = ({
       }
     >
       {!isStreaming && !isLoading && (
-        <WorkflowRunProvider snapshot={snapshot}>
+        <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId} withoutTimeTravel>
           <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />
         </WorkflowRunProvider>
       )}
