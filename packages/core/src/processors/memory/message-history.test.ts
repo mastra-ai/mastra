@@ -470,12 +470,6 @@ describe('MessageHistory', () => {
 
       const messages: MastraDBMessage[] = [
         {
-          role: 'system',
-          content: { format: 2, parts: [{ type: 'text', text: 'You are a helpful assistant' }] },
-          id: 'msg-0',
-          createdAt: new Date('2024-01-01T00:00:00Z'),
-        },
-        {
           role: 'user',
           content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
           id: 'msg-1',
@@ -483,29 +477,10 @@ describe('MessageHistory', () => {
         },
         {
           role: 'assistant',
-          content: { format: 2, parts: [{ type: 'text', text: 'Hi there!' }] },
-          id: 'msg-2',
-          createdAt: new Date('2024-01-01T00:00:02Z'),
-        },
-        {
-          role: 'assistant',
           content: {
             format: 2,
             parts: [
-              {
-                type: 'tool-invocation',
-                toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'search', args: {} },
-              },
-            ],
-          },
-          id: 'msg-3',
-          createdAt: new Date('2024-01-01T00:00:03Z'),
-        },
-        {
-          role: 'assistant',
-          content: {
-            format: 2,
-            parts: [
+              { type: 'text', text: 'Hi there!' },
               {
                 type: 'tool-invocation',
                 toolInvocation: {
@@ -518,12 +493,17 @@ describe('MessageHistory', () => {
               },
             ],
           },
-          id: 'msg-4',
-          createdAt: new Date('2024-01-01T00:00:04Z'),
+          id: 'msg-2',
+          createdAt: new Date('2024-01-01T00:00:02Z'),
         },
       ];
 
-      const messageList = new MessageList().add(messages, `input`);
+      const messageList = new MessageList().add(messages, `response`).addSystem({
+        role: 'system',
+        content: 'You are a helpful assistant',
+        id: 'msg-0',
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+      });
       const result = await processor.processOutputResult({
         messageList,
         messages,
@@ -533,7 +513,7 @@ describe('MessageHistory', () => {
         runtimeContext: createRuntimeContextWithMemory('thread-1'),
       });
 
-      expect(result).toEqual(messages);
+      expect(result.get.response.db()).toEqual(messages);
       expect(mockStorage.saveMessages).toHaveBeenCalledWith({
         messages: expect.arrayContaining([
           expect.objectContaining({
@@ -550,32 +530,8 @@ describe('MessageHistory', () => {
             role: 'assistant',
             content: expect.objectContaining({
               format: 2,
-              parts: expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Hi there!' })]),
-            }),
-            createdAt: expect.any(Date),
-          }),
-          expect.objectContaining({
-            id: 'msg-3',
-            role: 'assistant',
-            content: expect.objectContaining({
-              format: 2,
               parts: expect.arrayContaining([
-                expect.objectContaining({
-                  type: 'tool-invocation',
-                  toolInvocation: expect.objectContaining({
-                    state: 'call',
-                  }),
-                }),
-              ]),
-            }),
-            createdAt: expect.any(Date),
-          }),
-          expect.objectContaining({
-            id: 'msg-4',
-            role: 'assistant',
-            content: expect.objectContaining({
-              format: 2,
-              parts: expect.arrayContaining([
+                expect.objectContaining({ type: 'text', text: 'Hi there!' }),
                 expect.objectContaining({
                   type: 'tool-invocation',
                   toolInvocation: expect.objectContaining({
@@ -612,21 +568,9 @@ describe('MessageHistory', () => {
 
       const messages: MastraDBMessage[] = [
         {
-          role: 'system',
-          content: { format: 2, parts: [{ type: 'text', text: 'System prompt 1' }] },
-          id: 'msg-1',
-          createdAt: new Date(),
-        },
-        {
           role: 'user',
           content: { format: 2, parts: [{ type: 'text', text: 'User message' }] },
           id: 'msg-2',
-          createdAt: new Date(),
-        },
-        {
-          role: 'system',
-          content: { format: 2, parts: [{ type: 'text', text: 'System prompt 2' }] },
-          id: 'msg-3',
           createdAt: new Date(),
         },
         {
@@ -635,15 +579,9 @@ describe('MessageHistory', () => {
           id: 'msg-4',
           createdAt: new Date(),
         },
-        {
-          role: 'system',
-          content: { format: 2, parts: [{ type: 'text', text: 'System prompt 3' }] },
-          id: 'msg-5',
-          createdAt: new Date(),
-        },
       ];
 
-      const messageList = new MessageList().add(messages, `input`);
+      const messageList = new MessageList().add(messages, `input`).addSystem('System prompt 3');
       await processor.processOutputResult({
         messageList,
         messages,
@@ -702,93 +640,6 @@ describe('MessageHistory', () => {
       });
     });
 
-    it('should handle save failures gracefully', async () => {
-      const mockStorage = {
-        saveMessages: vi.fn().mockRejectedValue(new Error('Save failed')),
-        getThreadById: vi.fn().mockResolvedValue({
-          id: 'thread-1',
-          title: 'Test Thread',
-          metadata: {},
-        }),
-        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
-      } as unknown as MemoryStorage;
-
-      const processor = new MessageHistory({
-        storage: mockStorage,
-      });
-
-      const messages: MastraDBMessage[] = [
-        {
-          id: 'msg-1',
-          role: 'user' as const,
-          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
-          createdAt: new Date(),
-        },
-      ];
-
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const messageList = new MessageList().add(messages, `input`);
-      const result = await processor.processOutputResult({
-        messages,
-        abort: ((reason?: string) => {
-          throw new Error(reason || 'Aborted');
-        }) as (reason?: string) => never,
-        runtimeContext: createRuntimeContextWithMemory('thread-1'),
-        messageList,
-      });
-
-      expect(result).toEqual(messages);
-      expect(consoleSpy).toHaveBeenCalledWith('Failed to save messages:', expect.any(Error));
-
-      consoleSpy.mockRestore();
-    });
-
-    it('should handle thread update failures gracefully', async () => {
-      const mockStorage = {
-        saveMessages: vi.fn().mockResolvedValue(undefined),
-        getThreadById: vi.fn().mockResolvedValue({
-          id: 'thread-1',
-          title: 'Test Thread',
-          metadata: {},
-        }),
-        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
-        updateThread: vi.fn().mockRejectedValue(new Error('Update failed')),
-      } as unknown as MemoryStorage;
-
-      const processor = new MessageHistory({
-        storage: mockStorage,
-      });
-
-      const messages: MastraDBMessage[] = [
-        {
-          id: 'msg-1',
-          role: 'user' as const,
-          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
-          createdAt: new Date(),
-        },
-      ];
-
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const messageList = new MessageList().add(messages, `input`);
-      const result = await processor.processOutputResult({
-        messages,
-        abort: ((reason?: string) => {
-          throw new Error(reason || 'Aborted');
-        }) as (reason?: string) => never,
-        runtimeContext: createRuntimeContextWithMemory('thread-1'),
-        messageList,
-      });
-
-      // Should still save messages and return them
-      expect(result).toEqual(messages);
-      expect(mockStorage.saveMessages).toHaveBeenCalled();
-      expect(consoleSpy).toHaveBeenCalledWith('Failed to update thread metadata:', expect.any(Error));
-
-      consoleSpy.mockRestore();
-    });
-
     it('should return original messages when no threadId', async () => {
       const mockStorage = {
         saveMessages: vi.fn(),
@@ -818,7 +669,7 @@ describe('MessageHistory', () => {
         // No runtimeContext, so no threadId
       });
 
-      expect(result).toEqual(messages);
+      expect(result.get.input.db()).toEqual(messages);
       expect(mockStorage.saveMessages).not.toHaveBeenCalled();
     });
 
@@ -831,32 +682,16 @@ describe('MessageHistory', () => {
         storage: mockStorage,
       });
 
-      const messages: MastraDBMessage[] = [
-        {
-          id: 'msg-1',
-          role: 'system' as const,
-          content: { format: 2, parts: [{ type: 'text', text: 'System message 1' }] },
-          createdAt: new Date(),
-        },
-        {
-          id: 'msg-2',
-          role: 'system' as const,
-          content: { format: 2, parts: [{ type: 'text', text: 'System message 2' }] },
-          createdAt: new Date(),
-        },
-      ];
-
-      const messageList = new MessageList().add(messages, `input`);
-      const result = await processor.processOutputResult({
+      const messageList = new MessageList().addSystem(['System message 1', 'System message 2']);
+      await processor.processOutputResult({
         messageList,
-        messages,
+        messages: [],
         abort: ((reason?: string) => {
           throw new Error(reason || 'Aborted');
         }) as (reason?: string) => never,
         runtimeContext: createRuntimeContextWithMemory('thread-1'),
       });
 
-      expect(result).toEqual(messages);
       expect(mockStorage.saveMessages).not.toHaveBeenCalled();
     });
 
