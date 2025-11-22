@@ -69,15 +69,17 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       throw new Error('Path cannot be empty');
     }
     const keys = path.split('.');
+    if (keys.some(k => !k)) {
+      throw new Error(`Invalid path: "${path}" contains empty segments`);
+    }
     let o: any = obj;
     for (let i = 0; i < keys.length - 1; i++) {
       const key = keys[i];
-      if (!key) continue;
       if (!o[key]) o[key] = {};
       o = o[key] as any;
     }
     const lastKey = keys[keys.length - 1];
-    if (lastKey) o[lastKey] = value;
+    o[lastKey] = value;
   }
 
   constructor({
