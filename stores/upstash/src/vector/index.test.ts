@@ -1206,9 +1206,8 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
   });
 
   // Metadata filtering and advanced operations tests
-  (process.env.UPSTASH_VECTOR_URL && process.env.UPSTASH_VECTOR_TOKEN ? describe : describe.skip)(
-    'Upstash Metadata Filtering',
-    () => {
+  if (process.env.UPSTASH_VECTOR_URL && process.env.UPSTASH_VECTOR_TOKEN) {
+    describe('Upstash Metadata Filtering', () => {
       const url = process.env.UPSTASH_VECTOR_URL!;
       const token = process.env.UPSTASH_VECTOR_TOKEN!;
 
@@ -1233,6 +1232,6 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
           await new Promise(resolve => setTimeout(resolve, 5000));
         },
       });
-    },
-  );
+    });
+  }
 });
