@@ -1,8 +1,8 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MessageList } from '../../agent';
 import type { MastraDBMessage } from '../../memory';
 import { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import type { WorkingMemoryTemplate } from './working-memory';
 import { WorkingMemory } from './working-memory';
