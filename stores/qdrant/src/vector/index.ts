@@ -25,9 +25,20 @@ const DISTANCE_MAPPING: Record<string, Schemas['Distance']> = {
 };
 
 type QdrantQueryVectorParams = QueryVectorParams<QdrantVectorFilter>;
+type QdrantQueryWithNamedVectorParams = QdrantQueryVectorParams & { using?: string };
 
 export class QdrantVector extends MastraVector {
-  private client: QdrantClient;
+  protected client: QdrantClient;
+
+  private async validateVectorName(indexName: string, vectorName: string): Promise<void> {
+    const { config } = await this.client.getCollection(indexName);
+    const vectorsConfig = config.params.vectors;
+    const isNamedVectors = vectorsConfig && typeof vectorsConfig === 'object' && !('size' in vectorsConfig);
+
+    if (!isNamedVectors || !(vectorName in vectorsConfig)) {
+      throw new Error(`Vector name "${vectorName}" does not exist in collection "${indexName}"`);
+    }
+  }
 
   /**
    * Creates a new QdrantVector client.
@@ -41,12 +52,21 @@ export class QdrantVector extends MastraVector {
     this.client = new QdrantClient(qdrantParams);
   }
 
-  async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
+  async upsert({
+    indexName,
+    vectors,
+    metadata,
+    ids,
+    vectorName,
+  }: UpsertVectorParams & { vectorName?: string }): Promise<string[]> {
     const pointIds = ids || vectors.map(() => crypto.randomUUID());
 
+    if (vectorName) {
+      await this.validateVectorName(indexName, vectorName);
+    }
     const records = vectors.map((vector, i) => ({
       id: pointIds[i],
-      vector: vector,
+      vector: vectorName ? { [vectorName]: vector } : vector,
       payload: metadata?.[i] || {},
     }));
 
@@ -54,7 +74,6 @@ export class QdrantVector extends MastraVector {
       for (let i = 0; i < records.length; i += BATCH_SIZE) {
         const batch = records.slice(i, i + BATCH_SIZE);
         await this.client.upsert(indexName, {
-          // @ts-expect-error
           points: batch,
           wait: true,
         });
@@ -74,13 +93,34 @@ export class QdrantVector extends MastraVector {
     }
   }
 
-  async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
+  async createIndex({
+    indexName,
+    dimension,
+    metric = 'cosine',
+    namedVectors,
+  }: CreateIndexParams & { namedVectors?: Record<string, { size: number; distance: string }> }): Promise<void> {
     try {
-      if (!Number.isInteger(dimension) || dimension <= 0) {
-        throw new Error('Dimension must be a positive integer');
-      }
-      if (!DISTANCE_MAPPING[metric]) {
-        throw new Error(`Invalid metric: "${metric}". Must be one of: cosine, euclidean, dotproduct`);
+      if (namedVectors) {
+        if (Object.keys(namedVectors).length === 0) {
+          throw new Error('namedVectors must contain at least one named vector configuration');
+        }
+        for (const [name, config] of Object.entries(namedVectors)) {
+          if (!Number.isInteger(config.size) || config.size <= 0) {
+            throw new Error(`Named vector "${name}": size must be a positive integer`);
+          }
+          if (!DISTANCE_MAPPING[config.distance]) {
+            throw new Error(
+              `Named vector "${name}": invalid distance "${config.distance}". Must be one of: cosine, euclidean, dotproduct`,
+            );
+          }
+        }
+      } else {
+        if (!Number.isInteger(dimension) || dimension <= 0) {
+          throw new Error('Dimension must be a positive integer');
+        }
+        if (!DISTANCE_MAPPING[metric]) {
+          throw new Error(`Invalid metric: "${metric}". Must be one of: cosine, euclidean, dotproduct`);
+        }
       }
     } catch (validationError) {
       throw new MastraError(
@@ -95,18 +135,38 @@ export class QdrantVector extends MastraVector {
     }
 
     try {
+      // If namedVectors is provided, use it; otherwise use default vector config
+      const vectorsConfig = namedVectors
+        ? Object.entries(namedVectors).reduce(
+            (acc, [name, config]) => {
+              acc[name] = {
+                size: config.size,
+                distance: DISTANCE_MAPPING[config.distance] || 'Cosine',
+              };
+              return acc;
+            },
+            {} as Record<string, { size: number; distance: Schemas['Distance'] }>,
+          )
+        : {
+            size: dimension,
+            distance: DISTANCE_MAPPING[metric],
+          };
+
       await this.client.createCollection(indexName, {
-        vectors: {
-          size: dimension,
-          distance: DISTANCE_MAPPING[metric],
-        },
+        vectors: vectorsConfig,
       });
     } catch (error: any) {
       const message = error?.message || error?.toString();
       // Qdrant typically returns 409 for existing collection
       if (error?.status === 409 || (typeof message === 'string' && message.toLowerCase().includes('exists'))) {
         // Fetch collection info and check dimension
-        await this.validateExistingIndex(indexName, dimension, metric);
+        if (!namedVectors) {
+          await this.validateExistingIndex(indexName, dimension, metric);
+        } else {
+          this.logger.info(
+            `Collection "${indexName}" already exists. Skipping validation for named vectors configuration.`,
+          );
+        }
         return;
       }
 
@@ -133,7 +193,8 @@ export class QdrantVector extends MastraVector {
     topK = 10,
     filter,
     includeVector = false,
-  }: QdrantQueryVectorParams): Promise<QueryResult[]> {
+    using,
+  }: QdrantQueryWithNamedVectorParams): Promise<QueryResult[]> {
     const translatedFilter = this.transformFilter(filter) ?? {};
 
     try {
@@ -144,18 +205,25 @@ export class QdrantVector extends MastraVector {
           filter: translatedFilter,
           with_payload: true,
           with_vector: includeVector,
+          ...(using ? { using } : {}),
         })
       ).points;
 
       return results.map(match => {
         let vector: number[] = [];
-        if (includeVector) {
+        if (includeVector && match.vector != null) {
           if (Array.isArray(match.vector)) {
-            // If it's already an array of numbers
             vector = match.vector as number[];
           } else if (typeof match.vector === 'object' && match.vector !== null) {
-            // If it's an object with vector data
-            vector = Object.values(match.vector).filter(v => typeof v === 'number');
+            const named = match.vector as Record<string, unknown>;
+            const sourceArray: unknown[] | undefined =
+              using && Array.isArray(named[using])
+                ? (named[using] as unknown[])
+                : (Object.values(named).find(v => Array.isArray(v)) as unknown[] | undefined);
+
+            if (sourceArray) {
+              vector = sourceArray.filter((v): v is number => typeof v === 'number');
+            }
           }
         }
 
@@ -205,13 +273,32 @@ export class QdrantVector extends MastraVector {
     try {
       const { config, points_count } = await this.client.getCollection(indexName);
 
-      const distance = config.params.vectors?.distance as Schemas['Distance'];
-      return {
-        dimension: config.params.vectors?.size as number,
-        count: points_count || 0,
-        // @ts-expect-error
-        metric: Object.keys(DISTANCE_MAPPING).find(key => DISTANCE_MAPPING[key] === distance),
-      };
+      const vectors = config.params.vectors;
+      // Check if this is a named vectors collection (Record) or single vector config
+      const isNamedVectors = vectors && typeof vectors === 'object' && !('size' in vectors);
+
+      if (isNamedVectors) {
+        const firstVectorName = Object.keys(vectors)[0];
+        if (!firstVectorName) {
+          throw new Error(`Collection "${indexName}" has an empty named vectors configuration`);
+        }
+        const firstVector = vectors[firstVectorName];
+        const distance = firstVector?.distance as Schemas['Distance'];
+        return {
+          dimension: firstVector?.size as number,
+          count: points_count || 0,
+          // @ts-expect-error
+          metric: Object.keys(DISTANCE_MAPPING).find(key => DISTANCE_MAPPING[key] === distance),
+        };
+      } else {
+        const distance = (vectors as any)?.distance as Schemas['Distance'];
+        return {
+          dimension: (vectors as any)?.size as number,
+          count: points_count || 0,
+          // @ts-expect-error
+          metric: Object.keys(DISTANCE_MAPPING).find(key => DISTANCE_MAPPING[key] === distance),
+        };
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -251,10 +338,18 @@ export class QdrantVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+  async updateVector({
+    indexName,
+    id,
+    update,
+    vectorName,
+  }: UpdateVectorParams & { vectorName?: string }): Promise<void> {
     try {
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');
+      }
+      if (vectorName) {
+        await this.validateVectorName(indexName, vectorName);
       }
     } catch (validationError) {
       throw new MastraError(
@@ -269,6 +364,7 @@ export class QdrantVector extends MastraVector {
     }
 
     const pointId = this.parsePointId(id);
+    const wrappedVector = update.vector && vectorName ? { [vectorName]: update.vector } : update.vector;
 
     try {
       // Handle metadata-only update
@@ -284,7 +380,7 @@ export class QdrantVector extends MastraVector {
           points: [
             {
               id: pointId,
-              vector: update.vector,
+              vector: wrappedVector!,
             },
           ],
         });
@@ -295,7 +391,7 @@ export class QdrantVector extends MastraVector {
       if (update.vector && update.metadata) {
         const point = {
           id: pointId,
-          vector: update.vector,
+          vector: wrappedVector!,
           payload: update.metadata,
         };
 
