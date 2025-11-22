@@ -696,6 +696,9 @@ describe('MessageHistory', () => {
       expect(mockStorage.updateThread).toHaveBeenCalledWith({
         id: 'thread-1',
         title: 'Test Thread',
+        metadata: expect.objectContaining({
+          createdAt: expect.any(Date),
+        }),
       });
     });
 
