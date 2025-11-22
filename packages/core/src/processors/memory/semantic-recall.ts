@@ -441,22 +441,17 @@ export class SemanticRecall implements Processor {
    * Ensure vector index exists with correct dimensions
    */
   private async ensureVectorIndex(indexName: string, dimension: number): Promise<void> {
-    try {
-      // Check if index exists
-      const indexes = await this.vector.listIndexes();
-      const indexExists = indexes.includes(indexName);
+    // Check if index exists
+    const indexes = await this.vector.listIndexes();
+    const indexExists = indexes.includes(indexName);
 
-      if (!indexExists) {
-        // Create index if it doesn't exist
-        await this.vector.createIndex({
-          indexName,
-          dimension,
-          metric: 'cosine',
-        });
-      }
-    } catch (error) {
-      this.logger?.error('[SemanticRecall] Error ensuring vector index:', { error });
-      throw error;
+    if (!indexExists) {
+      // Create index if it doesn't exist
+      await this.vector.createIndex({
+        indexName,
+        dimension,
+        metric: 'cosine',
+      });
     }
   }
 
