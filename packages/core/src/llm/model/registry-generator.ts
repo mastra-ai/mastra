@@ -31,8 +31,12 @@ export async function fetchProvidersFromGateways(
         for (const [providerId, config] of Object.entries(providers)) {
           // If gateway has a prefix, prepend it to the provider ID for type generation
           // This creates paths like: prefix/provider/model
-          const typeProviderId = gatewayPrefix ? `${gatewayPrefix}/${providerId}` : providerId;
 
+          // NOTE: If the provider ID equals the gateway prefix, don't double the prefix.
+          // This is the case for the AzureOpenAIGateway.
+
+          const typeProviderId =
+            gatewayPrefix && gatewayPrefix !== providerId ? `${gatewayPrefix}/${providerId}` : providerId;
           allProviders[typeProviderId] = config;
           // Sort models alphabetically for consistent ordering
           allModels[typeProviderId] = config.models.sort();

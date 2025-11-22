@@ -11,7 +11,6 @@ const meta = {
   alibaba: "Alibaba",
   "alibaba-cn": "Alibaba (China)",
   "amazon-bedrock": "Amazon Bedrock",
-  azure: "Azure",
   baseten: "Baseten",
   cerebras: "Cerebras",
   chutes: "Chutes",
