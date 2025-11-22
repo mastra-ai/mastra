@@ -1009,6 +1009,7 @@ export class Workflow<
       new Run({
         workflowId: this.id,
         stateSchema: this.stateSchema,
+        inputSchema: this.inputSchema,
         runId: runIdToUse,
         resourceId: options?.resourceId,
         executionEngine: this.executionEngine,
@@ -1510,6 +1511,7 @@ export class Run<
   protected closeStreamAction?: () => Promise<void>;
   protected executionResults?: Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   protected stateSchema?: z.ZodObject<any>;
+  protected inputSchema?: z.ZodType<any>;
 
   protected cleanup?: () => void;
 
@@ -1523,6 +1525,7 @@ export class Run<
     runId: string;
     resourceId?: string;
     stateSchema?: z.ZodObject<any>;
+    inputSchema?: z.ZodType<any>;
     executionEngine: ExecutionEngine;
     executionGraph: ExecutionGraph;
     mastra?: Mastra;
@@ -1553,6 +1556,7 @@ export class Run<
     this.workflowSteps = params.workflowSteps;
     this.validateInputs = params.validateInputs;
     this.stateSchema = params.stateSchema;
+    this.inputSchema = params.inputSchema;
     this.workflowRunStatus = 'pending';
     this.workflowEngineType = params.workflowEngineType;
   }
@@ -1573,34 +1577,19 @@ export class Run<
   }
 
   protected async _validateInput(inputData: z.input<TInput>) {
-    const firstEntry = this.executionGraph.steps[0];
     let inputDataToUse = inputData;
 
-    if (firstEntry && this.validateInputs) {
-      let inputSchema: z.ZodType<any> | undefined;
+    if (this.validateInputs && this.inputSchema) {
+      const validatedInputData = await this.inputSchema.safeParseAsync(inputData);
 
-      if (firstEntry.type === 'step' || firstEntry.type === 'foreach' || firstEntry.type === 'loop') {
-        const step = firstEntry.step;
-        inputSchema = step.inputSchema;
-      } else if (firstEntry.type === 'conditional' || firstEntry.type === 'parallel') {
-        const firstStep = firstEntry.steps[0];
-        if (firstStep && firstStep.type === 'step') {
-          inputSchema = firstStep.step.inputSchema;
-        }
+      if (!validatedInputData.success) {
+        const errors = getZodErrors(validatedInputData.error);
+        throw new Error(
+          'Invalid input data: \n' + errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+        );
       }
 
-      if (inputSchema) {
-        const validatedInputData = await inputSchema.safeParseAsync(inputData);
-
-        if (!validatedInputData.success) {
-          const errors = getZodErrors(validatedInputData.error);
-          throw new Error(
-            'Invalid input data: \n' + errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
-          );
-        }
-
-        inputDataToUse = validatedInputData.data;
-      }
+      inputDataToUse = validatedInputData.data;
     }
 
     return inputDataToUse;
