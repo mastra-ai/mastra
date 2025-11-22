@@ -78,7 +78,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     uri,
     dbName,
     options,
-    embeddingField = "embedding",
+    embeddingField = 'embedding',
   }: {
     id: string;
     uri: string;
@@ -260,7 +260,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     throw new Error(`Index "${indexNameInternal}" did not become ready within timeout`);
   }
 
-  async upsert({ indexName, vectors, metadata, ids, documents, embeddingPath}: MongoDBUpsertVectorParams): Promise<string[]> {
+  async upsert({
+    indexName,
+    vectors,
+    metadata,
+    ids,
+    documents,
+    embeddingPath,
+  }: MongoDBUpsertVectorParams): Promise<string[]> {
     try {
       const collection = await this.getCollection(indexName);
 
@@ -410,7 +417,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         id: result._id,
         score: result.score,
         metadata: result.metadata,
-         vector: includeVector ? (result.vector as number[]) : undefined,
+        vector: includeVector ? (result.vector as number[]) : undefined,
         document: result.document,
       }));
     } catch (error) {
