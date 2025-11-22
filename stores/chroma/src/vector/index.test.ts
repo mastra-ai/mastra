@@ -1590,6 +1590,7 @@ describe.skipIf(!process.env.CHROMA_API_KEY)('ChromaCloudVector Fork Tests', () 
 
   beforeEach(async () => {
     cloudVector = new ChromaVector({
+      id: 'chroma-cloud-vector-fork-test',
       apiKey: process.env.CHROMA_API_KEY,
     });
 
