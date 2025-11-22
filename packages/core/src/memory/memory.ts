@@ -26,6 +26,7 @@ import type {
   MastraMessageV1,
   WorkingMemoryTemplate,
   MessageDeleteInput,
+  MemoryRuntimeContext,
 } from './types';
 
 export type MemoryProcessorOpts = {
@@ -471,16 +472,14 @@ https://mastra.ai/en/docs/memory/overview`,
   /**
    * Get input processors for this memory instance
    * This allows Memory to be used as a ProcessorProvider in Agent's inputProcessors array.
-   *
    * @param configuredProcessors - Processors already configured by the user (for deduplication)
-   * @param context - Optional execution context with threadId and resourceId
    * @returns Array of input processors configured for this memory instance
    */
   getInputProcessors(configuredProcessors: InputProcessor[] = [], context?: RequestContext): InputProcessor[] {
     const processors: InputProcessor[] = [];
 
     // Extract runtime memoryConfig from context if available
-    const memoryContext = context?.get('MastraMemory') as any;
+    const memoryContext = context?.get('MastraMemory') as MemoryRuntimeContext | undefined;
     const runtimeMemoryConfig = memoryContext?.memoryConfig;
     const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
 
@@ -599,16 +598,14 @@ https://mastra.ai/en/docs/memory/overview`,
   /**
    * Get output processors for this memory instance
    * This allows Memory to be used as a ProcessorProvider in Agent's outputProcessors array.
-   *
    * @param configuredProcessors - Processors already configured by the user (for deduplication)
-   * @param context - Optional execution context
    * @returns Array of output processors configured for this memory instance
    */
   getOutputProcessors(configuredProcessors: OutputProcessor[] = [], context?: RequestContext): OutputProcessor[] {
     const processors: OutputProcessor[] = [];
 
     // Extract runtime memoryConfig from context if available
-    const memoryContext = context?.get('MastraMemory') as any;
+    const memoryContext = context?.get('MastraMemory') as MemoryRuntimeContext | undefined;
     const runtimeMemoryConfig = memoryContext?.memoryConfig;
     const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
 

@@ -1,15 +1,16 @@
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodTypeAny } from 'zod';
-import { ZodObject } from 'zod';
+import z, { ZodObject } from 'zod';
 import type { MastraDBMessage } from '../agent/message-list';
-import { MessageList } from '../agent/message-list';
 import type {
   StorageListMessagesInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
 } from '../storage';
 import { InMemoryStore } from '../storage';
+import { createTool } from '../tools';
+import type { ToolAction } from '../tools';
 import { MastraMemory } from './memory';
 import type { StorageThreadType, MemoryConfig, MessageDeleteInput, WorkingMemoryTemplate } from './types';
 
@@ -18,15 +19,15 @@ const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instance
 export class MockMemory extends MastraMemory {
   constructor({
     storage,
-    enableWorkingMemory = true,
+    enableWorkingMemory = false,
     enableMessageHistory = true,
   }: {
     storage?: InMemoryStore;
     enableWorkingMemory?: boolean;
     enableMessageHistory?: boolean;
   } = {}) {
-    super({ 
-      name: 'mock', 
+    super({
+      name: 'mock',
       storage: storage || new InMemoryStore(),
       options: {
         workingMemory: enableWorkingMemory ? { enabled: true } : undefined,
@@ -50,13 +51,7 @@ export class MockMemory extends MastraMemory {
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig;
   }): Promise<{ messages: MastraDBMessage[] }> {
-    const dbMessages = new MessageList({
-      generateMessageId: () => this.generateId(),
-    })
-      .add(messages, 'memory')
-      .get.all.db();
-
-    return this.storage.saveMessages({ messages: dbMessages });
+    return this.storage.saveMessages({ messages });
   }
 
   async listThreadsByResourceId(
@@ -117,6 +112,57 @@ export class MockMemory extends MastraMemory {
 
     const resource = await this.storage.getResourceById({ resourceId: id });
     return resource?.workingMemory || null;
+  }
+
+  public listTools(_config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
+    return {
+      updateWorkingMemory: createTool({
+        id: 'update-working-memory',
+        description: `Update the working memory with new information. Any data not included will be overwritten.`,
+        inputSchema: z.object({ memory: z.string() }),
+        execute: async (inputData, context) => {
+          const threadId = context?.agent?.threadId;
+          const resourceId = context?.agent?.resourceId;
+
+          // Memory can be accessed via context.memory (when agent is part of Mastra instance)
+          // or context.memory (when agent is standalone with memory passed directly)
+          const memory = (context as any)?.memory;
+
+          if (!threadId || !memory || !resourceId) {
+            throw new Error('Thread ID, Memory instance, and resourceId are required for working memory updates');
+          }
+
+          let thread = await memory.getThreadById({ threadId });
+
+          if (!thread) {
+            thread = await memory.createThread({
+              threadId,
+              resourceId,
+              memoryConfig: _config,
+            });
+          }
+
+          if (thread.resourceId && thread.resourceId !== resourceId) {
+            throw new Error(
+              `Thread with id ${threadId} resourceId does not match the current resourceId ${resourceId}`,
+            );
+          }
+
+          const workingMemory =
+            typeof inputData.memory === 'string' ? inputData.memory : JSON.stringify(inputData.memory);
+
+          // Use the new updateWorkingMemory method which handles both thread and resource scope
+          await memory.updateWorkingMemory({
+            threadId,
+            resourceId,
+            workingMemory,
+            memoryConfig: _config,
+          });
+
+          return { success: true };
+        },
+      }),
+    };
   }
 
   async getWorkingMemoryTemplate({
