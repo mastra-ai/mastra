@@ -1215,7 +1215,8 @@ export class AgentLegacyHandler {
         | (StreamObjectResult<OUTPUT extends ZodSchema ? OUTPUT : never> & TracingProperties);
     }
 
-    const { onFinish, runId, output, experimental_output, agentSpan, ...llmOptions } = beforeResult;
+    const { onFinish, runId, output, experimental_output, agentSpan, messageList, requestContext, ...llmOptions } =
+      beforeResult;
     const overrideScorers = mergedStreamOptions.scorers;
     const tracingContext: TracingContext = { currentSpan: agentSpan };
 
@@ -1228,9 +1229,19 @@ export class AgentLegacyHandler {
         ...llmOptions,
         experimental_output,
         tracingContext,
-        outputProcessors: await this.capabilities.listResolvedOutputProcessors(mergedStreamOptions.requestContext),
+        requestContext,
+        outputProcessors: await this.capabilities.listResolvedOutputProcessors(requestContext),
         onFinish: async result => {
           try {
+            messageList.add(result.response.messages, 'response');
+
+            // Run output processors to save messages
+            await this.capabilities.__runOutputProcessors({
+              requestContext,
+              tracingContext,
+              messageList,
+            });
+
             const outputText = result.text;
             await after({
               result: result as any,
@@ -1263,8 +1274,33 @@ export class AgentLegacyHandler {
     const streamObjectResult = llm.__streamObject({
       ...llmOptions,
       tracingContext,
+      requestContext,
       onFinish: async result => {
         try {
+          // Add response messages to messageList
+          // For streamObject, create a message from the structured output
+          if (result.object) {
+            const responseMessages = [
+              {
+                role: 'assistant' as const,
+                content: [
+                  {
+                    type: 'text' as const,
+                    text: JSON.stringify(result.object),
+                  },
+                ],
+              },
+            ];
+            messageList.add(responseMessages as any, 'response');
+          }
+
+          // Run output processors to save messages
+          await this.capabilities.__runOutputProcessors({
+            requestContext,
+            tracingContext,
+            messageList,
+          });
+
           const outputText = JSON.stringify(result.object);
           await after({
             result: result as any,
