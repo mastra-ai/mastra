@@ -158,6 +158,17 @@ describe('Integration Testing CouchbaseVector', async () => {
           }
           collection = scope.collection(test_collectionName);
         }
+
+        // Initialize the CouchbaseVector client after cluster setup
+        couchbase_client = new CouchbaseVector({
+          connectionString,
+          username,
+          password,
+          bucketName: test_bucketName,
+          scopeName: test_scopeName,
+          collectionName: test_collectionName,
+          id: 'couchbase-integration-test',
+        });
       } catch (error) {
         console.error('Failed to start Couchbase container:', error);
       }
@@ -173,15 +184,6 @@ describe('Integration Testing CouchbaseVector', async () => {
 
   describe('Connection', () => {
     it('should connect to couchbase', async () => {
-      couchbase_client = new CouchbaseVector({
-        connectionString,
-        username,
-        password,
-        bucketName: test_bucketName,
-        scopeName: test_scopeName,
-        collectionName: test_collectionName,
-        id: 'couchbase-integration-test',
-      });
       expect(couchbase_client).toBeDefined();
       const collection = await couchbase_client.getCollection();
       expect(collection).toBeDefined();
