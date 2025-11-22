@@ -21,6 +21,7 @@ Depending on whether you’re streaming from an **agent** or a **workflow**, onl
 - **tool-result**: The result returned from tool execution.
 - **step-finish**: Confirms that a specific step has fully finalized, and may include metadata like the finish reason for that step.
 - **finish**: When the agent or workflow completes, including usage statistics.
+- **raw**: Raw data from the provider. Only included if `includeRawChunks` is set to `true`.
 
 ## Network event types
 
@@ -86,6 +87,38 @@ Below is an example of events that may be emitted. Each event always includes a 
   }
 }
 ```
+
+## Accessing raw chunks
+
+By default, raw chunks from the AI SDK are filtered out of the stream. These chunks contain provider-specific data that may be needed for advanced use cases, such as accessing Anthropic's inline citation metadata.
+
+To include raw chunks in the stream, set `includeRawChunks: true` when calling `stream()`:
+
+```typescript {3-5} showLineNumbers copy
+const testAgent = mastra.getAgent("testAgent");
+
+const stream = await testAgent.stream(
+  [{ role: "user", content: "Help me research dolphins" }],
+  { includeRawChunks: true }
+);
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'raw') {
+    console.log('Raw chunk:', chunk.payload);
+    // Access provider-specific data like Anthropic citations
+    if (chunk.payload.delta?.type === 'citations_delta') {
+      console.log('Citations:', chunk.payload.delta.citations);
+    }
+  }
+}
+```
+
+### Important notes
+
+- Raw chunks are **never persisted** to memory, even when `includeRawChunks: true` is set
+- Raw chunks are only available during streaming, not in the final result
+- The structure of raw chunks is provider-specific and follows the format of the underlying AI SDK
+- Raw chunks appear in both `fullStream` iteration and `onChunk` callbacks
 
 ## Inspecting workflow streams
 
