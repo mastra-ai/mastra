@@ -30,6 +30,16 @@ type QdrantQueryWithNamedVectorParams = QdrantQueryVectorParams & { using?: stri
 export class QdrantVector extends MastraVector {
   protected client: QdrantClient;
 
+  private async validateVectorName(indexName: string, vectorName: string): Promise<void> {
+    const { config } = await this.client.getCollection(indexName);
+    const vectorsConfig = config.params.vectors;
+    const isNamedVectors = vectorsConfig && typeof vectorsConfig === 'object' && !('size' in vectorsConfig);
+
+    if (!isNamedVectors || !(vectorName in vectorsConfig)) {
+      throw new Error(`Vector name "${vectorName}" does not exist in collection "${indexName}"`);
+    }
+  }
+
   /**
    * Creates a new QdrantVector client.
    * @param id - The unique identifier for this vector store instance.
@@ -52,13 +62,7 @@ export class QdrantVector extends MastraVector {
     const pointIds = ids || vectors.map(() => crypto.randomUUID());
 
     if (vectorName) {
-      const { config } = await this.client.getCollection(indexName);
-      const vectorsConfig = config.params.vectors;
-      const isNamedVectors = vectorsConfig && typeof vectorsConfig === 'object' && !('size' in vectorsConfig);
-
-      if (!isNamedVectors || !(vectorName in vectorsConfig)) {
-        throw new Error(`Vector name "${vectorName}" does not exist in collection "${indexName}"`);
-      }
+      await this.validateVectorName(indexName, vectorName);
     }
     const records = vectors.map((vector, i) => ({
       id: pointIds[i],
@@ -345,13 +349,7 @@ export class QdrantVector extends MastraVector {
         throw new Error('No updates provided');
       }
       if (vectorName) {
-        const { config } = await this.client.getCollection(indexName);
-        const vectorsConfig = config.params.vectors;
-        const isNamedVectors = vectorsConfig && typeof vectorsConfig === 'object' && !('size' in vectorsConfig);
-
-        if (!isNamedVectors || !(vectorName in vectorsConfig)) {
-          throw new Error(`Vector name "${vectorName}" does not exist in collection "${indexName}"`);
-        }
+        await this.validateVectorName(indexName, vectorName);
       }
     } catch (validationError) {
       throw new MastraError(
