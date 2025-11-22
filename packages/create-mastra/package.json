@@ -35,7 +35,7 @@
     "project"
   ],
   "dependencies": {
-    "commander": "^12.1.0",
+    "commander": "^14.0.2",
     "execa": "^9.6.0",
     "fs-extra": "^11.3.2",
     "pino": "^10.1.0",
