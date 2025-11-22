@@ -1,8 +1,8 @@
+import type { InputProcessor } from '..';
 import type { MessageList } from '../../agent/message-list';
 import type { IMastraLogger } from '../../logger';
 import { parseMemoryRuntimeContext } from '../../memory';
 import type { MastraDBMessage, MemoryConfig } from '../../memory';
-import type { InputProcessor } from '..';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 

@@ -1,6 +1,5 @@
 import type { Processor } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
-import { ErrorDomain, MastraError } from '../../error';
 import { parseMemoryRuntimeContext } from '../../memory';
 import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';

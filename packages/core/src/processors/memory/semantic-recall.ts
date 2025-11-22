@@ -1,15 +1,15 @@
+import type { SystemModelMessage } from 'ai-v5';
+import { LRUCache } from 'lru-cache';
+import xxhash from 'xxhash-wasm';
+import type { Processor } from '..';
 import { MessageList } from '../../agent';
 import type { IMastraLogger } from '../../logger';
 import { parseMemoryRuntimeContext } from '../../memory';
 import type { MastraDBMessage } from '../../memory';
 import type { TracingContext } from '../../observability';
-import type { Processor } from '..';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 import type { MastraEmbeddingModel, MastraVector } from '../../vector';
-import type { SystemModelMessage } from 'ai-v5';
-import { LRUCache } from 'lru-cache';
-import xxhash from 'xxhash-wasm';
 
 const DEFAULT_TOP_K = 4;
 const DEFAULT_MESSAGE_RANGE = 1; // Will be used for both before and after
