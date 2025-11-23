@@ -4,10 +4,39 @@ import { Deployer } from '@mastra/deployer';
 import { DepsService } from '@mastra/deployer/services';
 import fsExtra, { move, writeJson } from 'fs-extra/esm';
 
+export interface NetlifyBuildConfig {
+  /**
+   * Build command to execute. Defaults to "npm run build"
+   */
+  command?: string;
+  /**
+   * Directory to publish. Defaults to ".netlify/v1/functions"
+   */
+  publish?: string;
+  /**
+   * Environment variables to set during build
+   */
+  environment?: Record<string, string>;
+}
+
+export interface NetlifyDeployerConfig {
+  /**
+   * Build configuration options
+   */
+  build?: NetlifyBuildConfig;
+}
+
 export class NetlifyDeployer extends Deployer {
-  constructor() {
+  private buildConfig: NetlifyBuildConfig;
+
+  constructor(config?: NetlifyDeployerConfig) {
     super({ name: 'NETLIFY' });
     this.outputDir = join('.netlify', 'v1', 'functions', 'api');
+    this.buildConfig = {
+      command: config?.build?.command || 'npm run build',
+      publish: config?.build?.publish || '.netlify/v1/functions',
+      environment: config?.build?.environment || {},
+    };
   }
 
   protected async installDependencies(outputDirectory: string, rootDir = process.cwd()) {
@@ -40,9 +69,20 @@ export class NetlifyDeployer extends Deployer {
       return;
     }
 
-    const netlifyTomlContent = `[build]
-  command = "bun run build"
-  publish = ".netlify/v1/functions"
+    let netlifyTomlContent = `[build]
+  command = "${this.buildConfig.command}"
+  publish = "${this.buildConfig.publish}"`;
+
+    // Add build environment variables if any
+    if (this.buildConfig.environment && Object.keys(this.buildConfig.environment).length > 0) {
+      netlifyTomlContent += '\n\n[build.environment]';
+
+      for (const [key, value] of Object.entries(this.buildConfig.environment)) {
+        netlifyTomlContent += `\n  ${key} = "${value}"`;
+      }
+    }
+
+    netlifyTomlContent += `
 
 [[redirects]]
   from = "/*"

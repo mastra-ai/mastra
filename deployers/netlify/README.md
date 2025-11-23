@@ -23,11 +23,7 @@ The Netlify deployer is used as part of the Mastra framework:
 import { Mastra } from '@mastra/core/mastra';
 import { NetlifyDeployer } from '@mastra/deployer-netlify';
 
-const deployer = new NetlifyDeployer({
-  scope: 'your-team-id',
-  projectName: 'your-project-name',
-  token: 'your-netlify-token',
-});
+const deployer = new NetlifyDeployer();
 
 const mastra = new Mastra({
   deployer,
@@ -39,9 +35,63 @@ const mastra = new Mastra({
 
 ### Constructor Options
 
-- `scope` (required): Your Netlify team slug or ID
-- `projectName`: Name of your Netlify site (will be created if it doesn't exist)
-- `token`: Your Netlify authentication token
+The NetlifyDeployer accepts an optional configuration object:
+
+```typescript
+const deployer = new NetlifyDeployer({
+  build: {
+    command: 'npm run build',
+    publish: '.netlify/v1/functions',
+    environment: {
+      NODE_VERSION: '20',
+      NPM_FLAGS: '--legacy-peer-deps',
+    },
+  },
+});
+```
+
+#### Build Configuration
+
+- `build.command` (optional): Build command to execute during deployment. Defaults to `"npm run build"`.
+- `build.publish` (optional): Directory to publish. Defaults to `".netlify/v1/functions"`.
+- `build.environment` (optional): Environment variables to set during the build process. These are added to the `[build.environment]` section in netlify.toml.
+
+#### Examples
+
+Using a different package manager:
+
+```typescript
+const deployer = new NetlifyDeployer({
+  build: {
+    command: 'pnpm run build',
+  },
+});
+```
+
+Using Bun:
+
+```typescript
+const deployer = new NetlifyDeployer({
+  build: {
+    command: 'bun run build',
+  },
+});
+```
+
+With custom build environment:
+
+```typescript
+const deployer = new NetlifyDeployer({
+  build: {
+    command: 'npm run build',
+    environment: {
+      NODE_VERSION: '20.11.0',
+      NODE_ENV: 'production',
+      ENABLE_EXPERIMENTAL_FEATURES: 'true',
+    },
+  },
+});
+```
 
 ## Project Structure
 
@@ -57,18 +107,36 @@ your-project/
 
 ### netlify.toml Configuration
 
-The deployer creates a `netlify.toml` with the following defaults:
+The deployer automatically creates a `netlify.toml` file with configuration based on your settings. If a `netlify.toml` file already exists, it will be preserved.
+
+Default configuration:
 
 ```toml
-[functions]
-node_bundler = "esbuild"
-directory = "/netlify/functions"
+[build]
+  command = "npm run build"
+  publish = ".netlify/v1/functions"
 
 [[redirects]]
-force = true
-from = "/*"
-status = 200
-to = "/.netlify/functions/api/:splat"
+  from = "/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+```
+
+With custom build environment variables:
+
+```toml
+[build]
+  command = "npm run build"
+  publish = ".netlify/v1/functions"
+
+[build.environment]
+  NODE_VERSION = "20.11.0"
+  NODE_ENV = "production"
+
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
 ```
 
 ## Environment Variables
