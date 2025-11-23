@@ -44,11 +44,6 @@ export class NetlifyDeployer extends Deployer {
   command = "bun run build"
   publish = ".netlify/v1/functions"
 
-[functions]
-  directory = ".netlify/v1/functions"
-  node_bundler = "none"
-  included_files = [".netlify/v1/functions/**"]
-
 [[redirects]]
   from = "/*"
   to = "/.netlify/functions/api/:splat"
