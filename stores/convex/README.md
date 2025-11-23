@@ -66,3 +66,14 @@ const vector = new ConvexVector({
 ## Status
 
 Experimental – expect breaking changes while the adapter matures.
+
+## Testing
+
+The storage and vector integration tests talk to a real Convex deployment (Convex does not provide a standalone emulator).  
+Set the following environment variables before running `pnpm --filter @mastra/convex test`:
+
+- `CONVEX_TEST_URL` – the Convex deployment URL (e.g. `https://your-name.convex.cloud`)
+- `CONVEX_TEST_ADMIN_KEY` – an admin token for that deployment
+- `CONVEX_TEST_STORAGE_FUNCTION` *(optional)* – override the mutation path if you mounted `mastraStorage` somewhere other than `mastra/storage:handle`
+
+When those variables are missing the Vitest suites are skipped automatically.
