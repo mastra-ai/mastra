@@ -94,8 +94,8 @@ export abstract class BaseExporter implements ObservabilityExporter {
   /**
    * Export a tracing event
    *
-   * This method checks if the exporter is disabled before calling _exportEvent.
-   * Subclasses should implement _exportEvent instead of overriding this method.
+   * This method checks if the exporter is disabled before calling _exportTracingEvent.
+   * Subclasses should implement _exportTracingEvent instead of overriding this method.
    */
   async exportTracingEvent(event: TracingEvent): Promise<void> {
     if (this.isDisabled) {
