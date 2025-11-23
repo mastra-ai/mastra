@@ -17,8 +17,8 @@ import type { TracingEvent, ObservabilityExporter, InitExporterOptions } from '@
 export interface BaseExporterConfig {
   /** Optional Mastra logger instance */
   logger?: IMastraLogger;
-  /** Log level for the exporter (defaults to INFO) - accepts both enum and string */
-  logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error';
+  /** Log level for the exporter (defaults to INFO) - use LogLevel.INFO or 'info' string directly */
+  logLevel?: LogLevel;
 }
 
 /**
@@ -35,7 +35,8 @@ export interface BaseExporterConfig {
  *   name = 'my-exporter';
  *
  *   constructor(config: MyExporterConfig) {
- *     super(config);
+ *     // LogLevel can be passed as LogLevel.DEBUG or 'debug' string
+ *     super({ ...config, logLevel: config.logLevel ?? 'info' });
  *
  *     if (!config.apiKey) {
  *       this.setDisabled('Missing API key');
@@ -45,7 +46,7 @@ export interface BaseExporterConfig {
  *     // Initialize exporter-specific logic
  *   }
  *
- *   async _exportEvent(event: TracingEvent): Promise<void> {
+ *   async _exportTracingEvent(event: TracingEvent): Promise<void> {
  *     // Export logic
  *   }
  * }
@@ -65,8 +66,8 @@ export abstract class BaseExporter implements ObservabilityExporter {
    * Initialize the base exporter with logger
    */
   constructor(config: BaseExporterConfig = {}) {
-    // Map string log level to LogLevel enum if needed
-    const logLevel = this.resolveLogLevel(config.logLevel);
+    // Default to INFO level if not specified
+    const logLevel = config.logLevel ?? LogLevel.INFO;
     // Use constructor name as fallback since this.name isn't set yet (subclass initializes it)
     this.logger = config.logger ?? new ConsoleLogger({ level: logLevel, name: this.constructor.name });
   }
@@ -78,30 +79,6 @@ export abstract class BaseExporter implements ObservabilityExporter {
     this.logger = logger;
     // Use this.name here since it's guaranteed to be set by the subclass at this point
     this.logger.debug(`Logger updated for exporter [name=${this.name}]`);
-  }
-
-  /**
-   * Convert string log level to LogLevel enum
-   */
-  private resolveLogLevel(logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'): LogLevel {
-    if (!logLevel) {
-      return LogLevel.INFO;
-    }
-
-    // If already a LogLevel enum, return as-is
-    if (typeof logLevel === 'number') {
-      return logLevel;
-    }
-
-    // Map string to enum
-    const logLevelMap: Record<string, LogLevel> = {
-      debug: LogLevel.DEBUG,
-      info: LogLevel.INFO,
-      warn: LogLevel.WARN,
-      error: LogLevel.ERROR,
-    };
-
-    return logLevelMap[logLevel] ?? LogLevel.INFO;
   }
 
   /**
