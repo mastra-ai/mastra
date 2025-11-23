@@ -33,6 +33,13 @@ export class NetlifyDeployer extends Deployer {
   }
 
   private async writeNetlifyToml(rootDir = process.cwd()): Promise<void> {
+    const filePath = join(rootDir, 'netlify.toml');
+
+    if (await fsExtra.pathExists(filePath)) {
+      this.logger?.info('Existing netlify.toml found, preserving it');
+      return;
+    }
+
     const netlifyTomlContent = `[build]
   command = "bun run build"
   publish = ".netlify/v1/functions"
@@ -47,7 +54,7 @@ export class NetlifyDeployer extends Deployer {
   to = "/.netlify/functions/api/:splat"
   status = 200`;
 
-    await fsExtra.outputFile(join(rootDir, 'netlify.toml'), netlifyTomlContent);
+    await fsExtra.outputFile(filePath, netlifyTomlContent);
   }
 
   async bundle(
