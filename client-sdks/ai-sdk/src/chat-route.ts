@@ -105,6 +105,10 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
             schema: {
               type: 'object',
               properties: {
+                resumeData: {
+                  type: 'object',
+                  description: 'Resume data for the agent',
+                },
                 messages: {
                   type: 'array',
                   description: 'Array of messages in the conversation',
@@ -175,7 +179,7 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
       },
     },
     handler: async c => {
-      const { messages, ...rest } = await c.req.json();
+      const { messages, resumeData, ...rest } = await c.req.json();
       const mastra = c.get('mastra');
       const requestContext = (c as any).get('requestContext') as RequestContext | undefined;
 
@@ -208,11 +212,15 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
         throw new Error(`Agent ${agentToUse} not found`);
       }
 
-      const result = await agentObj.stream<OUTPUT>(messages, {
+      const mergedOptions = {
         ...defaultOptions,
         ...rest,
         requestContext: requestContext || defaultOptions?.requestContext,
-      });
+      };
+
+      const result = resumeData
+        ? await agentObj.resumeStream<OUTPUT>(resumeData, mergedOptions)
+        : await agentObj.stream<OUTPUT>(messages, mergedOptions);
 
       let lastMessageId: string | undefined;
       if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
