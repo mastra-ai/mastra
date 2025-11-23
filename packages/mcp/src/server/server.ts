@@ -1230,7 +1230,7 @@ export class MCPServer extends MCPServerBase {
     httpPath,
     req,
     res,
-    options = { sessionIdGenerator: () => randomUUID() },
+    options,
   }: {
     url: URL;
     httpPath: string;
@@ -1246,6 +1246,10 @@ export class MCPServer extends MCPServerBase {
       res.end();
       return;
     }
+    const mergedOptions = {
+      sessionIdGenerator: undefined, // default: disabled
+      ...options,                    // user-provided overrides default
+    };
 
     // Serverless mode: stateless, single request/response
     if (options?.serverless) {
@@ -1318,14 +1322,15 @@ export class MCPServer extends MCPServerBase {
             this.logger.debug('startHTTP: Received Streamable HTTP initialize request, creating new transport.');
 
             // Create a new transport for the new session
-            transport = new StreamableHTTPServerTransport({
-              ...options,
-              sessionIdGenerator: () => randomUUID(),
-              onsessioninitialized: id => {
-                this.streamableHTTPTransports.set(id, transport!);
-              },
-            });
-
+           transport = new StreamableHTTPServerTransport({
+            ...mergedOptions,
+            sessionIdGenerator:
+              mergedOptions.sessionIdGenerator ?? (() => randomUUID()),
+            onsessioninitialized: id => {
+              this.streamableHTTPTransports.set(id, transport!);
+            },
+          });
+          
             // Set up onclose handler to clean up transport when closed
             transport.onclose = () => {
               const closedSessionId = transport?.sessionId;
