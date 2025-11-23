@@ -1248,7 +1248,7 @@ export class MCPServer extends MCPServerBase {
     }
     const mergedOptions = {
       sessionIdGenerator: () => randomUUID(), // default: enabled
-      ...options,                    // user-provided overrides default
+      ...options, // user-provided overrides default
     };
 
     // Serverless mode: stateless, single request/response
@@ -1322,14 +1322,14 @@ export class MCPServer extends MCPServerBase {
             this.logger.debug('startHTTP: Received Streamable HTTP initialize request, creating new transport.');
 
             // Create a new transport for the new session
-           transport = new StreamableHTTPServerTransport({
-            ...mergedOptions,
-            sessionIdGenerator: mergedOptions.sessionIdGenerator,
-            onsessioninitialized: id => {
-              this.streamableHTTPTransports.set(id, transport!);
-            },
-          });
-          
+            transport = new StreamableHTTPServerTransport({
+              ...mergedOptions,
+              sessionIdGenerator: mergedOptions.sessionIdGenerator,
+              onsessioninitialized: id => {
+                this.streamableHTTPTransports.set(id, transport!);
+              },
+            });
+
             // Set up onclose handler to clean up transport when closed
             transport.onclose = () => {
               const closedSessionId = transport?.sessionId;
