@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import type { VectorTestConfig } from '../../vector-factory';
+import { createUnitVector, createVector } from './test-helpers';
 
 /**
  * Shared test suite for metadata field filtering in vector stores.
@@ -9,12 +10,13 @@ import type { VectorTestConfig } from '../../vector-factory';
  * Context: The Memory system stores thread_id and resource_id in metadata
  * and needs to filter by these fields for semantic recall.
  */
-export function createMetadataFilteringTest({
-  vector,
-  createIndex,
-  deleteIndex,
-  waitForIndexing = () => new Promise(resolve => setTimeout(resolve, 5000)),
-}: VectorTestConfig) {
+export function createMetadataFilteringTest(config: VectorTestConfig) {
+  const {
+    createIndex,
+    deleteIndex,
+    waitForIndexing = () => new Promise(resolve => setTimeout(resolve, 5000)),
+  } = config;
+
   describe('Metadata Field Filtering for Memory System', () => {
     const testIndexName = `metadata_filter_test_${Date.now()}`;
 
@@ -24,12 +26,7 @@ export function createMetadataFilteringTest({
 
       // Insert test vectors with thread_id and resource_id in metadata
       // This simulates what the Memory system does when storing message embeddings
-      const vectors = [
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 1, 0],
-        [0, 0, 0, 1],
-      ];
+      const vectors = [createUnitVector(0), createUnitVector(1), createUnitVector(2), createUnitVector(3)];
 
       const metadata = [
         { thread_id: 'thread-123', resource_id: 'resource-123', message: 'first' },
@@ -38,14 +35,14 @@ export function createMetadataFilteringTest({
         { thread_id: 'thread-456', resource_id: 'resource-456', message: 'fourth' },
       ];
 
-      await vector.upsert({
+      await config.vector.upsert({
         indexName: testIndexName,
         vectors,
         metadata,
       });
 
       // Wait for indexing to complete
-      await waitForIndexing();
+      await waitForIndexing(testIndexName);
     });
 
     afterAll(async () => {
@@ -53,9 +50,9 @@ export function createMetadataFilteringTest({
     });
 
     it('should filter by thread_id in metadata', async () => {
-      const results = await vector.query({
+      const results = await config.vector.query({
         indexName: testIndexName,
-        queryVector: [1, 0, 0, 0],
+        queryVector: createUnitVector(0),
         topK: 10,
         filter: { thread_id: 'thread-123' },
       });
@@ -70,9 +67,9 @@ export function createMetadataFilteringTest({
     });
 
     it('should filter by resource_id in metadata', async () => {
-      const results = await vector.query({
+      const results = await config.vector.query({
         indexName: testIndexName,
-        queryVector: [0, 1, 0, 0],
+        queryVector: createUnitVector(1),
         topK: 10,
         filter: { resource_id: 'resource-123' },
       });
@@ -88,9 +85,9 @@ export function createMetadataFilteringTest({
 
     it('should handle combined thread_id and resource_id filters', async () => {
       // Test filtering by both thread_id and resource_id
-      const results = await vector.query({
+      const results = await config.vector.query({
         indexName: testIndexName,
-        queryVector: [1, 0, 0, 0],
+        queryVector: createUnitVector(0),
         topK: 10,
         filter: {
           thread_id: 'thread-123',
@@ -106,9 +103,9 @@ export function createMetadataFilteringTest({
     });
 
     it('should return no results when filtering for non-existent thread_id', async () => {
-      const results = await vector.query({
+      const results = await config.vector.query({
         indexName: testIndexName,
-        queryVector: [1, 0, 0, 0],
+        queryVector: createUnitVector(0),
         topK: 10,
         filter: { thread_id: 'non-existent-thread' },
       });
@@ -117,9 +114,9 @@ export function createMetadataFilteringTest({
     });
 
     it('should return all results when no filter is applied', async () => {
-      const results = await vector.query({
+      const results = await config.vector.query({
         indexName: testIndexName,
-        queryVector: [0.5, 0.5, 0.5, 0.5],
+        queryVector: createVector(5),
         topK: 10,
       });
 
@@ -136,9 +133,9 @@ export function createMetadataFilteringTest({
       // Some implementations might use metadata.thread_id syntax
       // This test ensures backward compatibility if supported
       try {
-        const results = await vector.query({
+        const results = await config.vector.query({
           indexName: testIndexName,
-          queryVector: [1, 0, 0, 0],
+          queryVector: createUnitVector(0),
           topK: 10,
           filter: { 'metadata.thread_id': 'thread-123' },
         });
