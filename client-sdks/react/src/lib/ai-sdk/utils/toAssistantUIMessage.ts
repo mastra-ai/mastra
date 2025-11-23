@@ -137,12 +137,14 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
       return baseToolCall;
     }
 
-    // Extract pending suspensions from message metadata (if any)
-    const pendingToolApprovals = extendedMessage.metadata?.pendingToolApprovals as Record<string, any> | undefined;
+    // Extract requireApprovalMetadata from message metadata (if any)
+    const requireApprovalMetadata = extendedMessage.metadata?.requireApprovalMetadata as
+      | Record<string, any>
+      | undefined;
 
-    // Check if this part has a toolCallId that matches pending suspensions
+    // Check if this part has a toolCallId that matches requireApprovalMetadata
     const partToolCallId = 'toolCallId' in part && typeof part.toolCallId === 'string' ? part.toolCallId : undefined;
-    const suspensionData = partToolCallId ? pendingToolApprovals?.[partToolCallId] : undefined;
+    const suspensionData = partToolCallId ? requireApprovalMetadata?.[partToolCallId] : undefined;
     if (suspensionData) {
       const toolName =
         'toolName' in part && typeof part.toolName === 'string'
@@ -157,12 +159,7 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
         toolName,
         argsText: 'input' in part ? JSON.stringify(part.input) : '{}',
         args: ('input' in part ? part.input : {}) as ReadonlyJSONObject,
-        metadata: {
-          mode: 'stream' as const,
-          requireApprovalMetadata: {
-            [partToolCallId!]: suspensionData,
-          },
-        },
+        metadata: extendedMessage.metadata,
       };
     }
 

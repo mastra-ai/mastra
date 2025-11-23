@@ -294,21 +294,33 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       // Find and update the corresponding tool call
       const parts = [...lastMessage.parts];
       const toolPartIndex = parts.findIndex(
-        part => part.type === 'dynamic-tool' && 'toolCallId' in part && part.toolCallId === chunk.payload.toolCallId,
+        part =>
+          (part.type === 'dynamic-tool' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) &&
+          'toolCallId' in part &&
+          part.toolCallId === chunk.payload.toolCallId,
       );
 
       if (toolPartIndex !== -1) {
         const toolPart = parts[toolPartIndex];
+        if (
+          toolPart.type === 'dynamic-tool' ||
+          (typeof toolPart.type === 'string' && toolPart.type.startsWith('tool-'))
+        ) {
+          const toolName =
+            'toolName' in toolPart && typeof toolPart.toolName === 'string'
+              ? toolPart.toolName
+              : toolPart.type.substring(5);
 
-        if (toolPart.type === 'dynamic-tool') {
+          const toolCallId = (toolPart as any).toolCallId;
+
           if ((chunk.type === 'tool-result' && chunk.payload.isError) || chunk.type === 'tool-error') {
             const error = chunk.type === 'tool-error' ? chunk.payload.error : chunk.payload.result;
             parts[toolPartIndex] = {
               type: 'dynamic-tool',
-              toolName: toolPart.toolName,
-              toolCallId: toolPart.toolCallId,
+              toolName,
+              toolCallId,
               state: 'output-error',
-              input: toolPart.input,
+              input: (toolPart as any).input,
               errorText: String(error),
               callProviderMetadata: chunk.payload.providerMetadata,
             };
@@ -325,10 +337,10 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             }
             parts[toolPartIndex] = {
               type: 'dynamic-tool',
-              toolName: toolPart.toolName,
-              toolCallId: toolPart.toolCallId,
+              toolName,
+              toolCallId,
               state: 'output-available',
-              input: toolPart.input,
+              input: (toolPart as any).input,
               output,
               callProviderMetadata: chunk.payload.providerMetadata,
             };
