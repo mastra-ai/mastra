@@ -1247,7 +1247,7 @@ export class MCPServer extends MCPServerBase {
       return;
     }
     const mergedOptions = {
-      sessionIdGenerator: undefined, // default: disabled
+      sessionIdGenerator: () => randomUUID(), // default: enabled
       ...options,                    // user-provided overrides default
     };
 
@@ -1324,8 +1324,7 @@ export class MCPServer extends MCPServerBase {
             // Create a new transport for the new session
            transport = new StreamableHTTPServerTransport({
             ...mergedOptions,
-            sessionIdGenerator:
-              mergedOptions.sessionIdGenerator ?? (() => randomUUID()),
+            sessionIdGenerator: mergedOptions.sessionIdGenerator,
             onsessioninitialized: id => {
               this.streamableHTTPTransports.set(id, transport!);
             },
