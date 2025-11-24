@@ -144,17 +144,19 @@ export class Tool<
 
         let suspendCalled = false;
 
-        const baseContext = {
-          ...context,
-          ...(context.suspend
-            ? {
-                suspend: (args: any) => {
-                  suspendCalled = true;
-                  return context.suspend?.(args);
-                },
-              }
-            : {}),
-        };
+        const baseContext = context
+          ? {
+              ...context,
+              ...(context.suspend
+                ? {
+                    suspend: (args: any) => {
+                      suspendCalled = true;
+                      return context.suspend?.(args);
+                    },
+                  }
+                : {}),
+            }
+          : {};
 
         // Organize context based on execution source
         let organizedContext = baseContext;
@@ -210,7 +212,7 @@ export class Tool<
             // Ensure requestContext is always present even for direct execution
             organizedContext = {
               ...baseContext,
-              ...(baseContext.agent
+              agent: baseContext.agent
                 ? {
                     ...baseContext.agent,
                     suspend: (args: any) => {
@@ -218,8 +220,8 @@ export class Tool<
                       return baseContext.agent?.suspend?.(args);
                     },
                   }
-                : {}),
-              ...(baseContext.workflow
+                : baseContext.agent,
+              workflow: baseContext.workflow
                 ? {
                     ...baseContext.workflow,
                     suspend: (args: any) => {
@@ -227,7 +229,7 @@ export class Tool<
                       return baseContext.workflow?.suspend?.(args);
                     },
                   }
-                : {}),
+                : baseContext.workflow,
               requestContext: baseContext.requestContext || new RequestContext(),
             };
           }
@@ -237,12 +239,7 @@ export class Tool<
         const output = await originalExecute(data as any, organizedContext);
 
         // Validate output if schema exists
-        const outputValidation = validateToolOutput(
-          this.outputSchema,
-          output,
-          this.id,
-          suspendCalled || typeof output === 'undefined',
-        );
+        const outputValidation = validateToolOutput(this.outputSchema, output, this.id, suspendCalled);
         if (outputValidation.error) {
           return outputValidation.error as any;
         }
