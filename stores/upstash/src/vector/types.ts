@@ -1,4 +1,4 @@
-import type { UpsertVectorParams, QueryVectorParams, UpdateVectorParams } from '@mastra/core/vector';
+import type { UpsertVectorParams, QueryVectorParams } from '@mastra/core/vector';
 import type { FusionAlgorithm, QueryMode } from '@upstash/vector';
 import type { UpstashVectorFilter } from './filter';
 
@@ -17,10 +17,24 @@ export interface UpstashQueryVectorParams extends QueryVectorParams<UpstashVecto
   queryMode?: QueryMode;
 }
 
-export interface UpstashUpdateVectorParams extends UpdateVectorParams {
-  update: {
-    vector?: number[];
-    metadata?: Record<string, any>;
-    sparseVector?: UpstashSparseVector;
-  };
-}
+export type UpstashUpdateVectorParams =
+  | {
+      indexName: string;
+      id: string;
+      filter?: never;
+      update: {
+        vector?: number[];
+        metadata?: Record<string, any>;
+        sparseVector?: UpstashSparseVector;
+      };
+    }
+  | {
+      indexName: string;
+      id?: never;
+      filter: UpstashVectorFilter;
+      update: {
+        vector?: number[];
+        metadata?: Record<string, any>;
+        sparseVector?: UpstashSparseVector;
+      };
+    };

@@ -16,7 +16,7 @@ You'll create a workflow that gathers information from a candidate's resume, the
 
 - Node.js `v22.13.0` or later installed
 - An API key from a supported [Model Provider](/models/v1)
-- An existing Mastra project (Follow the [installation guide](/docs/v1/getting-started/installation) to set up a new project)
+- An existing Mastra project (Follow the [installation guide](/guides/v1/quickstarts/standalone-server) to set up a new project)
 
 ## Building the Workflow
 
@@ -58,13 +58,12 @@ To the existing `src/mastra/workflows/candidate-workflow.ts` file add the follow
 
 ```ts copy title="src/mastra/workflows/candidate-workflow.ts"
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 
 const recruiter = new Agent({
   id: "recruiter-agent",
   name: "Recruiter Agent",
   instructions: `You are a recruiter.`,
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-5.1",
 });
 
 const gatherCandidateInfo = createStep({

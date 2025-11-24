@@ -44,12 +44,26 @@ const createBasicOperator = (symbol: string) => {
   };
 };
 const createNumericOperator = (symbol: string) => {
-  return (key: string): FilterOperator => {
+  return (key: string, value: any): FilterOperator => {
     const jsonPath = getJsonPath(key);
-    return {
-      sql: `CAST(json_extract(metadata, ${jsonPath}) AS NUMERIC) ${symbol} ?`,
-      needsValue: true,
-    };
+
+    // Check if the value is numeric or a string (like ISO date)
+    const isNumeric =
+      typeof value === 'number' || (typeof value === 'string' && !isNaN(Number(value)) && value.trim() !== '');
+
+    if (isNumeric) {
+      // For numeric values, cast to NUMERIC for proper comparison
+      return {
+        sql: `CAST(json_extract(metadata, ${jsonPath}) AS NUMERIC) ${symbol} ?`,
+        needsValue: true,
+      };
+    } else {
+      // For non-numeric strings (like ISO dates), compare as text
+      return {
+        sql: `CAST(json_extract(metadata, ${jsonPath}) AS TEXT) ${symbol} ?`,
+        needsValue: true,
+      };
+    }
   };
 };
 

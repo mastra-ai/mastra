@@ -19,7 +19,7 @@ When building a web search agent, you have two main strategies to consider:
 
 - Node.js `v22.13.0` or later installed
 - An API key from a supported [Model Provider](/models/v1)
-- An existing Mastra project (Follow the [installation guide](/docs/v1/getting-started/installation) to set up a new project)
+- An existing Mastra project (Follow the [installation guide](/guides/v1/quickstarts/standalone-server) to set up a new project)
 
 ## Using native search tools
 
@@ -61,7 +61,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
-        model: 'openai/gpt-4o-mini',
+        model: "openai/gpt-5.1",
     });
     ```
 
@@ -76,7 +76,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
-        model: 'google/gemini-2.5-flash',
+        model: "google/gemini-2.5-flash",
     });
     ```
 
@@ -93,7 +93,7 @@ Setup the tool:
 <Tabs>
     <TabItem value="openai" label="Open AI">
 
-    ```ts copy title="src/mastra/agents/searchAgent.ts" {9-11}
+    ```ts copy title="src/mastra/agents/searchAgent.ts" {9-12}
     import { openai } from "@ai-sdk/openai";
     import { Agent } from "@mastra/core/agent";
 
@@ -102,7 +102,7 @@ Setup the tool:
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
-        model: 'openai/gpt-4o-mini',
+        model: "openai/gpt-5.1",
         tools: {
             webSearch: openai.tools.webSearch()
         }
@@ -112,7 +112,7 @@ Setup the tool:
     </TabItem>
     <TabItem value="gemini" label="Gemini">
 
-    ```ts copy title="src/mastra/agents/searchAgent.ts" {9-11}
+    ```ts copy title="src/mastra/agents/searchAgent.ts" {9-14}
     import { google } from "@ai-sdk/google";
     import { Agent } from "@mastra/core/agent";
 
@@ -121,9 +121,11 @@ Setup the tool:
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
-        model: 'google/gemini-2.5-flash',
+        model: "google/gemini-2.5-flash",
         tools: {
-            webSearch: google.tools.googleSearch()
+          webSearch: google.tools.googleSearch({
+            mode: "MODE_DYNAMIC"
+          })
         }
     });
     ```
@@ -191,7 +193,7 @@ export const searchAgent = new Agent({
   name: "Search Agent",
   instructions:
     "You are a search agent that can search the web for information.",
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
 });
 ```
 
@@ -252,7 +254,7 @@ export const searchAgent = new Agent({
   name: "Search Agent",
   instructions:
     "You are a search agent that can search the web for information.",
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   tools: {
     webSearch,
   },

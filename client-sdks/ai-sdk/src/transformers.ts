@@ -1,7 +1,7 @@
 import type { LLMStepResult } from '@mastra/core/agent';
 import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '@mastra/core/workflows';
-import type { InferUIMessageChunk, UIMessage } from 'ai';
+import type { InferUIMessageChunk, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai';
 import type { ZodType } from 'zod';
 import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from './helpers';
 import {
@@ -154,28 +154,45 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>({
   sendFinish,
   sendReasoning,
   sendSources,
+  messageMetadata,
+  onError,
 }: {
   lastMessageId?: string;
   sendStart?: boolean;
   sendFinish?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
+  messageMetadata?: UIMessageStreamOptions<UIMessage>['messageMetadata'];
+  onError?: UIMessageStreamOptions<UIMessage>['onError'];
 }) {
   let bufferedSteps = new Map<string, any>();
+  let tripwireOccurred = false;
+  let finishEventSent = false;
 
   return new TransformStream<ChunkType<TOutput>, object>({
     transform(chunk, controller) {
+      // Track if tripwire occurred
+      if (chunk.type === 'tripwire') {
+        tripwireOccurred = true;
+      }
+
+      // Track if finish event was sent
+      if (chunk.type === 'finish') {
+        finishEventSent = true;
+      }
+
       const part = convertMastraChunkToAISDKv5({ chunk, mode: 'stream' });
 
       const transformedChunk = convertFullStreamChunkToUIMessageStream<any>({
         part: part as any,
         sendReasoning,
         sendSources,
+        messageMetadataValue: messageMetadata?.({ part: part as TextStreamPart<ToolSet> }),
         sendStart,
         sendFinish,
         responseMessageId: lastMessageId,
         onError(error) {
-          return safeParseErrorObject(error);
+          return onError ? onError(error) : safeParseErrorObject(error);
         },
       });
 
@@ -195,6 +212,17 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>({
         } else {
           controller.enqueue(transformedChunk);
         }
+      }
+    },
+    flush(controller) {
+      // If tripwire occurred but no finish event was sent, send a finish event with 'other' reason
+      if (tripwireOccurred && !finishEventSent && sendFinish) {
+        // Send a finish event with finishReason 'other' to ensure graceful stream completion
+        // AI SDK doesn't support tripwires, so we use 'other' as the finish reason
+        controller.enqueue({
+          type: 'finish',
+          finishReason: 'other',
+        } as any);
       }
     },
   });

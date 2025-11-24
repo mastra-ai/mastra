@@ -1,6 +1,6 @@
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { getProvidersHandler } from './agents';
+import { GET_PROVIDERS_ROUTE } from './agents';
 
 describe('getProvidersHandler', () => {
   // Store original env
@@ -17,7 +17,7 @@ describe('getProvidersHandler', () => {
   });
 
   it('should return all providers from the registry', async () => {
-    const result = await getProvidersHandler();
+    const result = await GET_PROVIDERS_ROUTE.handler({});
 
     expect(result).toHaveProperty('providers');
     expect(Array.isArray(result.providers)).toBe(true);
@@ -41,7 +41,7 @@ describe('getProvidersHandler', () => {
     process.env.OPENAI_API_KEY = 'test-key';
     process.env.ANTHROPIC_API_KEY = 'test-key';
 
-    const result = await getProvidersHandler();
+    const result = await GET_PROVIDERS_ROUTE.handler({});
 
     const openaiProvider = result.providers.find(p => p.id === 'openai');
     const anthropicProvider = result.providers.find(p => p.id === 'anthropic');
@@ -61,7 +61,7 @@ describe('getProvidersHandler', () => {
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.GOOGLE_API_KEY;
 
-    const result = await getProvidersHandler();
+    const result = await GET_PROVIDERS_ROUTE.handler({});
 
     const openaiProvider = result.providers.find(p => p.id === 'openai');
     const anthropicProvider = result.providers.find(p => p.id === 'anthropic');
@@ -74,7 +74,7 @@ describe('getProvidersHandler', () => {
   });
 
   it('should include the correct env var name for each provider', async () => {
-    const result = await getProvidersHandler();
+    const result = await GET_PROVIDERS_ROUTE.handler({});
 
     const openaiProvider = result.providers.find(p => p.id === 'openai');
     const anthropicProvider = result.providers.find(p => p.id === 'anthropic');
@@ -84,7 +84,7 @@ describe('getProvidersHandler', () => {
   });
 
   it('should include models for each provider', async () => {
-    const result = await getProvidersHandler();
+    const result = await GET_PROVIDERS_ROUTE.handler({});
 
     const openaiProvider = result.providers.find(p => p.id === 'openai');
 
@@ -98,7 +98,7 @@ describe('getProvidersHandler', () => {
   });
 
   it('should match the structure of PROVIDER_REGISTRY', async () => {
-    const result = await getProvidersHandler();
+    const result = await GET_PROVIDERS_ROUTE.handler({});
 
     // Number of providers should match the registry
     const registryProviderCount = Object.keys(PROVIDER_REGISTRY).length;

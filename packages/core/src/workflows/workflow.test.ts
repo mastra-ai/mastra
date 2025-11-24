@@ -2,13 +2,13 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
-import { MockLanguageModelV2 } from 'ai-v5/test';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { z as zv4 } from 'zod-v4';
 import { Agent } from '../agent';
 import { RequestContext } from '../di';
 import { MastraError } from '../error';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { Mastra } from '../mastra';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 import { MockStore } from '../storage/mock';
@@ -1730,7 +1730,7 @@ describe('Workflow', () => {
       }
 
       const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
-      const errStreamResult = run.resumeStreamVNext({ resumeData: resumeData as any, step: getUserInput });
+      const errStreamResult = run.resumeStreamVNext({ resumeData, step: getUserInput });
       for await (const _data of errStreamResult.fullStream) {
       }
 
@@ -1743,10 +1743,10 @@ describe('Workflow', () => {
         );
       }
 
-      streamResult = run.resumeStreamVNext({ resumeData: resumeData as any, step: promptAgent });
+      streamResult = run.resumeStreamVNext({ resumeData, step: promptAgent });
       console.log('created stream');
       for await (const _data of streamResult.fullStream) {
-        console.log('data===', _data);
+        // console.log('data===', _data);
       }
 
       expect(evaluateToneAction).toHaveBeenCalledTimes(1);
@@ -2008,7 +2008,7 @@ describe('Workflow', () => {
       let result = await streamResult.result;
 
       const resumeData = { userInput: 'test input for resumption' };
-      streamResult = run.resumeStreamVNext({ resumeData: resumeData as any, step: promptAgent });
+      streamResult = run.resumeStreamVNext({ resumeData, step: promptAgent });
       for await (const data of streamResult.fullStream) {
         if (data.type === 'workflow-step-output') {
           expect(data.payload.output).toMatchObject({
