@@ -12,7 +12,7 @@ import { publishPackages } from '../_local-registry-setup/publish';
 export default async function setup(project: TestProject) {
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const rootDir = join(__dirname, '..', '..');
-  const tag = 'monorepo-test';
+  const tag = 'no-bundling-test';
   const teardown = await prepareMonorepo(rootDir, globby, tag);
 
   const verdaccioPath = require.resolve('verdaccio/bin/verdaccio');
