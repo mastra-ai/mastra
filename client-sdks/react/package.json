@@ -44,6 +44,7 @@
   ],
   "dependencies": {
     "@mastra/client-js": "workspace:*",
+    "@lukeed/uuid": "^2.0.1",
     "@radix-ui/react-tooltip": "^1.2.7",
     "hast-util-to-jsx-runtime": "^2.3.6",
     "lucide-react": "^0.522.0",
