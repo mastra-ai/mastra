@@ -12,7 +12,7 @@ export { NetlifyGateway } from './netlify.js';
 export function findGatewayForModel(gatewayId: string, gateways: MastraModelGateway[]): MastraModelGateway {
   // First, check for gateways whose ID matches the prefix (true gateways like netlify, openrouter, vercel)
   const prefixedGateway = gateways.find(
-    (g: MastraModelGateway) => g.id !== 'models.dev' && gatewayId.startsWith(`${g.id}/`),
+    (g: MastraModelGateway) => g.id !== 'models.dev' && (g.id === gatewayId || gatewayId.startsWith(`${g.id}/`)),
   );
   if (prefixedGateway) {
     return prefixedGateway;
