@@ -101,7 +101,9 @@ export function workflowRoute({
       if (requestContext && rest.requestContext) {
         mastra
           .getLogger()
-          ?.warn(`"requestContext" set in the route options will be overridden by the request's "requestContext".`);
+          ?.warn(
+            `"requestContext" from the request body will be ignored because "requestContext" is already set in the route options.`,
+          );
       }
 
       const run = await workflowObj.createRun({ runId, resourceId, ...rest });
