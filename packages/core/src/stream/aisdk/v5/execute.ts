@@ -1,10 +1,11 @@
 import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils-v5';
-import type { LanguageModelV2, LanguageModelV2Prompt, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2Prompt, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
 import { APICallError } from 'ai-v5';
 import type { CallSettings, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
 import type { StructuredOutputOptions } from '../../../agent/types';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
+import type { MastraLanguageModelV2 } from '../../../llm/model/shared.types';
 import { getResponseFormat } from '../../base/schema';
 import type { OutputSchema } from '../../base/schema';
 import type { LanguageModelV2StreamResult, OnResult } from '../../types';
@@ -21,7 +22,7 @@ function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K
 
 type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   runId: string;
-  model: LanguageModelV2;
+  model: MastraLanguageModelV2;
   providerOptions?: SharedV2ProviderOptions;
   inputMessages: LanguageModelV2Prompt;
   tools?: ToolSet;
@@ -68,6 +69,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
   structuredOutput,
   headers,
   shouldThrowError,
+  methodType,
 }: ExecutionProps<OUTPUT>) {
   // Deprecation warning for modelSettings.abortSignal
   if (modelSettings?.abortSignal && !hasLoggedModelSettingsAbortSignalDeprecation) {
@@ -153,7 +155,9 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
         const pRetry = await import('p-retry');
         return await pRetry.default(
           async () => {
-            const streamResult = await model.doStream({
+            const fn = (methodType === 'stream' ? model.doStream : model.doGenerate).bind(model);
+
+            const streamResult = await fn({
               ...toolsAndToolChoice,
               prompt,
               providerOptions: providerOptionsToUse,

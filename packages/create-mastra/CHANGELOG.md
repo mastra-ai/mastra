@@ -1,5 +1,29 @@
 # create-mastra
 
+## 0.18.5
+
+## 0.18.5-alpha.0
+
+## 0.18.4
+
+## 0.18.4-alpha.0
+
+## 0.18.3
+
+### Patch Changes
+
+- fix: detect bun runtime and cleanup on failure ([#10307](https://github.com/mastra-ai/mastra/pull/10307))
+
+## 0.18.3-alpha.0
+
+### Patch Changes
+
+- fix: detect bun runtime and cleanup on failure ([#10307](https://github.com/mastra-ai/mastra/pull/10307))
+
+## 0.18.2
+
+## 0.18.2-alpha.0
+
 ## 0.18.1
 
 ## 0.18.1-alpha.0

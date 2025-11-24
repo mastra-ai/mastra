@@ -244,8 +244,8 @@ describe('createVectorQueryTool', () => {
 
       const stringFilter = 'string-filter';
 
-      // Execute with string filter
-      await tool.execute?.({
+      // Execute with string filter - should throw an error for invalid JSON
+      const result = await tool.execute?.({
         context: {
           queryText: 'test query',
           topK: 5,
@@ -255,12 +255,9 @@ describe('createVectorQueryTool', () => {
         runtimeContext,
       });
 
-      // Since this is not a valid filter, it should be ignored
-      expect(vectorQuerySearch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          queryFilter: undefined,
-        }),
-      );
+      // Since this is not a valid JSON filter, the error is caught and returns empty results
+      expect(result).toEqual({ relevantContext: [], sources: [] });
+      expect(vectorQuerySearch).not.toHaveBeenCalled();
     });
 
     it('Returns early when no Mastra server or vector store is provided', async () => {

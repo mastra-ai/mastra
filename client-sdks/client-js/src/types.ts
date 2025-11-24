@@ -80,6 +80,7 @@ export type NetworkStreamParams = {
 } & MultiPrimitiveExecutionOptions;
 export interface GetAgentResponse {
   name: string;
+  description?: string;
   instructions: AgentInstructions;
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;

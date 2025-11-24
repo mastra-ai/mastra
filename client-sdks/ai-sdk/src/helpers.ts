@@ -8,6 +8,7 @@ import { isDataChunkType } from './utils';
 export type OutputChunkType<OUTPUT extends OutputSchema = undefined> =
   | TextStreamPart<ToolSet>
   | ObjectStreamPart<PartialSchemaOutput<OUTPUT>>
+  | DataChunkType
   | undefined;
 
 export type ToolAgentChunkType = { type: 'tool-agent'; toolCallId: string; payload: any };
@@ -127,6 +128,28 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
         toolName: chunk.payload.toolName,
         input: chunk.payload.args,
       };
+    case 'tool-call-approval':
+      return {
+        type: 'data-tool-call-approval',
+        id: chunk.payload.toolCallId,
+        data: {
+          runId: chunk.runId,
+          toolCallId: chunk.payload.toolCallId,
+          toolName: chunk.payload.toolName,
+          args: chunk.payload.args,
+        },
+      } satisfies DataChunkType;
+    case 'tool-call-suspended':
+      return {
+        type: 'data-tool-call-suspended',
+        id: chunk.payload.toolCallId,
+        data: {
+          runId: chunk.runId,
+          toolCallId: chunk.payload.toolCallId,
+          toolName: chunk.payload.toolName,
+          suspendPayload: chunk.payload.suspendPayload,
+        },
+      } satisfies DataChunkType;
     case 'tool-call-input-streaming-start':
       return {
         type: 'tool-input-start',
@@ -220,7 +243,13 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
         type: 'object',
         object: chunk.object,
       };
-
+    case 'tripwire':
+      return {
+        type: 'data-tripwire',
+        data: {
+          tripwireReason: chunk.payload.tripwireReason,
+        },
+      };
     default:
       if (chunk.type && 'payload' in chunk && chunk.payload) {
         return {

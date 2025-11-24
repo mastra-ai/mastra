@@ -1,5 +1,77 @@
 # mastra
 
+## 0.18.5
+
+### Patch Changes
+
+- Updated dependencies [[`880f12b`](https://github.com/mastra-ai/mastra/commit/880f12bb45a3d49faf8d22969744ffb6e01c66fd)]:
+  - @mastra/core@0.24.5
+  - @mastra/deployer@0.24.5
+
+## 0.18.5-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`880f12b`](https://github.com/mastra-ai/mastra/commit/880f12bb45a3d49faf8d22969744ffb6e01c66fd)]:
+  - @mastra/core@0.24.5-alpha.0
+  - @mastra/deployer@0.24.5-alpha.0
+
+## 0.18.4
+
+### Patch Changes
+
+- Updated dependencies [[`418420f`](https://github.com/mastra-ai/mastra/commit/418420fc10a9e2b95c7bae0e1dd08876bb7aa473)]:
+  - @mastra/core@0.24.4
+  - @mastra/deployer@0.24.4
+
+## 0.18.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`418420f`](https://github.com/mastra-ai/mastra/commit/418420fc10a9e2b95c7bae0e1dd08876bb7aa473)]:
+  - @mastra/core@0.24.4-alpha.0
+  - @mastra/deployer@0.24.4-alpha.0
+
+## 0.18.3
+
+### Patch Changes
+
+- fix: detect bun runtime and cleanup on failure ([#10307](https://github.com/mastra-ai/mastra/pull/10307))
+
+- Updated dependencies [[`7491cc0`](https://github.com/mastra-ai/mastra/commit/7491cc0350b2ba067f98c4915bf607119bd0150f), [`0d10ac7`](https://github.com/mastra-ai/mastra/commit/0d10ac7b8efa03c2f0c330eb2520148bfa6091e9), [`e3e899c`](https://github.com/mastra-ai/mastra/commit/e3e899c650f4c435445303bd97a66f5840a52a1e)]:
+  - @mastra/core@0.24.3
+  - @mastra/deployer@0.24.3
+
+## 0.18.3-alpha.0
+
+### Patch Changes
+
+- fix: detect bun runtime and cleanup on failure ([#10307](https://github.com/mastra-ai/mastra/pull/10307))
+
+- Updated dependencies [[`7491cc0`](https://github.com/mastra-ai/mastra/commit/7491cc0350b2ba067f98c4915bf607119bd0150f), [`0d10ac7`](https://github.com/mastra-ai/mastra/commit/0d10ac7b8efa03c2f0c330eb2520148bfa6091e9), [`e3e899c`](https://github.com/mastra-ai/mastra/commit/e3e899c650f4c435445303bd97a66f5840a52a1e)]:
+  - @mastra/core@0.24.3-alpha.0
+  - @mastra/deployer@0.24.3-alpha.0
+
+## 0.18.2
+
+### Patch Changes
+
+- Add support to skip dotenv/env file loading by adding MASTRA_SKIP_DOTENV ([#10246](https://github.com/mastra-ai/mastra/pull/10246))
+
+- Updated dependencies [[`eebb7bb`](https://github.com/mastra-ai/mastra/commit/eebb7bb407c57342a3be3a2efbe68c696589feeb), [`c6e6d07`](https://github.com/mastra-ai/mastra/commit/c6e6d071ecf346a80dceab410af2c567c7e66a57), [`0e6df8f`](https://github.com/mastra-ai/mastra/commit/0e6df8f66340992cb1b319834657deb17368de52), [`6295fd7`](https://github.com/mastra-ai/mastra/commit/6295fd783d49075d5bf2c18ff9486e94d36aaa56), [`d813cf7`](https://github.com/mastra-ai/mastra/commit/d813cf7251695d85cc60469058384ffa74974484)]:
+  - @mastra/core@0.24.2
+  - @mastra/deployer@0.24.2
+
+## 0.18.2-alpha.0
+
+### Patch Changes
+
+- Add support to skip dotenv/env file loading by adding MASTRA_SKIP_DOTENV ([#10246](https://github.com/mastra-ai/mastra/pull/10246))
+
+- Updated dependencies [[`eebb7bb`](https://github.com/mastra-ai/mastra/commit/eebb7bb407c57342a3be3a2efbe68c696589feeb), [`c6e6d07`](https://github.com/mastra-ai/mastra/commit/c6e6d071ecf346a80dceab410af2c567c7e66a57), [`0e6df8f`](https://github.com/mastra-ai/mastra/commit/0e6df8f66340992cb1b319834657deb17368de52), [`6295fd7`](https://github.com/mastra-ai/mastra/commit/6295fd783d49075d5bf2c18ff9486e94d36aaa56), [`d813cf7`](https://github.com/mastra-ai/mastra/commit/d813cf7251695d85cc60469058384ffa74974484)]:
+  - @mastra/core@0.24.2-alpha.0
+  - @mastra/deployer@0.24.2-alpha.0
+
 ## 0.18.1
 
 ### Patch Changes
