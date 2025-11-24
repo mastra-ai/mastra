@@ -35,6 +35,7 @@ export default async function setup(project: TestProject) {
       '--filter="@mastra/loggers"',
       '--filter="@mastra/evals"',
       '--filter="@mastra/observability"',
+      '--filter="@mastra/deployer"',
     ],
     tag,
     rootDir,
