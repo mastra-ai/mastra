@@ -682,7 +682,7 @@ export class InngestRun<
               ...payload,
             },
           } as WorkflowStreamEvent);
-        });
+        }, 'watch-v2');
 
         self.closeStreamAction = async () => {
           unwatch();

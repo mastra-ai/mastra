@@ -147,10 +147,10 @@ export function WorkflowTrigger({
 
   const suspendedSteps = Object.entries(streamResultToUse?.steps || {})
     .filter(([_, { status }]) => status === 'suspended')
-    .map(([stepId, { payload }]) => ({
+    .map(([stepId, { suspendPayload }]) => ({
       stepId,
       runId: innerRunId,
-      suspendPayload: payload,
+      suspendPayload,
       isLoading: false,
     }));
 

@@ -1448,6 +1448,7 @@ export class Workflow<
       payload: (snapshot as WorkflowRunState).context?.input,
       steps: fullSteps as any,
       activeStepsPath: (snapshot as WorkflowRunState).activeStepsPath,
+      serializedStepGraph: (snapshot as WorkflowRunState).serializedStepGraph,
     };
   }
 }
@@ -2879,7 +2880,7 @@ export class Run<
               ...payload,
             },
           } as WorkflowStreamEvent);
-        });
+        }, 'watch-v2');
 
         self.closeStreamAction = async () => {
           unwatch();

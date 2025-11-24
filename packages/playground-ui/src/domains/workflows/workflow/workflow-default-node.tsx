@@ -110,6 +110,7 @@ export function WorkflowDefaultNode({
           runId={runId}
           onSendEvent={onSendEvent}
           status={step?.status}
+          stepKey={fullLabel}
         />
       </div>
 
