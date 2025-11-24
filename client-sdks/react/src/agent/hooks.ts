@@ -48,7 +48,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
   const extractRunIdFromMessages = (messages: ExtendedMastraUIMessage[]): string | undefined => {
     for (const message of messages) {
       const pendingToolApprovals = message.metadata?.pendingToolApprovals as Record<string, any> | undefined;
-      if (pendingToolApprovals) {
+      if (pendingToolApprovals && typeof pendingToolApprovals === 'object') {
         const suspensionData = Object.values(pendingToolApprovals)[0];
         if (suspensionData?.runId) {
           return suspensionData.runId;

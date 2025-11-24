@@ -309,7 +309,9 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
           const toolName =
             'toolName' in toolPart && typeof toolPart.toolName === 'string'
               ? toolPart.toolName
-              : toolPart.type.substring(5);
+              : toolPart.type.startsWith('tool-')
+                ? toolPart.type.substring(5)
+                : '';
 
           const toolCallId = (toolPart as any).toolCallId;
 

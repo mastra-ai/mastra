@@ -18,16 +18,18 @@ import type {
   ModelManagerModelConfig,
 } from '../stream/types';
 import type { MastraIdGenerator } from '../types';
+import type { MastraMemory, MemoryConfig } from '../memory';
+import type { SaveQueueManager } from '../agent/save-queue';
 
 export type StreamInternal = {
   now?: () => number;
   generateId?: IdGenerator;
   currentDate?: () => Date;
-  saveQueueManager?: any; // SaveQueueManager from agent/save-queue
-  memoryConfig?: any; // MemoryConfig from memory/types
+  saveQueueManager?: SaveQueueManager; // SaveQueueManager from agent/save-queue
+  memoryConfig?: MemoryConfig; // MemoryConfig from memory/types
   threadId?: string;
   resourceId?: string;
-  memory?: any; // MastraMemory from memory/memory
+  memory?: MastraMemory; // MastraMemory from memory/memory
   threadExists?: boolean;
 };
 

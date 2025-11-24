@@ -32,6 +32,8 @@ export function createToolCallStep<
         const lastAssistantMessage = [...responseMessages].reverse().find(msg => msg.role === 'assistant');
 
         if (lastAssistantMessage) {
+          const content = lastAssistantMessage.content;
+          if (!content) return;
           // Add metadata to indicate this tool call is pending approval
           const metadata = (lastAssistantMessage.content.metadata || {}) as Record<string, any>;
           metadata.pendingToolApprovals = metadata.pendingToolApprovals || {};
@@ -62,7 +64,7 @@ export function createToolCallStep<
           const metadata = lastAssistantMessage.content.metadata as Record<string, any> | undefined;
           const pendingToolApprovals = metadata?.pendingToolApprovals as Record<string, any> | undefined;
 
-          if (pendingToolApprovals) {
+          if (pendingToolApprovals && typeof pendingToolApprovals === 'object') {
             delete pendingToolApprovals[toolCallId];
 
             // If no more pending suspensions, remove the whole object
@@ -85,6 +87,7 @@ export function createToolCallStep<
         const { saveQueueManager, memoryConfig, threadId, resourceId, memory } = _internal || {};
 
         if (!saveQueueManager || !threadId) {
+          console.warn('flushMessagesBeforeSuspension: saveQueueManager or threadId is missing');
           return;
         }
 
