@@ -146,7 +146,7 @@ describe('PgVector', () => {
 
     it('should throw error when pool is used after disconnect', async () => {
       await testDB.disconnect();
-      expect(testDB.pool.connect()).rejects.toThrow();
+      await expect(testDB.pool.connect()).rejects.toThrow();
     });
   });
 
@@ -3692,7 +3692,7 @@ describe('PgVector Metadata Filtering', () => {
     vector: metadataVectorDB,
     createIndex: async (indexName: string) => {
       // Using dimension 4 as required by the metadata filtering test vectors
-      await metadataVectorDB.createIndex({ indexName, dimension: 4 });
+      await metadataVectorDB.createIndex({ indexName, dimension: 1536 });
     },
     deleteIndex: async (indexName: string) => {
       await metadataVectorDB.deleteIndex({ indexName });

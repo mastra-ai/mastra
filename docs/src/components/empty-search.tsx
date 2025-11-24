@@ -5,7 +5,7 @@ export const searches = [
   {
     label: "Quickstart",
     description: "Get up and running with Mastra AI",
-    link: "/docs/v1/getting-started/installation",
+    link: "/docs/v1/getting-started/quickstart",
   },
   {
     label: "Agents",

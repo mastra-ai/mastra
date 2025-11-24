@@ -4,7 +4,7 @@ import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
-import { SpanType, wrapMastra } from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
 import type { TracingContext, TracingOptions } from '@mastra/core/observability';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import { ChunkFrom, WorkflowRunOutput } from '@mastra/core/stream';
@@ -44,6 +44,8 @@ import type {
   WorkflowEngineType,
   TimeTravelExecutionParams,
   TimeTravelContext,
+  StepParams,
+  ToolStep,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import { NonRetriableError, RetryAfterError } from 'inngest';
@@ -1113,23 +1115,9 @@ export function createStep<
   TStepOutput extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
   TSuspendSchema extends z.ZodType<any>,
->(params: {
-  id: TStepId;
-  description?: string;
-  inputSchema: TStepInput;
-  outputSchema: TStepOutput;
-  resumeSchema?: TResumeSchema;
-  suspendSchema?: TSuspendSchema;
-  stateSchema?: TState;
-  execute: ExecuteFunction<
-    z.infer<TState>,
-    z.infer<TStepInput>,
-    z.infer<TStepOutput>,
-    z.infer<TResumeSchema>,
-    z.infer<TSuspendSchema>,
-    InngestEngineType
-  >;
-}): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>;
+>(
+  params: StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>,
+): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>;
 
 export function createStep<
   TStepId extends string,
@@ -1149,11 +1137,7 @@ export function createStep<
   TSchemaOut extends z.ZodType<any>,
   TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
 >(
-  tool: Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
-    inputSchema: TSchemaIn;
-    outputSchema: TSchemaOut;
-    execute: (input: z.infer<TSchemaIn>, context: TContext) => Promise<z.infer<TSchemaOut>>;
-  },
+  tool: ToolStep<TSchemaIn, TSuspendSchema, TResumeSchema, TSchemaOut, TContext>,
 ): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, InngestEngineType>;
 export function createStep<
   TStepId extends string,
@@ -1164,28 +1148,9 @@ export function createStep<
   TSuspendSchema extends z.ZodType<any>,
 >(
   params:
-    | {
-        id: TStepId;
-        description?: string;
-        inputSchema: TStepInput;
-        outputSchema: TStepOutput;
-        resumeSchema?: TResumeSchema;
-        suspendSchema?: TSuspendSchema;
-        execute: ExecuteFunction<
-          z.infer<TState>,
-          z.infer<TStepInput>,
-          z.infer<TStepOutput>,
-          z.infer<TResumeSchema>,
-          z.infer<TSuspendSchema>,
-          InngestEngineType
-        >;
-      }
+    | StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>
     | Agent<any, any>
-    | (Tool<TStepInput, TStepOutput, any> & {
-        inputSchema: TStepInput;
-        outputSchema: TStepOutput;
-        execute: (context: ToolExecutionContext<TStepInput>) => Promise<any>;
-      }),
+    | ToolStep<TStepInput, TSuspendSchema, TResumeSchema, TStepOutput, any>,
   agentOptions?: AgentStepOptions,
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType> {
   if (isAgent(params)) {
@@ -1303,15 +1268,33 @@ export function createStep<
       description: params.description,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
-      execute: async ({ inputData, mastra, requestContext, tracingContext, suspend, resumeData }) => {
-        return params.execute({
-          context: inputData,
-          mastra: wrapMastra(mastra, tracingContext),
+      execute: async ({
+        inputData,
+        mastra,
+        requestContext,
+        tracingContext,
+        suspend,
+        resumeData,
+        runId,
+        workflowId,
+        state,
+        setState,
+      }) => {
+        // BREAKING CHANGE v1.0: Pass raw input as first arg, context as second
+        const toolContext = {
+          mastra,
           requestContext,
           tracingContext,
-          suspend,
           resumeData,
-        });
+          workflow: {
+            runId,
+            suspend,
+            workflowId,
+            state,
+            setState,
+          },
+        };
+        return params.execute(inputData, toolContext);
       },
       component: 'TOOL',
     };
@@ -1364,6 +1347,8 @@ export function init(inngest: Inngest) {
         suspendSchema: step.suspendSchema,
         stateSchema: step.stateSchema,
         execute: step.execute,
+        retries: step.retries,
+        scorers: step.scorers,
         component: step.component,
       };
     },
@@ -1743,7 +1728,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     const { inputData, validationError } = await validateStepInput({
       prevOutput,
       step,
-      validateInputs: this.options?.validateInputs ?? false,
+      validateInputs: this.options?.validateInputs ?? true,
     });
 
     const startedAt = await this.inngestStep.run(
@@ -2007,10 +1992,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             throw validationError;
           }
 
+          const retryCount = this.getOrGenerateRetryCount(step.id);
+
           const result = await step.execute({
             runId: executionContext.runId,
+            workflowId: executionContext.workflowId,
             mastra: this.mastra!,
             requestContext,
+            retryCount,
             writer: new ToolStream(
               {
                 prefix: 'workflow-step',
@@ -2049,11 +2038,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             bail: (result: any) => {
               bailed = { payload: result };
             },
-            resume: {
-              steps: resume?.steps?.slice(1) || [],
-              resumePayload: resume?.resumePayload,
-              // @ts-ignore
-              runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
+            abort: () => {
+              abortController?.abort();
             },
             [EMITTER_SYMBOL]: emitter,
             [STREAM_FORMAT_SYMBOL]: executionContext.format,
@@ -2185,7 +2171,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     }
 
     Object.assign(executionContext.suspendedPaths, stepRes.executionContext.suspendedPaths);
-    Object.assign(stepResults, stepRes.stepResults);
     executionContext.state = stepRes.executionContext.state;
 
     return stepRes.result as StepResult<any, any, any, any>;

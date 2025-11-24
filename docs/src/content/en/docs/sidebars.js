@@ -23,8 +23,8 @@ const sidebars = {
       items: [
         {
           type: "doc",
-          id: "getting-started/installation",
-          label: "Installation",
+          id: "getting-started/quickstart",
+          label: "Quickstart",
         },
         {
           type: "doc",
@@ -402,11 +402,6 @@ const sidebars = {
       ],
     },
     {
-      type: "doc",
-      id: "logging",
-      label: "Logging",
-    },
-    {
       type: "category",
       label: "Observability",
       items: [
@@ -415,6 +410,11 @@ const sidebars = {
           id: "observability/overview",
           key: "observability.overview",
           label: "Overview",
+        },
+        {
+          type: "doc",
+          id: "observability/logging",
+          label: "Logging",
         },
         {
           type: "category",
@@ -586,7 +586,7 @@ const sidebars = {
             {
               type: "doc",
               id: "frameworks/agentic-uis/ai-sdk",
-              label: "With Vercel AI SDK",
+              label: "With AI SDK",
             },
             {
               type: "doc",

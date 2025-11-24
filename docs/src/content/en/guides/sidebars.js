@@ -15,6 +15,11 @@ const sidebars = {
       items: [
         {
           type: "doc",
+          id: "quickstarts/standalone-server",
+          label: "Standalone Server",
+        },
+        {
+          type: "doc",
           id: "quickstarts/nextjs",
           label: "Next.js",
         },
@@ -54,6 +59,11 @@ const sidebars = {
           type: "doc",
           id: "guide/web-search",
           label: "Tools: Web Search",
+        },
+        {
+          type: "doc",
+          id: "guide/manual-install",
+          label: "Manual Install",
         },
       ],
     },
@@ -146,12 +156,17 @@ const sidebars = {
         {
           type: "doc",
           id: "migrations/vnext-to-standard-apis",
-          label: "VNext to Standard APIs",
+          label: "VNext → Standard APIs",
         },
         {
           type: "doc",
           id: "migrations/agentnetwork",
-          label: "AgentNetwork to .network()",
+          label: "AgentNetwork → .network()",
+        },
+        {
+          type: "doc",
+          id: "migrations/ai-sdk-v4-to-v5",
+          label: "AI SDK v4 → v5",
         },
       ],
     },

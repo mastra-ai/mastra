@@ -10,7 +10,6 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { config } from 'dotenv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { noopLogger } from '../logger';
 import { Mastra } from '../mastra';
@@ -206,6 +205,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       obamaObjectModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: '{"winner":"Barack Obama"}' }],
+          warnings: [],
+        }),
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: '1' },
@@ -423,7 +429,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           await new Promise(resolve => setTimeout(resolve, 1000));
           const resumeStream = await agentOne.declineToolCall({ runId: stream.runId, toolCallId });
           for await (const _chunk of resumeStream.fullStream) {
-            console.log(_chunk);
+            // console.log(_chunk);
           }
 
           const toolResults = await resumeStream.toolResults;
@@ -573,7 +579,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               name: z.string(),
             }),
             execute: async (inputData, context) => {
-              console.log('context', context);
+              // console.log('context', context);
               if (!context?.agent?.resumeData) {
                 return await context?.agent?.suspend({ message: 'Please provide the name of the user' });
               }
@@ -794,6 +800,50 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       expect(mockFindUser).toHaveBeenCalled();
       expect(name).toBe('Dero Israel');
+    }, 500000);
+
+    it('should call tool without input or output schemas', async () => {
+      const noSchemaTool = createTool({
+        id: 'noSchemaTool',
+        description: 'Returns test data with arbitrary structure',
+        // No inputSchema or outputSchema defined
+        execute: async () => {
+          return { success: true, data: { arbitrary: 'value', count: 42 } };
+        },
+      });
+
+      const testAgent = new Agent({
+        name: 'Test agent',
+        instructions: 'You are an agent that can use the noSchemaTool to get test data.',
+        model: openaiModel,
+        tools: { noSchemaTool },
+      });
+
+      const mastra = new Mastra({
+        agents: { testAgent },
+        logger: false,
+      });
+
+      const agent = mastra.getAgent('testAgent');
+
+      let toolCall;
+      let response;
+      if (version === 'v1') {
+        response = await agent.generateLegacy('Use the noSchemaTool to get test data', {
+          maxSteps: 2,
+          toolChoice: 'required',
+        });
+        toolCall = response.toolResults.find((result: any) => result.toolName === 'noSchemaTool');
+      } else {
+        response = await agent.generate('Use the noSchemaTool to get test data');
+        toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'noSchemaTool')?.payload;
+      }
+
+      // Verify the result contains the arbitrary data (no output validation)
+      expect(toolCall?.result).toEqual({ success: true, data: { arbitrary: 'value', count: 42 } });
+
+      // Verify no validation error was returned
+      expect(toolCall?.result?.error).toBeUndefined();
     }, 500000);
 
     it('generate - should pass and call client side tools', async () => {
@@ -4714,6 +4764,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
 
         const errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw testAPICallError;
+          },
           doStream: async () => {
             throw testAPICallError;
           },
@@ -4766,6 +4819,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         (testError as any).requestId = testErrorRequestId;
 
         const errorModel = new MockLanguageModelV2({
+          doGenerate() {
+            throw testError;
+          },
           doStream: async () => {
             throw testError;
           },
@@ -4842,6 +4898,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         (testError as any).requestId = testErrorRequestId;
 
         const errorModel = new MockLanguageModelV2({
+          doGenerate() {
+            throw testError;
+          },
           doStream: async () => {
             throw testError;
           },
@@ -4908,6 +4967,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     describe('stream options', () => {
       it('should call options.onError when stream error occurs in stream', async () => {
         const errorModel = new MockLanguageModelV2({
+          doGenerate() {
+            throw new Error('Simulated stream error');
+          },
           doStream: async () => {
             throw new Error('Simulated stream error');
           },
@@ -4971,6 +5033,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let pullCalls = 0;
 
         const abortModel = new MockLanguageModelV2({
+          // @ts-expect-error - error
+          doGenerate: async () => {
+            await new Promise(resolve => setImmediate(resolve));
+            abortController.abort();
+          },
           doStream: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             warnings: [],
@@ -5152,6 +5219,31 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
       } else {
         mockModel = new MockLanguageModelV2({
+          doGenerate: async ({ prompt }: LanguageModelV2CallOptions) => {
+            const messages = Array.isArray(prompt) ? prompt : [];
+            const textContent = messages
+              .map(msg => {
+                if (typeof msg.content === 'string') {
+                  return msg.content;
+                } else if (Array.isArray(msg.content)) {
+                  return msg.content
+                    .filter(part => part.type === 'text')
+                    .map(part => (part as LanguageModelV2TextPart).text)
+                    .join(' ');
+                }
+                return '';
+              })
+              .filter(Boolean)
+              .join(' ');
+
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [{ type: 'text', text: `processed: ${textContent}` }],
+              warnings: [],
+            };
+          },
           doStream: async ({ prompt }) => {
             const messages = Array.isArray(prompt) ? prompt : [];
             const textContent = messages
@@ -5715,6 +5807,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
       } else {
         dummyModel = new MockLanguageModelV2({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+            content: [{ type: 'text', text: 'Response acknowledging metadata' }],
+            warnings: [],
+          }),
           doStream: async () => ({
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },

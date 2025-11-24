@@ -792,11 +792,9 @@ ${workingMemory}`;
         let convertedSchema: JSONSchema7;
 
         if (isZodObject(schema as ZodTypeAny)) {
-          // Convert ZodObject to JSON Schema
-          convertedSchema = zodToJsonSchema(schema as ZodTypeAny) as JSONSchema7;
+          convertedSchema = zodToJsonSchema(schema as ZodTypeAny);
         } else {
-          // Already a JSON Schema
-          convertedSchema = schema as any as JSONSchema7;
+          convertedSchema = schema as JSONSchema7;
         }
 
         return { format: 'json', content: JSON.stringify(convertedSchema) };

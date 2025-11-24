@@ -1,6 +1,6 @@
 {
   "name": "create-mastra",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.3",
   "description": "Create Mastra apps with one command",
   "license": "Apache-2.0",
   "type": "module",
@@ -40,7 +40,7 @@
     "fs-extra": "^11.3.2",
     "pino": "^10.1.0",
     "pino-pretty": "^13.0.0",
-    "posthog-node": "^4.18.0",
+    "posthog-node": "^5.11.2",
     "prettier": "^3.6.2"
   },
   "devDependencies": {

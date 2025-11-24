@@ -1,7 +1,8 @@
 @import "./fonts.css";
 @import "tailwindcss";
+@import "tw-animate-css";
 
-@custom-variant dark (&:is([data-theme="dark"] *));
+@custom-variant dark (&:is([data-theme= "dark"] *));
 
 /* ==================== LIGHT MODE ==================== */
 :root {
@@ -192,6 +193,10 @@
   --ifm-menu-color-active: var(--mastra-text-primary);
 }
 
+body,
+html {
+  overscroll-behavior: none;
+}
 /* ==================== SELECTION COLORS ==================== */
 ::selection {
   background: #e3e3e3;
@@ -603,10 +608,6 @@ ol {
   .theme-doc-sidebar-container [class*="sidebar"] {
     width: 280px !important;
   }
-  /* [class*='docMainContainer'][class*='docMainContainer'] { */
-  /* use a container query to define behaviour below this point */
-  /* min-width: 69rem; */
-  /* } */
 
   .table-of-contents__left-border {
     border: none;
@@ -1124,12 +1125,6 @@ ol {
     container-name: doc;
   }
 
-  @container doc (max-width: 984px) {
-    #toc-column {
-      display: none !important;
-    }
-  }
-
   #doc-item-container {
     max-width: 64rem;
     margin: 0 auto;
@@ -1240,10 +1235,12 @@ ol {
     position: static !important;
   }
 
-  .toc-wrapper {
-    @apply overflow-y-auto sticky;
-    top: calc(var(--ifm-navbar-height) + 1rem);
-    max-height: calc(100vh - var(--ifm-navbar-height) - 2rem);
+  .toc-wrapper,
+  #toc-column {
+    position: sticky;
+    overflow-y: auto;
+    top: calc(var(--ifm-navbar-height) + 2rem);
+    max-height: calc(100vh - var(--ifm-navbar-height) - 8rem);
   }
 
   .menu__link--sublist {
