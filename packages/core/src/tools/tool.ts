@@ -2,7 +2,7 @@ import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
 import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
 import type { ToolAction, ToolExecutionContext } from './types';
-import { validateToolInput, validateToolOutput } from './validation';
+import { validateToolInput, validateToolOutput, validateToolSuspendData } from './validation';
 
 /**
  * A type-safe tool that agents and workflows can call to perform specific actions.
@@ -142,7 +142,7 @@ export class Tool<
           return error as any;
         }
 
-        let suspendCalled = false;
+        let suspendData = null;
 
         const baseContext = context
           ? {
@@ -150,7 +150,7 @@ export class Tool<
               ...(context.suspend
                 ? {
                     suspend: (args: any) => {
-                      suspendCalled = true;
+                      suspendData = args;
                       return context.suspend?.(args);
                     },
                   }
@@ -216,7 +216,7 @@ export class Tool<
                 ? {
                     ...baseContext.agent,
                     suspend: (args: any) => {
-                      suspendCalled = true;
+                      suspendData = args;
                       return baseContext.agent?.suspend?.(args);
                     },
                   }
@@ -225,7 +225,7 @@ export class Tool<
                 ? {
                     ...baseContext.workflow,
                     suspend: (args: any) => {
-                      suspendCalled = true;
+                      suspendData = args;
                       return baseContext.workflow?.suspend?.(args);
                     },
                   }
@@ -235,11 +235,30 @@ export class Tool<
           }
         }
 
+        const resumeData =
+          organizedContext.agent?.resumeData ?? organizedContext.workflow?.resumeData ?? organizedContext?.resumeData;
+
+        if (resumeData) {
+          const resumeValidation = validateToolInput(this.resumeSchema, resumeData, this.id);
+          if (resumeValidation.error) {
+            return resumeValidation.error as any;
+          }
+        }
+
         // Call the original execute with validated input and organized context
         const output = await originalExecute(data as any, organizedContext);
 
+        if (suspendData) {
+          const suspendValidation = validateToolSuspendData(this.suspendSchema, suspendData, this.id);
+          if (suspendValidation.error) {
+            return suspendValidation.error as any;
+          }
+        }
+
+        const skiptOutputValidation = !!(typeof output === 'undefined' && suspendData);
+
         // Validate output if schema exists
-        const outputValidation = validateToolOutput(this.outputSchema, output, this.id, suspendCalled);
+        const outputValidation = validateToolOutput(this.outputSchema, output, this.id, skiptOutputValidation);
         if (outputValidation.error) {
           return outputValidation.error as any;
         }
