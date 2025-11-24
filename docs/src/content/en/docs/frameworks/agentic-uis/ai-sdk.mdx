@@ -278,12 +278,12 @@ For more information about tool streaming see [Tool streaming documentation](/do
 
 ### Stream Transformations
 
-To manually transform Mastra's streams to AI SDK-compatible format, use the `toAISdkFormat()` utility.
+To manually transform Mastra's streams to AI SDK-compatible format, use the `toAISdkStream()` utility.
 
 ```typescript title="app/api/chat/route.ts" copy {3,13}
 import { mastra } from "../../mastra";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
-import { toAISdkFormat } from "@mastra/ai-sdk";
+import { toAISdkStream } from "@mastra/ai-sdk";
 
 export async function POST(req: Request) {
   const { messages } = await req.json();
@@ -293,7 +293,7 @@ export async function POST(req: Request) {
   // Transform stream into AI SDK format and create UI messages stream
   const uiMessageStream = createUIMessageStream({
     execute: async ({ writer }) => {
-      for await (const part of toAISdkFormat(stream, { from: "agent" })!) {
+      for await (const part of toAISdkStream(stream, { from: "agent" })!) {
         writer.write(part);
       }
     },
@@ -306,13 +306,107 @@ export async function POST(req: Request) {
 }
 ```
 
+#### Stream Transformation Options
+
+The `toAISdkStream()` function accepts the following options:
+
+<PropertiesTable
+  content={[
+    {
+      name: "from",
+      type: "'agent' | 'network' | 'workflow'",
+      isRequired: true,
+      description: "The type of Mastra stream being converted.",
+    },
+    {
+      name: "lastMessageId",
+      type: "string",
+      isOptional: true,
+      description: "(Agent only) The ID of the last message in the conversation.",
+    },
+    {
+      name: "sendStart",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "(Agent only) Whether to send start events.",
+    },
+    {
+      name: "sendFinish",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "(Agent only) Whether to send finish events.",
+    },
+    {
+      name: "sendReasoning",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "(Agent only) Whether to include reasoning-delta chunks in the stream. Set to true to stream the actual reasoning content from models that support extended thinking.",
+    },
+    {
+      name: "sendSources",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "(Agent only) Whether to include source citations in the output.",
+    },
+    {
+      name: "messageMetadata",
+      type: "Function",
+      isOptional: true,
+      description: "(Agent only) A function that receives the current stream part and returns metadata to attach to start and finish chunks.",
+    },
+    {
+      name: "onError",
+      type: "Function",
+      isOptional: true,
+      description: "(Agent only) A function to handle errors during stream conversion. Receives the error and should return a string representation.",
+    },
+  ]}
+/>
+
+**Example with reasoning enabled:**
+
+```typescript title="app/api/chat/route.ts" copy {11-14}
+import { mastra } from "../../mastra";
+import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
+import { toAISdkStream } from "@mastra/ai-sdk";
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const myAgent = mastra.getAgent("reasoningAgent");
+  const stream = await myAgent.stream(messages, {
+    providerOptions: {
+      openai: { reasoningEffort: "high" },
+    },
+  });
+
+  const uiMessageStream = createUIMessageStream({
+    execute: async ({ writer }) => {
+      for await (const part of toAISdkStream(stream, {
+        from: "agent",
+        sendReasoning: true, // Enable reasoning content streaming
+      })!) {
+        writer.write(part);
+      }
+    },
+  });
+
+  return createUIMessageStreamResponse({
+    stream: uiMessageStream,
+  });
+}
+```
+
 ### Client Side Stream Transformations
 
-If you have a client-side `response` from `agent.stream(...)` and want AI SDK-formatted parts without custom SSE parsing, wrap `response.processDataStream` into a `ReadableStream<ChunkType>` and pipe it through `toAISdkFormat`:
+If you have a client-side `response` from `agent.stream(...)` and want AI SDK-formatted parts without custom SSE parsing, wrap `response.processDataStream` into a `ReadableStream<ChunkType>` and pipe it through `toAISdkStream`:
 
 ```typescript title="client-stream-to-ai-sdk.ts" copy
 import { createUIMessageStream } from "ai";
-import { toAISdkFormat } from "@mastra/ai-sdk";
+import { toAISdkStream } from "@mastra/ai-sdk";
 import type { ChunkType, MastraModelOutput } from "@mastra/core/stream";
 
 // Client SDK agent stream
@@ -334,7 +428,7 @@ const chunkStream: ReadableStream<ChunkType> = new ReadableStream<ChunkType>({
 
 const uiMessageStream = createUIMessageStream({
   execute: async ({ writer }) => {
-    for await (const part of toAISdkFormat(
+    for await (const part of toAISdkStream(
       chunkStream as unknown as MastraModelOutput,
       { from: "agent" },
     )) {
