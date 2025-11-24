@@ -582,3 +582,156 @@ describe('GatewayRegistry Auto-Refresh', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
+
+describe('Issue #10434: Concurrent write corruption', () => {
+  it('should not corrupt JSON file when multiple writes happen concurrently', async () => {
+    // This test reproduces the issue where concurrent writes to provider-registry.json
+    // can result in malformed JSON like:
+    //   "version": "1.0.0"
+    // }mini"  <-- corruption from concurrent write
+    //   ]
+    // }
+
+    const tempDir = path.join(os.tmpdir(), `mastra-concurrent-write-test-${Date.now()}`);
+    const testJsonPath = path.join(tempDir, 'provider-registry.json');
+
+    // Ensure temp directory exists
+    fs.mkdirSync(tempDir, { recursive: true });
+
+    // Create two different JSON contents that would be written
+    const jsonContent1 = JSON.stringify(
+      {
+        providers: {
+          openai: { name: 'OpenAI', models: ['gpt-4', 'gpt-3.5-turbo'] },
+        },
+        models: { openai: ['gpt-4', 'gpt-3.5-turbo'] },
+        version: '1.0.0',
+      },
+      null,
+      2,
+    );
+
+    const jsonContent2 = JSON.stringify(
+      {
+        providers: {
+          anthropic: { name: 'Anthropic', models: ['claude-3-opus', 'claude-3-sonnet'] },
+        },
+        models: { anthropic: ['claude-3-opus', 'claude-3-sonnet'] },
+        version: '1.0.0',
+      },
+      null,
+      2,
+    );
+
+    // Simulate concurrent writes - this is what happens in the bug
+    // We'll do multiple rounds to increase the chance of catching the race condition
+    const iterations = 50;
+    let corruptionDetected = false;
+
+    for (let i = 0; i < iterations && !corruptionDetected; i++) {
+      // Start both writes "simultaneously" without awaiting
+      const write1 = fs.promises.writeFile(testJsonPath, jsonContent1, 'utf-8');
+      const write2 = fs.promises.writeFile(testJsonPath, jsonContent2, 'utf-8');
+
+      // Wait for both to complete
+      await Promise.all([write1, write2]);
+
+      // Check if the file is valid JSON
+      try {
+        const content = fs.readFileSync(testJsonPath, 'utf-8');
+        JSON.parse(content);
+        // If we get here, the JSON is valid (one write "won")
+      } catch (err) {
+        // JSON parse error means the file was corrupted by concurrent writes
+        corruptionDetected = true;
+        const content = fs.readFileSync(testJsonPath, 'utf-8');
+        console.log(`Corruption detected on iteration ${i + 1}:`);
+        console.log('File content (last 200 chars):', content.slice(-200));
+      }
+    }
+
+    // Clean up
+    fs.rmSync(tempDir, { recursive: true, force: true });
+
+    // The test FAILS if corruption is detected, demonstrating the bug exists
+    // Once we fix the bug with atomic writes, this test should pass (no corruption)
+    expect(corruptionDetected).toBe(false);
+  });
+
+  it('should handle concurrent syncGlobalCacheToLocal and writeRegistryFiles calls', async () => {
+    // This test simulates the specific race condition in the codebase:
+    // 1. syncGlobalCacheToLocal() reads global cache and writes to dist/
+    // 2. syncGateways() calls writeRegistryFiles() which also writes to dist/
+    // Both can happen simultaneously when MASTRA_DEV=true
+
+    const tempDir = path.join(os.tmpdir(), `mastra-sync-race-test-${Date.now()}`);
+    const globalCacheDir = path.join(tempDir, 'global-cache');
+    const distDir = path.join(tempDir, 'dist');
+    const globalJsonPath = path.join(globalCacheDir, 'provider-registry.json');
+    const distJsonPath = path.join(distDir, 'provider-registry.json');
+
+    // Create directories
+    fs.mkdirSync(globalCacheDir, { recursive: true });
+    fs.mkdirSync(distDir, { recursive: true });
+
+    // Create initial global cache content (what syncGlobalCacheToLocal would read)
+    const globalContent = JSON.stringify(
+      {
+        providers: { 'cached-provider': { name: 'Cached', models: ['model-a', 'model-b', 'model-c'] } },
+        models: { 'cached-provider': ['model-a', 'model-b', 'model-c'] },
+        version: '1.0.0',
+      },
+      null,
+      2,
+    );
+    fs.writeFileSync(globalJsonPath, globalContent, 'utf-8');
+
+    // Content that writeRegistryFiles would write (fresh from gateway fetch)
+    const freshContent = JSON.stringify(
+      {
+        providers: { 'fresh-provider': { name: 'Fresh', models: ['new-model-1', 'new-model-2'] } },
+        models: { 'fresh-provider': ['new-model-1', 'new-model-2'] },
+        version: '1.0.0',
+      },
+      null,
+      2,
+    );
+
+    // Simulate the race condition multiple times
+    const iterations = 50;
+    let corruptionDetected = false;
+
+    for (let i = 0; i < iterations && !corruptionDetected; i++) {
+      // Simulate syncGlobalCacheToLocal: read global, write to dist
+      const syncGlobalToLocal = async () => {
+        const content = fs.readFileSync(globalJsonPath, 'utf-8');
+        await fs.promises.writeFile(distJsonPath, content, 'utf-8');
+      };
+
+      // Simulate writeRegistryFiles: write fresh content to dist
+      const writeRegistryFiles = async () => {
+        await fs.promises.writeFile(distJsonPath, freshContent, 'utf-8');
+      };
+
+      // Start both operations concurrently (this is the bug scenario)
+      await Promise.all([syncGlobalToLocal(), writeRegistryFiles()]);
+
+      // Verify the result is valid JSON
+      try {
+        const resultContent = fs.readFileSync(distJsonPath, 'utf-8');
+        JSON.parse(resultContent);
+      } catch (err) {
+        corruptionDetected = true;
+        const resultContent = fs.readFileSync(distJsonPath, 'utf-8');
+        console.log(`Corruption detected on iteration ${i + 1}:`);
+        console.log('File content (last 200 chars):', resultContent.slice(-200));
+      }
+    }
+
+    // Clean up
+    fs.rmSync(tempDir, { recursive: true, force: true });
+
+    // This test demonstrates the bug - it should FAIL when corruption occurs
+    expect(corruptionDetected).toBe(false);
+  });
+});
