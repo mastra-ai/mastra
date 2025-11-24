@@ -1072,6 +1072,12 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 4.0.12(vitest@4.0.12)
+      ai:
+        specifier: ^4.3.16
+        version: 4.3.19(react@19.2.0)(zod@3.25.76)
+      ai-v5:
+        specifier: npm:ai@5.0.97
+        version: ai@5.0.97(zod@3.25.76)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -16895,7 +16901,7 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 2.0.0
       '@ai-sdk/provider-utils': 3.0.10(zod@3.25.76)
-      '@vercel/oidc': 3.0.3
+      '@vercel/oidc': 3.0.5
       zod: 3.25.76
 
   '@ai-sdk/gateway@2.0.0(zod@3.25.76)':
