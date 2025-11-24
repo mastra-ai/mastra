@@ -221,6 +221,7 @@ export class CoreToolBuilder extends MastraBase {
 
       try {
         let result;
+        let suspendCalled = false;
 
         if (isVercelTool(tool)) {
           // Handle Vercel tools (AI SDK tools)
@@ -267,7 +268,10 @@ export class CoreToolBuilder extends MastraBase {
             ),
             tracingContext: { currentSpan: toolSpan },
             abortSignal: execOptions.abortSignal,
-            suspend: execOptions.suspend,
+            suspend: (args: any) => {
+              suspendCalled = true;
+              return execOptions.suspend?.(args);
+            },
             resumeData: execOptions.resumeData,
           };
 
@@ -331,7 +335,7 @@ export class CoreToolBuilder extends MastraBase {
 
         // Validate output if outputSchema exists
         const outputSchema = this.getOutputSchema();
-        const outputValidation = validateToolOutput(outputSchema, result, options.name);
+        const outputValidation = validateToolOutput(outputSchema, result, options.name, suspendCalled);
         if (outputValidation.error) {
           logger?.warn(`Tool output validation failed for '${options.name}'`, {
             toolName: options.name,

@@ -59,13 +59,13 @@ const findUserTool = createTool({
   resumeSchema: z.object({
     name: z.string(),
   }),
-  execute: async (inputData, { workflow }) => {
-    if (!workflow.resumeData) {
-      return workflow.suspend({ message: "Please provide the name of the user" });
+  execute: async (inputData, { agent }) => {
+    if (!agent.resumeData) {
+      return agent.suspend({ message: "Please provide the name of the user" });
     }
 
     return {
-      name: workflow?.resumeData?.name,
+      name: agent?.resumeData?.name,
       email: "test@test.com",
     };
   },
@@ -73,11 +73,12 @@ const findUserTool = createTool({
 ```
 
 To continue execution, call `resumeStream` with the run’s `runId` and the `resumeData` that satisfies the `resumeSchema`. The workflow resumes from the suspension point and the tool completes with the new data.
+When using `suspend` directly in the tool, you don't need to add `requireToolApproval: true` to the agent `stream`/`generate` call, nor `requireApproval: true` to the tool creation.
 
 ```typescript {1} title="Resume a suspended tool call" showLineNumbers copy
 const resumedStream = await myAgent.resumeStream(
   { name: "John Smith" },
-  { runId: stream.runId },
+  { runId: stream.runId }
 );
 ```
 

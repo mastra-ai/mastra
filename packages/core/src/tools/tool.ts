@@ -142,8 +142,22 @@ export class Tool<
           return error as any;
         }
 
+        let suspendCalled = false;
+
+        const baseContext = {
+          ...context,
+          ...(context.suspend
+            ? {
+                suspend: (args: any) => {
+                  suspendCalled = true;
+                  return context.suspend?.(args);
+                },
+              }
+            : {}),
+        };
+
         // Organize context based on execution source
-        let organizedContext = context;
+        let organizedContext = baseContext;
         if (!context) {
           // No context provided - create a minimal context with requestContext
           organizedContext = {
@@ -152,16 +166,16 @@ export class Tool<
           };
         } else {
           // Check if this is agent execution (has toolCallId and messages)
-          const isAgentExecution = context.toolCallId && context.messages;
+          const isAgentExecution = baseContext.toolCallId && baseContext.messages;
 
           // Check if this is workflow execution (has workflow properties)
           // Agent execution takes precedence - don't treat as workflow if it's an agent call
-          const isWorkflowExecution = !isAgentExecution && (context.workflow || context.workflowId);
+          const isWorkflowExecution = !isAgentExecution && (baseContext.workflow || baseContext.workflowId);
 
-          if (isAgentExecution && !context.agent) {
+          if (isAgentExecution && !baseContext.agent) {
             // Reorganize agent context - nest agent-specific properties under 'agent' key
             const { toolCallId, messages, suspend, resumeData, threadId, resourceId, writableStream, ...rest } =
-              context;
+              baseContext;
             organizedContext = {
               ...rest,
               agent: {
@@ -176,9 +190,9 @@ export class Tool<
               // Ensure requestContext is always present
               requestContext: rest.requestContext || new RequestContext(),
             };
-          } else if (isWorkflowExecution && !context.workflow) {
+          } else if (isWorkflowExecution && !baseContext.workflow) {
             // Reorganize workflow context - nest workflow-specific properties under 'workflow' key
-            const { workflowId, runId, state, setState, suspend, resumeData, ...rest } = context;
+            const { workflowId, runId, state, setState, suspend, resumeData, ...rest } = baseContext;
             organizedContext = {
               ...rest,
               workflow: {
@@ -195,8 +209,26 @@ export class Tool<
           } else {
             // Ensure requestContext is always present even for direct execution
             organizedContext = {
-              ...context,
-              requestContext: context.requestContext || new RequestContext(),
+              ...baseContext,
+              ...(baseContext.agent
+                ? {
+                    ...baseContext.agent,
+                    suspend: (args: any) => {
+                      suspendCalled = true;
+                      return baseContext.agent?.suspend?.(args);
+                    },
+                  }
+                : {}),
+              ...(baseContext.workflow
+                ? {
+                    ...baseContext.workflow,
+                    suspend: (args: any) => {
+                      suspendCalled = true;
+                      return baseContext.workflow?.suspend?.(args);
+                    },
+                  }
+                : {}),
+              requestContext: baseContext.requestContext || new RequestContext(),
             };
           }
         }
@@ -205,7 +237,12 @@ export class Tool<
         const output = await originalExecute(data as any, organizedContext);
 
         // Validate output if schema exists
-        const outputValidation = validateToolOutput(this.outputSchema, output, this.id);
+        const outputValidation = validateToolOutput(
+          this.outputSchema,
+          output,
+          this.id,
+          suspendCalled || typeof output === 'undefined',
+        );
         if (outputValidation.error) {
           return outputValidation.error as any;
         }

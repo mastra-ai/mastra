@@ -76,9 +76,10 @@ export function validateToolOutput<T = any>(
   schema: ZodLikeSchema | undefined,
   output: unknown,
   toolId?: string,
+  suspendCalled?: boolean,
 ): { data: T | unknown; error?: ValidationError<T> } {
   // If no schema, return output as-is
-  if (!schema || !('safeParse' in schema)) {
+  if (!schema || !('safeParse' in schema) || suspendCalled) {
     return { data: output };
   }
 
