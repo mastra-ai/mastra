@@ -914,18 +914,12 @@ export class MCPServer extends MCPServerBase {
         continue;
       }
 
-      // Safely get description - avoid triggering Tool's dynamic description getter
-      // Note: For dynamic descriptions, the description will be undefined at MCP server
-      // registration time. Dynamic descriptions need requestContext which is not available
-      // during server initialization. They will be resolved when the tool is actually used.
+      // Resolve description without triggering Tool's dynamic getter.
       let description: string | undefined;
       try {
-        // Try to access description - will throw if it's a dynamic description
         const desc = toolInstance.description;
         description = typeof desc === 'string' ? desc : undefined;
       } catch (error) {
-        // If accessing description throws, it's a dynamic description
-        // We can't resolve it without requestContext, so log a warning
         this.logger.warn(
           `Tool '${toolName}' has a dynamic description that cannot be resolved at server initialization. ` +
             `The description will be undefined in the MCP tool listing.`,
