@@ -42,12 +42,26 @@ const createBasicOperator = (symbol: string) => {
 };
 
 const createNumericOperator = (symbol: string) => {
-  return (key: string, paramIndex: number) => {
+  return (key: string, paramIndex: number, value?: any) => {
     const jsonPathKey = parseJsonPathKey(key);
-    return {
-      sql: `(metadata#>>'{${jsonPathKey}}')::numeric ${symbol} $${paramIndex}`,
-      needsValue: true,
-    };
+
+    // Check if the value is a number or can be parsed as a number
+    const isNumeric =
+      typeof value === 'number' || (typeof value === 'string' && !isNaN(Number(value)) && value.trim() !== '');
+
+    // Use numeric comparison for numbers, text comparison for strings/dates
+    if (isNumeric) {
+      return {
+        sql: `(metadata#>>'{${jsonPathKey}}')::numeric ${symbol} $${paramIndex}::numeric`,
+        needsValue: true,
+      };
+    } else {
+      // Use text comparison for strings (including ISO 8601 dates which sort correctly)
+      return {
+        sql: `metadata#>>'{${jsonPathKey}}' ${symbol} $${paramIndex}::text`,
+        needsValue: true,
+      };
+    }
   };
 };
 
@@ -249,6 +263,115 @@ const parseJsonPathKey = (key: string) => {
 
 function escapeLikePattern(str: string): string {
   return str.replace(/([%_\\])/g, '\\$1');
+}
+
+/**
+ * Build a filter query for DELETE operations (no minScore/topK parameters)
+ */
+export function buildDeleteFilterQuery(filter: PGVectorFilter): FilterResult {
+  const values: any[] = [];
+
+  function buildCondition(key: string, value: any, parentPath: string): string {
+    // Handle logical operators ($and/$or)
+    if (['$and', '$or', '$not', '$nor'].includes(key)) {
+      return handleLogicalOperator(key as '$and' | '$or' | '$not' | '$nor', value, parentPath);
+    }
+
+    // If condition is not a FilterCondition object, assume it's an equality check
+    if (!value || typeof value !== 'object') {
+      values.push(value);
+      return `metadata#>>'{${parseJsonPathKey(key)}}' = $${values.length}`;
+    }
+
+    // Handle operator conditions
+    const [[operator, operatorValue] = []] = Object.entries(value);
+
+    // Special handling for nested $not
+    if (operator === '$not') {
+      const entries = Object.entries(operatorValue as Record<string, unknown>);
+      const conditions = entries
+        .map(([nestedOp, nestedValue]) => {
+          if (!FILTER_OPERATORS[nestedOp as OperatorType]) {
+            throw new Error(`Invalid operator in $not condition: ${nestedOp}`);
+          }
+          const operatorFn = FILTER_OPERATORS[nestedOp as OperatorType]!;
+          const operatorResult = operatorFn(key, values.length + 1, nestedValue);
+          if (operatorResult.needsValue) {
+            values.push(nestedValue as number);
+          }
+          return operatorResult.sql;
+        })
+        .join(' AND ');
+
+      return `NOT (${conditions})`;
+    }
+    const operatorFn = FILTER_OPERATORS[operator as OperatorType]!;
+    const operatorResult = operatorFn(key, values.length + 1, operatorValue);
+    if (operatorResult.needsValue) {
+      const transformedValue = operatorResult.transformValue ? operatorResult.transformValue() : operatorValue;
+      if (Array.isArray(transformedValue) && operator === '$elemMatch') {
+        values.push(...transformedValue);
+      } else {
+        values.push(transformedValue);
+      }
+    }
+    return operatorResult.sql;
+  }
+
+  function handleLogicalOperator(
+    key: '$and' | '$or' | '$not' | '$nor',
+    value: VectorFilter[],
+    parentPath: string,
+  ): string {
+    if (key === '$not') {
+      // For top-level $not
+      const entries = Object.entries(value);
+      const conditions = entries
+        .map(([fieldKey, fieldValue]) => buildCondition(fieldKey, fieldValue, key))
+        .join(' AND ');
+      return `NOT (${conditions})`;
+    }
+
+    // Handle empty conditions
+    if (!value || value.length === 0) {
+      switch (key) {
+        case '$and':
+        case '$nor':
+          return 'true'; // Empty $and/$nor match everything
+        case '$or':
+          return 'false'; // Empty $or matches nothing
+        default:
+          return 'true';
+      }
+    }
+
+    const joinOperator = key === '$or' || key === '$nor' ? 'OR' : 'AND';
+    const conditions = value.map((f: VectorFilter) => {
+      const entries = Object.entries(f || {});
+      if (entries.length === 0) return '';
+
+      const [firstKey, firstValue] = entries[0] || [];
+      if (['$and', '$or', '$not', '$nor'].includes(firstKey as string)) {
+        return buildCondition(firstKey as string, firstValue, parentPath);
+      }
+      return entries.map(([k, v]) => buildCondition(k, v, parentPath)).join(` ${joinOperator} `);
+    });
+
+    const joined = conditions.join(` ${joinOperator} `);
+    const operatorFn = FILTER_OPERATORS[key]!;
+    return operatorFn(joined, 0, value).sql;
+  }
+
+  if (!filter) {
+    return { sql: '', values };
+  }
+
+  const conditions = Object.entries(filter)
+    .map(([key, value]) => buildCondition(key, value, ''))
+    .filter(Boolean)
+    .join(' AND ');
+
+  return { sql: conditions ? `WHERE ${conditions}` : '', values };
 }
 
 export function buildFilterQuery(filter: PGVectorFilter, minScore: number, topK: number): FilterResult {

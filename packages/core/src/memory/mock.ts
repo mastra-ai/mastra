@@ -131,16 +131,9 @@ export class MockMemory extends MastraMemory {
         let convertedSchema: JSONSchema7;
 
         if (isZodObject(schema as ZodTypeAny)) {
-          // Check if Zod v4 with built-in toJsonSchema method
-          if (typeof (schema as any).toJsonSchema === 'function') {
-            convertedSchema = (schema as any).toJsonSchema() as JSONSchema7;
-          } else {
-            // Fall back to zodToJsonSchema for Zod v3
-            convertedSchema = zodToJsonSchema(schema as ZodTypeAny);
-          }
+          convertedSchema = zodToJsonSchema(schema as ZodTypeAny);
         } else {
-          // Already a JSON Schema
-          convertedSchema = schema as any as JSONSchema7;
+          convertedSchema = schema as JSONSchema7;
         }
 
         return { format: 'json', content: JSON.stringify(convertedSchema) };

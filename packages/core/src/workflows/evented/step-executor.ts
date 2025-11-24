@@ -9,7 +9,12 @@ import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { getStepResult } from '../step';
 import type { LoopConditionFunction, Step } from '../step';
 import type { Emitter, StepFlowEntry, StepResult } from '../types';
-import { validateStepInput, createDeprecationProxy, runCountDeprecationMessage } from '../utils';
+import {
+  validateStepInput,
+  createDeprecationProxy,
+  runCountDeprecationMessage,
+  validateStepSuspendData,
+} from '../utils';
 
 export class StepExecutor extends MastraBase {
   protected mastra?: Mastra;
@@ -90,7 +95,14 @@ export class StepExecutor extends MastraBase {
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(this, stepResults),
             suspend: async (suspendPayload: any): Promise<any> => {
-              suspended = { payload: { ...suspendPayload, __workflow_meta: { runId, path: [step.id] } } };
+              const { suspendData, validationError } = await validateStepSuspendData({
+                suspendData: suspendPayload,
+                step,
+              });
+              if (validationError) {
+                throw validationError;
+              }
+              suspended = { payload: { ...suspendData, __workflow_meta: { runId, path: [step.id] } } };
             },
             bail: (result: any) => {
               bailed = { payload: result };
