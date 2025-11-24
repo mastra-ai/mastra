@@ -1,9 +1,9 @@
 import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
+import { resolveMaybePromise } from '../utils/resolve-maybe-promise';
 import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
-import type { ToolAction, ToolExecutionContext } from './types';
+import type { ToolAction, ToolExecutionContext, DynamicToolDescription } from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from './validation';
-
 /**
  * A type-safe tool that agents and workflows can call to perform specific actions.
  *
@@ -72,7 +72,27 @@ export class Tool<
   id: TId;
 
   /** Description of what the tool does */
-  description: string;
+  #description: DynamicToolDescription;
+
+  get description(): DynamicToolDescription {
+    if (typeof this.#description === 'function') {
+      throw new Error('Dynamic description requires requestContext. Use getDescription()');
+    }
+    return this.#description;
+  }
+
+  async getDescription({
+    requestContext = new RequestContext(),
+    mastra,
+  }: {
+    requestContext?: RequestContext;
+    mastra?: Mastra;
+  } = {}): Promise<string> {
+    if (typeof this.#description === 'function') {
+      return await resolveMaybePromise(this.#description({ requestContext, mastra }), description => description);
+    }
+    return this.#description;
+  }
 
   /** Schema for validating input parameters */
   inputSchema?: TSchemaIn;
@@ -123,7 +143,7 @@ export class Tool<
    */
   constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId>) {
     this.id = opts.id;
-    this.description = opts.description;
+    this.#description = opts.description;
     this.inputSchema = opts.inputSchema;
     this.outputSchema = opts.outputSchema;
     this.suspendSchema = opts.suspendSchema;

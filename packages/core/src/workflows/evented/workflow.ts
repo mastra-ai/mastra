@@ -244,9 +244,11 @@ export function createStep<
       throw new Error('Tool must have input and output schemas defined');
     }
 
+    const description = getStaticDescriptionFromTool(params);
+
     return {
       id: params.id as TStepId,
-      description: params.description,
+      description,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
       suspendSchema: params.suspendSchema,
@@ -291,13 +293,24 @@ export function createStep<
 
   return {
     id: params.id as TStepId,
-    description: params.description,
+    description: ('description' in params && typeof params.description === 'string'
+      ? params.description
+      : undefined) as string | undefined,
     inputSchema: params.inputSchema,
     outputSchema: params.outputSchema,
     resumeSchema: params.resumeSchema,
     suspendSchema: params.suspendSchema,
     execute: params.execute,
   };
+}
+
+function getStaticDescriptionFromTool(tool: Tool<any, any, any, any, any>): string | undefined {
+  try {
+    const desc = tool.description;
+    return typeof desc === 'string' ? desc : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function createWorkflow<

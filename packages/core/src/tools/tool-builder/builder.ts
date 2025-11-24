@@ -176,12 +176,12 @@ export class CoreToolBuilder extends MastraBase {
         type: 'provider-defined' as const,
         id: tool.id as `${string}.${string}`,
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
-        description: tool.description,
+        description: this.getResolvedDescription(),
         parameters: processedParameters,
         execute: this.originalTool.execute
           ? this.createExecute(
               this.originalTool,
-              { ...this.options, description: this.originalTool.description },
+              { ...this.options, description: this.getResolvedDescription() },
               this.logType,
             )
           : undefined,
@@ -466,6 +466,20 @@ export class CoreToolBuilder extends MastraBase {
     };
   }
 
+  private getResolvedDescription(): string | undefined {
+    if (this.options.description !== undefined) {
+      return this.options.description;
+    }
+
+    try {
+      const desc = this.originalTool.description;
+      return typeof desc === 'string' ? desc : undefined;
+    } catch (error) {
+      // Tool.description throws for dynamic resolvers; fall back to undefined.
+      return undefined;
+    }
+  }
+
   buildV5() {
     const builtTool = this.build();
 
@@ -574,12 +588,12 @@ export class CoreToolBuilder extends MastraBase {
 
     const definition = {
       type: 'function' as const,
-      description: this.originalTool.description,
+      description: this.getResolvedDescription(),
       requireApproval: this.options.requireApproval,
       execute: this.originalTool.execute
         ? this.createExecute(
             this.originalTool,
-            { ...this.options, description: this.originalTool.description },
+            { ...this.options, description: this.getResolvedDescription() },
             this.logType,
             processedZodSchema, // Pass the processed Zod schema for validation
           )
