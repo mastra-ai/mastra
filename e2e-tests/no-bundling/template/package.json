@@ -24,7 +24,7 @@
     "@mastra/loggers": "no-bundling-test",
     "@mastra/memory": "no-bundling-test",
     "@mastra/observability": "no-bundling-test",
-    "zod": "^4.1.12"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "22.13.17",
