@@ -4,8 +4,8 @@ import type { TextPart, UIMessage, StreamObjectResult } from '@internal/ai-sdk-v
 import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
-  type ModelInformation,
 } from '@mastra/schema-compat';
+import type { ModelInformation } from '@mastra/schema-compat';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodSchema } from 'zod';
