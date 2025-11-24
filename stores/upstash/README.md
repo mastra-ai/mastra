@@ -161,6 +161,18 @@ The Upstash store requires the following configuration:
 - `UPSTASH_REDIS_REST_URL`: Your Upstash Redis REST URL
 - `UPSTASH_REDIS_REST_TOKEN`: Your Upstash Redis REST token
 
+## Vector Store Methods
+
+- `createIndex({ indexName, dimension, metric? })`: Create a new namespace
+- `upsert({ indexName, vectors, sparseVectors?, metadata?, ids? })`: Add or update vectors (supports hybrid search)
+- `query({ indexName, queryVector, sparseQueryVector?, topK?, filter?, includeVector?, includeMetadata?, mode?, fusionAlgorithm? })`: Search for similar vectors
+- `updateVector({ indexName, id?, filter?, update })`: Update a single vector by ID or metadata filter
+- `deleteVector({ indexName, id })`: Delete a single vector by ID
+- `deleteVectors({ indexName, ids?, filter? })`: Delete multiple vectors by IDs or metadata filter
+- `listIndexes()`: List all namespaces
+- `describeIndex({ indexName })`: Get namespace statistics
+- `deleteIndex({ indexName })`: Delete a namespace
+
 ## Features
 
 - Serverless vector database and key-value store

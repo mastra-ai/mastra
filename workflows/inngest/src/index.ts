@@ -20,6 +20,7 @@ import {
   runCountDeprecationMessage,
   validateStepResumeData,
   createTimeTravelExecutionParams,
+  validateStepSuspendData,
 } from '@mastra/core/workflows';
 import type {
   ExecuteFunction,
@@ -1268,6 +1269,8 @@ export function createStep<
       description: params.description,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
+      suspendSchema: params.suspendSchema,
+      resumeSchema: params.resumeSchema,
       execute: async ({
         inputData,
         mastra,
@@ -1285,9 +1288,9 @@ export function createStep<
           mastra,
           requestContext,
           tracingContext,
-          resumeData,
           workflow: {
             runId,
+            resumeData,
             suspend,
             workflowId,
             state,
@@ -2021,6 +2024,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(this, stepResults),
             suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions) => {
+              const { suspendData, validationError } = await validateStepSuspendData({
+                suspendData: suspendPayload,
+                step,
+              });
+              if (validationError) {
+                throw validationError;
+              }
               executionContext.suspendedPaths[step.id] = executionContext.executionPath;
               if (suspendOptions?.resumeLabel) {
                 const resumeLabel = Array.isArray(suspendOptions.resumeLabel)
@@ -2033,7 +2043,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                   };
                 }
               }
-              suspended = { payload: suspendPayload };
+              suspended = { payload: suspendData };
             },
             bail: (result: any) => {
               bailed = { payload: result };
