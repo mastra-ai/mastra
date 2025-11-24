@@ -83,6 +83,11 @@ For tools that are executed inside a workflow, access workflow-specific properti
   });
 ```
 
+The `suspendPayload` gets validated against the `suspendSchema` when the tool is executed. If the suspendPayload doesn't match the `suspendSchema`, the error will get logged.
+Also, when the tool is resumed, the `resumeData` gets validated against the `resumeSchema`. If the resumeData doesn't match the `resumeSchema`, the tool will return a `ValidationError`.
+
+To skip the `suspendSchema` or `resumeSchema` validation, remove the `suspendSchema` or `resumeSchema` from the tool creation.
+
 :::note
 For MCP-specific tool context changes, see the [MCP migration guide](/guides/v1/migrations/upgrade-to-v1/mcp).
 :::

@@ -136,6 +136,28 @@ createWorkflow({
 })
 ```
 
+### Step suspendPayload validation
+
+Step suspendPayload is now validated for steps that have a suspend schema defined. This also uses the `validateInputs` flag to determine whether to validate the suspendPayload or not.
+
+```diff
+  createStep({
+    id: "suspend-resume-step",
+    // ... other step properties
+    suspendSchema: z.object({
+      reason: z.string(),
+      otherReason: z.string()
+    }),
+    execute: async ({ suspend, resumeData}) => {
+      if (!resumeData) {
+-       return suspend({ reason: "Suspension reason" }); // Missing otherReason
++       return suspend({ reason: "Suspension reason", otherReason: "Other reason" });
+      }
+      //... continue execution logic
+    },
+  });
+```
+
 ## Removed
 
 ### Legacy workflows export
