@@ -420,20 +420,26 @@ export async function bundleExternals(
   } = bundlerOptions || {};
 
   /**
-   * When `externals` is true, collect all non-workspace deps to mark as external and filter them from depsToOptimize so they don't get bundled
+   * When `externals` is true, collect all non-workspace deps to mark as external and add them to the externals list
    */
   const nonWorkspaceDeps = new Map<string, DependencyMetadata>();
+  let automaticExternals: Array<string> = [];
 
   if (customExternals === true) {
     for (const [dep, metadata] of depsToOptimize.entries()) {
       if (!metadata.isWorkspace) {
+        // Hono is a dep of @mastra/server and needs to be always excluded from "externals"
+        if (dep.startsWith('hono')) {
+          continue;
+        }
         nonWorkspaceDeps.set(dep, metadata);
-        depsToOptimize.delete(dep);
       }
     }
+
+    automaticExternals = Array.from(nonWorkspaceDeps.keys());
   }
 
-  const externalsList = Array.isArray(customExternals) ? customExternals : [];
+  const externalsList = Array.isArray(customExternals) ? customExternals : automaticExternals;
   const allExternals = [...GLOBAL_EXTERNALS, ...DEPRECATED_EXTERNALS, ...externalsList];
 
   const workspacePackagesNames = Array.from(workspaceMap.keys());
