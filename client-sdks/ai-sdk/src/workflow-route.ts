@@ -74,6 +74,7 @@ export function workflowRoute({
     handler: async c => {
       const { runId, resourceId, inputData, resumeData, ...rest } = (await c.req.json()) as WorkflowRouteBody;
       const mastra = c.get('mastra');
+      const runtimeContext = (c as any).get('runtimeContext') as RuntimeContext | undefined;
 
       let workflowToUse: string | undefined = workflow;
       if (!workflow) {
@@ -97,9 +98,19 @@ export function workflowRoute({
         throw new Error(`Workflow ${workflowToUse} not found`);
       }
 
+      if (runtimeContext && rest.runtimeContext) {
+        mastra
+          .getLogger()
+          ?.warn(
+            `"runtimeContext" from the request body will be ignored because "runtimeContext" is already set in the route options.`,
+          );
+      }
+
       const run = await workflowObj.createRunAsync({ runId, resourceId, ...rest });
 
-      const stream = resumeData ? run.resumeStream({ resumeData, ...rest }) : run.stream({ inputData, ...rest });
+      const stream = resumeData
+        ? run.resumeStream({ resumeData, ...rest, runtimeContext: runtimeContext || rest.runtimeContext })
+        : run.stream({ inputData, ...rest, runtimeContext: runtimeContext || rest.runtimeContext });
 
       const uiMessageStream = createUIMessageStream({
         execute: async ({ writer }) => {
