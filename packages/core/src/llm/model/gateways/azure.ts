@@ -50,7 +50,6 @@ export interface AzureOpenAIGatewayConfig {
 export class AzureOpenAIGateway extends MastraModelGateway {
   readonly id = 'azure-openai';
   readonly name = 'azure-openai';
-  readonly prefix = 'azure-openai';
   private tokenCache = new InMemoryServerCache();
 
   constructor(private config: AzureOpenAIGatewayConfig) {
