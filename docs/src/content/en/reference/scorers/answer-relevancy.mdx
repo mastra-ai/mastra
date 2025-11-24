@@ -112,115 +112,45 @@ A relevancy score between 0 and 1:
 - **0.1–0.3**: The response includes minimal relevant content and largely misses the intent of the query.
 - **0.0**: The response is entirely unrelated and does not answer the query.
 
-## Examples
+## Example
 
-### High relevancy example
+Evaluate agent responses for relevancy across different scenarios:
 
-In this example, the response accurately addresses the input query with specific and relevant information.
-
-```typescript title="src/example-high-answer-relevancy.ts" showLineNumbers copy
+```typescript title="src/example-answer-relevancy.ts" showLineNumbers copy
+import { runExperiment } from "@mastra/core/scores";
 import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/llm";
+import { myAgent } from "./agent";
 
-const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-4o-mini" });
+const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-4o" });
 
-const inputMessages = [
-  {
-    role: "user",
-    content: "What are the health benefits of regular exercise?",
+const result = await runExperiment({
+  data: [
+    {
+      input: "What are the health benefits of regular exercise?",
+    },
+    {
+      input: "What should a healthy breakfast include?",
+    },
+    {
+      input: "What are the benefits of meditation?",
+    },
+  ],
+  scorers: [scorer],
+  target: myAgent,
+  onItemComplete: ({ scorerResults }) => {
+    console.log({
+      score: scorerResults[scorer.name].score,
+      reason: scorerResults[scorer.name].reason,
+    });
   },
-];
-const outputMessage = {
-  text: "Regular exercise improves cardiovascular health, strengthens muscles, boosts metabolism, and enhances mental well-being through the release of endorphins.",
-};
-
-const result = await scorer.run({
-  input: inputMessages,
-  output: outputMessage,
 });
 
-console.log(result);
+console.log(result.scores);
 ```
 
-#### High relevancy output
+For more details on `runExperiment`, see the [runExperiment reference](/reference/scorers/run-experiment).
 
-The output receives a high score because it accurately answers the query without including unrelated information.
-
-```typescript
-{
-  score: 1,
-  reason: 'The score is 1 because the output directly addresses the question by providing multiple explicit health benefits of regular exercise, including improvements in cardiovascular health, muscle strength, metabolism, and mental well-being. Each point is relevant and contributes to a comprehensive understanding of the health benefits.'
-}
-```
-
-### Partial relevancy example
-
-In this example, the response addresses the query in part but includes additional information that isn’t directly relevant.
-
-```typescript title="src/example-partial-answer-relevancy.ts" showLineNumbers copy
-import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/llm";
-
-const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-4o-mini" });
-
-const inputMessages = [
-  { role: "user", content: "What should a healthy breakfast include?" },
-];
-const outputMessage = {
-  text: "A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day.",
-};
-
-const result = await scorer.run({
-  input: inputMessages,
-  output: outputMessage,
-});
-
-console.log(result);
-```
-
-#### Partial relevancy output
-
-The output receives a lower score because it partially answers the query. While some relevant information is included, unrelated details reduce the overall relevance.
-
-```typescript
-{
-  score: 0.25,
-  reason: 'The score is 0.25 because the output provides a direct answer by mentioning whole grains and protein as components of a healthy breakfast, which is relevant. However, the additional information about the timing of breakfast and its effects on metabolism and energy levels is not directly related to the question, leading to a lower overall relevance score.'
-}
-```
-
-## Low relevancy example
-
-In this example, the response does not address the query and contains information that is entirely unrelated.
-
-```typescript title="src/example-low-answer-relevancy.ts" showLineNumbers copy
-import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/llm";
-
-const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-4o-mini" });
-
-const inputMessages = [
-  { role: "user", content: "What are the benefits of meditation?" },
-];
-const outputMessage = {
-  text: "The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.",
-};
-
-const result = await scorer.run({
-  input: inputMessages,
-  output: outputMessage,
-});
-
-console.log(result);
-```
-
-#### Low relevancy output
-
-The output receives a score of 0 because it fails to answer the query or provide any relevant information.
-
-```typescript
-{
-  score: 0,
-  reason: 'The score is 0 because the output about the Great Wall of China is completely unrelated to the benefits of meditation, providing no relevant information or context that addresses the input question.'
-}
-```
+To add this scorer to an agent, see the [Scorers overview](/docs/scorers/overview) guide.
 
 ## Related
 

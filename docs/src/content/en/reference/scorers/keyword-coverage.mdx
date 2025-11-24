@@ -102,124 +102,45 @@ The scorer handles several special cases:
 - Case differences: "JavaScript" matches "javascript"
 - Common words: Ignored in scoring to focus on meaningful keywords
 
-## Examples
+## Example
 
-### Full coverage example
+Evaluate keyword coverage between input queries and agent responses:
 
-In this example, the response fully reflects the key terms from the input. All required keywords are present, resulting in complete coverage with no omissions.
-
-```typescript title="src/example-full-keyword-coverage.ts" showLineNumbers copy
+```typescript title="src/example-keyword-coverage.ts" showLineNumbers copy
+import { runExperiment } from "@mastra/core/scores";
 import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
+import { myAgent } from "./agent";
 
 const scorer = createKeywordCoverageScorer();
 
-const input = "JavaScript frameworks like React and Vue";
-const output =
-  "Popular JavaScript frameworks include React and Vue for web development";
-
-const result = await scorer.run({
-  input: [{ role: "user", content: input }],
-  output: { role: "assistant", text: output },
+const result = await runExperiment({
+  data: [
+    {
+      input: "JavaScript frameworks like React and Vue",
+    },
+    {
+      input: "TypeScript offers interfaces, generics, and type inference",
+    },
+    {
+      input:
+        "Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning",
+    },
+  ],
+  scorers: [scorer],
+  target: myAgent,
+  onItemComplete: ({ scorerResults }) => {
+    console.log({
+      score: scorerResults[scorer.name].score,
+    });
+  },
 });
 
-console.log("Score:", result.score);
-console.log("AnalyzeStepResult:", result.analyzeStepResult);
+console.log(result.scores);
 ```
 
-#### Full coverage output
+For more details on `runExperiment`, see the [runExperiment reference](/reference/scorers/run-experiment).
 
-A score of 1 indicates that all expected keywords were found in the response. The `analyzeStepResult` field confirms that the number of matched keywords equals the total number extracted from the input.
-
-```typescript
-{
-  score: 1,
-  analyzeStepResult: {
-    totalKeywords: 4,
-    matchedKeywords: 4
-  }
-}
-```
-
-### Partial coverage example
-
-In this example, the response includes some, but not all, of the important keywords from the input. The score reflects partial coverage, with key terms either missing or only partially matched.
-
-```typescript title="src/example-partial-keyword-coverage.ts" showLineNumbers copy
-import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
-
-const scorer = createKeywordCoverageScorer();
-
-const input = "TypeScript offers interfaces, generics, and type inference";
-const output = "TypeScript provides type inference and some advanced features";
-
-const result = await scorer.run({
-  input: [{ role: "user", content: input }],
-  output: { role: "assistant", text: output },
-});
-
-console.log("Score:", result.score);
-console.log("AnalyzeStepResult:", result.analyzeStepResult);
-```
-
-#### Partial coverage output
-
-A score of 0.5 indicates that only half of the expected keywords were found in the response. The `analyzeStepResult` field shows how many terms were matched compared to the total identified in the input.
-
-```typescript
-{
-  score: 0.5,
-  analyzeStepResult: {
-    totalKeywords: 6,
-    matchedKeywords: 3
-  }
-}
-```
-
-### Minimal coverage example
-
-In this example, the response includes very few of the important keywords from the input. The score reflects minimal coverage, with most key terms missing or unaccounted for.
-
-```typescript title="src/example-minimal-keyword-coverage.ts" showLineNumbers copy
-import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
-
-const scorer = createKeywordCoverageScorer();
-
-const input =
-  "Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning";
-const output = "Data preparation is important for models";
-
-const result = await scorer.run({
-  input: [{ role: "user", content: input }],
-  output: { role: "assistant", text: output },
-});
-
-console.log("Score:", result.score);
-console.log("AnalyzeStepResult:", result.analyzeStepResult);
-```
-
-#### Minimal coverage output
-
-A low score indicates that only a small number of the expected keywords were present in the response. The `analyzeStepResult` field highlights the gap between total and matched keywords, signaling insufficient coverage.
-
-```typescript
-{
-  score: 0.2,
-  analyzeStepResult: {
-    totalKeywords: 10,
-    matchedKeywords: 2
-  }
-}
-```
-
-### Metric configuration
-
-You can create a `KeywordCoverageMetric` instance with default settings. No additional configuration is required.
-
-```typescript
-const metric = new KeywordCoverageMetric();
-```
-
-> See [KeywordCoverageScorer](/reference/scorers/keyword-coverage) for a full list of configuration options.
+To add this scorer to an agent, see the [Scorers overview](/docs/scorers/overview#adding-scorers-to-agents) guide.
 
 ## Related
 

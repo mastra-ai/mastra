@@ -94,116 +94,43 @@ Object with tone metrics:
 - **avgSentiment**: Average sentiment across sentences (stability mode).
 - **sentimentVariance**: Variance of sentiment across sentences (stability mode).
 
-## Examples
+## Example
 
-### Positive tone example
+Evaluate tone consistency between related agent responses:
 
-In this example, the texts exhibit a similar positive sentiment. The scorer measures the consistency between the tones, resulting in a high score.
-
-```typescript title="src/example-positive-tone.ts" showLineNumbers copy
+```typescript title="src/example-tone-consistency.ts" showLineNumbers copy
+import { runExperiment } from "@mastra/core/scores";
 import { createToneScorer } from "@mastra/evals/scorers/code";
+import { myAgent } from "./agent";
 
 const scorer = createToneScorer();
 
-const input = "This product is fantastic and amazing!";
-const output = "The product is excellent and wonderful!";
-
-const result = await scorer.run({
-  input: [{ role: "user", content: input }],
-  output: { role: "assistant", text: output },
+const result = await runExperiment({
+  data: [
+    {
+      input: "How was your experience with our service?",
+      groundTruth: "The service was excellent and exceeded expectations!",
+    },
+    {
+      input: "Tell me about the customer support",
+      groundTruth: "The support team was friendly and very helpful.",
+    },
+  ],
+  scorers: [scorer],
+  target: myAgent,
+  onItemComplete: ({ scorerResults }) => {
+    console.log({
+      score: scorerResults[scorer.name].score,
+    });
+  },
 });
 
-console.log("Score:", result.score);
-console.log("AnalyzeStepResult:", result.analyzeStepResult);
+console.log(result.scores);
 ```
 
-#### Positive tone output
+For more details on `runExperiment`, see the [runExperiment reference](/reference/scorers/run-experiment).
 
-The scorer returns a high score reflecting strong sentiment alignment. The `analyzeStepResult` field provides sentiment values and the difference between them.
-
-```typescript
-{
-  score: 0.8333333333333335,
-  analyzeStepResult: {
-    responseSentiment: 1.3333333333333333,
-    referenceSentiment: 1.1666666666666667,
-    difference: 0.16666666666666652,
-  },
-}
-```
-
-### Stable tone example
-
-In this example, the text’s internal tone consistency is analyzed by passing an empty response. This signals the scorer to evaluate sentiment stability within the single input text, resulting in a score reflecting how uniform the tone is throughout.
-
-```typescript title="src/example-stable-tone.ts" showLineNumbers copy
-import { createToneScorer } from "@mastra/evals/scorers/code";
-
-const scorer = createToneScorer();
-
-const input = "Great service! Friendly staff. Perfect atmosphere.";
-const output = "";
-
-const result = await scorer.run({
-  input: [{ role: "user", content: input }],
-  output: { role: "assistant", text: output },
-});
-
-console.log("Score:", result.score);
-console.log("AnalyzeStepResult:", result.analyzeStepResult);
-```
-
-#### Stable tone output
-
-The scorer returns a high score indicating consistent sentiment throughout the input text. The `analyzeStepResult` field includes the average sentiment and sentiment variance, reflecting tone stability.
-
-```typescript
-{
-  score: 0.9444444444444444,
-  analyzeStepResult: {
-    avgSentiment: 1.3333333333333333,
-    sentimentVariance: 0.05555555555555556,
-  },
-}
-```
-
-### Mixed tone example
-
-In this example, the input and response have different emotional tones. The scorer picks up on these variations and gives a lower consistency score.
-
-```typescript title="src/example-mixed-tone.ts" showLineNumbers copy
-import { createToneScorer } from "@mastra/evals/scorers/code";
-
-const scorer = createToneScorer();
-
-const input =
-  "The interface is frustrating and confusing, though it has potential.";
-const output =
-  "The design shows promise but needs significant improvements to be usable.";
-
-const result = await scorer.run({
-  input: [{ role: "user", content: input }],
-  output: { role: "assistant", text: output },
-});
-
-console.log("Score:", result.score);
-console.log("AnalyzeStepResult:", result.analyzeStepResult);
-```
-
-#### Mixed tone output
-
-The scorer returns a low score due to the noticeable differences in emotional tone. The `analyzeStepResult` field highlights the sentiment values and the degree of variation between them.
-
-```typescript
-{
-  score: 0.4181818181818182,
-  analyzeStepResult: {
-    responseSentiment: -0.4,
-    referenceSentiment: 0.18181818181818182,
-    difference: 0.5818181818181818,
-  },
-}
-```
+To add this scorer to an agent, see the [Scorers overview](/docs/scorers/overview#adding-scorers-to-agents) guide.
 
 ## Related
 
