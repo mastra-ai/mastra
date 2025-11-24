@@ -75,6 +75,19 @@ export function createTestModels({
 } = {}): ModelManagerModelConfig[] {
   const model = new MockLanguageModelV2({
     doStream: async () => ({ stream, request, response, warnings }),
+    doGenerate: async () => ({
+      content: [{ type: 'text' as const, text: 'Hello, world!' }],
+      finishReason: 'stop',
+      usage: testUsage,
+      warnings,
+      request,
+      response: {
+        id: 'id-0',
+        modelId: 'mock-model-id',
+        timestamp: new Date(0),
+        ...response,
+      },
+    }),
   });
   return [
     {
@@ -114,6 +127,30 @@ export const modelWithSources = new MockLanguageModelV2({
       },
     ]),
   }),
+  doGenerate: async () => ({
+    content: [
+      {
+        type: 'source' as const,
+        sourceType: 'url' as const,
+        id: '123',
+        url: 'https://example.com',
+        title: 'Example',
+        providerMetadata: { provider: { custom: 'value' } },
+      },
+      { type: 'text' as const, text: 'Hello!' },
+      {
+        type: 'source' as const,
+        sourceType: 'url' as const,
+        id: '456',
+        url: 'https://example.com/2',
+        title: 'Example 2',
+        providerMetadata: { provider: { custom: 'value2' } },
+      },
+    ],
+    finishReason: 'stop',
+    usage: testUsage,
+    warnings: [],
+  }),
 });
 
 export const modelWithDocumentSources = new MockLanguageModelV2({
@@ -146,6 +183,31 @@ export const modelWithDocumentSources = new MockLanguageModelV2({
       },
     ]),
   }),
+  doGenerate: async () => ({
+    content: [
+      {
+        type: 'source' as const,
+        sourceType: 'document' as const,
+        id: 'doc-123',
+        mediaType: 'application/pdf',
+        title: 'Document Example',
+        filename: 'example.pdf',
+        providerMetadata: { provider: { custom: 'doc-value' } },
+      },
+      { type: 'text' as const, text: 'Hello from document!' },
+      {
+        type: 'source' as const,
+        sourceType: 'document' as const,
+        id: 'doc-456',
+        mediaType: 'text/plain',
+        title: 'Text Document',
+        providerMetadata: { provider: { custom: 'doc-value2' } },
+      },
+    ],
+    finishReason: 'stop',
+    usage: testUsage,
+    warnings: [],
+  }),
 });
 
 export const modelWithFiles = new MockLanguageModelV2({
@@ -170,6 +232,24 @@ export const modelWithFiles = new MockLanguageModelV2({
         usage: testUsage,
       },
     ]),
+  }),
+  doGenerate: async () => ({
+    content: [
+      {
+        type: 'file' as const,
+        data: 'Hello World',
+        mediaType: 'text/plain',
+      },
+      { type: 'text' as const, text: 'Hello!' },
+      {
+        type: 'file' as const,
+        data: 'QkFVRw==',
+        mediaType: 'image/jpeg',
+      },
+    ],
+    finishReason: 'stop',
+    usage: testUsage,
+    warnings: [],
   }),
 });
 
@@ -291,6 +371,23 @@ export const modelWithReasoning = new MockLanguageModelV2({
         usage: testUsage,
       },
     ]),
+  }),
+  doGenerate: async () => ({
+    content: [
+      {
+        type: 'reasoning' as const,
+        text: 'I will open the conversation with witty banter. Once the user has relaxed, I will pry for valuable information. I need to think about this problem carefully. The best solution requires careful consideration of all factors.',
+      },
+      { type: 'text' as const, text: 'Hi there!' },
+    ],
+    finishReason: 'stop',
+    usage: testUsage,
+    warnings: [],
+    response: {
+      id: 'id-0',
+      modelId: 'mock-model-id',
+      timestamp: new Date(0),
+    },
   }),
 });
 

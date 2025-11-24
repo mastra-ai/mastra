@@ -6,22 +6,12 @@ import type { MCPServerBase as MastraMCPServerImplementation, ServerInfo, Server
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  getMcpServerMessageHandler,
-  listMcpRegistryServersHandler,
-  getMcpRegistryServerDetailHandler,
-} from '../routes/mcp/handlers';
+import { getMcpServerMessageHandler, listMcpRegistryServersHandler, getMcpRegistryServerDetailHandler } from '../mcp';
 
 // Mock dependencies
 vi.mock('fetch-to-node', () => ({
   toReqRes: vi.fn(),
   toFetchResponse: vi.fn(),
-}));
-
-// It's often simpler to mock specific functions from a module if that's all you need.
-// If '../error' only exports handleError or you only care about that one:
-vi.mock('../error', () => ({
-  handleError: vi.fn(),
 }));
 
 // Helper to create a mock Hono context

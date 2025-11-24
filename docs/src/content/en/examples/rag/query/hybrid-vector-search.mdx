@@ -45,7 +45,7 @@ Import the necessary dependencies:
 ```typescript copy showLineNumbers title="src/index.ts"
 import { embed } from "ai";
 import { PgVector } from "@mastra/pg";
-import { openai } from "@ai-sdk/openai";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 ```
 
 ## Vector Store Initialization
@@ -63,10 +63,10 @@ const pgVector = new PgVector({
 
 ### Filter by Metadata Value
 
-```typescript copy showLineNumbers{6} title="src/index.ts"
+```typescript copy showLineNumbers{3} title="src/index.ts"
 // Create embedding for the query
 const { embedding } = await embed({
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   value: "[Insert query based on document here]",
 });
 

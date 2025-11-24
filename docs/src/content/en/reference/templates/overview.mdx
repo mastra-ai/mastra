@@ -118,13 +118,10 @@ We recommend using OpenAI, Anthropic, or Google model providers for templates. C
 
 ```typescript title="src/mastra/agents/example-agent.ts"
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-// Or use: import { anthropic } from '@ai-sdk/anthropic';
-// Or use: import { google } from '@ai-sdk/google';
 
 const agent = new Agent({
   name: "example-agent",
-  model: openai("gpt-4"), // or anthropic('') or google('')
+  model: "openai/gpt-5.1", // or other provider strings
   instructions: "Your agent instructions here",
   // ... other configuration
 });
