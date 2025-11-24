@@ -15,6 +15,7 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
 import { describeRoute } from 'hono-openapi';
+import { normalizeServerBase } from '../build/utils';
 import { authenticationMiddleware, authorizationMiddleware } from './handlers/auth';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
@@ -22,7 +23,6 @@ import { healthHandler } from './handlers/health';
 import { MCP_ROUTES, getMcpServerMessageHandler, getMcpServerSseHandler } from './handlers/mcp';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
 import type { ServerBundleOptions } from './types';
-import { normalizeServerBase } from './utils';
 import { html } from './welcome';
 
 // Use adapter type definitions
