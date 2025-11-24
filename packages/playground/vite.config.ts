@@ -16,7 +16,6 @@ export default defineConfig(({ mode }) => {
     build: {
       cssCodeSplit: false,
     },
-    base: './',
     server: {
       fs: {
         allow: ['..'],

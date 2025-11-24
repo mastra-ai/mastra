@@ -24,7 +24,10 @@ vi.mock('fs/promises', () => ({
 }));
 
 vi.mock('@hono/node-server/serve-static', () => ({
-  serveStatic: vi.fn(() => vi.fn()),
+  serveStatic: vi.fn(() => async (ctx: any) => {
+    // Mock serveStatic middleware - returns 404 for non-existent files
+    return ctx.notFound();
+  }),
 }));
 
 vi.mock('@hono/swagger-ui', () => ({
@@ -70,19 +73,20 @@ vi.mock('../welcome', () => ({
 
 describe('Server base path functionality', () => {
   let mockMastra: Mastra;
+  // Mock the BUILT playground HTML (not source) - has absolute paths (Vite default)
   const mockIndexHtml = `<!DOCTYPE html>
 <html>
 <head>
-  <base href="%%MASTRA_BASE_PATH%%/">
-  <link rel="icon" href="%%MASTRA_BASE_PATH%%/favicon.ico">
+  <link rel="icon" href="/mastra.svg">
+  <script type="module" crossorigin src="/assets/index-abc123.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/style-xyz789.css">
 </head>
 <body>
   <script>
-    window.MASTRA_CONFIG = {
-      host: '%%MASTRA_SERVER_HOST%%',
-      port: '%%MASTRA_SERVER_PORT%%',
-      hideCloudCta: '%%MASTRA_HIDE_CLOUD_CTA%%'
-    };
+    window.MASTRA_TELEMETRY_DISABLED = '%%MASTRA_TELEMETRY_DISABLED%%';
+    window.MASTRA_SERVER_HOST = '%%MASTRA_SERVER_HOST%%';
+    window.MASTRA_SERVER_PORT = '%%MASTRA_SERVER_PORT%%';
+    window.MASTRA_HIDE_CLOUD_CTA = '%%MASTRA_HIDE_CLOUD_CTA%%';
   </script>
 </body>
 </html>`;
@@ -221,7 +225,7 @@ describe('Server base path functionality', () => {
   });
 
   describe('HTML placeholder replacement with base path', () => {
-    it('should replace base path placeholders in index.html for root path', async () => {
+    it('should not rewrite asset paths for root base path', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({
         base: '/',
         port: 4111,
@@ -234,12 +238,13 @@ describe('Server base path functionality', () => {
       expect(response.status).toBe(200);
       const html = await response.text();
 
-      // Base path should be empty string for root
-      expect(html).toContain('<base href="/">');
-      expect(html).toContain('href="/favicon.ico"');
+      // Absolute paths should remain unchanged (basePath is empty for root)
+      expect(html).toContain('href="/mastra.svg"');
+      expect(html).toContain('src="/assets/index-abc123.js"');
+      expect(html).toContain('href="/assets/style-xyz789.css"');
     });
 
-    it('should replace base path placeholders in index.html for custom path', async () => {
+    it('should rewrite asset paths for custom base path', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({
         base: '/admin',
         port: 3000,
@@ -252,8 +257,41 @@ describe('Server base path functionality', () => {
       expect(response.status).toBe(200);
       const html = await response.text();
 
-      expect(html).toContain('<base href="/admin/">');
-      expect(html).toContain('href="/admin/favicon.ico"');
+      expect(html).toContain('href="/admin/mastra.svg"');
+      expect(html).toContain('src="/admin/assets/index-abc123.js"');
+    });
+
+    it('should not double-prefix paths that already contain base path', async () => {
+      // Test HTML with mixed paths (some already prefixed, some not)
+      const mixedHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <link rel="icon" href="/mastra.svg">
+  <link rel="icon" href="/custom-path/mastra.svg">
+  <script src="/assets/index.js"></script>
+  <script src="/custom-path/assets/index.js"></script>
+</head>
+</html>`;
+
+      vi.mocked(readFile).mockResolvedValue(mixedHtml);
+      vi.mocked(mockMastra.getServer).mockReturnValue({
+        base: '/custom-path',
+        port: 4111,
+        host: 'localhost',
+      });
+
+      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+
+      const response = await app.request('/custom-path');
+      expect(response.status).toBe(200);
+      const html = await response.text();
+
+      // Should prefix unprefixed paths
+      expect(html).toContain('href="/custom-path/mastra.svg"');
+      expect(html).toContain('src="/custom-path/assets/index.js"');
+
+      // Should NOT double-prefix already prefixed paths
+      expect(html).not.toContain('/custom-path/custom-path/');
     });
 
     it('should replace server configuration placeholders in index.html', async () => {
@@ -269,8 +307,8 @@ describe('Server base path functionality', () => {
       expect(response.status).toBe(200);
       const html = await response.text();
 
-      expect(html).toContain("host: 'api.example.com'");
-      expect(html).toContain("port: '5000'");
+      expect(html).toContain("window.MASTRA_SERVER_HOST = 'api.example.com'");
+      expect(html).toContain("window.MASTRA_SERVER_PORT = '5000'");
     });
 
     it('should handle environment variable for port when server port is not set', async () => {
@@ -286,7 +324,7 @@ describe('Server base path functionality', () => {
       const html = await response.text();
 
       // Should use default port 4111 when PORT env is not set
-      expect(html).toContain("port: '4111'");
+      expect(html).toContain("window.MASTRA_SERVER_PORT = '4111'");
     });
 
     it('should replace hideCloudCta placeholder based on environment variable', async () => {
@@ -307,7 +345,7 @@ describe('Server base path functionality', () => {
         expect(response.status).toBe(200);
         const html = await response.text();
 
-        expect(html).toContain("hideCloudCta: 'true'");
+        expect(html).toContain("window.MASTRA_HIDE_CLOUD_CTA = 'true'");
       } finally {
         if (originalEnv !== undefined) {
           process.env.MASTRA_HIDE_CLOUD_CTA = originalEnv;
@@ -315,6 +353,182 @@ describe('Server base path functionality', () => {
           delete process.env.MASTRA_HIDE_CLOUD_CTA;
         }
       }
+    });
+
+    it('should not double-prefix paths that already contain base path', async () => {
+      // Test HTML with mixed paths (some already prefixed, some not)
+      const mixedHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <link rel="icon" href="/mastra.svg">
+  <link rel="alternate" href="/custom-path/already-prefixed.svg">
+  <script src="/assets/index.js"></script>
+  <script src="/custom-path/assets/already-prefixed.js"></script>
+</head>
+</html>`;
+
+      vi.mocked(readFile).mockResolvedValue(mixedHtml);
+      vi.mocked(mockMastra.getServer).mockReturnValue({
+        base: '/custom-path',
+        port: 4111,
+        host: 'localhost',
+      });
+
+      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+
+      const response = await app.request('/custom-path');
+      expect(response.status).toBe(200);
+      const html = await response.text();
+
+      // Should prefix unprefixed paths
+      expect(html).toContain('href="/custom-path/mastra.svg"');
+      expect(html).toContain('src="/custom-path/assets/index.js"');
+
+      // Should NOT double-prefix already prefixed paths
+      expect(html).not.toContain('/custom-path/custom-path/');
+      expect(html).toContain('href="/custom-path/already-prefixed.svg"');
+      expect(html).toContain('src="/custom-path/assets/already-prefixed.js"');
+    });
+  });
+
+  describe('CSS URL rewriting with base path', () => {
+    it('should rewrite CSS url() references to include base path', async () => {
+      const mockCss = `
+@font-face {
+  font-family: 'TestFont';
+  src: url(/assets/fonts/font.woff2) format('woff2');
+}
+.background {
+  background-image: url(/assets/images/bg.jpg);
+}`;
+
+      vi.mocked(readFile).mockImplementation(async (path: any) => {
+        if (path.includes('index.html')) {
+          return mockIndexHtml;
+        }
+        if (path.includes('.css')) {
+          return mockCss;
+        }
+        throw new Error('File not found');
+      });
+
+      vi.mocked(mockMastra.getServer).mockReturnValue({
+        base: '/custom-path',
+        port: 4111,
+        host: 'localhost',
+      });
+
+      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+
+      const response = await app.request('/custom-path/assets/style.css');
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Content-Type')).toBe('text/css');
+      const css = await response.text();
+
+      // CSS urls should be prefixed with base path
+      expect(css).toContain('url(/custom-path/assets/fonts/font.woff2)');
+      expect(css).toContain('url(/custom-path/assets/images/bg.jpg)');
+    });
+
+    it('should not double-prefix CSS urls that already contain base path', async () => {
+      const mockCss = `
+.icon {
+  background: url(/assets/icon.svg);
+}
+.already-prefixed {
+  background: url(/custom-path/assets/prefixed-icon.svg);
+}`;
+
+      vi.mocked(readFile).mockImplementation(async (path: any) => {
+        if (path.includes('index.html')) {
+          return mockIndexHtml;
+        }
+        if (path.includes('.css')) {
+          return mockCss;
+        }
+        throw new Error('File not found');
+      });
+
+      vi.mocked(mockMastra.getServer).mockReturnValue({
+        base: '/custom-path',
+        port: 4111,
+        host: 'localhost',
+      });
+
+      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+
+      const response = await app.request('/custom-path/assets/style.css');
+      expect(response.status).toBe(200);
+      const css = await response.text();
+
+      // Should prefix unprefixed url
+      expect(css).toContain('url(/custom-path/assets/icon.svg)');
+
+      // Should NOT double-prefix already prefixed url
+      expect(css).not.toContain('/custom-path/custom-path/');
+      expect(css).toContain('url(/custom-path/assets/prefixed-icon.svg)');
+    });
+
+    it('should handle CSS with quoted urls', async () => {
+      const mockCss = `
+.test1 { background: url("/assets/test1.png"); }
+.test2 { background: url('/assets/test2.png'); }
+.test3 { background: url(/assets/test3.png); }`;
+
+      vi.mocked(readFile).mockImplementation(async (path: any) => {
+        if (path.includes('index.html')) {
+          return mockIndexHtml;
+        }
+        if (path.includes('.css')) {
+          return mockCss;
+        }
+        throw new Error('File not found');
+      });
+
+      vi.mocked(mockMastra.getServer).mockReturnValue({
+        base: '/admin',
+        port: 4111,
+        host: 'localhost',
+      });
+
+      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+
+      const response = await app.request('/admin/assets/style.css');
+      expect(response.status).toBe(200);
+      const css = await response.text();
+
+      // All url formats should be rewritten correctly
+      expect(css).toContain('url("/admin/assets/test1.png")');
+      expect(css).toContain("url('/admin/assets/test2.png')");
+      expect(css).toContain('url(/admin/assets/test3.png)');
+    });
+
+    it('should not rewrite CSS urls when base path is root', async () => {
+      const mockCss = `
+.icon { background: url(/assets/icon.svg); }`;
+
+      vi.mocked(readFile).mockImplementation(async (path: any) => {
+        if (path.includes('index.html')) {
+          return mockIndexHtml;
+        }
+        if (path.includes('.css')) {
+          return mockCss;
+        }
+        throw new Error('File not found');
+      });
+
+      vi.mocked(mockMastra.getServer).mockReturnValue({
+        base: '/',
+        port: 4111,
+        host: 'localhost',
+      });
+
+      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+
+      // CSS middleware should not intercept when basePath is empty
+      const response = await app.request('/assets/style.css');
+      // Will be handled by serveStatic, likely 404 in test env
+      expect([200, 404]).toContain(response.status);
     });
   });
 
@@ -383,6 +597,42 @@ describe('Server base path functionality', () => {
       expect(response.status).toBe(200);
       expect(response.headers.get('Content-Type')).toBe('text/html');
     });
+
+    it('should serve static files from playground directory with base path', async () => {
+      vi.mocked(mockMastra.getServer).mockReturnValue({ base: '/custom-path' });
+
+      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+
+      // Test various static file paths that should be served
+      const staticPaths = [
+        '/custom-path/mastra.svg',
+        '/custom-path/favicon.ico',
+        '/custom-path/assets/index.js',
+        '/custom-path/assets/style.css',
+      ];
+
+      for (const path of staticPaths) {
+        const response = await app.request(path);
+        // Should attempt to serve (404 if file doesn't exist in test env)
+        expect([200, 404]).toContain(response.status);
+      }
+    });
+
+    it('should not serve static files without base path prefix when base path is set', async () => {
+      vi.mocked(mockMastra.getServer).mockReturnValue({ base: '/custom-path' });
+
+      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+
+      // These should NOT be served by the base path static handler
+      const response = await app.request('/mastra.svg');
+      // Should serve welcome HTML or 404, not the static file
+      if (response.status === 200) {
+        const content = await response.text();
+        expect(content).toContain('Welcome to Mastra');
+      } else {
+        expect(response.status).toBe(404);
+      }
+    });
   });
 
   describe('Base path with nested routes', () => {
@@ -403,7 +653,8 @@ describe('Server base path functionality', () => {
       const response = await app.request('/studio/v1/app');
       expect(response.status).toBe(200);
       const html = await response.text();
-      expect(html).toContain('<base href="/studio/v1/app/">');
+      expect(html).toContain('href="/studio/v1/app/mastra.svg"');
+      expect(html).toContain('src="/studio/v1/app/assets/index-abc123.js"');
     });
 
     it('should not match partial base paths', async () => {

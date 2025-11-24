@@ -265,9 +265,45 @@ export async function createHonoServer(
       },
     );
     // Playground routes - these should come after API routes
-    // Serve assets with specific MIME types
+    // Serve assets with MIME types and CSS rewriting
     app.use(`${basePath}/assets/*`, async (c, next) => {
       const path = c.req.path;
+
+      // Intercept CSS files to rewrite URLs when basePath is set
+      if (path.endsWith('.css') && basePath) {
+        // Remove basePath and /assets to get the filename
+        let filename = path;
+
+        if (filename.includes('..') || filename.includes('\0')) {
+          return c.notFound();
+        }
+
+        if (filename.startsWith(basePath)) {
+          filename = filename.slice(basePath.length);
+        }
+        if (filename.startsWith('/assets/')) {
+          filename = filename.slice('/assets/'.length);
+        }
+
+        try {
+          const cssPath = join(process.cwd(), './playground/assets', filename);
+          const cssContent = await readFile(cssPath, 'utf-8');
+
+          const normalizedBasePath = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
+          const escapedBasePath = normalizedBasePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+          // Rewrite url(/assets/...) and url("/assets/...) to url(/custom-path/assets/...)
+          const urlPattern = new RegExp(`url\\((["']?)\\/(?!${escapedBasePath.slice(1)}\\/)`, 'g');
+          const rewrittenCss = cssContent.replace(urlPattern, `url($1${normalizedBasePath}/`);
+
+          return c.newResponse(rewrittenCss, 200, { 'Content-Type': 'text/css' });
+        } catch (err) {
+          // File not found, fall through to serveStatic
+          return await next();
+        }
+      }
+
+      // Set MIME types for other assets
       if (path.endsWith('.js')) {
         c.header('Content-Type', 'application/javascript');
       } else if (path.endsWith('.css')) {
@@ -280,10 +316,20 @@ export async function createHonoServer(
     app.use(
       `${basePath}/assets/*`,
       serveStatic({
-        root: './playground',
-        rewriteRequestPath: basePath
-          ? path => (path.startsWith(basePath) ? path.slice(basePath.length) : path)
-          : undefined,
+        root: './playground/assets',
+        rewriteRequestPath: path => {
+          // Remove the basePath AND /assets prefix to get the actual file path
+          // Example: /custom-path/assets/style.css -> /style.css -> ./playground/assets/style.css
+          let rewritten = path;
+          if (basePath && rewritten.startsWith(basePath)) {
+            rewritten = rewritten.slice(basePath.length);
+          }
+          // Remove the /assets prefix since root is already './playground/assets'
+          if (rewritten.startsWith('/assets')) {
+            rewritten = rewritten.slice('/assets'.length);
+          }
+          return rewritten;
+        },
       }),
     );
   }
@@ -307,7 +353,7 @@ export async function createHonoServer(
     }
 
     // Only serve playground for routes matching the configured base path
-    const isPlaygroundRoute = !basePath || requestPath === basePath || requestPath.startsWith(`${basePath}/`);
+    const isPlaygroundRoute = basePath === '' || requestPath === basePath || requestPath.startsWith(`${basePath}/`);
     if (options?.playground && isPlaygroundRoute) {
       // For HTML routes, serve index.html with dynamic replacements
       let indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
@@ -323,6 +369,22 @@ export async function createHonoServer(
       // Inject the base path for frontend routing and favicon
       indexHtml = indexHtml.replace(/%%MASTRA_BASE_PATH%%/g, basePath);
 
+      // Rewrite absolute asset paths to include base path
+      if (basePath) {
+        // Normalize basePath (remove trailing slash)
+        const normalizedBasePath = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
+
+        // Use regex with negative lookahead to avoid double-prefixing paths that already have the basePath
+        // This prevents replacing paths that were already modified by %%MASTRA_BASE_PATH%% substitution
+        const escapedBasePath = normalizedBasePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const srcPattern = new RegExp(`src="\/(?!${escapedBasePath.slice(1)}\/)`, 'g');
+        const hrefPattern = new RegExp(`href="\/(?!${escapedBasePath.slice(1)}\/)`, 'g');
+
+        indexHtml = indexHtml
+          .replace(srcPattern, `src="${normalizedBasePath}/`)
+          .replace(hrefPattern, `href="${normalizedBasePath}/`);
+      }
+
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }
 
@@ -331,14 +393,18 @@ export async function createHonoServer(
 
   if (options?.playground) {
     // Serve extra static files from playground directory (this comes after HTML handler)
-    const playgroundPath = basePath || '*';
+    const playgroundPath = basePath ? `${basePath}/*` : '*';
     app.use(
       playgroundPath,
       serveStatic({
         root: './playground',
-        rewriteRequestPath: basePath
-          ? path => (path.startsWith(basePath) ? path.slice(basePath.length) : path)
-          : undefined,
+        rewriteRequestPath: path => {
+          // Remove the basePath prefix if present
+          if (basePath && path.startsWith(basePath)) {
+            return path.slice(basePath.length);
+          }
+          return path;
+        },
       }),
     );
   }

@@ -7,10 +7,10 @@ import { Layout } from '@/components/layout';
 declare global {
   interface Window {
     MASTRA_BASE_PATH?: string;
-    MASTRA_SERVER_HOST?: string;
-    MASTRA_SERVER_PORT?: string;
+    MASTRA_SERVER_HOST: string;
+    MASTRA_SERVER_PORT: string;
     MASTRA_TELEMETRY_DISABLED?: string;
-    MASTRA_HIDE_CLOUD_CTA?: string;
+    MASTRA_HIDE_CLOUD_CTA: string;
   }
 }
 
@@ -75,14 +75,9 @@ const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
 
 function App() {
   const basePath = window.MASTRA_BASE_PATH || '';
-  const host = window.MASTRA_SERVER_HOST || 'localhost';
-  const port = window.MASTRA_SERVER_PORT || '4111';
-  // Use current protocol to support both HTTP and HTTPS
-  const protocol = window.location.protocol;
-  const baseUrl = `${protocol}//${host}:${port}${basePath}`;
 
   return (
-    <MastraReactProvider baseUrl={baseUrl}>
+    <MastraReactProvider>
       <PlaygroundQueryClient>
         <PostHogProvider>
           <BrowserRouter basename={basePath}>
