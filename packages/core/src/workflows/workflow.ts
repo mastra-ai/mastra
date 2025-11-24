@@ -266,6 +266,8 @@ export function createStep<
       description: params.description,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
+      resumeSchema: params.resumeSchema,
+      suspendSchema: params.suspendSchema,
       execute: async ({
         inputData,
         mastra,
@@ -283,10 +285,11 @@ export function createStep<
           mastra,
           requestContext,
           tracingContext,
-          suspend,
           resumeData,
           workflow: {
             runId,
+            suspend,
+            resumeData,
             workflowId,
             state,
             setState,
