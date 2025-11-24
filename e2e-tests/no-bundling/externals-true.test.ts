@@ -61,13 +61,14 @@ describe('externals: true', () => {
     } catch {}
   });
 
-  describe.sequential('build', async () => {
-    let port = await getPort();
+  describe.sequential('build', () => {
+    let port: number;
     let proc: ReturnType<typeof execa> | undefined;
     const controller = new AbortController();
     const cancelSignal = controller.signal;
 
     beforeAll(async () => {
+      port = await getPort();
       await runBuild(fixturePath);
 
       const inputFile = join(fixturePath, '.mastra', 'output');
@@ -130,8 +131,8 @@ describe('externals: true', () => {
     }, timeout);
   });
 
-  describe.sequential('start', async () => {
-    let port = await getPort();
+  describe.sequential('start', () => {
+    let port: number;
     let proc: ReturnType<typeof execa> | undefined;
     const controller = new AbortController();
     const cancelSignal = controller.signal;
@@ -139,6 +140,7 @@ describe('externals: true', () => {
     it(
       'should start server successfully',
       async () => {
+        port = await getPort();
         await runBuild(fixturePath);
 
         console.log('started proc', port);
