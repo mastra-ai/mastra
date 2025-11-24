@@ -279,7 +279,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         // Optional.nullable should be transformed to nullable and then the data set to undefined
         barometricPressure: z.number().optional().nullable(),
         // Nullable should not change and be able to return a nullable value from openAI
-        precipitation: z.number().nullable()
+        precipitation: z.number().nullable(),
       });
 
       const result = await agent.generate(
@@ -299,11 +299,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         humidity: expect.any(Number),
         windSpeed: undefined,
         barometricPressure: undefined,
-        precipitation: null
-      }
+        precipitation: null,
+      };
 
-      const resultObject = await result.object
-      expect(resultObject).toEqual(resultData)
+      const resultObject = await result.object;
+      expect(resultObject).toEqual(resultData);
     });
   });
 
