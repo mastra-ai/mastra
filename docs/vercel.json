@@ -67,12 +67,12 @@
     },
     {
       "source": "/docs/v1/getting-started/installation",
-      "destination": "/guides/v1/quickstarts/standalone-server",
+      "destination": "/guides/v1/quickstarts/quickstart",
       "permanent": true
     },
     {
       "source": "/examples/v1/agents/ai-sdk-v5-integration",
-      "destination": "/guides/v1/quickstarts/nextjs",
+      "destination": "/guides/v1/frameworks/web-frameworks/next-js",
       "permanent": true
     },
     {
@@ -98,6 +98,166 @@
     {
       "source": "/examples/v1/memory/working-memory-template",
       "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-template",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agentic-uis/ai-sdk",
+      "destination": "/guides/frameworks/agentic-uis/ai-sdk-ui",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agentic-uis/copilotkit",
+      "destination": "/guides/frameworks/agentic-uis/copilotkit",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agentic-uis/assistant-ui",
+      "destination": "/guides/frameworks/agentic-uis/assistant-ui",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agentic-uis/cedar-os",
+      "destination": "/guides/frameworks/agentic-uis/cedar-os",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agentic-uis/openrouter",
+      "destination": "/guides/frameworks/agentic-uis/openrouter",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/servers/express",
+      "destination": "/guides/frameworks/servers/express",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/web-frameworks/vite-react",
+      "destination": "/guides/frameworks/web-frameworks/vite-react",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/web-frameworks/next-js",
+      "destination": "/guides/frameworks/web-frameworks/next-js",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/web-frameworks/astro",
+      "destination": "/guides/frameworks/web-frameworks/astro",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/web-frameworks/sveltekit",
+      "destination": "/guides/frameworks/web-frameworks/sveltekit",
+      "permanent": true
+    },
+    {
+      "source": "/guides/frameworks/agentic-uis/openrouter",
+      "destination": "/models/v1/gateways/openrouter",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/manual-install",
+      "destination": "/guides/quickstarts/manual-install",
+      "permanent": true
+    },
+    {
+      "source": "/guides/v1/guide/manual-install",
+      "destination": "/guides/v1/quickstarts/manual-install",
+      "permanent": true
+    },
+    {
+      "source": "/guides/quickstarts/nextjs",
+      "destination": "/guides/frameworks/web-frameworks/next-js",
+      "permanent": true
+    },
+    {
+      "source": "/guides/v1/quickstarts/nextjs",
+      "destination": "/guides/v1/frameworks/web-frameworks/next-js",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/frameworks/agentic-uis/ai-sdk",
+      "destination": "/guides/v1/frameworks/agentic-uis/ai-sdk-ui",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/frameworks/agentic-uis/copilotkit",
+      "destination": "/guides/v1/frameworks/agentic-uis/copilotkit",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/frameworks/agentic-uis/assistant-ui",
+      "destination": "/guides/v1/frameworks/agentic-uis/assistant-ui",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/frameworks/agentic-uis/cedar-os",
+      "destination": "/guides/v1/frameworks/agentic-uis/cedar-os",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/frameworks/agentic-uis/openrouter",
+      "destination": "/models/v1/gateways/openrouter",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/frameworks/servers/express",
+      "destination": "/guides/v1/frameworks/servers/express",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/frameworks/web-frameworks/vite-react",
+      "destination": "/guides/v1/frameworks/web-frameworks/vite-react",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/frameworks/web-frameworks/next-js",
+      "destination": "/guides/v1/frameworks/web-frameworks/next-js",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/frameworks/web-frameworks/astro",
+      "destination": "/guides/v1/frameworks/web-frameworks/astro",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/frameworks/web-frameworks/sveltekit",
+      "destination": "/guides/v1/frameworks/web-frameworks/sveltekit",
+      "permanent": true
+    },
+    {
+      "source": "/guides/v1/frameworks/agentic-uis/openrouter",
+      "destination": "/models/v1/gateways/openrouter",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/quickstart",
+      "destination": "/docs/getting-started/installation",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/getting-started/quickstart",
+      "destination": "/docs/v1/getting-started/installation",
+      "permanent": true
+    },
+    {
+      "source": "/guides/quickstarts/standalone-server",
+      "destination": "/guides/quickstarts/quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/guides/v1/quickstarts/standalone-server",
+      "destination": "/guides/v1/quickstarts/quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/guides/frameworks/agentic-uis/ai-sdk",
+      "destination": "/guides/frameworks/agentic-uis/ai-sdk-ui",
+      "permanent": true
+    },
+    {
+      "source": "/guides/v1/frameworks/agentic-uis/ai-sdk",
+      "destination": "/guides/v1/frameworks/agentic-uis/ai-sdk-ui",
       "permanent": true
     }
   ]

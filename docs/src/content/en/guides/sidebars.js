@@ -10,18 +10,88 @@ const sidebars = {
     "index",
     {
       type: "category",
-      label: "Quickstarts",
+      label: "Getting Started",
       collapsed: false,
       items: [
         {
           type: "doc",
-          id: "quickstarts/standalone-server",
-          label: "Standalone Server",
+          id: "quickstarts/quickstart",
+          label: "Quickstart",
         },
         {
           type: "doc",
-          id: "quickstarts/nextjs",
-          label: "Next.js",
+          id: "quickstarts/manual-install",
+          label: "Manual Setup",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "Frameworks",
+      collapsed: false,
+      items: [
+        {
+          type: "category",
+          label: "Agentic UIs",
+          items: [
+            {
+              type: "doc",
+              id: "frameworks/agentic-uis/ai-sdk-ui",
+              label: "With AI SDK UI",
+            },
+            {
+              type: "doc",
+              id: "frameworks/agentic-uis/copilotkit",
+              label: "With CopilotKit",
+            },
+            {
+              type: "doc",
+              id: "frameworks/agentic-uis/assistant-ui",
+              label: "With Assistant UI",
+            },
+            {
+              type: "doc",
+              id: "frameworks/agentic-uis/cedar-os",
+              label: "With Cedar-OS",
+            },
+          ],
+        },
+        {
+          type: "category",
+          label: "Servers",
+          items: [
+            {
+              type: "doc",
+              id: "frameworks/servers/express",
+              label: "With Express",
+            },
+          ],
+        },
+        {
+          type: "category",
+          label: "Web Frameworks",
+          items: [
+            {
+              type: "doc",
+              id: "frameworks/web-frameworks/vite-react",
+              label: "With Vite/React",
+            },
+            {
+              type: "doc",
+              id: "frameworks/web-frameworks/next-js",
+              label: "With Next.js",
+            },
+            {
+              type: "doc",
+              id: "frameworks/web-frameworks/astro",
+              label: "With Astro",
+            },
+            {
+              type: "doc",
+              id: "frameworks/web-frameworks/sveltekit",
+              label: "With SvelteKit",
+            },
+          ],
         },
       ],
     },
@@ -59,11 +129,6 @@ const sidebars = {
           type: "doc",
           id: "guide/web-search",
           label: "Tools: Web Search",
-        },
-        {
-          type: "doc",
-          id: "guide/manual-install",
-          label: "Manual Install",
         },
       ],
     },
