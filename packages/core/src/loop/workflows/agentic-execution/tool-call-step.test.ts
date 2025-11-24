@@ -75,6 +75,12 @@ describe('createToolCallStep tool approval workflow', () => {
             model: () => [],
           },
         },
+        response: {
+          db: () => [],
+        },
+        all: {
+          db: () => [],
+        },
       },
     } as unknown as MessageList;
 

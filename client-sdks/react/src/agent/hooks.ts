@@ -11,6 +11,7 @@ import { toUIMessage } from '@/lib/ai-sdk';
 import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
 import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
 import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
+import { randomUUID } from 'node:crypto';
 
 export interface MastraChatProps {
   agentId: string;
@@ -103,7 +104,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
 
     const response = await agent.generate({
       messages: coreUserMessages,
-      runId: agentId,
+      runId: randomUUID(),
       maxSteps,
       modelSettings: {
         frequencyPenalty,
@@ -161,7 +162,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
 
     const agent = clientWithAbort.getAgent(agentId);
 
-    const runId = threadId ? `${agentId}-${threadId}` : agentId;
+    const runId = randomUUID();
 
     const response = await agent.stream({
       messages: coreUserMessages,
@@ -221,7 +222,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
 
     const agent = clientWithAbort.getAgent(agentId);
 
-    const runId = threadId ? `${agentId}-${threadId}` : agentId;
+    const runId = randomUUID();
 
     const response = await agent.network({
       messages: coreUserMessages,
