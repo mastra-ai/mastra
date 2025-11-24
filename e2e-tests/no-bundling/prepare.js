@@ -8,15 +8,14 @@ import { execa } from 'execa';
  * @param {string} pathToStoreFiles
  * @param {'pnpm' | 'npm' | 'yarn'} pkgManager
  */
-export async function setupMonorepo(pathToStoreFiles, pkgManager) {
+export async function setupTemplate(pathToStoreFiles, pkgManager) {
   const __dirname = dirname(fileURLToPath(import.meta.url));
 
-  const monorepoPath = join(__dirname, 'template');
+  const templatePath = join(__dirname, 'template');
   const newPath = pathToStoreFiles;
 
   await mkdir(newPath, { recursive: true });
-  await cp(monorepoPath, newPath, { recursive: true });
-  await cp(join(__dirname, '..', '..', 'tsconfig.node.json'), join(newPath, 'tsconfig.json'));
+  await cp(templatePath, newPath, { recursive: true });
 
   console.log('Directory:', newPath);
   console.log('Installing dependencies...');

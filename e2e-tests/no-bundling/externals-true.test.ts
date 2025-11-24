@@ -1,6 +1,6 @@
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { join } from 'path';
-import { setupMonorepo } from './prepare';
+import { setupTemplate } from './prepare';
 import { mkdtemp, mkdir, rm, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
@@ -48,7 +48,7 @@ describe('externals: true', () => {
 
       fixturePath = await mkdtemp(join(tmpdir(), `mastra-no-bundling-test-${pkgManager}-`));
       process.env.npm_config_registry = registry;
-      await setupMonorepo(fixturePath, pkgManager);
+      await setupTemplate(fixturePath, pkgManager);
     },
     10 * 60 * 1000,
   );
