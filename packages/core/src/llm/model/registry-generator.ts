@@ -26,17 +26,20 @@ export async function fetchProvidersFromGateways(
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const providers = await gateway.fetchProviders();
-        const gatewayPrefix = gateway.prefix;
+
+        // models.dev is a provider registry, not a true gateway - don't prefix its providers
+        const isProviderRegistry = gateway.id === 'models.dev';
 
         for (const [providerId, config] of Object.entries(providers)) {
-          // If gateway has a prefix, prepend it to the provider ID for type generation
-          // This creates paths like: prefix/provider/model
+          // For true gateways, use gateway.id as prefix (e.g., "netlify/anthropic")
+          // Special case: if providerId matches gateway.id, it's a unified gateway (e.g., azure-openai returning {azure-openai: {...}})
+          // In this case, use just the gateway ID to avoid duplication (azure-openai, not azure-openai/azure-openai)
+          const typeProviderId = isProviderRegistry
+            ? providerId
+            : providerId === gateway.id
+              ? gateway.id
+              : `${gateway.id}/${providerId}`;
 
-          // NOTE: If the provider ID equals the gateway prefix, don't double the prefix.
-          // This is the case for the AzureOpenAIGateway.
-
-          const typeProviderId =
-            gatewayPrefix && gatewayPrefix !== providerId ? `${gatewayPrefix}/${providerId}` : providerId;
           allProviders[typeProviderId] = config;
           // Sort models alphabetically for consistent ordering
           allModels[typeProviderId] = config.models.sort();
