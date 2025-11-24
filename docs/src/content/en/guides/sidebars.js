@@ -15,12 +15,12 @@ const sidebars = {
       items: [
         {
           type: "doc",
-          id: "quickstarts/quickstart",
+          id: "getting-started/quickstart",
           label: "Quickstart",
         },
         {
           type: "doc",
-          id: "quickstarts/manual-install",
+          id: "getting-started/manual-install",
           label: "Manual Installation",
         },
       ],

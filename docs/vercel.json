@@ -259,6 +259,16 @@
       "source": "/guides/v1/frameworks/agentic-uis/ai-sdk",
       "destination": "/guides/v1/frameworks/agentic-uis/ai-sdk-ui",
       "permanent": true
+    },
+    {
+      "source": "/guides/quickstarts/:path*",
+      "destination": "/guides/getting-started/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/v1/quickstarts/:path*",
+      "destination": "/guides/v1/getting-started/:path*",
+      "permanent": true
     }
   ]
 }
