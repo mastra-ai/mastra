@@ -1,9 +1,9 @@
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { Tool } from '@mastra/core/tools';
-import { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { MastraServerAdapter } from '@mastra/server/server-adapter';
-import type { BodyLimitOptions, ServerRoute } from '@mastra/server/server-adapter';
+import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { MastraServerBase } from '@mastra/server/server-adapter';
+import type { ServerRoute } from '@mastra/server/server-adapter';
 import type { Context, Env, Hono, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
@@ -22,36 +22,7 @@ export type HonoVariables = {
 
 export type HonoBindings = {};
 
-export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, HonoRequest, Context> {
-  private taskStore: InMemoryTaskStore;
-  private customRouteAuthConfig?: Map<string, boolean>;
-  private playground?: boolean;
-  private isDev?: boolean;
-
-  constructor({
-    mastra,
-    tools,
-    taskStore,
-    customRouteAuthConfig,
-    playground,
-    isDev,
-    bodyLimitOptions,
-  }: {
-    mastra: Mastra;
-    tools?: Record<string, Tool>;
-    taskStore?: InMemoryTaskStore;
-    customRouteAuthConfig?: Map<string, boolean>;
-    playground?: boolean;
-    isDev?: boolean;
-    bodyLimitOptions?: BodyLimitOptions;
-  }) {
-    super({ mastra, bodyLimitOptions, tools });
-    this.taskStore = taskStore || new InMemoryTaskStore();
-    this.customRouteAuthConfig = customRouteAuthConfig;
-    this.playground = playground;
-    this.isDev = isDev;
-  }
-
+export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequest, Context> {
   createContextMiddleware(): MiddlewareHandler {
     return async (c, next) => {
       // Parse request context from request body and add to context
@@ -107,7 +78,6 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
       c.set('taskStore', this.taskStore);
       c.set('playground', this.playground === true);
       c.set('isDev', this.isDev === true);
-      c.set('customRouteAuthConfig', this.customRouteAuthConfig);
       c.set('abortSignal', c.req.raw.signal);
 
       return next();
@@ -280,15 +250,7 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
     );
   }
 
-  registerContextMiddleware<E extends Env = any>(app: Hono<E, any, any>): void {
-    app.use('*', this.createContextMiddleware());
-  }
-
-  async registerRoutes<E extends Env = any>(
-    app: Hono<E, any, any>,
-    { prefix, openapiPath }: { prefix?: string; openapiPath?: string },
-  ): Promise<void> {
-    // Cast to base type for super call - safe because registerRoute is generic
-    await super.registerRoutes(app as any, { prefix, openapiPath });
+  registerContextMiddleware(): void {
+    this.app.use('*', this.createContextMiddleware());
   }
 }

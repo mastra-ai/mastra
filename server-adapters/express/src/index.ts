@@ -1,9 +1,9 @@
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { Tool } from '@mastra/core/tools';
-import { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import type { ServerRoute, BodyLimitOptions } from '@mastra/server/server-adapter';
-import { MastraServerAdapter } from '@mastra/server/server-adapter';
+import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import type { ServerRoute } from '@mastra/server/server-adapter';
+import { MastraServerBase } from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
 
 // Extend Express types to include Mastra context
@@ -22,36 +22,7 @@ declare global {
   }
 }
 
-export class ExpressServerAdapter extends MastraServerAdapter<Application, Request, Response> {
-  private taskStore: InMemoryTaskStore;
-  private customRouteAuthConfig?: Map<string, boolean>;
-  private playground?: boolean;
-  private isDev?: boolean;
-
-  constructor({
-    mastra,
-    tools,
-    taskStore,
-    customRouteAuthConfig,
-    playground,
-    isDev,
-    bodyLimitOptions,
-  }: {
-    mastra: Mastra;
-    tools?: Record<string, Tool>;
-    taskStore?: InMemoryTaskStore;
-    customRouteAuthConfig?: Map<string, boolean>;
-    playground?: boolean;
-    isDev?: boolean;
-    bodyLimitOptions?: BodyLimitOptions;
-  }) {
-    super({ mastra, bodyLimitOptions, tools });
-    this.taskStore = taskStore || new InMemoryTaskStore();
-    this.customRouteAuthConfig = customRouteAuthConfig;
-    this.playground = playground;
-    this.isDev = isDev;
-  }
-
+export class MastraServer extends MastraServerBase<Application, Request, Response> {
   createContextMiddleware(): (req: Request, res: Response, next: NextFunction) => Promise<void> {
     return async (req: Request, res: Response, next: NextFunction) => {
       // Parse request context from request body and add to context
@@ -97,10 +68,11 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
       res.locals.requestContext = requestContext;
       res.locals.mastra = this.mastra;
       res.locals.tools = this.tools || {};
-      res.locals.taskStore = this.taskStore;
+      if (this.taskStore) {
+        res.locals.taskStore = this.taskStore;
+      }
       res.locals.playground = this.playground === true;
       res.locals.isDev = this.isDev === true;
-      res.locals.customRouteAuthConfig = this.customRouteAuthConfig;
       const controller = new AbortController();
       req.on('close', () => {
         controller.abort();
@@ -275,14 +247,7 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
     );
   }
 
-  registerContextMiddleware(app: Application): void {
-    app.use(this.createContextMiddleware());
-  }
-
-  async registerRoutes(
-    app: Application,
-    { prefix, openapiPath }: { prefix?: string; openapiPath?: string },
-  ): Promise<void> {
-    await super.registerRoutes(app, { prefix, openapiPath });
+  registerContextMiddleware(): void {
+    this.app.use(this.createContextMiddleware());
   }
 }
