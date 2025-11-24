@@ -13,6 +13,7 @@ import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream'
 import { createStep, createWorkflow } from '../../workflows';
 import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
+import { resolveMaybePromise } from '../../utils/resolve-maybe-promise';
 
 async function getRoutingAgent({ requestContext, agent }: { agent: Agent; requestContext: RequestContext }) {
   const instructionsToUse = await agent.getInstructions({ requestContext: requestContext });
@@ -21,6 +22,7 @@ async function getRoutingAgent({ requestContext, agent }: { agent: Agent; reques
   const toolsToUse = await agent.listTools({ requestContext: requestContext });
   const model = await agent.getModel({ requestContext: requestContext });
   const memoryToUse = await agent.getMemory({ requestContext: requestContext });
+  const mastraInstance = agent.getMastraInstance();
 
   const agentList = Object.entries(agentsToUse)
     .map(([name, agent]) => {
@@ -37,14 +39,17 @@ async function getRoutingAgent({ requestContext, agent }: { agent: Agent; reques
     })
     .join('\n');
 
-  const memoryTools = await memoryToUse?.listTools?.();
-  const toolList = Object.entries({ ...toolsToUse, ...memoryTools })
-    .map(([name, tool]) => {
-      return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(
-        zodToJsonSchema((tool as any).inputSchema || z.object({})),
+  const memoryTools = (await memoryToUse?.listTools?.()) || {};
+  const allTools = { ...toolsToUse, ...memoryTools };
+  const toolListEntries = await Promise.all(
+    Object.entries(allTools).map(async ([name, tool]) => {
+      const description = await resolveToolDescriptionForNetwork(tool, requestContext, mastraInstance);
+      return ` - **${name}**: ${description ?? 'No description'}, input schema: ${JSON.stringify(
+        zodToJsonSchema((tool as any)?.inputSchema || z.object({})),
       )}`;
-    })
-    .join('\n');
+    }),
+  );
+  const toolList = toolListEntries.join('\n');
 
   const instructions = `
           You are a router in a network of specialized AI agents.
@@ -78,6 +83,38 @@ async function getRoutingAgent({ requestContext, agent }: { agent: Agent; reques
     // @ts-ignore
     _agentNetworkAppend: true,
   });
+}
+
+export async function resolveToolDescriptionForNetwork(
+  tool: { description?: unknown; getDescription?: unknown } | undefined,
+  requestContext: RequestContext,
+  mastra?: unknown,
+): Promise<string | undefined> {
+  if (!tool) return undefined;
+
+  if (typeof tool.getDescription === 'function') {
+    try {
+      return await tool.getDescription({
+        requestContext,
+        mastra,
+      });
+    } catch (error) {
+      return undefined;
+    }
+  }
+
+  try {
+    if (typeof tool.description === 'string') {
+      return tool.description;
+    }
+    if (typeof tool.description === 'function') {
+      return await resolveMaybePromise(tool.description({ requestContext, mastra }), desc => desc);
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
 }
 
 export function getLastMessage(messages: MessageListInput) {

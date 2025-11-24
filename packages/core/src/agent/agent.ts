@@ -1265,10 +1265,17 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   ): Promise<string | undefined> {
     // check if tool has getDescription method (Mastra Tool class instance)
     if (typeof tool.getDescription === 'function') {
-      return await tool.getDescription({
-        requestContext,
-        mastra: this.#mastra,
-      });
+      try {
+        return await tool.getDescription({
+          requestContext,
+          mastra: this.#mastra,
+        });
+      } catch (error) {
+        this.logger?.debug?.(`[Agent:${this.name}] tool description getter threw. Falling back to undefined.`, {
+          error: error instanceof Error ? error.message : error,
+        });
+        return undefined;
+      }
     }
     // handle raw ToolAction objects with dynamic descriptions
     try {
@@ -1341,7 +1348,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingContext,
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
-          requireApproval: (toolObj as any).requireApproval,
+          requireApproval: (tool as any).requireApproval,
           description,
         };
         const convertedToCoreTool = makeCoreTool(tool, options);
@@ -1610,7 +1617,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
             tracingContext,
             model: await this.getModel({ requestContext }),
             tracingPolicy: this.#options?.tracingPolicy,
-            requireApproval: (toolObj as any).requireApproval,
+            requireApproval: (tool as any).requireApproval,
             description,
           };
           const convertedToCoreTool = makeCoreTool(tool, options, 'toolset');
@@ -1652,9 +1659,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         runId,
       });
       for (const [toolName, tool] of clientToolsForInput) {
+        // resolve description before spreading to preserve prototype methods (e.g., getDescription)
+        const description = await this.resolveToolDescription(tool, requestContext);
         const { execute, ...rest } = tool;
-
-        const description = await this.resolveToolDescription(rest, requestContext);
 
         const options: ToolOptions = {
           name: toolName,
