@@ -78,6 +78,7 @@ export class PosthogExporter extends BaseExporter {
     host: string;
     flushAt: number;
     flushInterval: number;
+    privacyMode?: boolean;
   } {
     const isServerless = config.serverless ?? false;
     const flushAt =
@@ -96,7 +97,12 @@ export class PosthogExporter extends BaseExporter {
       );
     }
 
-    return { host, flushAt, flushInterval };
+    return {
+      host,
+      flushAt,
+      flushInterval,
+      privacyMode: config.enablePrivacyMode,
+    };
   }
 
   private logInitialization(
@@ -150,7 +156,7 @@ export class PosthogExporter extends BaseExporter {
       type: span.type,
     });
 
-    if (span.parentSpanId === undefined || !traceData.distinctId) {
+    if (!traceData.distinctId) {
       const userId = span.metadata?.userId;
       if (userId) {
         traceData.distinctId = String(userId);
@@ -187,17 +193,9 @@ export class PosthogExporter extends BaseExporter {
       timestamp: new Date(endTime),
     });
 
-    this.cleanupSpan(span.traceId, span.id);
-  }
-
-  private cleanupSpan(traceId: string, spanId: string): void {
-    const traceData = this.traceMap.get(traceId);
-    if (!traceData) return;
-
-    traceData.spans.delete(spanId);
-
+    traceData.spans.delete(span.id);
     if (traceData.spans.size === 0) {
-      this.traceMap.delete(traceId);
+      this.traceMap.delete(span.traceId);
     }
   }
 
@@ -319,10 +317,8 @@ export class PosthogExporter extends BaseExporter {
     props.$ai_model = attrs.model || 'unknown-model';
     props.$ai_provider = attrs.provider || 'unknown-provider';
 
-    if (!this.config.enablePrivacyMode) {
-      if (span.input) props.$ai_input = this.formatMessages(span.input, 'user');
-      if (span.output) props.$ai_output_choices = this.formatMessages(span.output, 'assistant');
-    }
+    if (span.input) props.$ai_input = this.formatMessages(span.input, 'user');
+    if (span.output) props.$ai_output_choices = this.formatMessages(span.output, 'assistant');
 
     if (attrs.usage) {
       const { usage } = attrs;

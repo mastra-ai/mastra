@@ -476,29 +476,18 @@ describe('PosthogExporter', () => {
   });
 
   describe('Privacy Mode', () => {
-    it('should exclude input/output when privacy mode enabled', async () => {
+    it('should pass privacy mode config to SDK', async () => {
       exporter = new PosthogExporter({
         ...validConfig,
         enablePrivacyMode: true,
       });
 
-      const generation = createSpan({
-        type: SpanType.MODEL_GENERATION,
-        input: 'Sensitive user data',
-        output: 'Generated response',
-        attributes: {
-          model: 'gpt-4',
-          usage: { inputTokens: 10, outputTokens: 20 },
-        },
-      });
-
-      await exportSpanLifecycle(exporter, generation);
-
-      const props = mockCapture.mock.calls[0][0].properties;
-      expect(props).not.toHaveProperty('$ai_input');
-      expect(props).not.toHaveProperty('$ai_output_choices');
-      expect(props).toHaveProperty('$ai_model');
-      expect(props).toHaveProperty('$ai_input_tokens');
+      expect(mockPostHogConstructor).toHaveBeenCalledWith(
+        'test-key',
+        expect.objectContaining({
+          privacyMode: true,
+        }),
+      );
     });
 
     it('should not apply privacy mode to non-generation spans', async () => {
