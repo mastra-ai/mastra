@@ -30,21 +30,23 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   processZodType(value: ZodTypeV4): ZodTypeV4;
   processZodType(value: ZodTypeV3 | ZodTypeV4): ZodTypeV3 | ZodTypeV4 {
     if (isOptional(z)(value)) {
-      // For OpenAI strict mode, convert .optional() to .nullable()
+      // For OpenAI strict mode, convert .optional() to .nullable() with transform
       // This ensures all fields are in the required array but can accept null values
+      // The transform converts null -> undefined to match original .optional() semantics
       const innerType = '_def' in value ? value._def.innerType : (value as any)._zod?.def?.innerType;
 
       if (innerType) {
-        // If inner is nullable, just process and return it (strips the optional wrapper)
-        // This converts .optional().nullable() -> .nullable()
+        // If inner is nullable, just process and return it with transform (strips the optional wrapper)
+        // This converts .optional().nullable() -> .nullable() with transform
         if (isNullable(z)(innerType)) {
-          return this.processZodType(innerType);
+          const processed = this.processZodType(innerType);
+          return processed.transform((val: any) => (val === null ? undefined : val));
         }
 
-        // Otherwise, process inner and make it nullable
-        // This converts .optional() -> .nullable()
+        // Otherwise, process inner, make it nullable, and add transform
+        // This converts .optional() -> .nullable() with transform that converts null to undefined
         const processedInner = this.processZodType(innerType);
-        return processedInner.nullable();
+        return processedInner.nullable().transform((val: any) => (val === null ? undefined : val));
       }
 
       return value;
@@ -52,14 +54,14 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
       // Process nullable: unwrap, process inner, and re-wrap with nullable
       const innerType = '_def' in value ? value._def.innerType : (value as any)._zod?.def?.innerType;
       if (innerType) {
-        // Special case: if inner is optional, strip it for OpenAI strict mode
-        // This converts .nullable().optional() -> .nullable()
+        // Special case: if inner is optional, strip it and add transform for OpenAI strict mode
+        // This converts .nullable().optional() -> .nullable() with transform
         if (isOptional(z)(innerType)) {
           const innerInnerType =
             '_def' in innerType ? innerType._def.innerType : (innerType as any)._zod?.def?.innerType;
           if (innerInnerType) {
             const processedInnerInner = this.processZodType(innerInnerType);
-            return processedInnerInner.nullable();
+            return processedInnerInner.nullable().transform((val: any) => (val === null ? undefined : val));
           }
         }
 

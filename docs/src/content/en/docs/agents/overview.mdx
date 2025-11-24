@@ -361,38 +361,6 @@ const response = await testAgentThatDoesntSupportStructuredOutput.generate(
 console.log(response.object);
 ```
 
-### Schema compatibility
-
-Some model providers have specific schema requirements. For example, OpenAI's strict mode requires all properties to be in the `required` array. Use `processSchema` to transform your Zod schema before passing it to the agent, ensuring the same schema works for both backend generation and frontend validation.
-
-```typescript showLineNumbers copy
-import { z } from "zod";
-import { processSchema } from "@mastra/core";
-
-// Define your schema once
-const userSchema = z.object({
-  name: z.string(),
-  age: z.number().optional(), // Would cause issues with OpenAI strict mode
-});
-
-// Transform it for OpenAI
-const openaiSchema = processSchema.openai(userSchema);
-
-// Use in agent
-const response = await testAgent.generate("Extract user information", {
-  structuredOutput: {
-    schema: openaiSchema,
-  },
-});
-
-console.log(response.object);
-
-// Use the same transformed schema on frontend for validation
-const validatedData = openaiSchema.parse(response.object);
-```
-
-The `processSchema` utility converts `.optional()` fields to `.nullable()` for OpenAI models, ensuring all fields are in the required array but can accept null values. Other providers have their own transformations: `processSchema.anthropic()`, `processSchema.google()`, `processSchema.deepseek()`, `processSchema.meta()`, and `processSchema.openaiReasoning()` for reasoning models.
-
 ## Working with images
 
 Agents can analyze and describe images by processing both the visual content and any text within them. To enable image analysis, pass an object with `type: 'image'` and the image URL in the `content` array. You can combine image content with text prompts to guide the agent's analysis.

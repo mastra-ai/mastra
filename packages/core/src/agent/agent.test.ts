@@ -233,7 +233,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
   });
 
   describe('test schema compat structured output', async () => {
-    it('should convert optional nullable fields to nullable for openai and succeed without error', async () => {
+    it('should convert optional fields to nullable for openai and succeed without error', async () => {
       const weatherInfo = createTool({
         id: 'weather-info',
         description: 'Fetches the current weather information for a given city',
@@ -274,29 +274,36 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         weather: z.string(),
         temperature: z.number(),
         humidity: z.number(),
+        // Optional should be transformed to nullable and then the data set to undefined
         windSpeed: z.string().optional(),
+        // Optional.nullable should be transformed to nullable and then the data set to undefined
         barometricPressure: z.number().optional().nullable(),
+        // Nullable should not change and be able to return a nullable value from openAI
+        precipitation: z.number().nullable()
       });
 
-      const openaiSchema = processSchema.openai(schema);
-
-      const result = await agent.stream(
-        'What is the weather in London? You can omit wind speed and barometric pressure.',
+      const result = await agent.generate(
+        'What is the weather in London? You can omit wind speed, precipitation, and barometric pressure.',
         {
           structuredOutput: {
-            schema: openaiSchema,
+            schema,
           },
         },
       );
 
-      for await (const chunk of result.fullStream) {
-        if (chunk.type === 'object-result') {
-          console.log(chunk.object);
-        }
-        console.log(chunk);
+      expect(result.error).toBeUndefined();
+
+      const resultData = {
+        weather: expect.any(String),
+        temperature: expect.any(Number),
+        humidity: expect.any(Number),
+        windSpeed: undefined,
+        barometricPressure: undefined,
+        precipitation: null
       }
 
-      expect(result.error).toBeUndefined();
+      const resultObject = await result.object
+      expect(resultObject).toEqual(resultData)
     });
   });
 

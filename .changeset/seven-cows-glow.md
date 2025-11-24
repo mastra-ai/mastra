@@ -3,33 +3,35 @@
 '@mastra/core': patch
 ---
 
-Added schema compatibility transformations to fix provider-specific schema requirements.
+Fixed OpenAI schema compatibility when using `agent.generate()` or `agent.stream()` with `structuredOutput`.
 
-## New Features
+## Changes
 
-- **`processSchema` utilities**: New helper functions for manual schema transformations, exported from `@mastra/core/llm`
-  - `processSchema.openai()` - Transform schemas for OpenAI strict mode
-  - `processSchema.openaiReasoning()` - Transform schemas for OpenAI reasoning models (o1, o3, o4)
-  - `processSchema.anthropic()` - Transform schemas for Anthropic models
-  - `processSchema.google()` - Transform schemas for Google models
-  - `processSchema.deepseek()` - Transform schemas for DeepSeek models
-  - `processSchema.meta()` - Transform schemas for Meta models
+- **Automatic transformation**: Zod schemas are now automatically transformed for OpenAI strict mode compatibility when using OpenAI models (including reasoning models like o1, o3, o4)
+- **Optional field handling**: `.optional()` fields are converted to `.nullable()` with a transform that converts `null` → `undefined`, preserving optional semantics while satisfying OpenAI's strict mode requirements
+- **Preserves nullable fields**: Intentionally `.nullable()` fields remain unchanged
+- **Deep transformation**: Handles `.optional()` fields at any nesting level (objects, arrays, unions, etc.)
+- **JSON Schema objects**: Not transformed, only Zod schemas
 
-## Fixes
-
-- **OpenAI strict mode compatibility**: All `.optional()` fields are now correctly converted to `.nullable()` to ensure all properties are in the required array
-- **Nested optional/nullable handling**: Fixed handling of nested combinations like `.optional().nullable()` and `.nullable().optional()` - both now normalize to `.nullable()`
-- **Deep optional transformation**: `.optional()` fields are now transformed to `.nullable()` at any nesting level (objects, arrays, unions, etc.)
-
+## Example
 
 ```typescript
-import { processSchema } from '@mastra/core/llm';
+const agent = new Agent({
+  name: 'data-extractor',
+  model: { provider: 'openai', modelId: 'gpt-4o' },
+  instructions: 'Extract user information',
+});
 
 const schema = z.object({
   name: z.string(),
   age: z.number().optional(),
+  deletedAt: z.date().nullable(),
 });
 
-const openaiSchema = processSchema.openai(schema);
-// age is now .nullable() instead of .optional()
+// Schema is automatically transformed for OpenAI compatibility
+const result = await agent.generate('Extract: John, deleted yesterday', {
+  structuredOutput: { schema },
+});
+
+// Result: { name: 'John', age: undefined, deletedAt: null }
 ```
