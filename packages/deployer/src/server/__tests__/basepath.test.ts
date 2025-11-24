@@ -1,6 +1,6 @@
 import { Mastra } from '@mastra/core/mastra';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { createHonoServer } from './index';
+import { createHonoServer } from '../index';
 
 describe('Server Base Path Configuration', () => {
   let mastra: Mastra;

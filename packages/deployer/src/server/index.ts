@@ -22,7 +22,8 @@ import { healthHandler } from './handlers/health';
 import { MCP_ROUTES, getMcpServerMessageHandler, getMcpServerSseHandler } from './handlers/mcp';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
 import type { ServerBundleOptions } from './types';
-import { html } from './welcome.js';
+import { normalizeServerBase } from './utils';
+import { html } from './welcome';
 
 // Use adapter type definitions
 type Bindings = HonoBindings;
@@ -229,10 +230,7 @@ export async function createHonoServer(
   }
 
   const serverOptions = mastra.getServer();
-  // Normalize base path: ensure it starts with / and doesn't end with /
-  // Default is '/' which means playground is served at root
-  const baseValue = serverOptions?.base ?? '/';
-  const basePath = baseValue === '/' ? '' : `/${baseValue}`.replace(/^\/+/, '/').replace(/\/+$/, '');
+  const basePath = normalizeServerBase(serverOptions?.base ?? '/');
 
   if (options?.playground) {
     // SSE endpoint for refresh notifications
@@ -283,7 +281,9 @@ export async function createHonoServer(
       `${basePath}/assets/*`,
       serveStatic({
         root: './playground/assets',
-        rewriteRequestPath: basePath ? path => path.replace(basePath, '') : undefined,
+        rewriteRequestPath: basePath
+          ? path => (path.startsWith(basePath) ? path.slice(basePath.length) : path)
+          : undefined,
       }),
     );
   }
@@ -336,7 +336,9 @@ export async function createHonoServer(
       playgroundPath,
       serveStatic({
         root: './playground',
-        rewriteRequestPath: basePath ? path => path.replace(basePath, '') : undefined,
+        rewriteRequestPath: basePath
+          ? path => (path.startsWith(basePath) ? path.slice(basePath.length) : path)
+          : undefined,
       }),
     );
   }
@@ -379,7 +381,8 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       const logger = mastra.getLogger();
       logger.info(` Mastra API running on port ${protocol}://${host}:${port}/api`);
       if (options?.playground) {
-        const playgroundUrl = `${protocol}://${host}:${port}`;
+        const basePath = normalizeServerBase(serverOptions?.base ?? '/');
+        const playgroundUrl = `${protocol}://${host}:${port}${basePath}`;
         logger.info(`👨‍💻 Playground available at ${playgroundUrl}`);
       }
 
