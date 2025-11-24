@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@mastra/core": "no-bundling-test",
+    "@mastra/evals": "no-bundling-test",
     "@mastra/libsql": "no-bundling-test",
     "@mastra/loggers": "no-bundling-test",
     "@mastra/memory": "no-bundling-test",
