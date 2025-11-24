@@ -34,14 +34,6 @@ describe('externals: true', () => {
   let fixturePath: string;
   const pkgManager = 'pnpm';
 
-  async function runBuild(path: string) {
-    await execa(pkgManager, ['build'], {
-      cwd: path,
-      stdio: 'inherit',
-      env: process.env,
-    });
-  }
-
   beforeAll(
     async () => {
       const registry = inject('registry');
@@ -49,6 +41,12 @@ describe('externals: true', () => {
       fixturePath = await mkdtemp(join(tmpdir(), `mastra-no-bundling-test-${pkgManager}-`));
       process.env.npm_config_registry = registry;
       await setupTemplate(fixturePath, pkgManager);
+
+      await execa(pkgManager, ['build'], {
+        cwd: fixturePath,
+        stdio: 'inherit',
+        env: process.env,
+      });
     },
     10 * 60 * 1000,
   );
@@ -61,47 +59,7 @@ describe('externals: true', () => {
     } catch {}
   });
 
-  describe.sequential('build', () => {
-    let port: number;
-    let proc: ReturnType<typeof execa> | undefined;
-    const controller = new AbortController();
-    const cancelSignal = controller.signal;
-
-    beforeAll(async () => {
-      port = await getPort();
-      await runBuild(fixturePath);
-
-      const inputFile = join(fixturePath, '.mastra', 'output');
-      proc = execaNode('index.mjs', {
-        cwd: inputFile,
-        cancelSignal,
-        env: {
-          OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-          MASTRA_PORT: port.toString(),
-        },
-      });
-
-      activeProcesses.push({ controller, proc });
-
-      await new Promise<void>((resolve, reject) => {
-        proc!.stderr?.on('data', data => {
-          const errMsg = data?.toString();
-          if (errMsg && errMsg.includes('punycode')) {
-            // Ignore punycode warning
-            return;
-          }
-
-          reject(new Error('failed to start: ' + errMsg));
-        });
-        proc!.stdout?.on('data', data => {
-          console.log(data?.toString());
-          if (data?.toString()?.includes(`http://localhost:${port}`)) {
-            resolve();
-          }
-        });
-      });
-    }, timeout);
-
+  describe('build', () => {
     it('should include external deps in output/package.json', async () => {
       const packageJsonPath = join(fixturePath, '.mastra', 'output', 'package.json');
       const packageJsonContent = await readFile(packageJsonPath, 'utf-8');
@@ -115,23 +73,9 @@ describe('externals: true', () => {
       const zodChunkPath = join(fixturePath, '.mastra', '.build', 'zod.mjs');
       await expect(readFile(zodChunkPath)).rejects.toThrow();
     });
-
-    afterAll(async () => {
-      if (proc) {
-        try {
-          setImmediate(() => controller.abort());
-          await proc;
-        } catch (err) {
-          // @ts-expect-error - isCanceled is not typed
-          if (!err.isCanceled) {
-            console.log('failed to kill build proc', err);
-          }
-        }
-      }
-    }, timeout);
   });
 
-  describe.sequential('start', () => {
+  describe('start', () => {
     let port: number;
     let proc: ReturnType<typeof execa> | undefined;
     const controller = new AbortController();
@@ -141,7 +85,6 @@ describe('externals: true', () => {
       'should start server successfully',
       async () => {
         port = await getPort();
-        await runBuild(fixturePath);
 
         console.log('started proc', port);
         proc = execa('npm', ['run', 'start'], {
