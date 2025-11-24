@@ -21,7 +21,7 @@ const sidebars = {
         {
           type: "doc",
           id: "quickstarts/manual-install",
-          label: "Manual Setup",
+          label: "Manual Installation",
         },
       ],
     },
