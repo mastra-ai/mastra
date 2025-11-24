@@ -708,7 +708,7 @@ describe('Issue #10434: Concurrent write corruption', () => {
         const content = fs.readFileSync(testJsonPath, 'utf-8');
         JSON.parse(content);
         // If we get here, the JSON is valid (one write "won" atomically)
-      } catch (err) {
+      } catch {
         // JSON parse error means the file was corrupted
         corruptionDetected = true;
         const content = fs.readFileSync(testJsonPath, 'utf-8');
@@ -784,7 +784,7 @@ describe('Issue #10434: Concurrent write corruption', () => {
       try {
         const resultContent = fs.readFileSync(distJsonPath, 'utf-8');
         JSON.parse(resultContent);
-      } catch (err) {
+      } catch {
         corruptionDetected = true;
         const resultContent = fs.readFileSync(distJsonPath, 'utf-8');
         console.log(`Corruption detected on iteration ${i + 1}:`);
