@@ -1,6 +1,17 @@
 import z from 'zod';
 import { createOffsetPaginationSchema, tracingOptionsSchema, messageResponseSchema } from './common';
 
+export const workflowRunStatusSchema = z.enum([
+  'running',
+  'waiting',
+  'suspended',
+  'success',
+  'failed',
+  'canceled',
+  'pending',
+  'bailed',
+]);
+
 // Path parameter schemas
 export const workflowIdPathParams = z.object({
   workflowId: z.string().describe('Unique identifier for the workflow'),
@@ -82,6 +93,7 @@ export const listWorkflowRunsQuerySchema = createOffsetPaginationSchema().extend
   fromDate: z.coerce.date().optional(),
   toDate: z.coerce.date().optional(),
   resourceId: z.string().optional(),
+  status: workflowRunStatusSchema.optional(),
 });
 
 /**
@@ -119,6 +131,30 @@ export const resumeBodySchema = z.object({
 });
 
 /**
+ * Schema for restart workflow body
+ * Used by restart-async and restart endpoints
+ */
+export const restartBodySchema = z.object({
+  requestContext: z.record(z.string(), z.unknown()).optional(),
+  tracingOptions: tracingOptionsSchema.optional(),
+});
+
+/**
+ * Schema for time travel workflow body
+ * Used by time-travel-stream, time-travel-async and time-travel endpoints
+ */
+export const timeTravelBodySchema = z.object({
+  inputData: z.unknown().optional(),
+  resumeData: z.unknown().optional(),
+  initialState: z.unknown().optional(),
+  step: z.union([z.string(), z.array(z.string())]),
+  context: z.record(z.string(), z.any()).optional(),
+  nestedStepsContext: z.record(z.string(), z.record(z.string(), z.any())).optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
+  tracingOptions: tracingOptionsSchema.optional(),
+});
+
+/**
  * Schema for start async workflow body
  */
 export const startAsyncWorkflowBodySchema = workflowExecutionBodySchema;
@@ -135,7 +171,7 @@ export const sendWorkflowRunEventBodySchema = z.object({
  * Schema for workflow execution result
  */
 export const workflowExecutionResultSchema = z.object({
-  status: z.string(),
+  status: workflowRunStatusSchema,
   result: z.unknown().optional(),
   error: z.unknown().optional(),
 });

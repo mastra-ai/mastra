@@ -21,6 +21,8 @@
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
+    "pretest": "docker compose up -d",
+    "posttest": "docker compose down -v",
     "test": "vitest run",
     "lint": "eslint ."
   },
