@@ -438,9 +438,3 @@ serve(
     console.log('Swagger UI: http://localhost:3001/swagger-ui');
   },
 );
-
-// TODOs
-/*
-- Body should always be passed in the same way (as 'body')
-- All streaming should have the {fullStream: ReadableStream} shape, right now sometimes our handlers are already piping the fullstream and returning a readable stream, we should standardize this.
-*/
