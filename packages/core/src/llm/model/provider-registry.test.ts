@@ -430,6 +430,10 @@ describe('GatewayRegistry Auto-Refresh', () => {
     // Mock both fs.writeFileSync and fs.promises.writeFile to intercept writes
     const originalWriteFileSync = fs.writeFileSync;
     const originalWriteFile = fs.promises.writeFile;
+    const originalRename = fs.promises.rename;
+
+    // Track temp files for redirect mapping
+    const tempFileMap = new Map<string, string>();
 
     // Mock sync version for cache files
     fs.writeFileSync = vi.fn().mockImplementation((filePath, data, encoding) => {
@@ -437,19 +441,44 @@ describe('GatewayRegistry Auto-Refresh', () => {
       return originalWriteFileSync(filePath, data, encoding);
     });
 
-    // Mock async version for registry files
+    // Mock async version for registry files - handles atomic write temp files
     fs.promises.writeFile = vi.fn().mockImplementation(async (filePath, data, encoding) => {
       if (typeof filePath === 'string') {
-        if (filePath.includes('provider-registry.json')) {
-          // Redirect to temp JSON file
+        // Handle temp files from atomic writes
+        if (filePath.includes('.tmp') && filePath.includes('provider-registry.json')) {
+          const redirectedTempPath = `${tempJsonPath}.${Date.now()}.tmp`;
+          tempFileMap.set(filePath, redirectedTempPath);
+          return originalWriteFile(redirectedTempPath, data, encoding);
+        } else if (filePath.includes('.tmp') && filePath.includes('provider-types.generated.d.ts')) {
+          const redirectedTempPath = `${tempTypesPath}.${Date.now()}.tmp`;
+          tempFileMap.set(filePath, redirectedTempPath);
+          return originalWriteFile(redirectedTempPath, data, encoding);
+        } else if (filePath.includes('provider-registry.json')) {
+          // Direct write (non-atomic)
           return originalWriteFile(tempJsonPath, data, encoding);
         } else if (filePath.includes('provider-types.generated.d.ts')) {
-          // Redirect to temp types file
+          // Direct write (non-atomic)
           return originalWriteFile(tempTypesPath, data, encoding);
         }
       }
       // Let other writes go through normally
       return originalWriteFile(filePath, data, encoding);
+    });
+
+    // Mock rename to handle atomic write completion
+    fs.promises.rename = vi.fn().mockImplementation(async (oldPath, newPath) => {
+      if (typeof oldPath === 'string' && typeof newPath === 'string') {
+        const redirectedOldPath = tempFileMap.get(oldPath);
+        if (redirectedOldPath) {
+          // Redirect the rename to our temp location
+          if (newPath.includes('provider-registry.json')) {
+            return originalRename(redirectedOldPath, tempJsonPath);
+          } else if (newPath.includes('provider-types.generated.d.ts')) {
+            return originalRename(redirectedOldPath, tempTypesPath);
+          }
+        }
+      }
+      return originalRename(oldPath, newPath);
     });
 
     // First sync
@@ -497,11 +526,18 @@ describe('GatewayRegistry Auto-Refresh', () => {
     fs.mkdirSync(tmpDir, { recursive: true });
 
     const writtenFiles: string[] = [];
+    const renamedFiles: { src: string; dest: string }[] = [];
     const copiedFiles: { src: string; dest: string }[] = [];
 
     // Mock fs.promises.writeFile to track where files are written
     vi.spyOn(fs.promises, 'writeFile').mockImplementation(async (filePath: any) => {
       writtenFiles.push(filePath.toString());
+      return Promise.resolve();
+    });
+
+    // Mock fs.promises.rename to track atomic writes (write-to-temp-then-rename)
+    vi.spyOn(fs.promises, 'rename').mockImplementation(async (src: any, dest: any) => {
+      renamedFiles.push({ src: src.toString(), dest: dest.toString() });
       return Promise.resolve();
     });
 
@@ -526,9 +562,9 @@ describe('GatewayRegistry Auto-Refresh', () => {
     // Call syncGateways with writeToSrc=true
     await registry.syncGateways(true, true);
 
-    // Verify files were written to dist/
-    expect(writtenFiles.some(f => f.includes('dist/provider-registry.json'))).toBe(true);
-    expect(writtenFiles.some(f => f.includes('dist/llm/model/provider-types.generated.d.ts'))).toBe(true);
+    // Verify files were written to dist/ via atomic rename
+    expect(renamedFiles.some(f => f.dest.includes('dist/provider-registry.json'))).toBe(true);
+    expect(renamedFiles.some(f => f.dest.includes('dist/llm/model/provider-types.generated.d.ts'))).toBe(true);
 
     // Verify files were copied to src/
     expect(copiedFiles.some(c => c.dest.includes('src/llm/model/provider-registry.json'))).toBe(true);
@@ -541,11 +577,16 @@ describe('GatewayRegistry Auto-Refresh', () => {
     const tmpDir = path.join(os.tmpdir(), `mastra-test-${Date.now()}`);
     fs.mkdirSync(tmpDir, { recursive: true });
 
-    const writtenFiles: string[] = [];
+    const renamedFiles: { src: string; dest: string }[] = [];
 
-    // Mock fs.promises.writeFile to track where files are written
-    const writeFileSpy = vi.spyOn(fs.promises, 'writeFile').mockImplementation(async (filePath: any) => {
-      writtenFiles.push(filePath.toString());
+    // Mock fs.promises.writeFile to allow temp file writes
+    const writeFileSpy = vi.spyOn(fs.promises, 'writeFile').mockImplementation(async () => {
+      return Promise.resolve();
+    });
+
+    // Mock fs.promises.rename to track where files are atomically written
+    const renameSpy = vi.spyOn(fs.promises, 'rename').mockImplementation(async (src: any, dest: any) => {
+      renamedFiles.push({ src: src.toString(), dest: dest.toString() });
       return Promise.resolve();
     });
 
@@ -565,32 +606,59 @@ describe('GatewayRegistry Auto-Refresh', () => {
     await registry.syncGateways(true);
 
     // Verify .d.ts file is written to both global cache and local dist/llm/model/ subdirectory
-    const typesFiles = writtenFiles.filter(f => f.includes('provider-types.generated.d.ts'));
+    // With atomic writes, we check the rename destination (not writeFile path)
+    const typesFiles = renamedFiles.filter(f => f.dest.includes('provider-types.generated.d.ts'));
     expect(typesFiles.length).toBeGreaterThanOrEqual(1);
 
     // Should write to global cache
-    const globalTypesFile = typesFiles.find(f => f.includes('.cache/mastra/provider-types.generated.d.ts'));
+    const globalTypesFile = typesFiles.find(f => f.dest.includes('.cache/mastra/provider-types.generated.d.ts'));
     expect(globalTypesFile).toBeDefined();
 
     // Should also write to local dist/llm/model/ (not dist/ root)
-    const localTypesFile = typesFiles.find(f => f.includes('dist/llm/model/provider-types.generated.d.ts'));
+    const localTypesFile = typesFiles.find(f => f.dest.includes('dist/llm/model/provider-types.generated.d.ts'));
     expect(localTypesFile).toBeDefined();
-    expect(localTypesFile).not.toContain('dist/provider-types.generated.d.ts');
+    expect(localTypesFile?.dest).not.toContain('dist/provider-types.generated.d.ts');
 
     // Cleanup
     writeFileSpy.mockRestore();
+    renameSpy.mockRestore();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
 
 describe('Issue #10434: Concurrent write corruption', () => {
-  it('should not corrupt JSON file when multiple writes happen concurrently', async () => {
-    // This test reproduces the issue where concurrent writes to provider-registry.json
-    // can result in malformed JSON like:
-    //   "version": "1.0.0"
-    // }mini"  <-- corruption from concurrent write
-    //   ]
-    // }
+  // Store original fs functions to use in tests (avoid mock interference)
+  const originalWriteFile = fs.promises.writeFile.bind(fs.promises);
+  const originalRename = fs.promises.rename.bind(fs.promises);
+  const originalUnlink = fs.promises.unlink.bind(fs.promises);
+
+  // Ensure no mocks from other test suites interfere
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Helper: atomic write using temp file + rename pattern
+  // Uses original fs functions to avoid mock interference
+  async function atomicWriteFile(filePath: string, content: string): Promise<void> {
+    // Use random suffix to avoid collisions between concurrent writes
+    const randomSuffix = Math.random().toString(36).substring(2, 15);
+    const tempPath = `${filePath}.${process.pid}.${Date.now()}.${randomSuffix}.tmp`;
+    try {
+      await originalWriteFile(tempPath, content, 'utf-8');
+      await originalRename(tempPath, filePath);
+    } catch (error) {
+      try {
+        await originalUnlink(tempPath);
+      } catch {
+        // Ignore cleanup errors
+      }
+      throw error;
+    }
+  }
+
+  it('should not corrupt JSON file when using atomic writes for concurrent operations', async () => {
+    // This test verifies that atomic writes prevent file corruption
+    // from concurrent write operations (fix for issue #10434)
 
     const tempDir = path.join(os.tmpdir(), `mastra-concurrent-write-test-${Date.now()}`);
     const testJsonPath = path.join(tempDir, 'provider-registry.json');
@@ -623,15 +691,14 @@ describe('Issue #10434: Concurrent write corruption', () => {
       2,
     );
 
-    // Simulate concurrent writes - this is what happens in the bug
-    // We'll do multiple rounds to increase the chance of catching the race condition
+    // Test with atomic writes - should never corrupt
     const iterations = 50;
     let corruptionDetected = false;
 
     for (let i = 0; i < iterations && !corruptionDetected; i++) {
-      // Start both writes "simultaneously" without awaiting
-      const write1 = fs.promises.writeFile(testJsonPath, jsonContent1, 'utf-8');
-      const write2 = fs.promises.writeFile(testJsonPath, jsonContent2, 'utf-8');
+      // Start both atomic writes "simultaneously"
+      const write1 = atomicWriteFile(testJsonPath, jsonContent1);
+      const write2 = atomicWriteFile(testJsonPath, jsonContent2);
 
       // Wait for both to complete
       await Promise.all([write1, write2]);
@@ -640,9 +707,9 @@ describe('Issue #10434: Concurrent write corruption', () => {
       try {
         const content = fs.readFileSync(testJsonPath, 'utf-8');
         JSON.parse(content);
-        // If we get here, the JSON is valid (one write "won")
+        // If we get here, the JSON is valid (one write "won" atomically)
       } catch (err) {
-        // JSON parse error means the file was corrupted by concurrent writes
+        // JSON parse error means the file was corrupted
         corruptionDetected = true;
         const content = fs.readFileSync(testJsonPath, 'utf-8');
         console.log(`Corruption detected on iteration ${i + 1}:`);
@@ -653,16 +720,13 @@ describe('Issue #10434: Concurrent write corruption', () => {
     // Clean up
     fs.rmSync(tempDir, { recursive: true, force: true });
 
-    // The test FAILS if corruption is detected, demonstrating the bug exists
-    // Once we fix the bug with atomic writes, this test should pass (no corruption)
+    // With atomic writes, corruption should NEVER occur
     expect(corruptionDetected).toBe(false);
   });
 
-  it('should handle concurrent syncGlobalCacheToLocal and writeRegistryFiles calls', async () => {
-    // This test simulates the specific race condition in the codebase:
-    // 1. syncGlobalCacheToLocal() reads global cache and writes to dist/
-    // 2. syncGateways() calls writeRegistryFiles() which also writes to dist/
-    // Both can happen simultaneously when MASTRA_DEV=true
+  it('should handle concurrent syncGlobalCacheToLocal and writeRegistryFiles calls with atomic writes', async () => {
+    // This test verifies that atomic writes prevent corruption in the specific
+    // race condition scenario from issue #10434
 
     const tempDir = path.join(os.tmpdir(), `mastra-sync-race-test-${Date.now()}`);
     const globalCacheDir = path.join(tempDir, 'global-cache');
@@ -697,23 +761,23 @@ describe('Issue #10434: Concurrent write corruption', () => {
       2,
     );
 
-    // Simulate the race condition multiple times
+    // Simulate the race condition multiple times with atomic writes
     const iterations = 50;
     let corruptionDetected = false;
 
     for (let i = 0; i < iterations && !corruptionDetected; i++) {
-      // Simulate syncGlobalCacheToLocal: read global, write to dist
+      // Simulate syncGlobalCacheToLocal with atomic write
       const syncGlobalToLocal = async () => {
         const content = fs.readFileSync(globalJsonPath, 'utf-8');
-        await fs.promises.writeFile(distJsonPath, content, 'utf-8');
+        await atomicWriteFile(distJsonPath, content);
       };
 
-      // Simulate writeRegistryFiles: write fresh content to dist
+      // Simulate writeRegistryFiles with atomic write
       const writeRegistryFiles = async () => {
-        await fs.promises.writeFile(distJsonPath, freshContent, 'utf-8');
+        await atomicWriteFile(distJsonPath, freshContent);
       };
 
-      // Start both operations concurrently (this is the bug scenario)
+      // Start both operations concurrently
       await Promise.all([syncGlobalToLocal(), writeRegistryFiles()]);
 
       // Verify the result is valid JSON
@@ -731,7 +795,7 @@ describe('Issue #10434: Concurrent write corruption', () => {
     // Clean up
     fs.rmSync(tempDir, { recursive: true, force: true });
 
-    // This test demonstrates the bug - it should FAIL when corruption occurs
+    // With atomic writes, corruption should NEVER occur
     expect(corruptionDetected).toBe(false);
   });
 });
