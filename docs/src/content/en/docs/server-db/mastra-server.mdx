@@ -29,29 +29,20 @@ adding additional server behaviour.
 
 You can configure server `port`, `host`, `base`, and `timeout` in the Mastra instance.
 
-```typescript title="src/mastra/index.ts" copy showLineNumbers
+```typescript title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
-  // ...
   server: {
     port: 3000, // Defaults to 4111
     host: "0.0.0.0", // Defaults to 'localhost'
-    base: "my-mastra-studio", // Sub-path for the studio (optional)
+    base: "/my-mastra-studio", // Sub-path for the studio (optional)
     timeout: 10000, // Defaults to 30000 (30s)
   },
 });
 ```
 
-The `base` option allows you to host the Mastra Studio/Playground on a sub-path of your existing application. When configured, the studio will be available at `http://your-host:port/your-base` instead of the root. This is useful when integrating with existing applications or when using tools like Cloudflare Zero Trust where having all applications on the same domain simplifies authentication.
-
-**Example with sub-path:**
-- Without base: `http://localhost:4111/` (studio at root)
-- With base: `http://localhost:4111/my-mastra-studio/` (studio at sub-path)
-
-The `method` option can be one of `"GET"`, `"POST"`, `"PUT"`,
-`"DELETE"` or `"ALL"`. Using `"ALL"` will cause the handler to be
-invoked for any HTTP method that matches the path.
+The `base` option allows you to host Mastra Studio on a sub-path of your existing application. When configured, the studio will be available at `http://your-host:port/your-base` instead of the root.
 
 ## TypeScript configuration
 
@@ -80,11 +71,10 @@ Mastra requires `module` and `moduleResolution` values that support modern Node.
 
 Mastra allows you to configure CORS (Cross-Origin Resource Sharing) settings for your server.
 
-```typescript title="src/mastra/index.ts" copy showLineNumbers
+```typescript title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
-  // ...
   server: {
     cors: {
       origin: ["https://example.com"], // Allow specific origins or '*' for all

@@ -135,8 +135,7 @@ import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   server: {
-    port: 3000,
-    base: "/my-mastra-studio", // Studio will be available at /my-mastra-studio
+    base: "/my-mastra-studio",
   },
 });
 ```
@@ -147,8 +146,8 @@ This is particularly useful when:
 - Managing multiple services under a single domain
 
 **Example URLs:**
-- Default: `http://localhost:3000/` (studio at root)
-- With sub-path: `http://localhost:3000/my-mastra-studio/` (studio at sub-path)
+- Default: `http://localhost:4111/` (studio at root)
+- With `base`: `http://localhost:4111/my-mastra-studio/` (studio at sub-path)
 
 ### Local HTTPS
 

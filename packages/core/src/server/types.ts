@@ -91,7 +91,7 @@ export type ServerConfig = {
    */
   host?: string;
   /**
-   * Base path for the studio/playground
+   * Base path for Mastra Studio
    * @default '/'
    * @example '/my-mastra-studio'
    */
