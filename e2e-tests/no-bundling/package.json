@@ -1,5 +1,5 @@
 {
-  "name": "e2e-monorepo",
+  "name": "e2e-no-bundling",
   "version": "0.0.1",
   "private": true,
   "devDependencies": {

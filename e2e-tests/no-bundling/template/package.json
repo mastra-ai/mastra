@@ -1,0 +1,34 @@
+{
+  "name": "template",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.18.2",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@mastra/core": "1.0.0-beta.4",
+    "@mastra/evals": "1.0.0-beta.1",
+    "@mastra/libsql": "1.0.0-beta.1",
+    "@mastra/loggers": "1.0.0-beta.1",
+    "@mastra/memory": "1.0.0-beta.1",
+    "@mastra/observability": "1.0.0-beta.1",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.17",
+    "mastra": "1.0.0-beta.3",
+    "typescript": "^5.9.3"
+  }
+}
