@@ -42,25 +42,25 @@ describe('AzureOpenAIGateway - Real API Integration', () => {
       console.log(`\nFetched ${Object.keys(providers).length} providers from Azure Management API`);
       console.log('Providers:', Object.keys(providers));
 
-      expect(Object.keys(providers)).toEqual(['azureopenai']);
-      expect(providers['azureopenai']).toBeDefined();
+      expect(Object.keys(providers)).toEqual(['azure-openai']);
+      expect(providers['azure-openai']).toBeDefined();
 
-      const azureProvider = providers['azureopenai'];
+      const azureProvider = providers['azure-openai'];
 
-      expect(azureProvider.apiKeyHeader, 'Provider azureopenai missing apiKeyHeader').toBeDefined();
+      expect(azureProvider.apiKeyHeader, 'Provider azure-openai missing apiKeyHeader').toBeDefined();
       expect(azureProvider.apiKeyHeader).toBe('api-key');
 
-      expect(azureProvider.name, 'Provider azureopenai missing name').toBeDefined();
+      expect(azureProvider.name, 'Provider azure-openai missing name').toBeDefined();
       expect(typeof azureProvider.name).toBe('string');
       expect(azureProvider.name).toBe('Azure OpenAI');
 
-      expect(azureProvider.gateway, 'Provider azureopenai missing gateway').toBeDefined();
-      expect(azureProvider.gateway).toBe('azureopenai');
+      expect(azureProvider.gateway, 'Provider azure-openai missing gateway').toBeDefined();
+      expect(azureProvider.gateway).toBe('azure-openai');
 
-      expect(azureProvider.docUrl, 'Provider azureopenai missing docUrl').toBeDefined();
+      expect(azureProvider.docUrl, 'Provider azure-openai missing docUrl').toBeDefined();
       expect(azureProvider.docUrl).toBe('https://learn.microsoft.com/en-us/azure/ai-services/openai/');
 
-      expect(azureProvider.models, 'Provider azureopenai missing models').toBeDefined();
+      expect(azureProvider.models, 'Provider azure-openai missing models').toBeDefined();
       expect(Array.isArray(azureProvider.models)).toBe(true);
       expect(azureProvider.models.length).toBeGreaterThan(0);
     },
@@ -83,14 +83,14 @@ describe('AzureOpenAIGateway - Real API Integration', () => {
       });
 
       const providers = await gateway.fetchProviders();
-      const deployments = providers['azureopenai'].models;
+      const deployments = providers['azure-openai'].models;
 
       expect(deployments.length).toBeGreaterThan(0);
 
       const deploymentName = deployments[0];
       const model = await gateway.resolveLanguageModel({
         modelId: deploymentName,
-        providerId: 'azureopenai',
+        providerId: 'azure-openai',
         apiKey: process.env.AZURE_API_KEY!,
       });
 

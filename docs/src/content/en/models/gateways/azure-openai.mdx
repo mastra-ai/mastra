@@ -14,12 +14,12 @@ Unlike other providers that have fixed model names, Azure uses **deployment name
 
 ## How Azure Deployments Work
 
-Azure model IDs follow this pattern: `azureopenai/your-deployment-name`
+Azure model IDs follow this pattern: `azure-openai/your-deployment-name`
 
 The deployment name is **specific to your Azure account** and chosen when you create a deployment in Azure Portal. Common examples:
-- `azureopenai/my-gpt4-deployment`
-- `azureopenai/production-gpt-35-turbo`
-- `azureopenai/staging-gpt-4o`
+- `azure-openai/my-gpt4-deployment`
+- `azure-openai/production-gpt-35-turbo`
+- `azure-openai/staging-gpt-4o`
 
 ## Setup
 
@@ -119,7 +119,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "azureopenai/my-gpt4-deployment"  // Use your Azure deployment name (autocompleted in dev mode)
+  model: "azure-openai/my-gpt4-deployment"  // Use your Azure deployment name (autocompleted in dev mode)
 });
 
 // Generate a response

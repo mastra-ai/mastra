@@ -95,9 +95,9 @@ describe('AzureOpenAIGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      expect(providers.azureopenai.models).toEqual(['gpt-4-prod', 'gpt-35-turbo-dev']);
-      expect(providers.azureopenai.name).toBe('Azure OpenAI');
-      expect(providers.azureopenai.gateway).toBe('azureopenai');
+      expect(providers['azure-openai'].models).toEqual(['gpt-4-prod', 'gpt-35-turbo-dev']);
+      expect(providers['azure-openai'].name).toBe('Azure OpenAI');
+      expect(providers['azure-openai'].gateway).toBe('azure-openai');
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
@@ -117,7 +117,7 @@ describe('AzureOpenAIGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      expect(providers.azureopenai.models).toEqual(['gpt-4']);
+      expect(providers['azure-openai'].models).toEqual(['gpt-4']);
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
@@ -130,7 +130,7 @@ describe('AzureOpenAIGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      expect(providers.azureopenai.models).toEqual([]);
+      expect(providers['azure-openai'].models).toEqual([]);
       expect(mockFetch).not.toHaveBeenCalled();
     });
   });
@@ -144,8 +144,8 @@ describe('AzureOpenAIGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      expect(providers.azureopenai.models).toEqual([]);
-      expect(providers.azureopenai.name).toBe('Azure OpenAI');
+      expect(providers['azure-openai'].models).toEqual([]);
+      expect(providers['azure-openai'].name).toBe('Azure OpenAI');
       expect(mockFetch).not.toHaveBeenCalled();
     });
   });
@@ -229,8 +229,8 @@ describe('AzureOpenAIGateway', () => {
         }),
       );
 
-      expect(providers.azureopenai.models).toEqual(['my-gpt4', 'staging-gpt-4o']);
-      expect(providers.azureopenai.models).not.toContain('creating-deployment');
+      expect(providers['azure-openai'].models).toEqual(['my-gpt4', 'staging-gpt-4o']);
+      expect(providers['azure-openai'].models).not.toContain('creating-deployment');
     });
 
     it('should use discovery mode when deployments is empty array with management', async () => {
@@ -259,7 +259,7 @@ describe('AzureOpenAIGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      expect(providers.azureopenai.models).toEqual(['my-gpt4', 'staging-gpt-4o']);
+      expect(providers['azure-openai'].models).toEqual(['my-gpt4', 'staging-gpt-4o']);
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
@@ -319,7 +319,7 @@ describe('AzureOpenAIGateway', () => {
       const providers = await gateway.fetchProviders();
 
       expect(mockFetch).toHaveBeenCalledTimes(3);
-      expect(providers.azureopenai.models).toEqual(['deployment-1', 'deployment-2']);
+      expect(providers['azure-openai'].models).toEqual(['deployment-1', 'deployment-2']);
     });
 
     it('should return fallback config if token fetch fails', async () => {
@@ -341,7 +341,7 @@ describe('AzureOpenAIGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      expect(providers.azureopenai.models).toEqual([]);
+      expect(providers['azure-openai'].models).toEqual([]);
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Deployment discovery failed'), expect.anything());
 
       warnSpy.mockRestore();
@@ -375,7 +375,7 @@ describe('AzureOpenAIGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      expect(providers.azureopenai.models).toEqual([]);
+      expect(providers['azure-openai'].models).toEqual([]);
       expect(warnSpy).toHaveBeenCalled();
 
       warnSpy.mockRestore();
@@ -447,7 +447,7 @@ describe('AzureOpenAIGateway', () => {
         deployments: ['gpt-4'],
       });
 
-      const url = gateway.buildUrl('azureopenai/gpt-4', {});
+      const url = gateway.buildUrl('azure-openai/gpt-4', {});
       expect(url).toBeUndefined();
     });
   });
@@ -476,7 +476,7 @@ describe('AzureOpenAIGateway', () => {
 
       const model = await gateway.resolveLanguageModel({
         modelId: 'gpt-4',
-        providerId: 'azureopenai',
+        providerId: 'azure-openai',
         apiKey: 'test-key',
       });
 
@@ -492,7 +492,7 @@ describe('AzureOpenAIGateway', () => {
 
       const model = await gateway.resolveLanguageModel({
         modelId: 'gpt-4',
-        providerId: 'azureopenai',
+        providerId: 'azure-openai',
         apiKey: 'test-key',
       });
 

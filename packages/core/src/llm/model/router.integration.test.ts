@@ -24,12 +24,8 @@ const testConfigs = [
     model: 'openai/gpt-4o-mini',
     envVar: 'OPENROUTER_API_KEY',
   },
-  {
-    provider: 'azureopenai',
-    model: 'gpt-4o-mini', // Note: Must match an actual deployment name in your Azure OpenAI resource
-    envVar: 'AZURE_API_KEY',
-    requiresResourceName: true,
-  },
+  // Note: Azure OpenAI is tested separately in azure.integration.test.ts
+  // It requires an AzureOpenAIGateway instance and can't use ModelsDevGateway
 ];
 
 // Simple tool for testing tool calling
@@ -52,26 +48,12 @@ describe('ModelRouter Integration Tests', () => {
 
   beforeAll(() => {
     // Check which providers have API keys configured
-    availableProviders = testConfigs
-      .filter(({ envVar, provider, requiresResourceName }) => {
-        const hasApiKey = process.env[envVar];
-
-        // Azure OpenAI also needs AZURE_RESOURCE_NAME
-        if (requiresResourceName && provider === 'azureopenai') {
-          return hasApiKey && process.env.AZURE_RESOURCE_NAME;
-        }
-
-        return hasApiKey;
-      })
-      .map(({ provider }) => provider);
+    availableProviders = testConfigs.filter(({ envVar }) => process.env[envVar]).map(({ provider }) => provider);
 
     if (availableProviders.length === 0) {
       console.log('\n⚠️  No API keys configured. Set one or more of:');
-      testConfigs.forEach(({ envVar, provider, requiresResourceName }) => {
+      testConfigs.forEach(({ envVar }) => {
         console.log(`   - ${envVar}`);
-        if (requiresResourceName && provider === 'azureopenai') {
-          console.log(`   - AZURE_RESOURCE_NAME (also required for Azure OpenAI)`);
-        }
       });
       console.log('\nSkipping all integration tests.\n');
     } else {

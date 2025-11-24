@@ -26,7 +26,7 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "gateways/azureopenai",
+          id: "gateways/azure-openai",
           label: "Azure OpenAI",
         },
         {

@@ -1,5 +1,5 @@
 ---
-"@mastra/core": minor
+"@mastra/core": patch
 ---
 
 Add Azure OpenAI gateway
@@ -46,7 +46,7 @@ export const mastra = new Mastra({
 
 // Use Azure OpenAI models
 const agent = new Agent({
-  model: "azureopenai/gpt-4-deployment",
+  model: "azure-openai/gpt-4-deployment",
   instructions: "You are a helpful assistant"
 });
 ```

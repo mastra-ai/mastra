@@ -48,9 +48,9 @@ export interface AzureOpenAIGatewayConfig {
 }
 
 export class AzureOpenAIGateway extends MastraModelGateway {
-  readonly id = 'azureopenai';
-  readonly name = 'azureopenai';
-  readonly prefix = 'azureopenai';
+  readonly id = 'azure-openai';
+  readonly name = 'azure-openai';
+  readonly prefix = 'azure-openai';
   private tokenCache = new InMemoryServerCache();
 
   constructor(private config: AzureOpenAIGatewayConfig) {
@@ -94,26 +94,26 @@ export class AzureOpenAIGateway extends MastraModelGateway {
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
     if (this.config.deployments && this.config.deployments.length > 0) {
       return {
-        azureopenai: {
+        'azure-openai': {
           apiKeyEnvVar: [],
           apiKeyHeader: 'api-key',
           name: 'Azure OpenAI',
           models: this.config.deployments,
           docUrl: 'https://learn.microsoft.com/en-us/azure/ai-services/openai/',
-          gateway: 'azureopenai',
+          gateway: 'azure-openai',
         },
       };
     }
 
     if (!this.config.management) {
       return {
-        azureopenai: {
+        'azure-openai': {
           apiKeyEnvVar: [],
           apiKeyHeader: 'api-key',
           name: 'Azure OpenAI',
           models: [],
           docUrl: 'https://learn.microsoft.com/en-us/azure/ai-services/openai/',
-          gateway: 'azureopenai',
+          gateway: 'azure-openai',
         },
       };
     }
@@ -134,13 +134,13 @@ export class AzureOpenAIGateway extends MastraModelGateway {
       });
 
       return {
-        azureopenai: {
+        'azure-openai': {
           apiKeyEnvVar: [],
           apiKeyHeader: 'api-key',
           name: 'Azure OpenAI',
           models: deployments.map(d => d.name),
           docUrl: 'https://learn.microsoft.com/en-us/azure/ai-services/openai/',
-          gateway: 'azureopenai',
+          gateway: 'azure-openai',
         },
       };
     } catch (error) {
@@ -151,13 +151,13 @@ export class AzureOpenAIGateway extends MastraModelGateway {
       );
 
       return {
-        azureopenai: {
+        'azure-openai': {
           apiKeyEnvVar: [],
           apiKeyHeader: 'api-key',
           name: 'Azure OpenAI',
           models: [],
           docUrl: 'https://learn.microsoft.com/en-us/azure/ai-services/openai/',
-          gateway: 'azureopenai',
+          gateway: 'azure-openai',
         },
       };
     }

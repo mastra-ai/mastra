@@ -83,10 +83,10 @@ const __dirname = path.dirname(__filename);
 const POPULAR_PROVIDERS = ['openai', 'anthropic', 'google', 'deepseek', 'groq', 'mistral', 'xai'];
 
 // Providers that are actually gateways (aggregate multiple model providers)
-const GATEWAY_PROVIDERS = ['netlify', 'openrouter', 'vercel', 'azureopenai'];
+const GATEWAY_PROVIDERS = ['netlify', 'openrouter', 'vercel', 'azure-openai'];
 
-const MANUALLY_DOCUMENTED_PROVIDERS = ['azureopenai'];
-const MANUALLY_DOCUMENTED_GATEWAYS = ['azureopenai'];
+const MANUALLY_DOCUMENTED_PROVIDERS = ['azure-openai'];
+const MANUALLY_DOCUMENTED_GATEWAYS = ['azure-openai'];
 
 interface ProviderInfo {
   id: string;
@@ -903,7 +903,7 @@ ${gatewaysList
   .map(g => {
     // Custom descriptions for manually documented gateways
     if (MANUALLY_DOCUMENTED_GATEWAYS.includes(g)) {
-      if (g === 'azureopenai') {
+      if (g === 'azure-openai') {
         return `    <CardGridItem
       title="Azure OpenAI"
       description="Use your private Azure OpenAI deployments with associated deployment names"
