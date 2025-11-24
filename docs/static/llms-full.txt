@@ -76334,13 +76334,13 @@ A relevancy score between 0 and 1:
 Evaluate agent responses for relevancy across different scenarios:
 
 ```typescript title="src/example-answer-relevancy.ts" showLineNumbers copy
-import { runEvals } from "@mastra/core/evals";
-import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/prebuilt";
+import { runExperiment } from "@mastra/core/scores";
+import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/llm";
 import { myAgent } from "./agent";
 
 const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-4o" });
 
-const result = await runEvals({
+const result = await runExperiment({
   data: [
     {
       input: "What are the health benefits of regular exercise?",
@@ -76356,8 +76356,8 @@ const result = await runEvals({
   target: myAgent,
   onItemComplete: ({ scorerResults }) => {
     console.log({
-      score: scorerResults[scorer.id].score,
-      reason: scorerResults[scorer.id].reason,
+      score: scorerResults[scorer.name].score,
+      reason: scorerResults[scorer.name].reason,
     });
   },
 });
@@ -76365,9 +76365,9 @@ const result = await runEvals({
 console.log(result.scores);
 ```
 
-For more details on `runEvals`, see the [runEvals reference](/reference/v1/evals/run-evals).
+For more details on `runEvals`, see the [runEvals reference](/reference/scorers/run-experiment).
 
-To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overview) guide.
+To add this scorer to an agent, see the [Scorers overview](/docs/scorers/overview) guide.
 
 ## Related
 
@@ -76531,13 +76531,13 @@ Score calculation: `max(0, base_score - contradiction_penalty - missing_penalty 
 Evaluate agent responses for similarity to ground truth across different scenarios:
 
 ```typescript title="src/example-answer-similarity.ts" showLineNumbers copy
-import { runEvals } from "@mastra/core/evals";
-import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
+import { runExperiment } from "@mastra/core/scores";
+import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
 import { myAgent } from "./agent";
 
 const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o" });
 
-const result = await runEvals({
+const result = await runExperiment({
   data: [
     {
       input: "What is 2+2?",
@@ -76556,8 +76556,8 @@ const result = await runEvals({
   target: myAgent,
   onItemComplete: ({ scorerResults }) => {
     console.log({ 
-      score: scorerResults[scorer.id].score,
-      reason: scorerResults[scorer.id].reason,
+      score: scorerResults[scorer.name].score,
+      reason: scorerResults[scorer.name].reason,
     });
   },
 });
@@ -76565,9 +76565,9 @@ const result = await runEvals({
 console.log(result.scores);
 ```
 
-For more details on `runEvals`, see the [runEvals reference](/reference/v1/evals/run-evals).
+For more details on `runExperiment`, see the [runExperiment reference](/reference/scorers/run-experiment).
 
-To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overview#adding-scorers-to-agents) guide.
+To add this scorer to an agent, see the [Scorers overview](/docs/scorers/overview#adding-scorers-to-agents) guide.
 
 
 ---
@@ -76701,13 +76701,13 @@ A bias score between 0 and 1:
 Evaluate agent responses for bias across different types of questions:
 
 ```typescript title="src/example-bias.ts" showLineNumbers copy
-import { runEvals } from "@mastra/core/evals";
-import { createBiasScorer } from "@mastra/evals/scorers/prebuilt";
+import { runExperiment } from "@mastra/core/scores";
+import { createBiasScorer } from "@mastra/evals/scorers/llm";
 import { myAgent } from "./agent";
 
 const scorer = createBiasScorer({ model: "openai/gpt-4o" });
 
-const result = await runEvals({
+const result = await runExperiment({
   data: [
     {
       input: "What makes someone a good leader?",
@@ -76723,8 +76723,8 @@ const result = await runEvals({
   target: myAgent,
   onItemComplete: ({ scorerResults }) => {
     console.log({
-      score: scorerResults[scorer.id].score,
-      reason: scorerResults[scorer.id].reason,
+      score: scorerResults[scorer.name].score,
+      reason: scorerResults[scorer.name].reason,
     });
   },
 });
@@ -76732,9 +76732,9 @@ const result = await runEvals({
 console.log(result.scores);
 ```
 
-For more details on `runEvals`, see the [runEvals reference](/reference/v1/evals/run-evals).
+For more details on `runExperiment`, see the [runExperiment reference](/reference/scorers/run-experiment).
 
-To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overview#adding-scorers-to-agents) guide.
+To add this scorer to an agent, see the [Scorers overview](/docs/scorers/overview#adding-scorers-to-agents) guide.
 
 ## Related
 
@@ -76856,13 +76856,13 @@ A completeness score between 0 and 1:
 Evaluate agent responses for completeness across different query complexities:
 
 ```typescript title="src/example-completeness.ts" showLineNumbers copy
-import { runEvals } from "@mastra/core/evals";
-import { createCompletenessScorer } from "@mastra/evals/scorers/prebuilt";
+import { runExperiment } from "@mastra/core/scores";
+import { createCompletenessScorer } from "@mastra/evals/scorers/code";
 import { myAgent } from "./agent";
 
 const scorer = createCompletenessScorer();
 
-const result = await runEvals({
+const result = await runExperiment({
   data: [
     {
       input:
@@ -76881,7 +76881,7 @@ const result = await runEvals({
   target: myAgent,
   onItemComplete: ({ scorerResults }) => {
     console.log({
-      score: scorerResults[scorer.id].score,
+      score: scorerResults[scorer.name].score,
     });
   },
 });
@@ -76889,9 +76889,9 @@ const result = await runEvals({
 console.log(result.scores);
 ```
 
-For more details on `runEvals`, see the [runEvals reference](/reference/v1/evals/run-evals).
+For more details on `runExperiment`, see the [runExperiment reference](/reference/scorers/run-experiment).
 
-To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overview#adding-scorers-to-agents) guide.
+To add this scorer to an agent, see the [Scorers overview](/docs/scorers/overview#adding-scorers-to-agents) guide.
 
 ## Related
 
@@ -76987,13 +76987,13 @@ Final score: `similarity_value * scale`
 Evaluate textual similarity between expected and actual agent outputs:
 
 ```typescript title="src/example-content-similarity.ts" showLineNumbers copy
-import { runEvals } from "@mastra/core/evals";
-import { createContentSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
+import { runExperiment } from "@mastra/core/scores";
+import { createContentSimilarityScorer } from "@mastra/evals/scorers/code";
 import { myAgent } from "./agent";
 
 const scorer = createContentSimilarityScorer();
 
-const result = await runEvals({
+const result = await runExperiment({
   data: [
     {
       input: "Summarize the benefits of TypeScript",
@@ -77010,8 +77010,8 @@ const result = await runEvals({
   target: myAgent,
   onItemComplete: ({ scorerResults }) => {
     console.log({
-      score: scorerResults[scorer.id].score,
-      groundTruth: scorerResults[scorer.id].groundTruth,
+      score: scorerResults[scorer.name].score,
+      groundTruth: scorerResults[scorer.name].groundTruth,
     });
   },
 });
@@ -77019,19 +77019,9 @@ const result = await runEvals({
 console.log(result.scores);
 ```
 
-For more details on `runEvals`, see the [runEvals reference](/reference/v1/evals/run-evals).
+For more details on `runExperiment`, see the [runExperiment reference](/reference/scorers/run-experiment).
 
-To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overview#adding-scorers-to-agents) guide.
-
-### Score interpretation
-
-A similarity score between 0 and 1:
-
-- **1.0**: Perfect match – content is nearly identical.
-- **0.7–0.9**: High similarity – minor differences in word choice or structure.
-- **0.4–0.6**: Moderate similarity – general overlap with noticeable variation.
-- **0.1–0.3**: Low similarity – few common elements or shared meaning.
-- **0.0**: No similarity – completely different content.
+To add this scorer to an agent, see the [Scorers overview](/docs/scorers/overview#adding-scorers-to-agents) guide.
 
 ## Related
 
@@ -77235,8 +77225,8 @@ const scorer = createContextPrecisionScorer({
 Evaluate RAG system context retrieval precision for different queries:
 
 ```typescript title="src/example-context-precision.ts" showLineNumbers copy
-import { runEvals } from "@mastra/core/evals";
-import { createContextPrecisionScorer } from "@mastra/evals/scorers/prebuilt";
+import { runExperiment } from "@mastra/core/scores";
+import { createContextPrecisionScorer } from "@mastra/evals/scorers/llm";
 import { myAgent } from "./agent";
 
 const scorer = createContextPrecisionScorer({
@@ -77249,7 +77239,7 @@ const scorer = createContextPrecisionScorer({
   },
 });
 
-const result = await runEvals({
+const result = await runExperiment({
   data: [
     {
       input: "How does photosynthesis work in plants?",
@@ -77262,8 +77252,8 @@ const result = await runEvals({
   target: myAgent,
   onItemComplete: ({ scorerResults }) => {
     console.log({
-      score: scorerResults[scorer.id].score,
-      reason: scorerResults[scorer.id].reason,
+      score: scorerResults[scorer.name].score,
+      reason: scorerResults[scorer.name].reason,
     });
   },
 });
@@ -77271,9 +77261,9 @@ const result = await runEvals({
 console.log(result.scores);
 ```
 
-For more details on `runEvals`, see the [runEvals reference](/reference/v1/evals/run-evals).
+For more details on `runExperiment`, see the [runExperiment reference](/reference/scorers/run-experiment).
 
-To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overview#adding-scorers-to-agents) guide.
+To add this scorer to an agent, see the [Scorers overview](/docs/scorers/overview#adding-scorers-to-agents) guide.
 
 ## Comparison with Context Relevance
 
@@ -77289,9 +77279,9 @@ Choose the right scorer for your needs:
 
 ## Related
 
-- [Answer Relevancy Scorer](/reference/v1/evals/answer-relevancy) - Evaluates if answers address the question
-- [Faithfulness Scorer](/reference/v1/evals/faithfulness) - Measures answer groundedness in context
-- [Custom Scorers](/docs/v1/evals/custom-scorers) - Creating your own evaluation metrics
+- [Answer Relevancy Scorer](/reference/scorers/answer-relevancy) - Evaluates if answers address the question
+- [Faithfulness Scorer](/reference/scorers/faithfulness) - Measures answer groundedness in context
+- [Custom Scorers](/docs/scorers/custom-scorers) - Creating your own evaluation metrics
 
 
 ---
@@ -78572,8 +78562,8 @@ A faithfulness score between 0 and 1:
 Evaluate agent responses for faithfulness to provided context:
 
 ```typescript title="src/example-faithfulness.ts" showLineNumbers copy
-import { runEvals } from "@mastra/core/evals";
-import { createFaithfulnessScorer } from "@mastra/evals/scorers/prebuilt";
+import { runExperiment } from "@mastra/core/scores";
+import { createFaithfulnessScorer } from "@mastra/evals/scorers/llm";
 import { myAgent } from "./agent";
 
 // Context is typically populated from agent tool calls or RAG retrieval
@@ -78581,7 +78571,7 @@ const scorer = createFaithfulnessScorer({
   model: "openai/gpt-4o",
 });
 
-const result = await runEvals({
+const result = await runExperiment({
   data: [
     {
       input: "Tell me about the Tesla Model 3.",
@@ -78594,8 +78584,8 @@ const result = await runEvals({
   target: myAgent,
   onItemComplete: ({ scorerResults }) => {
     console.log({
-      score: scorerResults[scorer.id].score,
-      reason: scorerResults[scorer.id].reason,
+      score: scorerResults[scorer.name].score,
+      reason: scorerResults[scorer.name].reason,
     });
   },
 });
@@ -78603,9 +78593,9 @@ const result = await runEvals({
 console.log(result.scores);
 ```
 
-For more details on `runEvals`, see the [runEvals reference](/reference/v1/evals/run-evals).
+For more details on `runExperiment`, see the [runExperiment reference](/reference/scorers/run-experiment).
 
-To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overview#adding-scorers-to-agents) guide.
+To add this scorer to an agent, see the [Scorers overview](/docs/scorers/overview#adding-scorers-to-agents) guide.
 
 ## Related
 
@@ -78752,8 +78742,8 @@ A hallucination score between 0 and 1:
 Evaluate agent responses for hallucinations against provided context:
 
 ```typescript title="src/example-hallucination.ts" showLineNumbers copy
-import { runEvals } from "@mastra/core/evals";
-import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
+import { runExperiment } from "@mastra/core/scores";
+import { createHallucinationScorer } from "@mastra/evals/scorers/llm";
 import { myAgent } from "./agent";
 
 // Context is typically populated from agent tool calls or RAG retrieval
@@ -78761,7 +78751,7 @@ const scorer = createHallucinationScorer({
   model: "openai/gpt-4o",
 });
 
-const result = await runEvals({
+const result = await runExperiment({
   data: [
     {
       input: "When was the first iPhone released?",
@@ -78774,8 +78764,8 @@ const result = await runEvals({
   target: myAgent,
   onItemComplete: ({ scorerResults }) => {
     console.log({
-      score: scorerResults[scorer.id].score,
-      reason: scorerResults[scorer.id].reason,
+      score: scorerResults[scorer.name].score,
+      reason: scorerResults[scorer.name].reason,
     });
   },
 });
@@ -78783,9 +78773,9 @@ const result = await runEvals({
 console.log(result.scores);
 ```
 
-For more details on `runEvals`, see the [runEvals reference](/reference/v1/evals/run-evals).
+For more details on `runExperiment`, see the [runExperiment reference](/reference/scorers/run-experiment).
 
-To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overview#adding-scorers-to-agents) guide.
+To add this scorer to an agent, see the [Scorers overview](/docs/scorers/overview#adding-scorers-to-agents) guide.
 
 ## Related
 
@@ -78903,13 +78893,13 @@ The scorer handles several special cases:
 Evaluate keyword coverage between input queries and agent responses:
 
 ```typescript title="src/example-keyword-coverage.ts" showLineNumbers copy
-import { runEvals } from "@mastra/core/evals";
-import { createKeywordCoverageScorer } from "@mastra/evals/scorers/prebuilt";
+import { runExperiment } from "@mastra/core/scores";
+import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
 import { myAgent } from "./agent";
 
 const scorer = createKeywordCoverageScorer();
 
-const result = await runEvals({
+const result = await runExperiment({
   data: [
     {
       input: "JavaScript frameworks like React and Vue",
@@ -78926,7 +78916,7 @@ const result = await runEvals({
   target: myAgent,
   onItemComplete: ({ scorerResults }) => {
     console.log({
-      score: scorerResults[scorer.id].score,
+      score: scorerResults[scorer.name].score,
     });
   },
 });
@@ -78934,9 +78924,9 @@ const result = await runEvals({
 console.log(result.scores);
 ```
 
-For more details on `runEvals`, see the [runEvals reference](/reference/v1/evals/run-evals).
+For more details on `runExperiment`, see the [runExperiment reference](/reference/scorers/run-experiment).
 
-To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overview#adding-scorers-to-agents) guide.
+To add this scorer to an agent, see the [Scorers overview](/docs/scorers/overview#adding-scorers-to-agents) guide.
 
 ## Related
 
@@ -80947,13 +80937,13 @@ A textual difference score between 0 and 1:
 Measure textual differences between expected and actual agent outputs:
 
 ```typescript title="src/example-textual-difference.ts" showLineNumbers copy
-import { runEvals } from "@mastra/core/evals";
-import { createTextualDifferenceScorer } from "@mastra/evals/scorers/prebuilt";
+import { runExperiment } from "@mastra/core/scores";
+import { createTextualDifferenceScorer } from "@mastra/evals/scorers/code";
 import { myAgent } from "./agent";
 
 const scorer = createTextualDifferenceScorer();
 
-const result = await runEvals({
+const result = await runExperiment({
   data: [
     {
       input: "Summarize the concept of recursion",
@@ -80969,8 +80959,8 @@ const result = await runEvals({
   target: myAgent,
   onItemComplete: ({ scorerResults }) => {
     console.log({
-      score: scorerResults[scorer.id].score,
-      groundTruth: scorerResults[scorer.id].groundTruth,
+      score: scorerResults[scorer.name].score,
+      groundTruth: scorerResults[scorer.name].groundTruth,
     });
   },
 });
@@ -80978,9 +80968,9 @@ const result = await runEvals({
 console.log(result.scores);
 ```
 
-For more details on `runEvals`, see the [runEvals reference](/reference/v1/evals/run-evals).
+For more details on `runExperiment`, see the [runExperiment reference](/reference/scorers/run-experiment).
 
-To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overview#adding-scorers-to-agents) guide.
+To add this scorer to an agent, see the [Scorers overview](/docs/scorers/overview#adding-scorers-to-agents) guide.
 
 ## Related
 
@@ -81091,13 +81081,13 @@ Object with tone metrics:
 Evaluate tone consistency between related agent responses:
 
 ```typescript title="src/example-tone-consistency.ts" showLineNumbers copy
-import { runEvals } from "@mastra/core/evals";
-import { createToneScorer } from "@mastra/evals/scorers/prebuilt";
+import { runExperiment } from "@mastra/core/scores";
+import { createToneScorer } from "@mastra/evals/scorers/code";
 import { myAgent } from "./agent";
 
 const scorer = createToneScorer();
 
-const result = await runEvals({
+const result = await runExperiment({
   data: [
     {
       input: "How was your experience with our service?",
@@ -81112,7 +81102,7 @@ const result = await runEvals({
   target: myAgent,
   onItemComplete: ({ scorerResults }) => {
     console.log({
-      score: scorerResults[scorer.id].score,
+      score: scorerResults[scorer.name].score,
     });
   },
 });
@@ -81120,9 +81110,9 @@ const result = await runEvals({
 console.log(result.scores);
 ```
 
-For more details on `runEvals`, see the [runEvals reference](/reference/v1/evals/run-evals).
+For more details on `runExperiment`, see the [runExperiment reference](/reference/scorers/run-experiment).
 
-To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overview#adding-scorers-to-agents) guide.
+To add this scorer to an agent, see the [Scorers overview](/docs/scorers/overview#adding-scorers-to-agents) guide.
 
 ## Related
 
@@ -81831,13 +81821,13 @@ A toxicity score between 0 and 1:
 Evaluate agent responses for toxic, biased, or harmful content:
 
 ```typescript title="src/example-toxicity.ts" showLineNumbers copy
-import { runEvals } from "@mastra/core/evals";
-import { createToxicityScorer } from "@mastra/evals/scorers/prebuilt";
+import { runExperiment } from "@mastra/core/scores";
+import { createToxicityScorer } from "@mastra/evals/scorers/llm";
 import { myAgent } from "./agent";
 
 const scorer = createToxicityScorer({ model: "openai/gpt-4o" });
 
-const result = await runEvals({
+const result = await runExperiment({
   data: [
     {
       input: "What do you think about the new team member?",
@@ -81853,8 +81843,8 @@ const result = await runEvals({
   target: myAgent,
   onItemComplete: ({ scorerResults }) => {
     console.log({
-      score: scorerResults[scorer.id].score,
-      reason: scorerResults[scorer.id].reason,
+      score: scorerResults[scorer.name].score,
+      reason: scorerResults[scorer.name].reason,
     });
   },
 });
@@ -81862,9 +81852,9 @@ const result = await runEvals({
 console.log(result.scores);
 ```
 
-For more details on `runEvals`, see the [runEvals reference](/reference/v1/evals/run-evals).
+For more details on `runExperiment`, see the [runExperiment reference](/reference/scorers/run-experiment).
 
-To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overview#adding-scorers-to-agents) guide.
+To add this scorer to an agent, see the [Scorers overview](/docs/scorers/overview#adding-scorers-to-agents) guide.
 
 ## Related
 
