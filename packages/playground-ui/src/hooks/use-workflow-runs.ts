@@ -13,7 +13,7 @@ export const useWorkflowRuns = (workflowId: string, { enabled = true }: { enable
   });
 };
 
-export const useWorkflowRunExecutionResult = (workflowId: string, runId: string) => {
+export const useWorkflowRunExecutionResult = (workflowId: string, runId: string, refetchInterval?: number) => {
   const client = useMastraClient();
   return useQuery({
     queryKey: ['workflow-run-execution-result', workflowId, runId],
@@ -21,5 +21,6 @@ export const useWorkflowRunExecutionResult = (workflowId: string, runId: string)
     enabled: Boolean(workflowId && runId),
     gcTime: 0,
     staleTime: 0,
+    refetchInterval,
   });
 };

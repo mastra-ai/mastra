@@ -9,7 +9,7 @@ import type {
   DescribeIndexParams,
   DeleteIndexParams,
   DeleteVectorParams,
-  UpdateVectorParams,
+  DeleteVectorsParams,
 } from '@mastra/core/vector';
 import { Pinecone } from '@pinecone-database/pinecone';
 import type {
@@ -37,11 +37,28 @@ interface PineconeUpsertVectorParams extends UpsertVectorParams {
   sparseVectors?: RecordSparseValues[];
 }
 
-interface PineconeUpdateVectorParams extends UpdateVectorParams {
+// Pinecone-specific update params that includes namespace in both union branches
+type PineconeUpdateVectorParams =
+  | {
+      indexName: string;
+      id: string;
+      filter?: never;
+      update: { vector?: number[]; metadata?: Record<string, any> };
+      namespace?: string;
+    }
+  | {
+      indexName: string;
+      id?: never;
+      filter: PineconeVectorFilter;
+      update: { vector?: number[]; metadata?: Record<string, any> };
+      namespace?: string;
+    };
+
+interface PineconeDeleteVectorParams extends DeleteVectorParams {
   namespace?: string;
 }
 
-interface PineconeDeleteVectorParams extends DeleteVectorParams {
+interface PineconeDeleteVectorsParams extends DeleteVectorsParams<PineconeVectorFilter> {
   namespace?: string;
 }
 
@@ -302,47 +319,129 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
 
   /**
    * Updates a vector by its ID with the provided vector and/or metadata.
-   * @param indexName - The name of the index containing the vector.
-   * @param id - The ID of the vector to update.
-   * @param update - An object containing the vector and/or metadata to update.
-   * @param update.vector - An optional array of numbers representing the new vector.
-   * @param update.metadata - An optional record containing the new metadata.
-   * @param namespace - The namespace of the index (optional).
+   * Note: Pinecone only supports update by ID, not by filter.
+   * @param params - Parameters containing the id for targeting the vector to update
+   * @param params.indexName - The name of the index containing the vector.
+   * @param params.id - The ID of the vector to update.
+   * @param params.update - An object containing the vector and/or metadata to update.
+   * @param namespace - The namespace of the index (optional, Pinecone-specific).
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector({ indexName, id, update, namespace }: PineconeUpdateVectorParams): Promise<void> {
+  async updateVector(params: PineconeUpdateVectorParams): Promise<void> {
+    const { indexName, update } = params;
+
+    // Validate mutually exclusive parameters
+    if ('id' in params && params.id && 'filter' in params && params.filter) {
+      throw new MastraError({
+        id: 'STORAGE_PINECONE_VECTOR_UPDATE_MUTUALLY_EXCLUSIVE',
+        text: 'Cannot specify both id and filter - they are mutually exclusive',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    if (!('id' in params && params.id) && !('filter' in params && params.filter)) {
+      throw new MastraError({
+        id: 'STORAGE_PINECONE_VECTOR_UPDATE_NO_TARGET',
+        text: 'Either id or filter must be provided',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     if (!update.vector && !update.metadata) {
       throw new MastraError({
         id: 'STORAGE_PINECONE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'No updates provided',
-        details: { indexName, id },
+        details: { indexName },
       });
     }
+
+    // Extract Pinecone-specific namespace field
+    const namespace = params.namespace;
 
     try {
       const index = this.client.Index(indexName).namespace(namespace || '');
 
-      const updateObj: UpdateOptions = { id };
+      // Handle update by ID
+      if ('id' in params && params.id) {
+        const updateObj: UpdateOptions = { id: params.id };
 
-      if (update.vector) {
-        updateObj.values = update.vector;
+        if (update.vector) {
+          updateObj.values = update.vector;
+        }
+
+        if (update.metadata) {
+          updateObj.metadata = update.metadata;
+        }
+
+        await index.update(updateObj);
       }
+      // Handle update by filter (query first, then update each)
+      else if ('filter' in params && params.filter) {
+        // Validate filter is not empty
+        if (Object.keys(params.filter).length === 0) {
+          throw new MastraError({
+            id: 'STORAGE_PINECONE_VECTOR_UPDATE_EMPTY_FILTER',
+            text: 'Filter cannot be an empty filter object',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName },
+          });
+        }
 
-      if (update.metadata) {
-        updateObj.metadata = update.metadata;
+        const translatedFilter = this.transformFilter(params.filter);
+        if (translatedFilter) {
+          // Get index stats to know dimensions for dummy vector
+          const stats = await this.describeIndex({ indexName });
+
+          // Create a normalized dummy vector for querying (avoid zero vector for cosine similarity)
+          const dummyVector = new Array(stats.dimension).fill(1 / Math.sqrt(stats.dimension));
+
+          // Query with large topK to get all matching vectors
+          // Pinecone's max topK is 10000
+          const results = await index.query({
+            vector: dummyVector,
+            topK: 10000,
+            filter: translatedFilter,
+            includeMetadata: false,
+            includeValues: false,
+          });
+
+          // Update each matching vector
+          const idsToUpdate = results.matches.map(m => m.id as string);
+          for (const id of idsToUpdate) {
+            const updateObj: UpdateOptions = { id };
+
+            if (update.vector) {
+              updateObj.values = update.vector;
+            }
+
+            if (update.metadata) {
+              updateObj.metadata = update.metadata;
+            }
+
+            await index.update(updateObj);
+          }
+        }
       }
-
-      await index.update(updateObj);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: 'STORAGE_PINECONE_VECTOR_UPDATE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...('id' in params && params.id && { id: params.id }),
+            ...('filter' in params && params.filter && { filter: JSON.stringify(params.filter) }),
+          },
         },
         error,
       );
@@ -367,7 +466,118 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
           id: 'STORAGE_PINECONE_VECTOR_DELETE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Deletes multiple vectors by IDs or filter.
+   * @param indexName - The name of the index containing the vectors.
+   * @param ids - Array of vector IDs to delete (mutually exclusive with filter).
+   * @param filter - Filter to match vectors to delete (mutually exclusive with ids).
+   * @param namespace - The namespace of the index (optional, Pinecone-specific).
+   * @returns A promise that resolves when the deletion is complete.
+   * @throws Will throw an error if both ids and filter are provided, or if neither is provided.
+   */
+  async deleteVectors(params: PineconeDeleteVectorsParams): Promise<void> {
+    const { indexName, filter, ids } = params;
+    const namespace = params.namespace;
+
+    // Validate mutually exclusive parameters
+    if (ids && filter) {
+      throw new MastraError({
+        id: 'STORAGE_PINECONE_VECTOR_DELETE_VECTORS_MUTUALLY_EXCLUSIVE',
+        text: 'Cannot specify both ids and filter - they are mutually exclusive',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    if (!ids && !filter) {
+      throw new MastraError({
+        id: 'STORAGE_PINECONE_VECTOR_DELETE_VECTORS_NO_TARGET',
+        text: 'Either filter or ids must be provided',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    // Validate ids array is not empty
+    if (ids && ids.length === 0) {
+      throw new MastraError({
+        id: 'STORAGE_PINECONE_VECTOR_DELETE_VECTORS_EMPTY_IDS',
+        text: 'Cannot delete with empty ids array',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    // Validate filter is not empty
+    if (filter && Object.keys(filter).length === 0) {
+      throw new MastraError({
+        id: 'STORAGE_PINECONE_VECTOR_DELETE_VECTORS_EMPTY_FILTER',
+        text: 'Cannot delete with empty filter object',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    try {
+      const index = this.client.Index(indexName).namespace(namespace || '');
+
+      if (ids) {
+        // Delete by IDs - Pinecone's deleteMany accepts an array of IDs
+        await index.deleteMany(ids);
+      } else if (filter) {
+        // Delete by filter - Pinecone's deleteMany doesn't properly support metadata filters
+        // We need to query for matching IDs first, then delete them
+        const translatedFilter = this.transformFilter(filter);
+        if (translatedFilter) {
+          // Get index stats to know dimensions for dummy vector
+          const stats = await this.describeIndex({ indexName });
+
+          // Create a normalized dummy vector for querying (avoid zero vector for cosine similarity)
+          const dummyVector = new Array(stats.dimension).fill(1 / Math.sqrt(stats.dimension));
+
+          // Query with large topK to get all matching vectors
+          // Pinecone's max topK is 10000
+          const results = await index.query({
+            vector: dummyVector,
+            topK: 10000,
+            filter: translatedFilter,
+            includeMetadata: false,
+            includeValues: false,
+          });
+
+          // Extract IDs and delete them
+          const idsToDelete = results.matches.map(m => m.id as string);
+          if (idsToDelete.length > 0) {
+            await index.deleteMany(idsToDelete);
+          }
+        }
+      }
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_PINECONE_VECTOR_DELETE_VECTORS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            ...(filter && { filter: JSON.stringify(filter) }),
+            ...(ids && { idsCount: ids.length }),
+          },
         },
         error,
       );
