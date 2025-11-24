@@ -36,7 +36,7 @@ describe('externals: true', () => {
 
   async function runBuild(path: string) {
     await execa(pkgManager, ['build'], {
-      cwd: join(path, 'apps', 'custom'),
+      cwd: path,
       stdio: 'inherit',
       env: process.env,
     });
