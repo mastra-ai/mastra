@@ -1,6 +1,18 @@
 import type { Schema } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import { z, ZodOptional, ZodObject, ZodArray, ZodUnion, ZodString, ZodNumber, ZodDate, ZodDefault, ZodNull } from 'zod';
+import {
+  z,
+  ZodOptional,
+  ZodObject,
+  ZodArray,
+  ZodUnion,
+  ZodString,
+  ZodNumber,
+  ZodDate,
+  ZodDefault,
+  ZodNull,
+  ZodNullable,
+} from 'zod';
 import type { ZodTypeAny } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
 import type { SchemaCompatLayer as ParentSchemaCompatLayer } from './schema-compatibility';
@@ -32,6 +44,7 @@ export const ALL_ARRAY_CHECKS = ['min', 'max', 'length'] as const;
 export const isOptional = (v: ZodTypeAny): v is ZodOptional<any> => v instanceof ZodOptional;
 export const isObj = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
 export const isNull = (v: ZodTypeAny): v is ZodNull => v instanceof ZodNull;
+export const isNullable = (v: ZodTypeAny): v is ZodNullable<any> => v instanceof ZodNullable;
 export const isArr = (v: ZodTypeAny): v is ZodArray<any, any> => v instanceof ZodArray;
 export const isUnion = (v: ZodTypeAny): v is ZodUnion<[ZodTypeAny, ...ZodTypeAny[]]> => v instanceof ZodUnion;
 export const isString = (v: ZodTypeAny): v is ZodString => v instanceof ZodString;
@@ -58,6 +71,7 @@ export const SUPPORTED_ZOD_TYPES = [
   'ZodDate',
   'ZodAny',
   'ZodDefault',
+  'ZodNullable',
 ] as const;
 
 /**
