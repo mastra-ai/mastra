@@ -1,10 +1,10 @@
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { Tool } from '@mastra/core/tools';
+import type { InMemoryTaskStore } from '../a2a/store';
 import { generateOpenAPIDocument } from './openapi-utils';
 import { SERVER_ROUTES } from './routes';
 import type { ServerRoute } from './routes';
-import type { InMemoryTaskStore } from '../a2a/store';
 
 export * from './routes';
 
@@ -32,6 +32,7 @@ export abstract class MastraServerBase<TApp, TRequest, TResponse> {
   protected taskStore?: InMemoryTaskStore;
   protected playground?: boolean;
   protected isDev?: boolean;
+  protected customRouteAuthConfig?: Map<string, boolean>;
 
   constructor({
     app,
@@ -43,6 +44,7 @@ export abstract class MastraServerBase<TApp, TRequest, TResponse> {
     taskStore,
     playground = false,
     isDev = false,
+    customRouteAuthConfig,
   }: {
     app: TApp;
     mastra: Mastra;
@@ -53,6 +55,7 @@ export abstract class MastraServerBase<TApp, TRequest, TResponse> {
     taskStore?: InMemoryTaskStore;
     playground?: boolean;
     isDev?: boolean;
+    customRouteAuthConfig?: Map<string, boolean>;
   }) {
     this.mastra = mastra;
     this.bodyLimitOptions = bodyLimitOptions;
@@ -63,6 +66,7 @@ export abstract class MastraServerBase<TApp, TRequest, TResponse> {
     this.taskStore = taskStore;
     this.playground = playground;
     this.isDev = isDev;
+    this.customRouteAuthConfig = customRouteAuthConfig;
   }
 
   protected mergeRequestContext({
@@ -94,9 +98,11 @@ export abstract class MastraServerBase<TApp, TRequest, TResponse> {
   abstract sendResponse(route: ServerRoute, response: TResponse, result: unknown): Promise<unknown>;
   abstract registerRoute(app: TApp, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void>;
   abstract registerContextMiddleware(): void;
+  abstract registerAuthMiddleware(): void;
 
   async init() {
     this.registerContextMiddleware();
+    this.registerAuthMiddleware();
     await this.registerRoutes();
   }
 

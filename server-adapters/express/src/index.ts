@@ -6,6 +6,8 @@ import type { ServerRoute } from '@mastra/server/server-adapter';
 import { MastraServerBase } from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
 
+import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
+
 // Extend Express types to include Mastra context
 declare global {
   namespace Express {
@@ -73,6 +75,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       }
       res.locals.playground = this.playground === true;
       res.locals.isDev = this.isDev === true;
+      res.locals.customRouteAuthConfig = this.customRouteAuthConfig;
       const controller = new AbortController();
       req.on('close', () => {
         controller.abort();
@@ -249,5 +252,16 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
   registerContextMiddleware(): void {
     this.app.use(this.createContextMiddleware());
+  }
+
+  registerAuthMiddleware(): void {
+    const authConfig = this.mastra.getServer()?.auth;
+    if (!authConfig) {
+      // No auth config, skip registration
+      return;
+    }
+
+    this.app.use(authenticationMiddleware);
+    this.app.use(authorizationMiddleware);
   }
 }

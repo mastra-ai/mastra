@@ -15,7 +15,6 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
 import { describeRoute } from 'hono-openapi';
-import { authenticationMiddleware, authorizationMiddleware } from './handlers/auth';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
@@ -94,6 +93,7 @@ export async function createHonoServer(
     isDev: options.isDev,
     bodyLimitOptions,
     openapiPath: '/openapi.json',
+    customRouteAuthConfig,
   });
 
   // Register context middleware FIRST - this sets mastra, requestContext, tools, taskStore in context
@@ -140,9 +140,9 @@ export async function createHonoServer(
     healthHandler,
   );
 
-  // Run AUTH middlewares after CORS middleware
-  app.use('*', authenticationMiddleware);
-  app.use('*', authorizationMiddleware);
+  // Register auth middleware (authentication and authorization)
+  // This is handled by the server adapter now
+  honoServerAdapter.registerAuthMiddleware();
 
   if (server?.middleware) {
     const normalizedMiddlewares = Array.isArray(server.middleware) ? server.middleware : [server.middleware];

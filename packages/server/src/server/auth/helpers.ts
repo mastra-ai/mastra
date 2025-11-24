@@ -1,9 +1,13 @@
 import type { MastraAuthConfig } from '@mastra/core/server';
-import type { HonoRequest } from 'hono';
+
 import { defaultAuthConfig } from './defaults';
 
-export const isDevPlaygroundRequest = (req: HonoRequest): boolean => {
-  return req.header('x-mastra-dev-playground') === 'true' && process.env.MASTRA_DEV === 'true';
+/**
+ * Check if request is from dev playground
+ * @param getHeader - Function to get header value from request
+ */
+export const isDevPlaygroundRequest = (getHeader: (name: string) => string | undefined): boolean => {
+  return getHeader('x-mastra-dev-playground') === 'true' && process.env.MASTRA_DEV === 'true';
 };
 
 export const isCustomRoutePublic = (

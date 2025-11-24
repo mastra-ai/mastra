@@ -60,6 +60,16 @@
         "default": "./dist/server/a2a/store.cjs"
       }
     },
+    "./auth": {
+      "import": {
+        "types": "./dist/server/auth/index.d.ts",
+        "default": "./dist/server/auth/index.js"
+      },
+      "require": {
+        "types": "./dist/server/auth/index.d.ts",
+        "default": "./dist/server/auth/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

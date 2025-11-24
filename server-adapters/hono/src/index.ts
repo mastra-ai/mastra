@@ -8,6 +8,8 @@ import type { Context, Env, Hono, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
 
+import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
+
 // Export type definitions for Hono app configuration
 export type HonoVariables = {
   mastra: Mastra;
@@ -79,6 +81,7 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
       c.set('playground', this.playground === true);
       c.set('isDev', this.isDev === true);
       c.set('abortSignal', c.req.raw.signal);
+      c.set('customRouteAuthConfig', this.customRouteAuthConfig);
 
       return next();
     };
@@ -252,5 +255,16 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
 
   registerContextMiddleware(): void {
     this.app.use('*', this.createContextMiddleware());
+  }
+
+  registerAuthMiddleware(): void {
+    const authConfig = this.mastra.getServer()?.auth;
+    if (!authConfig) {
+      // No auth config, skip registration
+      return;
+    }
+
+    this.app.use('*', authenticationMiddleware as any);
+    this.app.use('*', authorizationMiddleware as any);
   }
 }
