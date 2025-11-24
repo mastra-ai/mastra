@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
+import { OpenAIReasoningSchemaCompatLayer, OpenAISchemaCompatLayer } from '@mastra/schema-compat';
+import type { ModelInformation } from '@mastra/schema-compat';
 import slugify from '@sindresorhus/slugify';
 import type { CoreMessage, StreamObjectResult, TextPart, Tool, UIMessage } from 'ai';
 import deepEqual from 'fast-deep-equal';
@@ -62,7 +64,7 @@ import { Telemetry } from '../telemetry/telemetry';
 import { createTool } from '../tools';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
+import { makeCoreTool, createMastraProxy, ensureToolProperties, isZodType } from '../utils';
 import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
@@ -3955,6 +3957,48 @@ export class Agent<
     });
 
     const modelInfo = llm.getModel();
+
+    // Apply OpenAI schema compatibility layer automatically for OpenAI models
+    // In direct mode, use the main model; in processor mode, use structuredOutput.model
+    if (
+      'structuredOutput' in mergedStreamOptions &&
+      mergedStreamOptions.structuredOutput &&
+      mergedStreamOptions.structuredOutput.schema
+    ) {
+      let structuredOutputModel = llm.getModel();
+      if (mergedStreamOptions.structuredOutput?.model) {
+        structuredOutputModel = (await this.resolveModelConfig(
+          mergedStreamOptions.structuredOutput?.model,
+          mergedStreamOptions.runtimeContext || new RuntimeContext(),
+        )) as MastraLanguageModelV2;
+      }
+
+      const targetProvider = structuredOutputModel.provider;
+      const targetModelId = structuredOutputModel.modelId;
+      // Only transform Zod schemas for OpenAI models, OpenAI is the most common and there is a huge issue that so many users run into
+      // We transform all .optional() to .nullable().transform(v => v === null ? undefined : v)
+      // OpenAI can't handle optional fields, we turn them to nullable and then transform the data received back so the types match the users schema
+      if (targetProvider.includes('openai') || targetModelId.includes('openai')) {
+        if (isZodType(mergedStreamOptions.structuredOutput.schema) && targetModelId) {
+          const modelInfo: ModelInformation = {
+            provider: targetProvider,
+            modelId: targetModelId,
+            supportsStructuredOutputs: false, // Set to false to enable transform
+          };
+
+          const isReasoningModel = /^o[1-5]/.test(targetModelId);
+          const compatLayer = isReasoningModel
+            ? new OpenAIReasoningSchemaCompatLayer(modelInfo)
+            : new OpenAISchemaCompatLayer(modelInfo);
+
+          if (compatLayer.shouldApply() && mergedStreamOptions.structuredOutput.schema) {
+            mergedStreamOptions.structuredOutput.schema = compatLayer.processZodType(
+              mergedStreamOptions.structuredOutput.schema,
+            ) as OUTPUT extends OutputSchema ? OUTPUT : never;
+          }
+        }
+      }
+    }
 
     if (modelInfo.specificationVersion !== 'v2') {
       const modelId = modelInfo.modelId || 'unknown';

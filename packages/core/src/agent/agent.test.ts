@@ -237,6 +237,81 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     }
   });
 
+  describe('test schema compat structured output', async () => {
+    it('should convert optional fields to nullable for openai and succeed without error', async () => {
+      const weatherInfo = createTool({
+        id: 'weather-info',
+        description: 'Fetches the current weather information for a given city',
+        inputSchema: z.object({
+          city: z.string(),
+        }),
+        execute: async ({ context }) => {
+          return {
+            city: context.city,
+            weather: 'sunny',
+            temperature_celsius: 19,
+            temperature_fahrenheit: 66,
+            humidity: 50,
+            wind: '10 mph',
+          };
+        },
+      });
+
+      const weatherAgent = new Agent({
+        id: 'weather-agent',
+        name: 'Weather Agent',
+        instructions:
+          'You are a weather agent. When asked about weather in any city, use the weather info tool with the city name as the input.',
+        description: 'An agent that can help you get the weather for a given city.',
+        model: 'openai/gpt-4o',
+        tools: {
+          weatherInfo,
+        },
+      });
+
+      const mastra = new Mastra({
+        agents: { weatherAgent },
+        logger: false,
+      });
+      const agent = mastra.getAgent('weatherAgent');
+
+      const schema = z.object({
+        weather: z.string(),
+        temperature: z.number(),
+        humidity: z.number(),
+        // Optional should be transformed to nullable and then the data set to undefined
+        windSpeed: z.string().optional(),
+        // Optional.nullable should be transformed to nullable and then the data set to undefined
+        barometricPressure: z.number().optional().nullable(),
+        // Nullable should not change and be able to return a nullable value from openAI
+        precipitation: z.number().nullable(),
+      });
+
+      const result = await agent.generate(
+        'What is the weather in London? You can omit wind speed, precipitation, and barometric pressure.',
+        {
+          structuredOutput: {
+            schema,
+          },
+        },
+      );
+
+      expect(result.error).toBeUndefined();
+
+      const resultData = {
+        weather: expect.any(String),
+        temperature: expect.any(Number),
+        humidity: expect.any(Number),
+        windSpeed: undefined,
+        barometricPressure: undefined,
+        precipitation: null,
+      };
+
+      const resultObject = await result.object;
+      expect(resultObject).toEqual(resultData);
+    });
+  });
+
   describe(`${version} - agent`, () => {
     it('should get a text response from the agent', async () => {
       const electionAgent = new Agent({

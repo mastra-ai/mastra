@@ -10,7 +10,7 @@ export function imagePromptTest({ version }: { version: 'v1' | 'v2' }) {
   const openaiModel = version === 'v1' ? openai('gpt-4o') : openaiV5('gpt-4o');
 
   describe('image prompt test', () => {
-    it('should download assets from messages', async () => {
+    it('should download assets from messages', { timeout: 100000, retry: 3 }, async () => {
       const agent = new Agent({
         name: 'llmPrompt-agent',
         instructions: 'test agent',
@@ -56,7 +56,7 @@ export function imagePromptTest({ version }: { version: 'v1' | 'v2' }) {
       }
 
       expect(result.text.toLowerCase()).toContain('google');
-    }, 10000);
+    });
   });
 }
 

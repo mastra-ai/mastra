@@ -205,7 +205,7 @@ describe('MessageList - File URL Handling', () => {
     }
   });
 
-  it('should download URLs for providers that do not support them', async () => {
+  it('should download URLs for providers that do not support them', { timeout: 100000, retry: 3 }, async () => {
     const messageList = new MessageList();
     const imageUrl = 'https://httpbin.org/image/png';
 
