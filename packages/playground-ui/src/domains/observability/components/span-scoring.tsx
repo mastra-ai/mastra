@@ -13,7 +13,7 @@ export interface SpanScoringProps {
 }
 
 export const SpanScoring = ({ traceId, spanId, entityType, isTopLevelSpan }: SpanScoringProps) => {
-  const { data: scorers = {}, isLoading, error } = useScorers();
+  const { data: scorers = {}, isLoading, error, refetch, isRefetching } = useScorers();
   const [selectedScorer, setSelectedScorer] = useState<string | null>(null);
   const { mutate: triggerScorer, isPending, isSuccess } = useTriggerScorer();
   const [notificationIsVisible, setNotificationIsVisible] = useState(false);
@@ -23,6 +23,10 @@ export const SpanScoring = ({ traceId, spanId, entityType, isTopLevelSpan }: Spa
       setNotificationIsVisible(true);
     }
   }, [isSuccess]);
+
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
 
   let scorerList = Object.entries(scorers)
     .map(([key, scorer]) => ({
@@ -52,12 +56,18 @@ export const SpanScoring = ({ traceId, spanId, entityType, isTopLevelSpan }: Spa
     }
   };
 
+  console.log('scorerList', scorers, isLoading, scorerList);
+
   const handleScorerChange = (val: string) => {
     setSelectedScorer(val);
     setNotificationIsVisible(false);
   };
 
-  const selectedScorerDescription = scorerList.find(s => s.name === selectedScorer)?.description || '';
+  const selectedScorerDescription = scorerList?.find(s => s.name === selectedScorer)?.description || '';
+
+  if (isLoading || isRefetching) {
+    return 'loading';
+  }
 
   if (error) {
     return (
