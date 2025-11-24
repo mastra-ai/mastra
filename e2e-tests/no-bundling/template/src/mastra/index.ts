@@ -23,4 +23,7 @@ export const mastra = new Mastra({
     // Enables DefaultExporter and CloudExporter for tracing
     default: { enabled: true },
   }),
+  bundler: {
+    externals: true,
+  },
 });
