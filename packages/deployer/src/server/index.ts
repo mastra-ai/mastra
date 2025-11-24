@@ -280,7 +280,7 @@ export async function createHonoServer(
     app.use(
       `${basePath}/assets/*`,
       serveStatic({
-        root: './playground/assets',
+        root: './playground',
         rewriteRequestPath: basePath
           ? path => (path.startsWith(basePath) ? path.slice(basePath.length) : path)
           : undefined,
