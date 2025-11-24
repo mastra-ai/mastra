@@ -229,7 +229,7 @@ describe('OpenAIReasoningSchemaCompatLayer - Passthrough Setting', () => {
     supportsStructuredOutputs: false,
   };
 
-  it('should not allow extra fields (passthrough: false)', () => {
+  it('should strip extra fields by default', () => {
     const schema = z.object({
       name: z.string(),
       age: z.number().optional(),
@@ -239,13 +239,40 @@ describe('OpenAIReasoningSchemaCompatLayer - Passthrough Setting', () => {
     const processed = layer.processZodType(schema);
 
     // Should strip extra fields
-    expect(() => {
-      processed.parse({
-        name: 'John',
-        age: null,
-        extraField: 'should be stripped',
-      });
-    }).toThrow();
+    const result = processed.parse({
+      name: 'John',
+      age: null,
+      extraField: 'should be stripped',
+    });
+
+    expect(result).toEqual({
+      name: 'John',
+      age: undefined,
+    });
+  });
+
+  it('should not allow passthrough even if schema has .passthrough()', () => {
+    const schema = z
+      .object({
+        name: z.string(),
+        age: z.number().optional(),
+      })
+      .passthrough();
+
+    const layer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    // Should strip extra fields even though original schema had .passthrough()
+    const result = processed.parse({
+      name: 'John',
+      age: null,
+      extraField: 'should be stripped',
+    });
+
+    expect(result).toEqual({
+      name: 'John',
+      age: undefined,
+    });
   });
 });
 

@@ -27,7 +27,7 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
 
   shouldApply(): boolean {
     if (
-      (this.getModel().supportsStructuredOutputs || this.isReasoningModel()) &&
+      this.isReasoningModel() &&
       (this.getModel().provider.includes(`openai`) || this.getModel().modelId.includes(`openai`))
     ) {
       return true;
