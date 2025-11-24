@@ -13,7 +13,7 @@ import cors from 'cors';
 import express from 'express';
 import swaggerUi from 'swagger-ui-express';
 import { z } from 'zod';
-import { ExpressServerAdapter } from '../src/index';
+import { MastraServer } from '../src/index';
 
 const storage = new LibSQLStore({
   id: 'express-storage',
@@ -521,9 +521,8 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-const expressServerAdapter = new ExpressServerAdapter({ mastra });
-expressServerAdapter.registerContextMiddleware(app);
-await expressServerAdapter.registerRoutes(app, { openapiPath: '/openapi.json' });
+const expressServerAdapter = new MastraServer({ mastra, app, openapiPath: '/openapi.json' });
+await expressServerAdapter.init();
 
 // Add Swagger UI
 app.use('/swagger-ui', swaggerUi.serve, swaggerUi.setup(undefined, { swaggerUrl: '/openapi.json' }));
