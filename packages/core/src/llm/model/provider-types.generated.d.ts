@@ -179,6 +179,7 @@ export type ProviderModelsMap = {
     'anthropic/claude-4-sonnet',
     'anthropic/claude-4.5-sonnet',
     'anthropic/claude-haiku-4.5',
+    'anthropic/claude-opus-4.5',
     'deepseek/deepseek-r1',
     'deepseek/deepseek-r1-distill-llama-70b',
     'deepseek/deepseek-v3.1-terminus',
