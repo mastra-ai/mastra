@@ -189,6 +189,16 @@
       "source": "/examples/v1/processors/response-validator",
       "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-validator",
       "permanent": true
+    },
+    {
+      "source": "/examples/v1/agents/image-analysis",
+      "destination": "/docs/v1/agents/overview#analyzing-images",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/evals/running-in-ci",
+      "destination": "/docs/v1/evals/running-in-ci",
+      "permanent": true
     }
   ]
 }

@@ -22,7 +22,6 @@ const sidebars = {
           id: "agents/supervisor-agent",
           label: "Supervisor Agent",
         },
-        { type: "doc", id: "agents/image-analysis", label: "Image Analysis" },
         { type: "doc", id: "agents/request-context", label: "Request Context" },
       ],
     },
@@ -195,14 +194,6 @@ const sidebars = {
             },
           ],
         },
-      ],
-    },
-    {
-      type: "category",
-      label: "Evals",
-      collapsed: true,
-      items: [
-        { type: "doc", id: "evals/running-in-ci", label: "Running in CI" },
       ],
     },
     {

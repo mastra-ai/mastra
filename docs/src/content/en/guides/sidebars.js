@@ -65,11 +65,6 @@ const sidebars = {
           id: "build-your-ui/assistant-ui",
           label: "Assistant UI",
         },
-        {
-          type: "doc",
-          id: "build-your-ui/assistant-ui",
-          label: "WhatsApp",
-        },
       ],
     },
     {
@@ -209,6 +204,11 @@ const sidebars = {
           type: "doc",
           id: "guide/web-search",
           label: "Tools: Web Search",
+        },
+        {
+          type: "doc",
+          id: "guide/whatsapp-chat-bot",
+          label: "WhatsApp Chat Bot",
         },
       ],
     },
