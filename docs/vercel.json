@@ -99,6 +99,81 @@
       "source": "/examples/v1/memory/working-memory-template",
       "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-template",
       "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agentic-uis/ai-sdk",
+      "destination": "/guides/build-your-ui/ai-sdk-ui",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agentic-uis/assistant-ui",
+      "destination": "/guides/build-your-ui/assistant-ui",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agentic-uis/copilotkit",
+      "destination": "/guides/build-your-ui/copilotkit",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agentic-uis/cedar-os",
+      "destination": "/guides/build-your-ui",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agentic-uis/openrouter",
+      "destination": "/models/gateways/openrouter",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/web-frameworks/astro",
+      "destination": "/guides/getting-started/astro",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/web-frameworks/next-js",
+      "destination": "/guides/getting-started/next-js",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/web-frameworks/sveltekit",
+      "destination": "/guides/getting-started/sveltekit",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/web-frameworks/vite-react",
+      "destination": "/guides/getting-started/vite-react",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/servers/express",
+      "destination": "/guides/getting-started/express",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/manual-install",
+      "destination": "/guides/getting-started/manual-install",
+      "permanent": true
+    },
+    {
+      "source": "/guides/quickstarts/nextjs",
+      "destination": "/guides/getting-started/next-js",
+      "permanent": true
+    },
+    {
+      "source": "/guides/quickstarts/standalone-server",
+      "destination": "/guides/getting-started/quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/quickstart",
+      "destination": "/guides/getting-started/quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/templates",
+      "destination": "/docs/getting-started/start",
+      "permanent": true
     }
   ]
 }
