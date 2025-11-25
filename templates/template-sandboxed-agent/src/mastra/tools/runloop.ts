@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import z from 'zod';
-import RunloopSDK from '@runloop/api-client';
+import { RunloopSDK } from '@runloop/api-client/sdk';
 
 // Initialize Runloop SDK instance (uses RUNLOOP_API_KEY from env)
 const runloop = new RunloopSDK();
@@ -12,21 +12,27 @@ function escapeCodeForShell(code: string): string {
 }
 
 // Helper function to parse ls -la output into file list
-function parseLsOutput(output: string, basePath: string): Array<{ name: string; path: string; isDirectory: boolean }> {
-  const lines = output.trim().split('\n').filter(line => line.trim());
+function parseLsOutput(
+  output: string,
+  basePath: string
+): Array<{ name: string; path: string; isDirectory: boolean }> {
+  const lines = output
+    .trim()
+    .split('\n')
+    .filter(line => line.trim());
   const files: Array<{ name: string; path: string; isDirectory: boolean }> = [];
 
   for (const line of lines) {
     // Skip header line and . / .. entries
     if (line.startsWith('total') || line.includes(' -> ')) continue;
-    
+
     const parts = line.trim().split(/\s+/);
     if (parts.length < 9) continue;
 
     const permissions = parts[0];
     const isDirectory = permissions.startsWith('d');
     const name = parts.slice(8).join(' '); // Handle filenames with spaces
-    
+
     // Skip . and ..
     if (name === '.' || name === '..') continue;
 
@@ -38,7 +44,10 @@ function parseLsOutput(output: string, basePath: string): Array<{ name: string; 
 }
 
 // Helper function to parse stat output
-function parseStatOutput(output: string, path: string): {
+function parseStatOutput(
+  output: string,
+  path: string
+): {
   name: string;
   path: string;
   size: number;
@@ -48,9 +57,21 @@ function parseStatOutput(output: string, path: string): {
   group: string;
   modifiedTime?: Date;
   isDirectory: boolean;
+  symlinkTarget?: string;
 } {
   const lines = output.trim().split('\n');
-  const result: any = {
+  const result: {
+    name: string;
+    path: string;
+    size: number;
+    mode: number;
+    permissions: string;
+    owner: string;
+    group: string;
+    modifiedTime?: Date;
+    isDirectory: boolean;
+    symlinkTarget?: string;
+  } = {
     name: path.split('/').pop() || path,
     path,
     size: 0,
@@ -86,7 +107,7 @@ function parseStatOutput(output: string, path: string): {
       if (match) {
         try {
           result.modifiedTime = new Date(match[1].trim());
-        } catch (e) {
+        } catch {
           // Ignore date parsing errors
         }
       }
@@ -126,13 +147,17 @@ export const createSandbox = createTool({
     .or(
       z.object({
         error: z.string(),
-      }),
+      })
     ),
-  execute: async sandboxOptions => {
+  execute: async ({ context: sandboxOptions }) => {
     try {
       const blueprintName = process.env.RUNLOOP_BLUEPRINT_NAME;
-      
-      const createOptions: any = {
+
+      const createOptions: {
+        name: string;
+        blueprint_name?: string;
+        environment_variables?: Record<string, string>;
+      } = {
         name: `devbox-${Date.now()}`,
       };
 
@@ -144,7 +169,7 @@ export const createSandbox = createTool({
         createOptions.environment_variables = sandboxOptions.envs;
       }
 
-      const devbox = await runloop.api.devboxes.create(createOptions);
+      const devbox = await runloop.devbox.create(createOptions);
 
       return {
         sandboxId: devbox.id,
@@ -168,8 +193,13 @@ export const runCode = createTool({
         language: z
           .enum(['ts', 'js', 'python'])
           .default('python')
-          .describe('language used for code execution. If not provided, default python context is used'),
-        envs: z.record(z.string()).optional().describe('Custom environment variables for code execution.'),
+          .describe(
+            'language used for code execution. If not provided, default python context is used'
+          ),
+        envs: z
+          .record(z.string())
+          .optional()
+          .describe('Custom environment variables for code execution.'),
         timeoutMS: z.number().optional().describe(`
         Timeout for the code execution in **milliseconds**.
         @default 60_000 // 60 seconds
@@ -189,13 +219,14 @@ export const runCode = createTool({
     .or(
       z.object({
         error: z.string().describe('The error from a failed execution'),
-      }),
+      })
     ),
-  execute: async input => {
+  execute: async ({ context: input }) => {
     try {
-      const devbox = runloop.api.devboxes.fromId(input.sandboxId);
+      const devbox = runloop.devbox.fromId(input.sandboxId);
       const language = input.runCodeOpts?.language || 'python';
-      const timeoutMs = input.runCodeOpts?.timeoutMS || 60_000;
+      // timeoutMs is available but not currently used in execution
+      // const timeoutMs = input.runCodeOpts?.timeoutMS || 60_000;
 
       // Escape code for shell execution
       const escapedCode = escapeCodeForShell(input.code);
@@ -259,11 +290,11 @@ export const readFile = createTool({
     .or(
       z.object({
         error: z.string().describe('The error from a failed file read'),
-      }),
+      })
     ),
-  execute: async input => {
+  execute: async ({ context: input }) => {
     try {
-      const devbox = runloop.api.devboxes.fromId(input.sandboxId);
+      const devbox = runloop.devbox.fromId(input.sandboxId);
       const content = await devbox.file.read({ file_path: input.path });
 
       return {
@@ -294,11 +325,11 @@ export const writeFile = createTool({
     .or(
       z.object({
         error: z.string().describe('The error from a failed file write'),
-      }),
+      })
     ),
-  execute: async input => {
+  execute: async ({ context: input }) => {
     try {
-      const devbox = runloop.api.devboxes.fromId(input.sandboxId);
+      const devbox = runloop.devbox.fromId(input.sandboxId);
       await devbox.file.write({ file_path: input.path, contents: input.content });
 
       return {
@@ -323,7 +354,7 @@ export const writeFiles = createTool({
         z.object({
           path: z.string().describe('The path where the file should be written'),
           data: z.string().describe('The content to write to the file'),
-        }),
+        })
       )
       .describe('Array of files to write, each with path and data'),
   }),
@@ -335,11 +366,11 @@ export const writeFiles = createTool({
     .or(
       z.object({
         error: z.string().describe('The error from a failed files write'),
-      }),
+      })
     ),
-  execute: async input => {
+  execute: async ({ context: input }) => {
     try {
-      const devbox = runloop.api.devboxes.fromId(input.sandboxId);
+      const devbox = runloop.devbox.fromId(input.sandboxId);
       const filesWritten: string[] = [];
 
       // Write files sequentially
@@ -375,7 +406,7 @@ export const listFiles = createTool({
             name: z.string().describe('The name of the file or directory'),
             path: z.string().describe('The full path of the file or directory'),
             isDirectory: z.boolean().describe('Whether this is a directory'),
-          }),
+          })
         )
         .describe('Array of files and directories'),
       path: z.string().describe('The path that was listed'),
@@ -383,11 +414,11 @@ export const listFiles = createTool({
     .or(
       z.object({
         error: z.string().describe('The error from a failed file listing'),
-      }),
+      })
     ),
-  execute: async input => {
+  execute: async ({ context: input }) => {
     try {
-      const devbox = runloop.api.devboxes.fromId(input.sandboxId);
+      const devbox = runloop.devbox.fromId(input.sandboxId);
       const result = await devbox.cmd.exec({ command: `ls -la "${input.path}"` });
       const stdout = await result.stdout();
 
@@ -420,11 +451,11 @@ export const deleteFile = createTool({
     .or(
       z.object({
         error: z.string().describe('The error from a failed file deletion'),
-      }),
+      })
     ),
-  execute: async input => {
+  execute: async ({ context: input }) => {
     try {
-      const devbox = runloop.api.devboxes.fromId(input.sandboxId);
+      const devbox = runloop.devbox.fromId(input.sandboxId);
       const result = await devbox.cmd.exec({ command: `rm -rf "${input.path}"` });
 
       if (result.exitCode !== 0) {
@@ -459,11 +490,11 @@ export const createDirectory = createTool({
     .or(
       z.object({
         error: z.string().describe('The error from a failed directory creation'),
-      }),
+      })
     ),
-  execute: async input => {
+  execute: async ({ context: input }) => {
     try {
-      const devbox = runloop.api.devboxes.fromId(input.sandboxId);
+      const devbox = runloop.devbox.fromId(input.sandboxId);
       const result = await devbox.cmd.exec({ command: `mkdir -p "${input.path}"` });
 
       if (result.exitCode !== 0) {
@@ -501,16 +532,19 @@ export const getFileInfo = createTool({
       owner: z.string().describe('The owner of the file or directory'),
       group: z.string().describe('The group of the file or directory'),
       modifiedTime: z.date().optional().describe('The last modified time in ISO string format'),
-      symlinkTarget: z.string().optional().describe('The target path if this is a symlink, null otherwise'),
+      symlinkTarget: z
+        .string()
+        .optional()
+        .describe('The target path if this is a symlink, null otherwise'),
     })
     .or(
       z.object({
         error: z.string().describe('The error from a failed file info request'),
-      }),
+      })
     ),
-  execute: async input => {
+  execute: async ({ context: input }) => {
     try {
-      const devbox = runloop.api.devboxes.fromId(input.sandboxId);
+      const devbox = runloop.devbox.fromId(input.sandboxId);
       const result = await devbox.cmd.exec({ command: `stat "${input.path}"` });
       const stdout = await result.stdout();
 
@@ -521,7 +555,9 @@ export const getFileInfo = createTool({
       const info = parseStatOutput(stdout, input.path);
 
       // Check if it's a directory
-      const lsResult = await devbox.cmd.exec({ command: `test -d "${input.path}" && echo "dir" || echo "file"` });
+      const lsResult = await devbox.cmd.exec({
+        command: `test -d "${input.path}" && echo "dir" || echo "file"`,
+      });
       const lsStdout = await lsResult.stdout();
       const isDirectory = lsStdout.trim() === 'dir';
 
@@ -561,14 +597,16 @@ export const checkFileExists = createTool({
     .or(
       z.object({
         error: z.string().describe('The error from a failed existence check'),
-      }),
+      })
     ),
-  execute: async input => {
+  execute: async ({ context: input }) => {
     try {
-      const devbox = runloop.api.devboxes.fromId(input.sandboxId);
-      
+      const devbox = runloop.devbox.fromId(input.sandboxId);
+
       // Check if file exists
-      const testResult = await devbox.cmd.exec({ command: `test -e "${input.path}" && echo "exists" || echo "not_exists"` });
+      const testResult = await devbox.cmd.exec({
+        command: `test -e "${input.path}" && echo "exists" || echo "not_exists"`,
+      });
       const stdout = await testResult.stdout();
       const exists = stdout.trim() === 'exists';
 
@@ -580,7 +618,9 @@ export const checkFileExists = createTool({
       }
 
       // Determine type
-      const typeResult = await devbox.cmd.exec({ command: `test -d "${input.path}" && echo "directory" || echo "file"` });
+      const typeResult = await devbox.cmd.exec({
+        command: `test -d "${input.path}" && echo "directory" || echo "file"`,
+      });
       const typeStdout = await typeResult.stdout();
       const type = typeStdout.trim();
 
@@ -618,12 +658,12 @@ export const getFileSize = createTool({
     .or(
       z.object({
         error: z.string().describe('The error from a failed size check'),
-      }),
+      })
     ),
-  execute: async input => {
+  execute: async ({ context: input }) => {
     try {
-      const devbox = runloop.api.devboxes.fromId(input.sandboxId);
-      
+      const devbox = runloop.devbox.fromId(input.sandboxId);
+
       // Get file size
       const sizeResult = await devbox.cmd.exec({ command: `stat -c%s "${input.path}"` });
       const sizeStdout = await sizeResult.stdout();
@@ -634,7 +674,9 @@ export const getFileSize = createTool({
       }
 
       // Get file type
-      const typeResult = await devbox.cmd.exec({ command: `test -d "${input.path}" && echo "directory" || echo "file"` });
+      const typeResult = await devbox.cmd.exec({
+        command: `test -d "${input.path}" && echo "directory" || echo "file"`,
+      });
       const typeStdout = await typeResult.stdout();
       const type = typeStdout.trim();
 
@@ -668,7 +710,8 @@ export const getFileSize = createTool({
 
 export const watchDirectory = createTool({
   id: 'watchDirectory',
-  description: 'Monitor a directory for file system changes in the Runloop devbox (uses polling since native watching is not available)',
+  description:
+    'Monitor a directory for file system changes in the Runloop devbox (uses polling since native watching is not available)',
   inputSchema: z.object({
     sandboxId: z.string().describe('The sandboxId for the devbox to watch directory in'),
     path: z.string().describe('The directory path to watch for changes'),
@@ -688,37 +731,47 @@ export const watchDirectory = createTool({
             type: z.string().describe('The type of filesystem event (CREATE, DELETE, MODIFY)'),
             name: z.string().describe('The name of the file that changed'),
             timestamp: z.string().describe('When the event occurred'),
-          }),
+          })
         )
         .describe('Array of filesystem events that occurred during the watch period'),
     })
     .or(
       z.object({
         error: z.string().describe('The error from a failed directory watch'),
-      }),
+      })
     ),
-  execute: async input => {
+  execute: async ({ context: input }) => {
     try {
-      const devbox = runloop.api.devboxes.fromId(input.sandboxId);
+      const devbox = runloop.devbox.fromId(input.sandboxId);
       const events: Array<{ type: string; name: string; timestamp: string }> = [];
 
       // Get initial file list
-      const initialResult = await devbox.cmd.exec({ 
-        command: `find "${input.path}" ${input.recursive ? '' : '-maxdepth 1'} -type f 2>/dev/null | sort` 
+      const initialResult = await devbox.cmd.exec({
+        command: `find "${input.path}" ${input.recursive ? '' : '-maxdepth 1'} -type f 2>/dev/null | sort`,
       });
-      const initialFiles = new Set((await initialResult.stdout()).trim().split('\n').filter(f => f));
+      const initialFiles = new Set(
+        (await initialResult.stdout())
+          .trim()
+          .split('\n')
+          .filter((f: string) => f)
+      );
 
       // Poll for changes
       const pollInterval = 1000; // Poll every second
       const endTime = Date.now() + input.watchDuration;
-      
+
       while (Date.now() < endTime) {
         await new Promise(resolve => setTimeout(resolve, pollInterval));
-        
-        const currentResult = await devbox.cmd.exec({ 
-          command: `find "${input.path}" ${input.recursive ? '' : '-maxdepth 1'} -type f 2>/dev/null | sort` 
+
+        const currentResult = await devbox.cmd.exec({
+          command: `find "${input.path}" ${input.recursive ? '' : '-maxdepth 1'} -type f 2>/dev/null | sort`,
         });
-        const currentFiles = new Set((await currentResult.stdout()).trim().split('\n').filter(f => f));
+        const currentFiles = new Set(
+          (await currentResult.stdout())
+            .trim()
+            .split('\n')
+            .filter((f: string) => f)
+        );
 
         // Detect new files
         for (const file of currentFiles) {
@@ -767,8 +820,14 @@ export const runCommand = createTool({
     sandboxId: z.string().describe('The sandboxId for the devbox to run the command in'),
     command: z.string().describe('The shell command to execute'),
     workingDirectory: z.string().optional().describe('The working directory to run the command in'),
-    timeoutMs: z.number().default(30000).describe('Timeout for the command execution in milliseconds'),
-    captureOutput: z.boolean().default(true).describe('Whether to capture stdout and stderr output'),
+    timeoutMs: z
+      .number()
+      .default(30000)
+      .describe('Timeout for the command execution in milliseconds'),
+    captureOutput: z
+      .boolean()
+      .default(true)
+      .describe('Whether to capture stdout and stderr output'),
   }),
   outputSchema: z
     .object({
@@ -782,11 +841,11 @@ export const runCommand = createTool({
     .or(
       z.object({
         error: z.string().describe('The error from a failed command execution'),
-      }),
+      })
     ),
-  execute: async input => {
+  execute: async ({ context: input }) => {
     try {
-      const devbox = runloop.api.devboxes.fromId(input.sandboxId);
+      const devbox = runloop.devbox.fromId(input.sandboxId);
       const startTime = Date.now();
 
       let command = input.command;
@@ -796,13 +855,14 @@ export const runCommand = createTool({
 
       const result = await devbox.cmd.exec({ command });
       const stdout = await result.stdout();
+      const stderr = result.stderr || '';
       const executionTime = Date.now() - startTime;
 
       return {
         success: result.exitCode === 0,
-        exitCode: result.exitCode,
+        exitCode: result.exitCode ?? 0,
         stdout,
-        stderr: result.stderr || '',
+        stderr: typeof stderr === 'string' ? stderr : '',
         command: input.command,
         executionTime,
       };
@@ -813,4 +873,3 @@ export const runCommand = createTool({
     }
   },
 });
-

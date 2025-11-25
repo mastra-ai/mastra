@@ -1,0 +1,9 @@
+node_modules
+dist
+*.db
+*.db-*
+.mastra
+pnpm-lock.yaml
+package-lock.json
+*.log
+
