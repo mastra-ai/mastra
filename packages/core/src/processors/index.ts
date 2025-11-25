@@ -3,8 +3,8 @@ import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 
-export interface Processor {
-  readonly id: string;
+export interface Processor<TId extends string = string> {
+  readonly id: TId;
   readonly name?: string;
 
   /**

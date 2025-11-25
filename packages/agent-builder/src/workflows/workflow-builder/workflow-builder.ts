@@ -183,6 +183,7 @@ const workflowResearchStep = createStep({
       const model = await resolveModel({ requestContext });
 
       const researchAgent = new Agent({
+        id: 'workflow-research-agent',
         model,
         instructions: workflowBuilderPrompts.researchAgent.instructions,
         name: 'Workflow Research Agent',

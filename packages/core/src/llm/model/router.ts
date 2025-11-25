@@ -81,7 +81,9 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     // Resolve gateway once using the normalized ID
     this.gateway = findGatewayForModel(normalizedConfig.id, [...(customGateways || []), ...defaultGateways]);
     // Extract provider from id if present
-    const parsed = parseModelRouterId(normalizedConfig.id, this.gateway.prefix);
+    // Gateway ID is used as prefix (except for models.dev which is a provider registry)
+    const gatewayPrefix = this.gateway.id === 'models.dev' ? undefined : this.gateway.id;
+    const parsed = parseModelRouterId(normalizedConfig.id, gatewayPrefix);
 
     this.provider = parsed.providerId || 'openai-compatible';
 
@@ -118,9 +120,11 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       };
     }
 
+    const gatewayPrefix = this.gateway.id === 'models.dev' ? undefined : this.gateway.id;
     const model = await this.resolveLanguageModel({
       apiKey,
-      ...parseModelRouterId(this.config.routerId, this.gateway.prefix),
+      headers: this.config.headers,
+      ...parseModelRouterId(this.config.routerId, gatewayPrefix),
     });
 
     const aiSDKV5Model = new AISDKV5LanguageModel(model);
@@ -153,9 +157,11 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       };
     }
 
+    const gatewayPrefix = this.gateway.id === 'models.dev' ? undefined : this.gateway.id;
     const model = await this.resolveLanguageModel({
       apiKey,
-      ...parseModelRouterId(this.config.routerId, this.gateway.prefix),
+      headers: this.config.headers,
+      ...parseModelRouterId(this.config.routerId, gatewayPrefix),
     });
 
     const aiSDKV5Model = new AISDKV5LanguageModel(model);
@@ -166,13 +172,22 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     modelId,
     providerId,
     apiKey,
+    headers,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
+    headers?: Record<string, string>;
   }): Promise<LanguageModelV2> {
     const key = createHash('sha256')
-      .update(this.gateway.id + modelId + providerId + apiKey + (this.config.url || ''))
+      .update(
+        this.gateway.id +
+          modelId +
+          providerId +
+          apiKey +
+          (this.config.url || '') +
+          (headers ? JSON.stringify(headers) : ''),
+      )
       .digest('hex');
     if (ModelRouterLanguageModel.modelInstances.has(key)) return ModelRouterLanguageModel.modelInstances.get(key)!;
 
@@ -189,7 +204,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       return modelInstance;
     }
 
-    const modelInstance = await this.gateway.resolveLanguageModel({ modelId, providerId, apiKey });
+    const modelInstance = await this.gateway.resolveLanguageModel({ modelId, providerId, apiKey, headers });
     ModelRouterLanguageModel.modelInstances.set(key, modelInstance);
     return modelInstance;
   }
