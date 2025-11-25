@@ -5,6 +5,7 @@ import type { MastraToolInvocationOptions } from '../../../tools/types';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
+import type { MastraDBMessage } from '../../../memory';
 
 export function createToolCallStep<
   Tools extends ToolSet = ToolSet,
@@ -58,18 +59,27 @@ export function createToolCallStep<
           return;
         }
 
-        // Find and update the assistant message to remove approval metadata
-        // At this point, messages have been persisted, so we look in all messages
-        const allMessages = messageList.get.all.db();
-        const lastAssistantMessage = [...allMessages].reverse().find(msg => msg.role === 'assistant');
-
-        if (lastAssistantMessage) {
-          const content = lastAssistantMessage.content;
-          if (!content) return;
+        const getMetadata = (message: MastraDBMessage) => {
+          const content = message.content;
+          if (!content) return undefined;
           const metadata =
             typeof content.metadata === 'object' && content.metadata !== null
               ? (content.metadata as Record<string, any>)
               : undefined;
+          return metadata;
+        };
+
+        // Find and update the assistant message to remove approval metadata
+        // At this point, messages have been persisted, so we look in all messages
+        const allMessages = messageList.get.all.db();
+        const lastAssistantMessage = [...allMessages].reverse().find(msg => {
+          const metadata = getMetadata(msg);
+          const pendingToolApprovals = metadata?.pendingToolApprovals as Record<string, any> | undefined;
+          return !!pendingToolApprovals?.[toolCallId];
+        });
+
+        if (lastAssistantMessage) {
+          const metadata = getMetadata(lastAssistantMessage);
           const pendingToolApprovals = metadata?.pendingToolApprovals as Record<string, any> | undefined;
 
           if (pendingToolApprovals && typeof pendingToolApprovals === 'object') {
