@@ -152,6 +152,46 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
           });
         }
 
+        // MCP server 404 tests
+        if (route.path.includes(':serverId')) {
+          it('should return 404 when MCP server not found', async () => {
+            const request = buildRouteRequest(route, {
+              pathParams: { serverId: 'non-existent-server' },
+            });
+
+            const httpRequest: HttpRequest = {
+              method: request.method,
+              path: request.path,
+              query: request.query,
+              body: request.body,
+            };
+
+            const response = await executeHttpRequest(app, httpRequest);
+
+            expect(response.status).toBe(404);
+          });
+        }
+
+        // MCP v0 server detail 404 test (uses :id instead of :serverId)
+        if (route.path.includes('/api/mcp/v0/servers/:id')) {
+          it('should return 404 when MCP server not found', async () => {
+            const request = buildRouteRequest(route, {
+              pathParams: { id: 'non-existent-server' },
+            });
+
+            const httpRequest: HttpRequest = {
+              method: request.method,
+              path: request.path,
+              query: request.query,
+              body: request.body,
+            };
+
+            const response = await executeHttpRequest(app, httpRequest);
+
+            expect(response.status).toBe(404);
+          });
+        }
+
         // Stream consumption test
         if (route.responseType === 'stream') {
           it('should be consumable via stream reader', async () => {

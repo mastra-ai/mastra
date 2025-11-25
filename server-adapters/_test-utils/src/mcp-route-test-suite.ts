@@ -102,6 +102,29 @@ export function createMCPRouteTestSuite(config: AdapterTestSuiteConfig) {
         expect((res.data as any).next).toContain('limit=1');
         expect((res.data as any).next).toContain('offset=1');
       });
+
+      it('should return empty list when no MCP servers registered', async () => {
+        // Create a minimal Mastra instance with no MCP servers
+        const emptyMastra = new Mastra({});
+
+        // Setup adapter with empty Mastra
+        const emptySetup = await setupAdapter({
+          mastra: emptyMastra,
+          tools: {},
+        });
+
+        const res = await executeHttpRequest(emptySetup.app, {
+          method: 'GET',
+          path: '/api/mcp/v0/servers',
+        });
+
+        expect(res.status).toBe(200);
+        expect(res.data).toMatchObject({
+          servers: [],
+          total_count: 0,
+          next: null,
+        });
+      });
     });
 
     describe('GET /api/mcp/v0/servers/:id', () => {
