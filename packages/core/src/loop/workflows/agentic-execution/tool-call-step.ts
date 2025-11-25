@@ -35,7 +35,10 @@ export function createToolCallStep<
           const content = lastAssistantMessage.content;
           if (!content) return;
           // Add metadata to indicate this tool call is pending approval
-          const metadata = (lastAssistantMessage.content.metadata || {}) as Record<string, any>;
+          const metadata =
+            typeof lastAssistantMessage.content.metadata === 'object'
+              ? (lastAssistantMessage.content.metadata as Record<string, any>)
+              : {};
           metadata.pendingToolApprovals = metadata.pendingToolApprovals || {};
           metadata.pendingToolApprovals[toolCallId] = {
             toolName,
@@ -68,8 +71,8 @@ export function createToolCallStep<
             delete pendingToolApprovals[toolCallId];
 
             // If no more pending suspensions, remove the whole object
-            if (Object.keys(pendingToolApprovals).length === 0) {
-              delete metadata!.pendingToolApprovals;
+            if (metadata && Object.keys(pendingToolApprovals).length === 0) {
+              delete metadata.pendingToolApprovals;
             }
 
             // Flush to persist the metadata removal
