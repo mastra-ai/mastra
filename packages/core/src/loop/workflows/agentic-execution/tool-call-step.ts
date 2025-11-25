@@ -1,11 +1,11 @@
 import type { ToolSet } from 'ai-v5';
+import type { MastraDBMessage } from '../../../memory';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { ChunkFrom } from '../../../stream/types';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
-import type { MastraDBMessage } from '../../../memory';
 
 export function createToolCallStep<
   Tools extends ToolSet = ToolSet,
