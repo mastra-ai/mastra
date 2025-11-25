@@ -133,6 +133,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/cohere",
+          label: "Cohere",
+        },
+        {
+          type: "doc",
           id: "providers/cortecs",
           label: "Cortecs",
         },
@@ -250,6 +255,11 @@ const sidebars = {
           type: "doc",
           id: "providers/perplexity",
           label: "Perplexity",
+        },
+        {
+          type: "doc",
+          id: "providers/poe",
+          label: "Poe",
         },
         {
           type: "doc",

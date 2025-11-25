@@ -42,7 +42,8 @@ export async function validateStepInput({
 
       validationError = new Error('Step input validation failed: \n' + errorMessages);
     } else {
-      inputData = isEmpty(validatedInput.data) ? prevOutput : validatedInput.data;
+      const isEmptyData = isEmpty(validatedInput.data);
+      inputData = isEmptyData ? prevOutput : validatedInput.data;
     }
   }
 
@@ -69,6 +70,34 @@ export async function validateStepResumeData({ resumeData, step }: { resumeData?
     }
   }
   return { resumeData, validationError };
+}
+
+export async function validateStepSuspendData({
+  suspendData,
+  step,
+}: {
+  suspendData?: any;
+  step: Step<string, any, any>;
+}) {
+  if (!suspendData) {
+    return { suspendData: undefined, validationError: undefined };
+  }
+
+  let validationError: Error | undefined;
+
+  const suspendSchema = step.suspendSchema;
+
+  if (suspendSchema) {
+    const validatedSuspendData = await suspendSchema.safeParseAsync(suspendData);
+    if (!validatedSuspendData.success) {
+      const errors = getZodErrors(validatedSuspendData.error!);
+      const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+      validationError = new Error('Step suspend data validation failed: \n' + errorMessages);
+    } else {
+      suspendData = validatedSuspendData.data;
+    }
+  }
+  return { suspendData, validationError };
 }
 
 export function getResumeLabelsByStepId(
