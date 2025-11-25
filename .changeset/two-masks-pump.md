@@ -2,4 +2,4 @@
 '@mastra/ai-sdk': patch
 ---
 
-Add resumeData support to the AI SDK chat route for agents, enabling resuming streaming conversations.
+Added support for resuming agent streams in the chat route. You can now pass `resumeData` in the request body to continue a previous agent stream, enabling long-running conversations and multi-step agent workflows.
