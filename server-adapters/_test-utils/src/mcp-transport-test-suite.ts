@@ -3,7 +3,24 @@ import { Mastra } from '@mastra/core/mastra';
 import { MCPServer, MCPClient } from '@mastra/mcp';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { MCPTransportTestConfig } from './mcp-route-test-suite';
+
+/**
+ * Configuration for MCP transport test suite
+ */
+export interface MCPTransportTestConfig {
+  /** Name for the test suite */
+  suiteName?: string;
+  /**
+   * Creates an HTTP server for the given Mastra instance.
+   * Returns the server and port for testing.
+   */
+  createServer: (mastra: Mastra) => Promise<{
+    /** The HTTP server instance (will be closed in afterAll) */
+    server: { close: () => void };
+    /** The port the server is listening on */
+    port: number;
+  }>;
+}
 
 /**
  * Creates a standardized integration test suite for MCP transport routes

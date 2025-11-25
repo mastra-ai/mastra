@@ -1,12 +1,4 @@
-export {
-  createRouteAdapterTestSuite,
-  type AdapterTestContext,
-  type HttpRequest,
-  type HttpResponse,
-  type RouteAdapterTestSuiteConfig,
-} from './route-adapter-test-suite';
-export {
-  createMCPRouteTestSuite,
-  createMCPTransportTestSuite,
-  type MCPTransportTestConfig,
-} from './mcp-route-test-suite';
+export { createRouteAdapterTestSuite } from './route-adapter-test-suite';
+export type { AdapterTestSuiteConfig, AdapterTestContext, HttpRequest, HttpResponse } from './test-helpers';
+export { createMCPRouteTestSuite } from './mcp-route-test-suite';
+export { createMCPTransportTestSuite, type MCPTransportTestConfig } from './mcp-transport-test-suite';

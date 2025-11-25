@@ -4,24 +4,6 @@ import { MCPServer } from '@mastra/mcp';
 import { AdapterTestContext, AdapterTestSuiteConfig, createDefaultTestContext } from './test-helpers';
 
 /**
- * Configuration for MCP transport test suite
- */
-export interface MCPTransportTestConfig {
-  /** Name for the test suite */
-  suiteName?: string;
-  /**
-   * Creates an HTTP server for the given Mastra instance.
-   * Returns the server, port, and MCP server IDs for testing.
-   */
-  createServer: (mastra: Mastra) => Promise<{
-    /** The HTTP server instance (will be closed in afterAll) */
-    server: { close: () => void };
-    /** The port the server is listening on */
-    port: number;
-  }>;
-}
-
-/**
  * Creates a standardized integration test suite for MCP registry routes
  *
  * Tests the 5 MCP registry routes work correctly with any adapter:
