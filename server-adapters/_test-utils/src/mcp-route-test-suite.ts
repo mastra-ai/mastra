@@ -3,29 +3,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { MCPServer } from '@mastra/mcp';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import type { HttpRequest, HttpResponse } from './route-adapter-test-suite';
-
-/**
- * Configuration for MCP route integration test suite
- */
-export interface MCPRouteTestSuiteConfig {
-  /** Name for the test suite */
-  suiteName?: string;
-
-  /**
-   * Setup adapter and app for testing MCP routes
-   * Called in beforeEach
-   */
-  setupAdapter: (mastra: Mastra) => Promise<{
-    app: any;
-    adapter: any;
-  }>;
-
-  /**
-   * Execute HTTP request through the adapter's framework (Express/Hono)
-   */
-  executeHttpRequest: (app: any, request: HttpRequest) => Promise<HttpResponse>;
-}
+import { AdapterTestContext, AdapterTestSuiteConfig, createDefaultTestContext } from './test-helpers';
 
 /**
  * Creates a standardized integration test suite for MCP registry routes
@@ -56,92 +34,29 @@ export interface MCPRouteTestSuiteConfig {
  * });
  * ```
  */
-export function createMCPRouteTestSuite(config: MCPRouteTestSuiteConfig) {
-  const { suiteName = 'MCP Registry Routes Integration', setupAdapter, executeHttpRequest } = config;
+export function createMCPRouteTestSuite(config: AdapterTestSuiteConfig) {
+  const { suiteName = 'MCP Registry Routes Integration', setupAdapter, executeHttpRequest, createTestContext } = config;
 
   describe(suiteName, () => {
+    let context: AdapterTestContext;
     let app: any;
-    let mastra: Mastra;
     let mcpServer1: MCPServer;
     let mcpServer2: MCPServer;
 
     beforeEach(async () => {
-      // Create real tools for MCP servers
-      const weatherTool = createTool({
-        id: 'getWeather',
-        description: 'Gets the current weather for a location',
-        inputSchema: z.object({
-          location: z.string().describe('The location to get weather for'),
-        }),
-        outputSchema: z.object({
-          temperature: z.number(),
-          condition: z.string(),
-        }),
-        execute: async ({ location }) => ({
-          temperature: 72,
-          condition: `Sunny in ${location}`,
-        }),
-      });
+      // Create test context - use provided or default
+      if (createTestContext) {
+        const result = createTestContext();
+        context = result instanceof Promise ? await result : result;
+      } else {
+        context = await createDefaultTestContext();
+      }
 
-      const calculatorTool = createTool({
-        id: 'calculate',
-        description: 'Performs basic calculations',
-        inputSchema: z.object({
-          operation: z.enum(['add', 'subtract', 'multiply', 'divide']),
-          a: z.number(),
-          b: z.number(),
-        }),
-        outputSchema: z.object({
-          result: z.number(),
-        }),
-        execute: async ({ operation, a, b }) => {
-          let result = 0;
-          switch (operation) {
-            case 'add':
-              result = a + b;
-              break;
-            case 'subtract':
-              result = a - b;
-              break;
-            case 'multiply':
-              result = a * b;
-              break;
-            case 'divide':
-              result = a / b;
-              break;
-          }
-          return { result };
-        },
-      });
-
-      // Create real MCP servers with tools
-      mcpServer1 = new MCPServer({
-        name: 'Test Server 1',
-        version: '1.0.0',
-        description: 'Test MCP Server 1',
-        tools: {
-          getWeather: weatherTool,
-          calculate: calculatorTool,
-        },
-      });
-
-      mcpServer2 = new MCPServer({
-        name: 'Test Server 2',
-        version: '1.1.0',
-        description: 'Test MCP Server 2',
-        tools: {},
-      });
-
-      // Create real Mastra instance with MCP servers
-      mastra = new Mastra({
-        mcpServers: {
-          'test-server-1': mcpServer1,
-          'test-server-2': mcpServer2,
-        },
-      });
-
-      const setup = await setupAdapter(mastra);
+      const setup = await setupAdapter(context);
       app = setup.app;
+      const mastra = setup.adapter.mastra;
+      mcpServer1 = mastra.getMCPServerById('test-server-1');
+      mcpServer2 = mastra.getMCPServerById('test-server-2');
     });
 
     describe('GET /api/mcp/v0/servers', () => {

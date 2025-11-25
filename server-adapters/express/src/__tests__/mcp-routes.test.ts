@@ -2,11 +2,10 @@ import type { Server } from 'http';
 import { describe } from 'vitest';
 import express from 'express';
 import type { Application } from 'express';
-import type { Mastra } from '@mastra/core/mastra';
 import { MastraServer } from '../index';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { createMCPRouteTestSuite } from '@internal/server-adapter-test-utils';
-import type { HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
+import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
 
 /**
  * Express Integration Tests for MCP Registry Routes
@@ -15,7 +14,7 @@ describe('Express MCP Registry Routes Integration', () => {
   createMCPRouteTestSuite({
     suiteName: 'Express Adapter',
 
-    setupAdapter: async (mastra: Mastra) => {
+    setupAdapter: (context: AdapterTestContext) => {
       // Create Express app
       const app = express();
       app.use(express.json());
@@ -23,8 +22,11 @@ describe('Express MCP Registry Routes Integration', () => {
       // Create adapter
       const adapter = new MastraServer({
         app,
-        mastra,
-        taskStore: new InMemoryTaskStore(),
+        mastra: context.mastra,
+        taskStore: context.taskStore,
+        customRouteAuthConfig: context.customRouteAuthConfig,
+        playground: context.playground,
+        isDev: context.isDev,
       });
 
       // Register context middleware

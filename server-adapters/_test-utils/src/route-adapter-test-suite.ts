@@ -1,82 +1,16 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { SERVER_ROUTES, type ServerRoute } from '@mastra/server/server-adapter';
-import type { Mastra } from '@mastra/core';
-import type { Tool } from '@mastra/core/tools';
-import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { buildRouteRequest, createDefaultTestContext, parseDatesInResponse } from './test-helpers';
+import { SERVER_ROUTES } from '@mastra/server/server-adapter';
+
+import {
+  AdapterTestContext,
+  AdapterTestSuiteConfig,
+  buildRouteRequest,
+  createDefaultTestContext,
+  HttpRequest,
+  parseDatesInResponse,
+} from './test-helpers';
 import { expectValidSchema } from './route-test-utils';
 import { createRouteTestSuite } from './route-test-suite';
-
-/**
- * Test context for adapter integration tests
- * Convention: Create entities with IDs that match auto-generated values:
- * - agentId: 'test-agent'
- * - workflowId: 'test-workflow'
- * - toolId: 'test-tool'
- * - etc.
- */
-export interface AdapterTestContext {
-  mastra: Mastra;
-  tools?: Record<string, Tool>;
-  taskStore?: InMemoryTaskStore;
-  customRouteAuthConfig?: Map<string, boolean>;
-  playground?: boolean;
-  isDev?: boolean;
-}
-
-/**
- * HTTP request to execute through adapter
- */
-export interface HttpRequest {
-  method: string;
-  path: string;
-  query?: Record<string, string | string[]>;
-  body?: unknown;
-  headers?: Record<string, string>;
-}
-
-/**
- * HTTP response from adapter
- */
-export interface HttpResponse {
-  status: number;
-  type: 'json' | 'stream';
-  data?: unknown;
-  stream?: ReadableStream | AsyncIterable<unknown>;
-  headers: Record<string, string>;
-}
-
-/**
- * Configuration for adapter integration test suite
- */
-export interface RouteAdapterTestSuiteConfig {
-  /** Name for the test suite */
-  suiteName?: string;
-
-  /** Routes to test */
-  routes: ServerRoute[];
-
-  /**
-   * Setup adapter and app for testing
-   * Called once before all tests
-   */
-  setupAdapter: (context: AdapterTestContext) => {
-    adapter: any;
-    app: any;
-  };
-
-  /**
-   * Execute HTTP request through the adapter's framework (Express/Hono)
-   */
-  executeHttpRequest: (app: any, request: HttpRequest) => Promise<HttpResponse>;
-
-  /**
-   * Create test context with Mastra instance, agents, etc.
-   * Convention: Create entities with IDs matching auto-generated values
-   * Optional - uses createDefaultTestContext() if not provided
-   */
-  createTestContext?: () => Promise<AdapterTestContext> | AdapterTestContext;
-}
 
 /**
  * Creates a standardized integration test suite for server adapters (Express/Hono)
@@ -90,14 +24,8 @@ export interface RouteAdapterTestSuiteConfig {
  * Uses auto-generated test data from route schemas.
  * For specific test scenarios, write additional tests outside the factory.
  */
-export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig) {
-  const {
-    suiteName = 'Route Adapter Integration',
-    routes,
-    setupAdapter,
-    executeHttpRequest,
-    createTestContext,
-  } = config;
+export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
+  const { suiteName = 'Route Adapter Integration', setupAdapter, executeHttpRequest, createTestContext } = config;
 
   describe('Route Validation', () => {
     createRouteTestSuite({
@@ -124,7 +52,7 @@ export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig)
     });
 
     // Test deprecated routes separately - just verify they're marked correctly
-    const deprecatedRoutes = routes.filter(r => r.deprecated);
+    const deprecatedRoutes = SERVER_ROUTES.filter(r => r.deprecated);
     deprecatedRoutes.forEach(route => {
       const testName = `${route.method} ${route.path}`;
       describe(testName, () => {
@@ -136,7 +64,7 @@ export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig)
     });
 
     // Test non-deprecated routes with full test suite
-    const activeRoutes = routes.filter(r => !r.deprecated);
+    const activeRoutes = SERVER_ROUTES.filter(r => !r.deprecated);
     activeRoutes.forEach(route => {
       const testName = `${route.method} ${route.path}`;
       describe(testName, () => {
@@ -370,7 +298,7 @@ export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig)
     describe('Cross-Route Tests', () => {
       it('should handle array query parameters', async () => {
         // Find a non-deprecated GET route to test with
-        const getRoute = routes.find(r => r.method === 'GET' && !r.deprecated);
+        const getRoute = SERVER_ROUTES.find(r => r.method === 'GET' && !r.deprecated);
         if (!getRoute) return;
 
         const request = buildRouteRequest(getRoute);
@@ -392,7 +320,7 @@ export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig)
 
       it('should return valid error response structure', async () => {
         // Find a non-deprecated route with agentId to test 404
-        const agentRoute = routes.find(r => r.path.includes(':agentId') && !r.deprecated);
+        const agentRoute = SERVER_ROUTES.find(r => r.path.includes(':agentId') && !r.deprecated);
         if (!agentRoute) return;
 
         const request = buildRouteRequest(agentRoute, {
@@ -427,7 +355,7 @@ export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig)
 
       it('should return 400 for empty body when fields are required', async () => {
         // Find a non-deprecated POST route with body schema
-        const postRoute = routes.find(r => r.method === 'POST' && r.bodySchema && !r.deprecated);
+        const postRoute = SERVER_ROUTES.find(r => r.method === 'POST' && r.bodySchema && !r.deprecated);
         if (!postRoute) return;
 
         const request = buildRouteRequest(postRoute);

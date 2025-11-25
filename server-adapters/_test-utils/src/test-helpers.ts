@@ -1,7 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
 import { Mock, vi } from 'vitest';
-import type { AdapterTestContext } from './route-adapter-test-suite';
 import { Workflow } from '@mastra/core/workflows';
 import { createScorer } from '@mastra/core/evals';
 import { SpanType } from '@mastra/core/observability';
@@ -16,7 +15,9 @@ import type { ZodTypeAny } from 'zod';
 import { ServerRoute, WorkflowRegistry } from '@mastra/server/server-adapter';
 import { BaseLogMessage, IMastraLogger, LogLevel } from '@mastra/core/logger';
 import { generateValidDataFromSchema, getDefaultValidPathParams } from './route-test-utils';
-
+import { MCPServer } from '@mastra/mcp';
+import type { Tool } from '@mastra/core/tools';
+import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 vi.mock('@mastra/core/vector');
 
 vi.mock('zod', async importOriginal => {
@@ -34,6 +35,74 @@ vi.mock('zod', async importOriginal => {
 });
 
 const z = require('zod');
+
+/**
+ * Test context for adapter integration tests
+ * Convention: Create entities with IDs that match auto-generated values:
+ * - agentId: 'test-agent'
+ * - workflowId: 'test-workflow'
+ * - toolId: 'test-tool'
+ * - etc.
+ */
+export interface AdapterTestContext {
+  mastra: Mastra;
+  tools?: Record<string, Tool>;
+  taskStore?: InMemoryTaskStore;
+  customRouteAuthConfig?: Map<string, boolean>;
+  playground?: boolean;
+  isDev?: boolean;
+}
+
+/**
+ * HTTP request to execute through adapter
+ */
+export interface HttpRequest {
+  method: string;
+  path: string;
+  query?: Record<string, string | string[]>;
+  body?: unknown;
+  headers?: Record<string, string>;
+}
+
+/**
+ * HTTP response from adapter
+ */
+export interface HttpResponse {
+  status: number;
+  type: 'json' | 'stream';
+  data?: unknown;
+  stream?: ReadableStream | AsyncIterable<unknown>;
+  headers: Record<string, string>;
+}
+
+/**
+ * Configuration for adapter integration test suite
+ */
+export interface AdapterTestSuiteConfig {
+  /** Name for the test suite */
+  suiteName?: string;
+
+  /**
+   * Setup adapter and app for testing
+   * Called once before all tests
+   */
+  setupAdapter: (context: AdapterTestContext) => {
+    adapter: any;
+    app: any;
+  };
+
+  /**
+   * Execute HTTP request through the adapter's framework (Express/Hono)
+   */
+  executeHttpRequest: (app: any, request: HttpRequest) => Promise<HttpResponse>;
+
+  /**
+   * Create test context with Mastra instance, agents, etc.
+   * Convention: Create entities with IDs matching auto-generated values
+   * Optional - uses createDefaultTestContext() if not provided
+   */
+  createTestContext?: () => Promise<AdapterTestContext> | AdapterTestContext;
+}
 
 /**
  * Creates a test agent with all common mocks configured
@@ -225,6 +294,71 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
 
   mockLogger.listLogs.mockResolvedValue({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
 
+  const weatherTool = createTool({
+    id: 'getWeather',
+    description: 'Gets the current weather for a location',
+    inputSchema: z.object({
+      location: z.string().describe('The location to get weather for'),
+    }),
+    outputSchema: z.object({
+      temperature: z.number(),
+      condition: z.string(),
+    }),
+    execute: async ({ location }) => ({
+      temperature: 72,
+      condition: `Sunny in ${location}`,
+    }),
+  });
+
+  const calculatorTool = createTool({
+    id: 'calculate',
+    description: 'Performs basic calculations',
+    inputSchema: z.object({
+      operation: z.enum(['add', 'subtract', 'multiply', 'divide']),
+      a: z.number(),
+      b: z.number(),
+    }),
+    outputSchema: z.object({
+      result: z.number(),
+    }),
+    execute: async ({ operation, a, b }) => {
+      let result = 0;
+      switch (operation) {
+        case 'add':
+          result = a + b;
+          break;
+        case 'subtract':
+          result = a - b;
+          break;
+        case 'multiply':
+          result = a * b;
+          break;
+        case 'divide':
+          result = a / b;
+          break;
+      }
+      return { result };
+    },
+  });
+
+  // Create real MCP servers with tools
+  const mcpServer1 = new MCPServer({
+    name: 'Test Server 1',
+    version: '1.0.0',
+    description: 'Test MCP Server 1',
+    tools: {
+      getWeather: weatherTool,
+      calculate: calculatorTool,
+    },
+  });
+
+  const mcpServer2 = new MCPServer({
+    name: 'Test Server 2',
+    version: '1.1.0',
+    description: 'Test MCP Server 2',
+    tools: {},
+  });
+
   // Create Mastra instance with all test entities
   const mastra = new Mastra({
     logger: mockLogger as unknown as IMastraLogger,
@@ -237,6 +371,10 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     },
     scorers: { 'test-scorer': testScorer },
     vectors: { 'test-vector': vector },
+    mcpServers: {
+      'test-server-1': mcpServer1,
+      'test-server-2': mcpServer2,
+    },
   });
 
   await mockWorkflowRun(workflow);

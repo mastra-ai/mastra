@@ -1,10 +1,9 @@
 import { describe } from 'vitest';
 import { Hono } from 'hono';
-import type { Mastra } from '@mastra/core/mastra';
 import { MastraServer } from '../index';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { createMCPRouteTestSuite } from '@internal/server-adapter-test-utils';
-import type { HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
+import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
 
 /**
  * Hono Integration Tests for MCP Registry Routes
@@ -13,15 +12,18 @@ describe('Hono MCP Registry Routes Integration', () => {
   createMCPRouteTestSuite({
     suiteName: 'Hono Adapter',
 
-    setupAdapter: async (mastra: Mastra) => {
+    setupAdapter: (context: AdapterTestContext) => {
       // Create Hono app
       const app = new Hono();
 
       // Create adapter
       const adapter = new MastraServer({
         app: app as any,
-        mastra,
-        taskStore: new InMemoryTaskStore(),
+        mastra: context.mastra,
+        taskStore: context.taskStore,
+        customRouteAuthConfig: context.customRouteAuthConfig,
+        playground: context.playground,
+        isDev: context.isDev,
       });
 
       // Register context middleware
