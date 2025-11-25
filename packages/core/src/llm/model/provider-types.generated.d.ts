@@ -179,7 +179,6 @@ export type ProviderModelsMap = {
     'anthropic/claude-4-sonnet',
     'anthropic/claude-4.5-sonnet',
     'anthropic/claude-haiku-4.5',
-    'cerebras/qwen3-coder',
     'deepseek/deepseek-r1',
     'deepseek/deepseek-r1-distill-llama-70b',
     'deepseek/deepseek-v3.1-terminus',
@@ -507,6 +506,7 @@ export type ProviderModelsMap = {
     'claude-3-5-haiku',
     'claude-haiku-4-5',
     'claude-opus-4-1',
+    'claude-opus-4-5',
     'claude-sonnet-4',
     'claude-sonnet-4-5',
     'gemini-3-pro',
@@ -895,6 +895,7 @@ export type ProviderModelsMap = {
     'claude-opus-4-1',
     'claude-opus-4-1-20250805',
     'claude-opus-4-20250514',
+    'claude-opus-4-5',
     'claude-sonnet-4-0',
     'claude-sonnet-4-20250514',
     'claude-sonnet-4-5',
@@ -909,6 +910,7 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/gpt-oss-120b',
     'accounts/fireworks/models/gpt-oss-20b',
     'accounts/fireworks/models/kimi-k2-instruct',
+    'accounts/fireworks/models/kimi-k2-thinking',
     'accounts/fireworks/models/minimax-m2',
     'accounts/fireworks/models/qwen3-235b-a22b',
     'accounts/fireworks/models/qwen3-coder-480b-a35b-instruct',
@@ -1048,7 +1050,7 @@ export type ProviderModelsMap = {
     'xai/grok-4-fast-reasoning',
     'xai/grok-code-fast-1',
   ];
-  readonly cerebras: readonly ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'qwen-3-coder-480b', 'zai-glm-4.6'];
+  readonly cerebras: readonly ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'zai-glm-4.6'];
   readonly netlify: readonly [
     'anthropic/claude-3-5-haiku-20241022',
     'anthropic/claude-3-7-sonnet-20250219',
@@ -1056,6 +1058,7 @@ export type ProviderModelsMap = {
     'anthropic/claude-haiku-4-5-20251001',
     'anthropic/claude-opus-4-1-20250805',
     'anthropic/claude-opus-4-20250514',
+    'anthropic/claude-opus-4-5-20251101',
     'anthropic/claude-sonnet-4-20250514',
     'anthropic/claude-sonnet-4-5-20250929',
     'gemini/gemini-2.0-flash',
