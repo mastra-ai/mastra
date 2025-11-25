@@ -51,16 +51,6 @@
         "default": "./dist/workflows/constants.cjs"
       }
     },
-    "./network/vNext": {
-      "import": {
-        "types": "./dist/network/vNext/index.d.ts",
-        "default": "./dist/network/vNext/index.js"
-      },
-      "require": {
-        "types": "./dist/network/vNext/index.d.ts",
-        "default": "./dist/network/vNext/index.cjs"
-      }
-    },
     "./workflows/evented": {
       "import": {
         "types": "./dist/workflows/evented/index.d.ts",
@@ -99,16 +89,6 @@
       "require": {
         "types": "./dist/base.d.ts",
         "default": "./dist/base.cjs"
-      }
-    },
-    "./telemetry/otel-vendor": {
-      "import": {
-        "types": "./dist/telemetry/otel-vendor.d.ts",
-        "default": "./dist/telemetry/otel-vendor.js"
-      },
-      "require": {
-        "types": "./dist/telemetry/otel-vendor.d.ts",
-        "default": "./dist/telemetry/otel-vendor.cjs"
       }
     },
     "./test-utils/llm-mock": {
