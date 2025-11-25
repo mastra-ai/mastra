@@ -4,6 +4,7 @@ import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { MastraServerBase } from '@mastra/server/server-adapter';
+import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { Application, NextFunction, Request, Response } from 'express';
 
 import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
@@ -123,7 +124,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     return { urlParams, queryParams: queryParams as Record<string, string>, body };
   }
 
-  async sendResponse(route: ServerRoute, response: Response, result: unknown): Promise<void> {
+  async sendResponse(route: ServerRoute, response: Response, result: unknown, request?: Request): Promise<void> {
     if (route.responseType === 'json') {
       response.json(result);
     } else if (route.responseType === 'stream') {
@@ -146,6 +147,45 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         }
       } else {
         response.end();
+      }
+    } else if (route.responseType === 'mcp-http') {
+      // MCP Streamable HTTP transport
+      const { server, httpPath } = result as MCPHttpTransportResult;
+
+      try {
+        await server.startHTTP({
+          url: new URL(request!.url, `http://${request!.headers.host}`),
+          httpPath,
+          req: request!,
+          res: response,
+        });
+        // Response handled by startHTTP
+      } catch (error: any) {
+        if (!response.headersSent) {
+          response.status(500).json({
+            jsonrpc: '2.0',
+            error: { code: -32603, message: 'Internal server error' },
+            id: null,
+          });
+        }
+      }
+    } else if (route.responseType === 'mcp-sse') {
+      // MCP SSE transport
+      const { server, ssePath, messagePath } = result as MCPSseTransportResult;
+
+      try {
+        await server.startSSE({
+          url: new URL(request!.url, `http://${request!.headers.host}`),
+          ssePath,
+          messagePath,
+          req: request!,
+          res: response,
+        });
+        // Response handled by startSSE
+      } catch (error: any) {
+        if (!response.headersSent) {
+          response.status(500).json({ error: 'Error handling MCP SSE request' });
+        }
       }
     } else {
       response.sendStatus(500);
@@ -224,7 +264,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
         try {
           const result = await route.handler(handlerParams);
-          await this.sendResponse(route, res, result);
+          await this.sendResponse(route, res, result, req);
         } catch (error) {
           console.error('Error calling handler', error);
           // Check if it's an HTTPException or MastraError with a status code

@@ -200,3 +200,90 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
     return { result };
   },
 });
+
+// ============================================================================
+// MCP Transport Routes (Streamable HTTP and SSE)
+// ============================================================================
+
+/**
+ * MCP HTTP Transport response type.
+ * Adapters use this to set up the HTTP transport via MCPServer.startHTTP()
+ */
+export interface MCPHttpTransportResult {
+  server: MastraMCPServerImplementation;
+  httpPath: string;
+}
+
+/**
+ * MCP SSE Transport response type.
+ * Adapters use this to set up the SSE transport via MCPServer.startSSE() or startHonoSSE()
+ */
+export interface MCPSseTransportResult {
+  server: MastraMCPServerImplementation;
+  ssePath: string;
+  messagePath: string;
+}
+
+export const MCP_HTTP_TRANSPORT_ROUTE = createRoute({
+  method: 'ALL',
+  path: '/api/mcp/:serverId/mcp',
+  responseType: 'mcp-http',
+  pathParamSchema: mcpServerIdPathParams,
+  summary: 'MCP HTTP Transport',
+  description: 'Streamable HTTP transport endpoint for MCP protocol communication',
+  tags: ['MCP'],
+  handler: async ({ mastra, serverId }: RuntimeContext & { serverId: string }): Promise<MCPHttpTransportResult> => {
+    if (!mastra || typeof mastra.getMCPServerById !== 'function') {
+      throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
+    }
+
+    const server = mastra.getMCPServerById(serverId);
+
+    if (!server) {
+      throw new HTTPException(404, { message: `MCP server '${serverId}' not found` });
+    }
+
+    return {
+      server,
+      httpPath: `/api/mcp/${serverId}/mcp`,
+    };
+  },
+});
+
+export const MCP_SSE_TRANSPORT_ROUTE = createRoute({
+  method: 'ALL',
+  path: '/api/mcp/:serverId/sse',
+  responseType: 'mcp-sse',
+  pathParamSchema: mcpServerIdPathParams,
+  summary: 'MCP SSE Transport',
+  description: 'SSE transport endpoint for MCP protocol communication',
+  tags: ['MCP'],
+  handler: async ({ mastra, serverId }: RuntimeContext & { serverId: string }): Promise<MCPSseTransportResult> => {
+    if (!mastra || typeof mastra.getMCPServerById !== 'function') {
+      throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
+    }
+
+    const server = mastra.getMCPServerById(serverId);
+
+    if (!server) {
+      throw new HTTPException(404, { message: `MCP server '${serverId}' not found` });
+    }
+
+    return {
+      server,
+      ssePath: `/api/mcp/${serverId}/sse`,
+      messagePath: `/api/mcp/${serverId}/messages`,
+    };
+  },
+});
+
+export const MCP_SSE_MESSAGES_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/mcp/:serverId/messages',
+  responseType: 'mcp-sse',
+  pathParamSchema: mcpServerIdPathParams,
+  summary: 'MCP SSE Messages',
+  description: 'Message endpoint for SSE transport (posts messages to active SSE streams)',
+  tags: ['MCP'],
+  handler: MCP_SSE_TRANSPORT_ROUTE.handler,
+});

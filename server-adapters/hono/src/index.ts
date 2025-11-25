@@ -4,9 +4,11 @@ import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { MastraServerBase } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
+import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { Context, Env, Hono, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
+import { toReqRes, toFetchResponse } from 'fetch-to-node';
 
 import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
 
@@ -152,6 +154,47 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
     } else if (route.responseType === 'datastream-response') {
       const fetchResponse = result as globalThis.Response;
       return fetchResponse;
+    } else if (route.responseType === 'mcp-http') {
+      // MCP Streamable HTTP transport
+      const { server, httpPath } = result as MCPHttpTransportResult;
+      const { req, res } = toReqRes(response.req.raw);
+
+      try {
+        await server.startHTTP({
+          url: new URL(response.req.url),
+          httpPath,
+          req,
+          res,
+        });
+        return await toFetchResponse(res);
+      } catch (error: any) {
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              error: { code: -32603, message: 'Internal server error' },
+              id: null,
+            }),
+          );
+          return await toFetchResponse(res);
+        }
+        return await toFetchResponse(res);
+      }
+    } else if (route.responseType === 'mcp-sse') {
+      // MCP SSE transport
+      const { server, ssePath, messagePath } = result as MCPSseTransportResult;
+
+      try {
+        return await server.startHonoSSE({
+          url: new URL(response.req.url),
+          ssePath,
+          messagePath,
+          context: response,
+        });
+      } catch (error: any) {
+        return response.json({ error: 'Error handling MCP SSE request' }, 500);
+      }
     } else {
       return response.status(500);
     }
