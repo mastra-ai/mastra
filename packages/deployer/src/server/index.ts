@@ -18,7 +18,7 @@ import { describeRoute } from 'hono-openapi';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
-import { MCP_ROUTES, getMcpServerMessageHandler, getMcpServerSseHandler } from './handlers/mcp';
+import { getMcpServerMessageHandler, getMcpServerSseHandler } from './handlers/mcp';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
