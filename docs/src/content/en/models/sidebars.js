@@ -26,6 +26,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "gateways/azure-openai",
+          label: "Azure OpenAI",
+        },
+        {
+          type: "doc",
           id: "gateways/netlify",
           label: "Netlify",
         },
@@ -105,11 +110,6 @@ const sidebars = {
           type: "doc",
           id: "providers/amazon-bedrock",
           label: "Amazon Bedrock",
-        },
-        {
-          type: "doc",
-          id: "providers/azure",
-          label: "Azure",
         },
         {
           type: "doc",
