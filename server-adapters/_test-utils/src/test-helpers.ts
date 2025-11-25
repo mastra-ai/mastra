@@ -164,24 +164,37 @@ export function mockAgentMethods(agent: Agent) {
     });
   };
 
-  // Mock stream method
-  vi.spyOn(agent, 'stream').mockResolvedValue(createMockStream() as any);
+  // Mock stream method - returns object with fullStream property
+  vi.spyOn(agent, 'stream').mockResolvedValue({ fullStream: createMockStream() } as any);
 
   // Mock legacy generate - returns a stream
   vi.spyOn(agent, 'generateLegacy').mockResolvedValue(createMockStream() as any);
 
-  // Mock streamLegacy - needs to return an object with toDataStreamResponse method
+  // Helper to create a mock Response object for datastream-response routes
+  const createMockResponse = () => {
+    const stream = createMockStream();
+    return new Response(stream, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Transfer-Encoding': 'chunked',
+      },
+    });
+  };
+
+  // Mock streamLegacy - needs to return an object with toDataStreamResponse/toTextStreamResponse methods
   const mockStreamResult = {
     ...createMockStream(),
-    toDataStreamResponse: vi.fn().mockReturnValue(createMockStream()),
+    toDataStreamResponse: vi.fn().mockImplementation(() => createMockResponse()),
+    toTextStreamResponse: vi.fn().mockImplementation(() => createMockResponse()),
   };
   vi.spyOn(agent, 'streamLegacy').mockResolvedValue(mockStreamResult as any);
 
-  // Mock approveToolCall method
-  vi.spyOn(agent, 'approveToolCall').mockResolvedValue(createMockStream() as any);
+  // Mock approveToolCall method - returns object with fullStream property
+  vi.spyOn(agent, 'approveToolCall').mockResolvedValue({ fullStream: createMockStream() } as any);
 
-  // Mock declineToolCall method
-  vi.spyOn(agent, 'declineToolCall').mockResolvedValue(createMockStream() as any);
+  // Mock declineToolCall method - returns object with fullStream property
+  vi.spyOn(agent, 'declineToolCall').mockResolvedValue({ fullStream: createMockStream() } as any);
 
   // Mock network method
   vi.spyOn(agent, 'network').mockResolvedValue(createMockStream() as any);
@@ -417,7 +430,10 @@ async function mockWorkflowRun(workflow: Workflow) {
   const workflowBuilderRun = await workflow.createRun({
     runId: 'test-run',
   });
-  vi.spyOn(workflowBuilderRun, 'streamLegacy').mockResolvedValue(createMockWorkflowStream() as any);
+  // streamLegacy returns an object with a stream property
+  vi.spyOn(workflowBuilderRun, 'streamLegacy').mockReturnValue({
+    stream: createMockWorkflowStream(),
+  } as any);
   // observeStreamLegacy returns an object with a stream property
   vi.spyOn(workflowBuilderRun, 'observeStreamLegacy').mockReturnValue({
     stream: createMockWorkflowStream(),

@@ -1,43 +1,34 @@
 import type { Server } from 'http';
 import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
 import { createRouteAdapterTestSuite } from '@internal/server-adapter-test-utils';
-import { SERVER_ROUTES } from '@mastra/server/server-adapter';
 import express from 'express';
 import type { Application } from 'express';
 import { describe } from 'vitest';
-import { ExpressServerAdapter } from '../index';
+import { MastraServer } from '../index';
 
 // Wrapper describe block so the factory can call describe() inside
 describe('Express Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Express Adapter Integration Tests',
-    routes: SERVER_ROUTES,
 
     setupAdapter: (context: AdapterTestContext) => {
+      // Create Express app
       const app = express();
-
-      // Add JSON body parser
       app.use(express.json());
 
-      // Create Express adapter
-      const adapter = new ExpressServerAdapter({
+      // Create adapter
+      const adapter = new MastraServer({
+        app,
         mastra: context.mastra,
-        tools: context.tools,
         taskStore: context.taskStore,
         customRouteAuthConfig: context.customRouteAuthConfig,
         playground: context.playground,
         isDev: context.isDev,
       });
 
-      // Register context middleware
-      app.use(adapter.createContextMiddleware());
+      adapter.init();
 
-      // Register all routes
-      SERVER_ROUTES.forEach(route => {
-        adapter.registerRoute(app, route, { prefix: '' });
-      });
-
-      return { adapter, app };
+      return { app, adapter };
     },
 
     executeHttpRequest: async (app: Application, httpRequest: HttpRequest): Promise<HttpResponse> => {
