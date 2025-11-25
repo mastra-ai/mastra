@@ -660,9 +660,8 @@ export function transformNetwork(
 
       if (!current) return null;
 
-      console.log(payload.payload);
       current.steps.push({
-        id: payload.payload.args.toolCallId,
+        id: payload.payload.args.toolCallId!,
         name: payload.payload.args?.toolName!,
         status: 'running',
         iteration: payload.payload.args?.iteration ? Number(payload.payload.args.iteration) : 0,
