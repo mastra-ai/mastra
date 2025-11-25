@@ -205,45 +205,52 @@ describe('MessageList - File URL Handling', () => {
     }
   });
 
-  it('should download URLs for providers that do not support them', async () => {
-    const messageList = new MessageList();
-    const imageUrl = 'https://httpbin.org/image/png';
+  it(
+    'should download URLs for providers that do not support them',
+    {
+      timeout: 100000,
+      retry: 3,
+    },
+    async () => {
+      const messageList = new MessageList();
+      const imageUrl = 'https://httpbin.org/image/png';
 
-    // Add message with URL
-    const v2Message: MastraDBMessage = {
-      id: 'test-msg-2',
-      role: 'user',
-      content: {
-        format: 2,
-        parts: [
-          { type: 'text', text: 'Analyze this image' },
-          { type: 'file', mimeType: 'image/png', data: imageUrl },
-        ],
-      },
-      createdAt: new Date(),
-      resourceId: 'test-resource',
-      threadId: 'test-thread',
-    };
+      // Add message with URL
+      const v2Message: MastraDBMessage = {
+        id: 'test-msg-2',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Analyze this image' },
+            { type: 'file', mimeType: 'image/png', data: imageUrl },
+          ],
+        },
+        createdAt: new Date(),
+        resourceId: 'test-resource',
+        threadId: 'test-thread',
+      };
 
-    messageList.add(v2Message, 'user');
+      messageList.add(v2Message, 'user');
 
-    // Test with provider that does NOT support URLs (empty supportedUrls)
-    const llmPrompt = await messageList.get.all.aiV5.llmPrompt({
-      downloadConcurrency: 1,
-      downloadRetries: 1,
-      supportedUrls: {}, // No URL support
-    });
+      // Test with provider that does NOT support URLs (empty supportedUrls)
+      const llmPrompt = await messageList.get.all.aiV5.llmPrompt({
+        downloadConcurrency: 1,
+        downloadRetries: 1,
+        supportedUrls: {}, // No URL support
+      });
 
-    const userMessage = llmPrompt.find((msg: any) => msg.role === 'user');
-    expect(userMessage).toBeDefined();
+      const userMessage = llmPrompt.find((msg: any) => msg.role === 'user');
+      expect(userMessage).toBeDefined();
 
-    if (userMessage && Array.isArray(userMessage.content)) {
-      const filePart = userMessage.content.find((part: any) => part.type === 'file');
-      expect(filePart).toBeDefined();
-      expect(filePart?.type).toBe('file');
-      // URL should be downloaded and converted to binary data
-      expect((filePart as any)?.data).toBeInstanceOf(Uint8Array);
-      expect((filePart as any)?.data).not.toBe(imageUrl);
-    }
-  });
+      if (userMessage && Array.isArray(userMessage.content)) {
+        const filePart = userMessage.content.find((part: any) => part.type === 'file');
+        expect(filePart).toBeDefined();
+        expect(filePart?.type).toBe('file');
+        // URL should be downloaded and converted to binary data
+        expect((filePart as any)?.data).toBeInstanceOf(Uint8Array);
+        expect((filePart as any)?.data).not.toBe(imageUrl);
+      }
+    },
+  );
 });

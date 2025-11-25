@@ -34,13 +34,11 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 
 class MyPrivateGateway extends MastraModelGateway {
   // Required: Unique identifier for the gateway
-  readonly id = 'my-private-gateway';
+  // This ID is used as the prefix for all providers from this gateway
+  readonly id = 'private';
 
   // Required: Human-readable name
   readonly name = 'My Private Gateway';
-
-  // Optional: Prefix for model IDs (e.g., "private/provider/model")
-  readonly prefix = 'private';
 
   /**
    * Fetch provider configurations from your gateway
@@ -138,7 +136,7 @@ mastra.addGateway(new MyPrivateGateway());
 
 ## Using Custom Gateways
 
-Reference models from your custom gateway using the gateway prefix:
+Reference models from your custom gateway using the gateway ID as prefix:
 
 ```typescript
 import { Agent } from '@mastra/core';
@@ -152,7 +150,7 @@ const agent = new Agent({
 mastra.addAgent(agent, 'myAgent');
 ```
 
-When you create an agent or use a model, Mastra's model router automatically selects the appropriate gateway based on the model ID prefix. If no custom gateways match, it falls back to the default gateways (Netlify and models.dev).
+When you create an agent or use a model, Mastra's model router automatically selects the appropriate gateway based on the model ID. The gateway ID serves as the prefix. If no custom gateways match, it falls back to the built-in gateways.
 
 ### TypeScript Autocomplete
 
@@ -183,19 +181,10 @@ When running in development mode (`MASTRA_DEV=true`), Mastra automatically gener
 4. **Autocomplete now works**:
    ```typescript
    const agent = new Agent({
-     // If your gateway has a prefix:
-     model: 'my-prefix/my-provider/model-1', // ✅ Full autocomplete!
+     model: 'my-gateway-id/my-provider/model-1', // ✅ Full autocomplete!
 
-     // If your gateway has no prefix:
-     model: 'my-provider/model-1', // ✅ Full autocomplete!
    });
    ```
-
-   :::note
-   The model ID format depends on whether your gateway has a `prefix` property:
-   - **With prefix**: `prefix/provider/model`
-   - **Without prefix**: `provider/model`
-   :::
 
 **How It Works**
 
@@ -294,14 +283,8 @@ console.log(Object.keys(gateways)); // ['myGateway', 'anotherGateway']
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `id` | `string` | Unique identifier for the gateway |
+| `id` | `string` | Unique identifier for the gateway, used as the gateway prefix for the model string |
 | `name` | `string` | Human-readable gateway name |
-
-### Optional
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `prefix` | `string \| undefined` | Optional prefix for model IDs |
 
 ### Methods
 
@@ -338,10 +321,9 @@ Understanding the distinction:
 
 ```typescript
 class VersionedGateway extends MastraModelGateway {
-  readonly id = 'my-gateway-v2';     // Unique ID for versioning
+  readonly id = 'my-gateway-v2';     // Unique ID for versioning and prefixing
   readonly name = 'My Gateway';       // Display name
-  readonly prefix = 'versioned';
-  // ... implementation
+\  // ... implementation
 }
 
 const mastra = new Mastra({
@@ -365,12 +347,11 @@ console.log(byKey === byId); // true
 Models accessed through custom gateways follow this format:
 
 ```
-[prefix]/[provider]/[model]
+[gatewayId]/[provider]/[model]
 ```
 
 Examples:
-- `private/my-provider/model-1` - With prefix
-- `my-provider/model-1` - Without prefix (if `prefix` is undefined)
+- `private/my-provider/model-1`
 
 ## Advanced Example
 
@@ -380,7 +361,6 @@ Token-based gateway with caching:
 class TokenGateway extends MastraModelGateway {
   readonly id = 'token-gateway-v1';
   readonly name = 'Token Gateway';
-  readonly prefix = 'token';
 
   private tokenCache: Map<string, { token: string; expiresAt: number }> = new Map();
 

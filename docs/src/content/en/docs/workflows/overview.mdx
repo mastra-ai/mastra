@@ -253,7 +253,7 @@ const result = await run.stream({
   }
 });
 
-for await (const chunk of result.stream) {
+for await (const chunk of result.fullStream) {
   console.log(chunk);
 }
 ```

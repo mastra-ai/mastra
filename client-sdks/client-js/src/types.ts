@@ -20,6 +20,7 @@ import type {
   MemoryConfig,
   StorageThreadType,
 } from '@mastra/core/memory';
+import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type {
@@ -33,7 +34,7 @@ import type {
 import type { OutputSchema } from '@mastra/core/stream';
 
 import type { QueryResult } from '@mastra/core/vector';
-import type { Workflow, WorkflowResult, WorkflowState } from '@mastra/core/workflows';
+import type { TimeTravelContext, Workflow, WorkflowResult, WorkflowState } from '@mastra/core/workflows';
 
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
@@ -81,6 +82,7 @@ export type NetworkStreamParams = {
 export interface GetAgentResponse {
   id: string;
   name: string;
+  description?: string;
   instructions: AgentInstructions;
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;
@@ -322,7 +324,6 @@ export type GetLogsResponse = {
 };
 
 export type RequestFunction = (path: string, options?: RequestOptions) => Promise<any>;
-
 export interface GetVNextNetworkResponse {
   id: string;
   name: string;
@@ -527,6 +528,18 @@ export interface MemorySearchResult {
       createdAt: string;
     }>;
   };
+}
+
+export interface TimeTravelParams {
+  runId: string;
+  step: string | string[];
+  inputData?: Record<string, any>;
+  resumeData?: Record<string, any>;
+  initialState?: Record<string, any>;
+  context?: TimeTravelContext<any, any, any, any>;
+  nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+  requestContext?: RequestContext | Record<string, any>;
+  tracingOptions?: TracingOptions;
 }
 
 export interface ListAgentsModelProvidersResponse {
