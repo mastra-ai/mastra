@@ -1,5 +1,5 @@
 ---
-"@mastra/core": minor
+"@mastra/core": patch
 ---
 
 Add `onOutput` hook for tools
