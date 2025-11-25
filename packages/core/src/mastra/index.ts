@@ -253,6 +253,7 @@ export class Mastra<
   #tools?: TTools;
   #processors?: TProcessors;
   #server?: ServerConfig;
+  #mastraServer?: any;
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
@@ -1778,6 +1779,14 @@ export class Mastra<
 
   public getServer() {
     return this.#server;
+  }
+
+  public setMastraServer<TServer>(server: TServer) {
+    this.#mastraServer = server;
+  }
+
+  public getMastraServer() {
+    return this.#mastraServer;
   }
 
   public getBundlerConfig() {

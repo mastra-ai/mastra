@@ -67,6 +67,8 @@ export abstract class MastraServerBase<TApp, TRequest, TResponse> {
     this.playground = playground;
     this.isDev = isDev;
     this.customRouteAuthConfig = customRouteAuthConfig;
+
+    this.mastra.setMastraAppServer(this);
   }
 
   protected mergeRequestContext({
@@ -172,5 +174,9 @@ export abstract class MastraServerBase<TApp, TRequest, TResponse> {
     }
 
     return bodySchema.parseAsync(body);
+  }
+
+  getApp() {
+    this.app;
   }
 }
