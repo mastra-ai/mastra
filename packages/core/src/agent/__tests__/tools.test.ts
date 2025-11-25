@@ -1,3 +1,4 @@
+import { openai } from '@ai-sdk/openai-v5';
 import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -947,5 +948,39 @@ describe('requireApproval property preservation', () => {
     // Check that the converted tool has requireApproval property set
     expect(tools.criticalAction).toBeDefined();
     expect((tools.criticalAction as any).requireApproval).toBe(true);
+  });
+
+  it('should suspend when requireApproval is true', async () => {
+    // Create a tool with requireApproval: true
+    const criticalTool = createTool({
+      id: 'critical-action',
+      description: 'Perform a critical action',
+      inputSchema: z.object({ data: z.string() }),
+      requireApproval: true,
+      execute: async ({ data }) => {
+        return { success: true, data };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for requireApproval',
+      model: openai('gpt-4.1'),
+    });
+
+    const result = await agent.stream('Use the critical-action tool with data "test"', {
+      toolsets: {
+        actions: {
+          criticalAction: criticalTool,
+        },
+      },
+    });
+
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'tool-call-approval') {
+        expect(chunk.payload.toolName).toBe('criticalAction');
+      }
+    }
   });
 });
