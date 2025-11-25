@@ -1,7 +1,8 @@
 import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { MastraDBMessage, MockMemory } from '../../memory';
+import type { MastraDBMessage } from '../../memory';
+import { MockMemory } from '../../memory';
 import { Agent } from '../agent';
 
 function uiMessageTest(version: 'v1' | 'v2') {
