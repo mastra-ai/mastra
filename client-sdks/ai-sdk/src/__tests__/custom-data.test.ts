@@ -398,7 +398,7 @@ describe('Custom Data Handling', () => {
     });
   });
 
-  describe.only('network custom data', () => {
+  describe('network custom data', () => {
     it('should generate a network data chunk', async () => {
       const { networkStreamFixture } = await import('./__fixtures__/network.stream');
       const mockStream = ReadableStream.from(networkStreamFixture);
