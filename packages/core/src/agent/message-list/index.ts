@@ -1707,6 +1707,11 @@ export class MessageList {
       content.providerMetadata = coreMessage.providerOptions;
     }
 
+    // Preserve metadata field if present (matches aiV4UIMessageToMastraDBMessage behavior)
+    if ('metadata' in coreMessage && coreMessage.metadata !== null && coreMessage.metadata !== undefined) {
+      content.metadata = coreMessage.metadata as Record<string, unknown>;
+    }
+
     return {
       id,
       role: MessageList.getRole(coreMessage),
@@ -2818,8 +2823,11 @@ export class MessageList {
       .map(p => p.text)
       .join('\n');
 
-    // Store original content in metadata for round-trip
-    const metadata: Record<string, unknown> = {};
+    // Preserve metadata from the input message if present
+    const metadata: Record<string, unknown> =
+      'metadata' in modelMsg && modelMsg.metadata !== null && modelMsg.metadata !== undefined
+        ? (modelMsg.metadata as Record<string, unknown>)
+        : {};
 
     // Generate ID from modelMsg if available, otherwise create a new one
     const id =
@@ -2838,7 +2846,7 @@ export class MessageList {
         reasoning: reasoningParts.length > 0 ? reasoningParts.join('\n') : undefined,
         experimental_attachments: experimental_attachments.length > 0 ? experimental_attachments : undefined,
         content: contentString || undefined,
-        metadata,
+        metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       },
     };
     // Add message-level providerOptions if present (AIV5 ModelMessage uses providerOptions)

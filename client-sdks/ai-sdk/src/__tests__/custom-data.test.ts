@@ -1,4 +1,5 @@
-import type { MastraModelOutput } from '@mastra/core/stream';
+import { ReadableStream } from 'node:stream/web';
+import type { MastraAgentNetworkStream, MastraModelOutput } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
 import { toAISdkV5Stream } from '../convert-streams';
 
@@ -394,6 +395,69 @@ describe('Custom Data Handling', () => {
         expect(error.message).toContain('UI Messages require a data property');
         expect(error.message).toContain('data-missing-data-prop');
       }
+    });
+  });
+
+  describe('network custom data', () => {
+    it('should generate a network data chunk', async () => {
+      const { networkStreamFixture } = await import('./__fixtures__/network.stream');
+      const mockStream = ReadableStream.from(networkStreamFixture);
+
+      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraAgentNetworkStream, { from: 'network' });
+
+      const chunks: any[] = [];
+      for await (const chunk of aiSdkStream) {
+        chunks.push(chunk);
+      }
+
+      const customDataChunk = chunks.find(chunk => chunk.type === 'data-network');
+
+      // Verify the number of steps is correct
+      expect(customDataChunk.data.steps).toHaveLength(7);
+
+      // Verify the order of step types matches expected sequence
+      const stepNames = customDataChunk.data.steps.map((step: any) => step.name);
+      expect(stepNames).toEqual([
+        'routing-agent',
+        'inventory-agent',
+        'routing-agent',
+        'purchase-workflow-step',
+        'routing-agent',
+        'create-invoice',
+        'routing-agent',
+      ]);
+
+      expect(customDataChunk.data.steps[0].task.id).toEqual('inventoryAgent');
+      expect(customDataChunk.data.steps[1].task.id).toEqual('inventory-agent');
+      expect(customDataChunk.data.steps[2].task.id).toEqual('purchaseWorkflow');
+      expect(customDataChunk.data.steps[3].task.id).toEqual('purchase-workflow-step');
+      expect(customDataChunk.data.steps[5].task.id).toEqual('create-invoice');
+      expect(customDataChunk.data.steps[6].task.id).toEqual('');
+    });
+
+    it('should pass a custom data chunk through the network', async () => {
+      const { networkStreamFixture } = await import('./__fixtures__/network.stream');
+      const mockStream = ReadableStream.from(networkStreamFixture);
+
+      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraAgentNetworkStream, { from: 'network' });
+
+      const chunks: any[] = [];
+      for await (const chunk of aiSdkStream) {
+        chunks.push(chunk);
+      }
+
+      const customDataChunk = chunks.find(chunk => chunk.type === 'data-inventory-search');
+
+      // Verify the number of steps is correct
+      expect(customDataChunk).toMatchInlineSnapshot(`
+        {
+          "data": {
+            "description": "search for laptops in inventory",
+            "name": "laptop",
+          },
+          "type": "data-inventory-search",
+        }
+      `);
     });
   });
 });
