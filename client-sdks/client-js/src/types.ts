@@ -316,7 +316,7 @@ export type GetMemoryThreadMessagesPaginatedParams = Omit<StorageGetMessagesArg,
 
 export interface GetMemoryThreadMessagesResponse {
   messages: CoreMessage[];
-  legacyMessages: AiMessageType[];
+  legacyMessages: UIMessageWithMetadata[];
   uiMessages: UIMessage[];
 }
 

@@ -322,6 +322,9 @@ importers:
 
   client-sdks/react:
     dependencies:
+      '@lukeed/uuid':
+        specifier: ^2.0.1
+        version: 2.0.1
       '@mastra/client-js':
         specifier: workspace:*
         version: link:../client-js

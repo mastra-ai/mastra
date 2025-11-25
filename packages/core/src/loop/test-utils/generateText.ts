@@ -745,12 +745,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
             "id": "test-id-from-model",
             "messages": [
               {
-                "content": [
-                  {
-                    "text": "Hello, world!",
-                    "type": "text",
-                  },
-                ],
+                "content": "Hello, world!",
                 "role": "assistant",
               },
             ],
@@ -767,7 +762,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               {
                 "id": "1234",
                 "metadata": {
-                  "createdAt": 2024-01-01T00:00:00.000Z,
+                  "createdAt": 2024-01-01T00:00:00.001Z,
                 },
                 "parts": [
                   {
@@ -811,7 +806,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               {
                 "id": "1234",
                 "metadata": {
-                  "createdAt": 2024-01-01T00:00:00.000Z,
+                  "createdAt": 2024-01-01T00:00:00.001Z,
                 },
                 "parts": [
                   {

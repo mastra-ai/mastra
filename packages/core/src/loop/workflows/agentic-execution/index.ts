@@ -72,6 +72,19 @@ export function createAgenticExecutionWorkflow<
             ),
           );
         }
+        // Add assistant response messages to messageList BEFORE processing tool calls
+        // This ensures messages are available for persistence before suspension
+        const responseMessages = typedInputData.messages.nonUser;
+        if (responseMessages && responseMessages.length > 0) {
+          rest.messageList.add(responseMessages, 'response');
+        }
+        return typedInputData;
+      },
+      { id: 'add-response-to-messagelist' },
+    )
+    .map(
+      async ({ inputData }) => {
+        const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
         return typedInputData.output.toolCalls || [];
       },
       { id: 'map-tool-calls' },
