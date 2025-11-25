@@ -226,6 +226,20 @@ export function createToolCallStep<
 
         const result = await tool.execute(inputData.args, toolOptions);
 
+        // Call onOutput hook after successful execution
+        if (tool && 'onOutput' in tool && typeof (tool as any).onOutput === 'function') {
+          try {
+            await (tool as any).onOutput({
+              toolCallId: inputData.toolCallId,
+              toolName: inputData.toolName,
+              output: result,
+              abortSignal: options?.abortSignal,
+            });
+          } catch (error) {
+            console.error('Error calling onOutput', error);
+          }
+        }
+
         return { result, ...inputData };
       } catch (error) {
         return {
