@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import type { UIMessageWithMetadata } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
@@ -49,7 +48,7 @@ describe('Agent Memory Tests', () => {
       id: 'test-agent',
       name: 'test',
       instructions: '',
-      model: openai('gpt-4o-mini'),
+      model: 'openai/gpt-4o-mini',
       memory: new Memory({
         options: {
           lastMessages: 10,
@@ -82,7 +81,7 @@ describe('Agent Memory Tests', () => {
           id: 'test-agent',
           name: 'Test Agent',
           instructions: 'You are a test agent',
-          model: openai('gpt-4o-mini'),
+          model: 'openai/gpt-4o-mini',
           memory: new Memory({
             options: {
               workingMemory: {
@@ -134,7 +133,7 @@ describe('Agent Memory Tests', () => {
           id: 'test-agent',
           name: 'Test Agent',
           instructions: 'You are a test agent',
-          model: openai('gpt-4o-mini'),
+          model: 'openai/gpt-4o-mini',
           memory: new Memory({
             options: {
               workingMemory: {
@@ -191,7 +190,7 @@ describe('Agent Memory Tests', () => {
           id: 'test-agent',
           name: 'Test Agent',
           instructions: 'You are a helpful assistant',
-          model: openai('gpt-4o-mini'),
+          model: 'openai/gpt-4o-mini',
           memory: new Memory({
             options: {
               lastMessages: 5,
@@ -268,7 +267,7 @@ describe('Agent Memory Tests', () => {
       name: 'test',
       instructions:
         'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code.',
-      model: openai('gpt-4o'),
+      model: 'openai/gpt-4o',
       memory,
       tools: { get_weather: weatherTool },
     });
@@ -505,7 +504,7 @@ describe('Agent Memory Tests', () => {
       id: 'title-on',
       name: 'title-on',
       instructions: 'Test agent with generateTitle on.',
-      model: openai('gpt-4o'),
+      model: 'openai/gpt-4o',
       memory: memoryWithTitle,
       tools: { get_weather: weatherTool },
     });
@@ -514,7 +513,7 @@ describe('Agent Memory Tests', () => {
       id: 'title-on',
       name: 'title-on',
       instructions: 'Test agent with generateTitle on.',
-      model: ({ requestContext }) => openai(requestContext.get('model') as string),
+      model: ({ requestContext }) => `openai/${requestContext.get('model') as string}`,
       memory: memoryWithTitle,
       tools: { get_weather: weatherTool },
     });
@@ -534,7 +533,7 @@ describe('Agent Memory Tests', () => {
       id: 'title-off',
       name: 'title-off',
       instructions: 'Test agent with generateTitle off.',
-      model: openai('gpt-4o'),
+      model: 'openai/gpt-4o',
       memory: memoryNoTitle,
       tools: { get_weather: weatherTool },
     });
@@ -655,7 +654,7 @@ describe('Agent with message processors', () => {
   }, 300_000);
 });
 
-describe('CRITICAL BUG: Input processors not running', () => {
+describe('Input Processors', () => {
   it('should run MessageHistory input processor and include previous messages in LLM request', async () => {
     const memory = new Memory({
       storage: new MockStore(),
@@ -668,7 +667,7 @@ describe('CRITICAL BUG: Input processors not running', () => {
       id: 'bug-test-agent',
       name: 'Bug Test Agent',
       instructions: 'You are a helpful assistant',
-      model: openai('gpt-4o-mini'),
+      model: 'openai/gpt-4o-mini',
       memory,
     });
 
@@ -751,5 +750,155 @@ describe('Agent memory test gemini', () => {
         memory: { resource, thread },
       }),
     ).resolves.not.toThrow();
+  });
+});
+
+describe('Guardrails + Memory interaction', () => {
+  it('should NOT save messages to memory when output guardrail aborts', async () => {
+    const storage = new MockStore();
+    const memory = new Memory({
+      storage,
+      options: {
+        lastMessages: 10,
+      },
+    });
+
+    // Create an output guardrail that always aborts
+    const abortingGuardrail = {
+      id: 'content-blocker',
+      name: 'Content Blocker',
+      processOutputResult: async ({ messages, abort }: { messages: any[]; abort: (reason?: string) => never }) => {
+        abort('Content blocked by guardrail');
+        return messages; // Never reached, but satisfies TypeScript
+      },
+    };
+
+    const agent = new Agent({
+      id: 'guardrail-memory-test-agent',
+      name: 'Guardrail Memory Test Agent',
+      instructions: 'You are a helpful assistant',
+      model: 'openai/gpt-4o-mini',
+      memory,
+      // Output guardrails run BEFORE memory processors due to ordering:
+      // [user outputProcessors] → [memory outputProcessors]
+      outputProcessors: [abortingGuardrail],
+    });
+
+    const threadId = randomUUID();
+    const resourceId = 'guardrail-memory-test';
+
+    // Generate should complete but with tripwire
+    const result = await agent.generate('Hello, save this message!', {
+      threadId,
+      resourceId,
+    });
+
+    // Verify the guardrail triggered
+    expect(result.tripwire).toBe(true);
+    expect(result.tripwireReason).toBe('Content blocked by guardrail');
+
+    // CRITICAL: Verify NO messages were saved to memory
+    // Because the guardrail aborted BEFORE memory processors ran
+    const { messages } = await memory.recall({ threadId });
+    expect(messages.length).toBe(0);
+  });
+
+  it('should save messages to memory when output guardrail passes', async () => {
+    const storage = new MockStore();
+    const memory = new Memory({
+      storage,
+      options: {
+        lastMessages: 10,
+      },
+    });
+
+    // Create an output guardrail that passes (doesn't abort)
+    const passingGuardrail = {
+      id: 'content-validator',
+      name: 'Content Validator',
+      processOutputResult: async ({ messages }: { messages: any[] }) => {
+        // Just pass through without aborting
+        return messages;
+      },
+    };
+
+    const agent = new Agent({
+      id: 'passing-guardrail-memory-test-agent',
+      name: 'Passing Guardrail Memory Test Agent',
+      instructions: 'You are a helpful assistant',
+      model: 'openai/gpt-4o-mini',
+      memory,
+      outputProcessors: [passingGuardrail],
+    });
+
+    const threadId = randomUUID();
+    const resourceId = 'passing-guardrail-memory-test';
+
+    // Generate should complete normally
+    const result = await agent.generate('Hello, save this message!', {
+      threadId,
+      resourceId,
+    });
+
+    // Verify no tripwire
+    expect(result.tripwire).toBeFalsy();
+
+    // Verify messages WERE saved to memory
+    const { messages } = await memory.recall({ threadId });
+    expect(messages.length).toBeGreaterThan(0);
+
+    // Should have at least user message and assistant response
+    const userMessages = messages.filter((m: any) => m.role === 'user');
+    const assistantMessages = messages.filter((m: any) => m.role === 'assistant');
+    expect(userMessages.length).toBe(1);
+    expect(assistantMessages.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should NOT save messages when input guardrail aborts (before LLM call)', async () => {
+    const storage = new MockStore();
+    const memory = new Memory({
+      storage,
+      options: {
+        lastMessages: 10,
+      },
+    });
+
+    // Create an input guardrail that always aborts
+    const inputAbortingGuardrail = {
+      id: 'input-content-blocker',
+      name: 'Input Content Blocker',
+      processInput: async ({ messages, abort }: { messages: any[]; abort: (reason?: string) => never }) => {
+        abort('Input blocked by guardrail');
+        return messages; // Never reached, but satisfies TypeScript
+      },
+    };
+
+    const agent = new Agent({
+      id: 'input-guardrail-memory-test-agent',
+      name: 'Input Guardrail Memory Test Agent',
+      instructions: 'You are a helpful assistant',
+      model: 'openai/gpt-4o-mini',
+      memory,
+      // Input processors run: [memory inputProcessors] → [user inputProcessors]
+      // So memory loads history first, then guardrail can abort
+      inputProcessors: [inputAbortingGuardrail],
+    });
+
+    const threadId = randomUUID();
+    const resourceId = 'input-guardrail-memory-test';
+
+    // Generate should complete but with tripwire (no LLM call made)
+    const result = await agent.generate('Hello, this should be blocked!', {
+      threadId,
+      resourceId,
+    });
+
+    // Verify the guardrail triggered
+    expect(result.tripwire).toBe(true);
+    expect(result.tripwireReason).toBe('Input blocked by guardrail');
+
+    // Verify NO messages were saved - LLM was never called, output processors never ran
+    const { messages } = await memory.recall({ threadId });
+    expect(messages.length).toBe(0);
   });
 });

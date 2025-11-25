@@ -19,6 +19,7 @@ Some processors implement both input and output logic and can be used in either 
 Use processors to:
 
 - Normalize or validate user input
+- Add guardrails to your agent
 - Detect and prevent prompt injection or jailbreak attempts
 - Moderate content for safety or compliance
 - Transform messages (e.g., translate languages, filter tool calls)
@@ -66,7 +67,23 @@ inputProcessors: [
 
 For output processors, the order determines the sequence of transformations applied to the model's response.
 
-Memory processors (when memory is enabled) are automatically added to the agent's processor pipeline. See [Memory Processors](/docs/v1/memory/memory-processors) for details on how memory processors integrate with manually configured processors.
+### With memory enabled
+
+When memory is enabled on an agent, memory processors are automatically added to the pipeline:
+
+**Input processors:**
+```
+[Memory Processors] → [Your inputProcessors]
+```
+Memory loads conversation history first, then your processors run.
+
+**Output processors:**
+```
+[Your outputProcessors] → [Memory Processors]
+```
+Your processors run first, then memory persists messages.
+
+This ordering ensures that if your output guardrail calls `abort()`, memory processors are skipped and no messages are saved. See [Memory Processors](/docs/v1/memory/memory-processors#processor-execution-order) for details.
 
 ## Creating custom processors
 

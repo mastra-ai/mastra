@@ -50,9 +50,10 @@ const agent = new Agent({
   id: "test-agent",
   name: "Test Agent",
   instructions: "You are a helpful assistant",
-  model: openai("gpt-4o"),
+  model: 'openai/gpt-4o',
   memory: new Memory({
     storage: new LibSQLStore({
+      id: "memory-store",
       url: "file:memory.db",
     }),
     lastMessages: 10, // MessageHistory processor automatically added
@@ -99,12 +100,14 @@ import { openai } from "@ai-sdk/openai";
 const agent = new Agent({
   name: "semantic-agent",
   instructions: "You are a helpful assistant with semantic memory",
-  model: openai("gpt-4o"),
+  model: 'openai/gpt-4o',
   memory: new Memory({
     storage: new LibSQLStore({
+      id: "memory-store",
       url: "file:memory.db",
     }),
     vector: new PineconeVector({
+      id: "memory-vector",
       apiKey: process.env.PINECONE_API_KEY!,
       environment: "us-east-1",
     }),
@@ -151,9 +154,10 @@ import { openai } from "@ai-sdk/openai";
 const agent = new Agent({
   name: "working-memory-agent",
   instructions: "You are an assistant with working memory",
-  model: openai("gpt-4o"),
+  model: 'openai/gpt-4o',
   memory: new Memory({
     storage: new LibSQLStore({
+      id: "memory-store",
       url: "file:memory.db",
     }),
     workingMemory: { enabled: true }, // WorkingMemory processor automatically added
@@ -175,16 +179,16 @@ import { openai } from "@ai-sdk/openai";
 
 // Custom MessageHistory with different configuration
 const customMessageHistory = new MessageHistory({
-  storage: new LibSQLStore({ url: "file:memory.db" }),
+  storage: new LibSQLStore({ id: "memory-store", url: "file:memory.db" }),
   lastMessages: 20,
 });
 
 const agent = new Agent({
   name: "custom-memory-agent",
   instructions: "You are a helpful assistant",
-  model: openai("gpt-4o"),
+  model: 'openai/gpt-4o',
   memory: new Memory({
-    storage: new LibSQLStore({ url: "file:memory.db" }),
+    storage: new LibSQLStore({ id: "memory-store", url: "file:memory.db" }),
     lastMessages: 10, // This would normally add MessageHistory(10)
   }),
   inputProcessors: [
@@ -194,56 +198,120 @@ const agent = new Agent({
 });
 ```
 
-### Guardrails and Memory
+## Processor Execution Order
 
-By default, memory processors run first for input processing. This means:
+Understanding the execution order is important when combining guardrails with memory:
 
-- Messages are saved to memory first
-- Then utility processors like `ToolCallFilter` and `TokenLimiter` filter what goes to the LLM
-- This is usually what you want - full conversation history in memory, filtered context for the LLM
+### Input Processors
 
-However, if you're using guardrails (content moderation, validation, etc.), you typically want them to run BEFORE memory processors for two reasons:
+```
+[Memory Processors] → [Your inputProcessors]
+```
 
-1. **Prevent invalid content from being saved to memory** - block inappropriate content before it's stored
-2. **Efficiency** - avoid running expensive guardrail checks on already-validated content retrieved from memory
+1. **Memory processors run FIRST**: `WorkingMemory`, `MessageHistory`, `SemanticRecall`
+2. **Your input processors run AFTER**: guardrails, filters, validators
 
-To achieve this, place guardrails BEFORE memory processors:
+This means memory loads conversation history before your processors can validate or filter the input.
+
+### Output Processors
+
+```
+[Your outputProcessors] → [Memory Processors]
+```
+
+1. **Your output processors run FIRST**: guardrails, filters, validators
+2. **Memory processors run AFTER**: `SemanticRecall` (embeddings), `MessageHistory` (persistence)
+
+This ordering is designed to be **safe by default**: if your output guardrail calls `abort()`, the memory processors never run and **no messages are saved**.
+
+## Guardrails and Memory
+
+The default execution order provides safe guardrail behavior:
+
+### Output guardrails (recommended)
+
+Output guardrails run **before** memory processors save messages. If a guardrail aborts:
+
+- The tripwire is triggered
+- Memory processors are skipped
+- **No messages are persisted to storage**
 
 ```typescript copy showLineNumbers
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { ContentModerationProcessor } from "./guardrails";
-import { TokenLimiter } from "@mastra/core/processors";
 import { openai } from "@ai-sdk/openai";
 
-const memory = new Memory({
-  lastMessages: 10,
-});
+// Output guardrail that blocks inappropriate content
+const contentBlocker = {
+  id: "content-blocker",
+  processOutputResult: async ({ messages, abort }) => {
+    const hasInappropriateContent = messages.some((msg) =>
+      containsBadContent(msg)
+    );
+    if (hasInappropriateContent) {
+      abort("Content blocked by guardrail");
+    }
+    return messages;
+  },
+};
 
 const agent = new Agent({
-  name: "moderated-agent",
+  name: "safe-agent",
   instructions: "You are a helpful assistant",
-  model: openai("gpt-4o"),
-  memory,
-  inputProcessors: [
-    // 1. Guardrails first - blocks inappropriate content
-    new ContentModerationProcessor(),
+  model: 'openai/gpt-4o',
+  memory: new Memory({ lastMessages: 10 }),
+  // Your guardrail runs BEFORE memory saves
+  outputProcessors: [contentBlocker],
+});
 
-    // 2. Memory processors - only saves allowed content
-    memory,
+// If the guardrail aborts, nothing is saved to memory
+const result = await agent.generate("Hello");
+if (result.tripwire) {
+  console.log("Blocked:", result.tripwireReason);
+  // Memory is empty - no messages were persisted
+}
+```
 
-    // 3. Utility processors - work automatically after memory
-    new TokenLimiter(4000),
-  ],
+### Input guardrails
+
+Input guardrails run **after** memory processors load history. If a guardrail aborts:
+
+- The tripwire is triggered
+- The LLM is never called
+- Output processors (including memory persistence) are skipped
+- **No messages are persisted to storage**
+
+```typescript copy showLineNumbers
+// Input guardrail that validates user input
+const inputValidator = {
+  id: "input-validator",
+  processInput: async ({ messages, abort }) => {
+    const lastUserMessage = messages.findLast((m) => m.role === "user");
+    if (isInvalidInput(lastUserMessage)) {
+      abort("Invalid input detected");
+    }
+    return messages;
+  },
+};
+
+const agent = new Agent({
+  name: "validated-agent",
+  instructions: "You are a helpful assistant",
+  model: 'openai/gpt-4o',
+  memory: new Memory({ lastMessages: 10 }),
+  // Your guardrail runs AFTER memory loads history
+  inputProcessors: [inputValidator],
 });
 ```
 
-With this ordering:
+### Summary
 
-- Guardrails validate/filter NEW input before it reaches memory
-- Retrieved memory content bypasses guardrails (already validated)
-- Only appropriate content is saved to memory
-- Token limiting and other utilities work automatically after memory
+| Guardrail Type | When it runs | If it aborts |
+| -------------- | ------------ | ------------ |
+| Input | After memory loads history | LLM not called, nothing saved |
+| Output | Before memory saves | Nothing saved to storage |
+
+Both scenarios are safe - guardrails prevent inappropriate content from being persisted to memory
 
 ## Related documentation
 
