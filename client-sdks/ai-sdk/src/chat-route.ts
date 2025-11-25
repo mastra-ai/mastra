@@ -109,6 +109,10 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
                   type: 'object',
                   description: 'Resume data for the agent',
                 },
+                runId: {
+                  type: 'string',
+                  description: 'The run ID required when resuming an agent execution',
+                },
                 messages: {
                   type: 'array',
                   description: 'Array of messages in the conversation',
@@ -179,9 +183,13 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
       },
     },
     handler: async c => {
-      const { messages, resumeData, ...rest } = await c.req.json();
+      const { messages, resumeData, runId, ...rest } = await c.req.json();
       const mastra = c.get('mastra');
       const requestContext = (c as any).get('requestContext') as RequestContext | undefined;
+
+      if (resumeData && !runId) {
+        throw new Error('runId is required when resumeData is provided');
+      }
 
       let agentToUse: string | undefined = agent;
       if (!agent) {
@@ -215,6 +223,7 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
       const mergedOptions = {
         ...defaultOptions,
         ...rest,
+        ...(runId && { runId }),
         requestContext: requestContext || defaultOptions?.requestContext,
       };
 
