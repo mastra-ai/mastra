@@ -9,9 +9,8 @@ import type { ProviderConfig } from './base';
 
 // Mock custom gateway implementation for testing
 class TestCustomGateway extends MastraModelGateway {
-  readonly id = 'test-custom';
+  readonly id = 'custom';
   readonly name = 'test-custom';
-  readonly prefix = 'custom';
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
     return {
@@ -19,7 +18,7 @@ class TestCustomGateway extends MastraModelGateway {
         name: 'My Custom Provider',
         models: ['model-1', 'model-2', 'model-3'],
         apiKeyEnvVar: 'CUSTOM_API_KEY',
-        gateway: 'test-custom',
+        gateway: 'custom',
         url: 'https://api.custom-provider.com/v1',
       },
     };
@@ -41,16 +40,19 @@ class TestCustomGateway extends MastraModelGateway {
     modelId,
     providerId,
     apiKey,
+    headers,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
+    headers?: Record<string, string>;
   }): Promise<LanguageModelV2> {
     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
     return createOpenAICompatible({
       name: providerId,
       apiKey,
       baseURL,
+      headers,
       supportsStructuredOutputs: true,
     }).chatModel(modelId);
   }
@@ -58,9 +60,8 @@ class TestCustomGateway extends MastraModelGateway {
 
 // Another test gateway with a different prefix
 class AnotherCustomGateway extends MastraModelGateway {
-  readonly id = 'another-custom';
+  readonly id = 'another';
   readonly name = 'another-custom';
-  readonly prefix = 'another';
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
     return {
@@ -68,7 +69,7 @@ class AnotherCustomGateway extends MastraModelGateway {
         name: 'Another Provider',
         models: ['model-a', 'model-b'],
         apiKeyEnvVar: 'ANOTHER_API_KEY',
-        gateway: 'another-custom',
+        gateway: 'another',
         url: 'https://api.another.com/v1',
       },
     };
@@ -90,16 +91,19 @@ class AnotherCustomGateway extends MastraModelGateway {
     modelId,
     providerId,
     apiKey,
+    headers,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
+    headers?: Record<string, string>;
   }): Promise<LanguageModelV2> {
     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
     return createOpenAICompatible({
       name: providerId,
       apiKey,
       baseURL,
+      headers,
       supportsStructuredOutputs: true,
     }).chatModel(modelId);
   }

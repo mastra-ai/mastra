@@ -247,7 +247,7 @@ export async function analyzeEntry(
   const optimizerBundler = await rollup({
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     input: isVirtualFile ? '#entry' : entry,
-    treeshake: 'smallest',
+    treeshake: false,
     preserveSymlinks: true,
     plugins: getInputPlugins({ entry, isVirtualFile }, mastraEntry, { sourcemapEnabled }),
     external: DEPS_TO_IGNORE,

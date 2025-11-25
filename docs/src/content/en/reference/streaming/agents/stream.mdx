@@ -255,6 +255,13 @@ const aiSdkStream = await agent.stream("message for agent", {
         "Overrides the output processors set on the agent. Output processors that can modify or validate messages from the agent before they are returned to the user. Must implement either (or both) of the `processOutputResult` and `processOutputStream` functions.",
     },
     {
+      name: "includeRawChunks",
+      type: "boolean",
+      isOptional: true,
+      description:
+        "Whether to include raw chunks in the stream output (not available on all model providers).",
+    },
+    {
       name: "inputProcessors",
       type: "Processor[]",
       isOptional: true,

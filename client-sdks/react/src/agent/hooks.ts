@@ -15,6 +15,7 @@ import { v4 as uuid } from '@lukeed/uuid';
 
 export interface MastraChatProps {
   agentId: string;
+  resourceId?: string;
   initializeMessages?: () => MastraUIMessage[];
 }
 
@@ -43,7 +44,7 @@ export type NetworkArgs = SharedArgs & {
   onNetworkChunk?: (chunk: NetworkChunkType) => Promise<void>;
 };
 
-export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
+export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatProps) => {
   // Extract runId from any pending suspensions in initial messages
   const extractRunIdFromMessages = (messages: ExtendedMastraUIMessage[]): string | undefined => {
     for (const message of messages) {
@@ -117,7 +118,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
       },
       instructions,
       requestContext,
-      ...(threadId ? { threadId, resourceId: agentId } : {}),
+      ...(threadId ? { threadId, resourceId: resourceId || agentId } : {}),
       providerOptions: providerOptions as any,
     });
 
@@ -179,7 +180,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
       },
       instructions,
       requestContext,
-      ...(threadId ? { threadId, resourceId: agentId } : {}),
+      ...(threadId ? { threadId, resourceId: resourceId || agentId } : {}),
       providerOptions: providerOptions as any,
       requireToolApproval,
     });
@@ -238,7 +239,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
       },
       runId,
       requestContext,
-      ...(threadId ? { thread: threadId, resourceId: agentId } : {}),
+      ...(threadId ? { thread: threadId, resourceId: resourceId || agentId } : {}),
     });
 
     const transformer = new AISdkNetworkTransformer();

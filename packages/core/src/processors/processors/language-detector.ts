@@ -103,7 +103,7 @@ export interface LanguageDetectorOptions {
  * Supports 100+ languages via internal agent-based detection and translation,
  * making it ideal for multilingual AI applications and global deployment.
  */
-export class LanguageDetector implements Processor {
+export class LanguageDetector implements Processor<'language-detector'> {
   readonly id = 'language-detector';
   readonly name = 'Language Detector';
 
