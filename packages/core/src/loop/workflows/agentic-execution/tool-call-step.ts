@@ -36,7 +36,7 @@ export function createToolCallStep<
           if (!content) return;
           // Add metadata to indicate this tool call is pending approval
           const metadata =
-            typeof lastAssistantMessage.content.metadata === 'object'
+            typeof lastAssistantMessage.content.metadata === 'object' && lastAssistantMessage.content.metadata !== null
               ? (lastAssistantMessage.content.metadata as Record<string, any>)
               : {};
           metadata.pendingToolApprovals = metadata.pendingToolApprovals || {};
