@@ -541,8 +541,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector(params: UpdateVectorParams<MongoDBVectorFilter>): Promise<void> {
-    const { indexName, update } = params;
+  async updateVector(params: MongoDBUpdateVectorParams): Promise<void> {
+    const { indexName, update,embeddingPath } = params;
 
     // Validate that both id and filter are not provided at the same time
     if ('id' in params && params.id && 'filter' in params && params.filter) {
