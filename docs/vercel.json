@@ -117,12 +117,12 @@
     },
     {
       "source": "/docs/frameworks/agentic-uis/openrouter",
-      "destination": "/guides/frameworks/agentic-uis/openrouter",
+      "destination": "/models/v1/gateways/openrouter",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/servers/express",
-      "destination": "/guides/frameworks/servers/express",
+      "destination": "/guides/getting-started/express",
       "permanent": true
     },
     {
@@ -192,7 +192,7 @@
     },
     {
       "source": "/docs/v1/frameworks/servers/express",
-      "destination": "/guides/v1/frameworks/servers/express",
+      "destination": "/guides/v1/getting-started/express",
       "permanent": true
     },
     {
@@ -227,7 +227,7 @@
     },
     {
       "source": "/docs/v1/getting-started/quickstart",
-      "destination": "/docs/v1/getting-started/installation",
+      "destination": "/guides/v1/quickstarts/quickstart",
       "permanent": true
     },
     {
