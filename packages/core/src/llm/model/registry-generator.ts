@@ -32,8 +32,8 @@ export async function fetchProvidersFromGateways(
 
         for (const [providerId, config] of Object.entries(providers)) {
           // For true gateways, use gateway.id as prefix (e.g., "netlify/anthropic")
-          // Special case: if providerId matches gateway.id, it's a unified gateway (e.g., netlify returning {netlify: {...}})
-          // In this case, use just the gateway ID to avoid duplication (netlify, not netlify/netlify)
+          // Special case: if providerId matches gateway.id, it's a unified gateway (e.g., azure-openai returning {azure-openai: {...}})
+          // In this case, use just the gateway ID to avoid duplication (azure-openai, not azure-openai/azure-openai)
           const typeProviderId = isProviderRegistry
             ? providerId
             : providerId === gateway.id

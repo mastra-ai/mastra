@@ -670,7 +670,6 @@
       "models": [
         "alpha-doubao-seed-code",
         "alpha-gd4",
-        "alpha-kimi-k2-thinking",
         "alpha-minimax-m2",
         "big-pickle",
         "claude-3-5-haiku",
@@ -688,6 +687,7 @@
         "gpt-5.1-codex",
         "grok-code",
         "kimi-k2",
+        "kimi-k2-thinking",
         "qwen3-coder"
       ],
       "docUrl": "https://opencode.ai/docs/zen",
@@ -1986,7 +1986,6 @@
     "opencode": [
       "alpha-doubao-seed-code",
       "alpha-gd4",
-      "alpha-kimi-k2-thinking",
       "alpha-minimax-m2",
       "big-pickle",
       "claude-3-5-haiku",
@@ -2004,6 +2003,7 @@
       "gpt-5.1-codex",
       "grok-code",
       "kimi-k2",
+      "kimi-k2-thinking",
       "qwen3-coder"
     ],
     "fastrouter": [

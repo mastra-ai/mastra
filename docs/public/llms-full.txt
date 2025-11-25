@@ -6756,111 +6756,6 @@ Congratulations! You have successfully integrated Mastra with Assistant UI using
 
 
 ---
-title: "Using Cedar-OS | Frameworks"
-description: "Learn how to integrate Cedar-OS with Mastra"
----
-
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
-
-# Using Cedar-OS
-[EN] Source: https://mastra.ai/en/docs/frameworks/agentic-uis/cedar-os
-
-[Cedar-OS](https://docs.cedarcopilot.com/introduction/overview) is an open-source agentic UI framework designed specifically for building the most ambitious AI-native applications. Cedar was built with Mastra in mind.
-
-:::info
-
-Also see the [Extending Mastra](https://docs.cedarcopilot.com/agent-backend-connection/mastra) and [Custom Backend Implementation](https://docs.cedarcopilot.com/agent-backend-connection/custom) guides on Cedar's documentation site for more advanced integration patterns.
-
-:::
-
-## Integration Guide
-
-<Steps>
-
-<StepItem>
-
-Run Cedar's CLI command:
-
-```bash
-npx cedar-os-cli plant-seed
-```
-
-If starting from scratch, select the **Mastra starter** template for a complete setup with both frontend and backend in a monorepo
-
-If you already have a Mastra backend, use the **blank frontend cedar repo** option instead. This will give you the option to download components and download all dependencies for Cedar. It is recommended to download at least one of the chat components to get started.
-
-</StepItem>
-
-<StepItem>
-
-Wrap your application with the CedarCopilot provider to connect to your Mastra backend:
-
-```tsx
-import { CedarCopilot } from "cedar-os";
-
-function App() {
-  return (
-    <CedarCopilot
-      llmProvider={{
-        provider: "mastra",
-        baseURL: "http://localhost:4111", // default dev port for Mastra
-        apiKey: process.env.NEXT_PUBLIC_MASTRA_API_KEY, // optional — only for backend auth
-      }}
-    >
-      <YourApp />
-    </CedarCopilot>
-  );
-}
-```
-
-</StepItem>
-
-<StepItem>
-
-Configure your Mastra backend to work with Cedar by following the [Mastra Configuration Options](https://docs.cedarcopilot.com/agent-backend-connection/agent-backend-connection#mastra-configuration-options).
-
-[Register API routes](https://mastra.ai/en/examples/deployment/custom-api-route) in your Mastra server (or NextJS serverless routes if in a monorepo):
-
-```ts mastra/src/index.ts
-import { registerApiRoute } from "@mastra/core/server";
-
-// POST /chat
-// The chat's non-streaming default endpoint
-registerApiRoute("/chat", {
-  method: "POST",
-  // …validate input w/ zod
-  handler: async (c) => {
-    /* your agent.generate() logic */
-  },
-});
-
-// POST /chat/stream (SSE)
-// The chat's streaming default endpoint
-registerApiRoute("/chat/stream", {
-  method: "POST",
-  handler: async (c) => {
-    /* stream agent output in SSE format */
-  },
-});
-```
-
-</StepItem>
-
-<StepItem>
-
-Drop Cedar components into your frontend – see [Chat Overview](https://docs.cedarcopilot.com/chat/chat-overview).
-
-Your backend and frontend are now linked! You're ready to start building AI-native experiences with your Mastra agents.
-
-</StepItem>
-
-</Steps>
-
-
----
 title: "Using CopilotKit | Frameworks"
 description: "Learn how to integrate CopilotKit with Mastra"
 ---
@@ -46249,18 +46144,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2
   },
   {
-    "model": "opencode/alpha-kimi-k2-thinking",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 0.6,
-    "outputCost": 2.5
-  },
-  {
     "model": "opencode/alpha-minimax-m2",
     "imageInput": false,
     "audioInput": false,
@@ -46459,6 +46342,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.45,
+    "outputCost": 2.5
+  },
+  {
+    "model": "opencode/kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
     "inputCost": 0.6,
