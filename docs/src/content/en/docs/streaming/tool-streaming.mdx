@@ -145,8 +145,8 @@ export const weatherTool = createTool({
     return weather;
   },
   // Called after successful execution
-  onOutput: ({ output, toolCallId }) => {
-    console.log(`Weather result: ${output.temperature}°F, ${output.conditions}`);
+  onOutput: ({ output, toolName }) => {
+    console.log(`${toolName} result: ${output.temperature}°F, ${output.conditions}`);
   },
 });
 ```

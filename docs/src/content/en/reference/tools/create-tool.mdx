@@ -246,8 +246,8 @@ export const tool = createTool({
   execute: async (input) => {
     return { result: "Success" };
   },
-  onOutput: ({ output, toolCallId, messages, abortSignal }) => {
-    console.log(`Tool execution completed:`, output);
+  onOutput: ({ output, toolCallId, toolName, abortSignal }) => {
+    console.log(`${toolName} execution completed:`, output);
     // output is fully typed based on outputSchema
   },
 });
@@ -268,13 +268,13 @@ For a typical streaming tool call, the hooks are invoked in this order:
 All hooks receive a parameter object with these common properties:
 
 - `toolCallId` (string): Unique identifier for this specific tool call
-- `messages` (array): The conversation messages at the time of the tool call
 - `abortSignal` (AbortSignal): Signal for detecting if the operation should be cancelled
 
 Additionally:
+- `onInputStart`, `onInputDelta`, and `onInputAvailable` receive `messages` (array): The conversation messages at the time of the tool call
 - `onInputDelta` receives `inputTextDelta` (string): The incremental text chunk
 - `onInputAvailable` receives `input`: The validated input data (typed according to `inputSchema`)
-- `onOutput` receives `output`: The tool's return value (typed according to `outputSchema`)
+- `onOutput` receives `output`: The tool's return value (typed according to `outputSchema`) and `toolName` (string): The name of the tool
 
 ### Error Handling
 
