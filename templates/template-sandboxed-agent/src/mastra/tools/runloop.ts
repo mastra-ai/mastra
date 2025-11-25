@@ -156,15 +156,33 @@ export const createSandbox = createTool({
       // Ports: 3000-9000
       const availablePorts = [3000, 4000, 5000, 6000, 7000, 8000, 9000];
 
+      // Generate sandbox name with Mastra framework prefix
+      const timestamp = Date.now();
+      const sandboxName = `mastra-devbox-${timestamp}`;
+
+      // Build framework metadata
+      const frameworkMetadata: Record<string, string> = {
+        framework: 'mastra',
+        created_at: new Date().toISOString(),
+      };
+
+      // Merge user metadata with framework metadata (framework takes precedence)
+      const mergedMetadata = {
+        ...(sandboxOptions.metadata || {}),
+        ...frameworkMetadata,
+      };
+
       const createOptions: {
         name: string;
         blueprint_name?: string;
         environment_variables?: Record<string, string>;
+        metadata?: Record<string, string>;
         launch_parameters?: {
           available_ports?: number[];
         };
       } = {
-        name: `devbox-${Date.now()}`,
+        name: sandboxName,
+        metadata: mergedMetadata,
         launch_parameters: {
           available_ports: availablePorts,
         },
@@ -182,6 +200,109 @@ export const createSandbox = createTool({
 
       return {
         sandboxId: devbox.id,
+      };
+    } catch (e) {
+      return {
+        error: JSON.stringify(e),
+      };
+    }
+  },
+});
+
+export const createSnapshot = createTool({
+  id: 'createSnapshot',
+  description:
+    'Create a disk snapshot of a Runloop devbox to save the current code state. Snapshots can be used to restore devboxes to this state or create new devboxes from this saved state. Useful for saving progress, creating checkpoints, or sharing code states.',
+  inputSchema: z.object({
+    sandboxId: z.string().describe('The sandboxId (devbox ID) to create a snapshot from'),
+    name: z
+      .string()
+      .optional()
+      .describe(
+        'Optional name for the snapshot. If not provided, will be auto-generated with Mastra framework info'
+      ),
+    commitMessage: z
+      .string()
+      .optional()
+      .describe(
+        'Optional commit message describing what this snapshot contains (max 1000 characters)'
+      ),
+    metadata: z
+      .record(z.string())
+      .optional()
+      .describe('Optional custom metadata to attach to the snapshot'),
+    async: z
+      .boolean()
+      .default(false)
+      .describe(
+        'Whether to create the snapshot asynchronously (non-blocking). Default: false (waits for completion)'
+      ),
+  }),
+  outputSchema: z
+    .object({
+      snapshotId: z.string().describe('The snapshot ID'),
+      name: z.string().describe('The name of the snapshot'),
+      status: z.string().describe('Status of the snapshot creation'),
+      sandboxId: z.string().describe('The devbox ID the snapshot was created from'),
+      metadata: z.record(z.string()).describe('The metadata attached to the snapshot'),
+    })
+    .or(
+      z.object({
+        error: z.string().describe('The error from a failed snapshot creation'),
+      })
+    ),
+  execute: async ({ context: input }) => {
+    try {
+      const devbox = runloop.devbox.fromId(input.sandboxId);
+
+      // Generate snapshot name if not provided
+      const timestamp = Date.now();
+      const snapshotName = input.name || `mastra-snapshot-${timestamp}`;
+
+      // Build framework metadata
+      const frameworkMetadata: Record<string, string> = {
+        framework: 'mastra',
+        source_sandbox_id: input.sandboxId,
+        created_at: new Date().toISOString(),
+      };
+
+      // Merge user metadata with framework metadata (framework takes precedence)
+      const mergedMetadata = {
+        ...(input.metadata || {}),
+        ...frameworkMetadata,
+      };
+
+      // Prepare snapshot parameters
+      const snapshotParams: {
+        name?: string;
+        commit_message?: string;
+        metadata?: Record<string, string>;
+      } = {
+        name: snapshotName,
+        metadata: mergedMetadata,
+      };
+
+      if (input.commitMessage) {
+        snapshotParams.commit_message = input.commitMessage.substring(0, 1000); // Enforce max length
+      }
+
+      // Create snapshot (sync or async)
+      let snapshot;
+      let status: string;
+      if (input.async) {
+        snapshot = await devbox.snapshotDiskAsync(snapshotParams);
+        status = 'Snapshot creation started';
+      } else {
+        snapshot = await devbox.snapshotDisk(snapshotParams);
+        status = 'Snapshot created successfully';
+      }
+
+      return {
+        snapshotId: snapshot.id,
+        name: snapshotName,
+        status,
+        sandboxId: input.sandboxId,
+        metadata: mergedMetadata,
       };
     } catch (e) {
       return {

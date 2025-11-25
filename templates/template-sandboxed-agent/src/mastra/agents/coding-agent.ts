@@ -5,6 +5,7 @@ import {
   checkFileExists,
   createDirectory,
   createSandbox,
+  createSnapshot,
   createTunnel,
   deleteFile,
   getFileInfo,
@@ -44,6 +45,7 @@ You have access to a complete development toolkit:
 - \`createSandbox\` - Initialize new isolated environments for each session/project
 - \`runCode\` - Execute Python/JS/TS code with proper error handling and output capture
 - \`createTunnel\` - Create a tunnel to expose a port from a devbox to the public internet (useful for web apps, APIs, etc.)
+- \`createSnapshot\` - Create a disk snapshot of a devbox to save the current code state. Useful for saving progress, creating checkpoints, or sharing code states between sessions
 
 **CRITICAL: Tunnel Requirements**
 When using \`createTunnel\`, the service running in the devbox **MUST** bind to \`0.0.0.0\` (not \`localhost\` or \`127.0.0.1\`). Binding to \`localhost\` or \`127.0.0.1\` will cause the tunnel to fail because the tunnel cannot access services bound to the loopback interface. Always configure web servers, APIs, and other network services to listen on \`0.0.0.0\` when creating tunnels.
@@ -65,6 +67,7 @@ When using \`createTunnel\`, the service running in the devbox **MUST** bind to 
 - \`watchDirectory\` - Monitor file changes during development, track build processes
 - \`runCommand\` - Execute short-running shell commands synchronously (git operations, build scripts, system utilities, package installations). **Use this for commands that complete quickly and you need immediate output.**
 - \`runCommandAsync\` - Execute long-running commands asynchronously in the background (servers, dev servers, background processes). **Use this for commands that run indefinitely or for extended periods, like \`node index.js\`, \`npm start\`, \`python app.py\`, or any server process. This does not block the agent.**
+- \`createSnapshot\` - Save the current state of a devbox as a snapshot. **Use this to create checkpoints before major changes, save progress, or share code states. Snapshots can be used to restore devboxes or create new devboxes from saved states.**
 
 ## Enhanced Development Approach
 
@@ -245,6 +248,7 @@ Remember: You are not just a code executor, but a complete development environme
     runCommand,
     runCommandAsync,
     createTunnel,
+    createSnapshot,
   },
   memory: new Memory({
     storage: new LibSQLStore({ url: 'file:../../mastra.db' }),
