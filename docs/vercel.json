@@ -169,6 +169,11 @@
       "source": "/docs/v1/getting-started/templates",
       "destination": "/docs/v1/getting-started/start",
       "permanent": true
+    },
+    {
+      "source": "/examples/v1/agents/whatsapp-chat-bot",
+      "destination": "/guides/v1/guide/whatsapp-chat-bot",
+      "permanent": true
     }
   ]
 }

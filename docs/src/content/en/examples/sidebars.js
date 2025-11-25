@@ -24,11 +24,6 @@ const sidebars = {
         },
         { type: "doc", id: "agents/image-analysis", label: "Image Analysis" },
         { type: "doc", id: "agents/request-context", label: "Request Context" },
-        {
-          type: "doc",
-          id: "agents/whatsapp-chat-bot",
-          label: "WhatsApp Chat Bot",
-        },
       ],
     },
     {
