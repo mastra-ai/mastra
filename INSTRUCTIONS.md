@@ -229,3 +229,4 @@ Be watchful for these anti-patterns:
 - **Don't ignore the cycle** - It will cause subtle bugs and maintenance issues
 - **Don't create a "god" shared file** - Extract only what's needed for the specific cycle
 - **Don't break public APIs** - Ensure `package.json` exports still work after refactoring
+- **Don't add re-exports from non-public barrel files** - When extracting code to a new file, update the importing files to use direct imports to the new file. Don't add `export { foo } from './new-file'` to the original file unless it's a public-facing barrel file.

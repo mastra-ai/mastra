@@ -21,7 +21,7 @@ import { createStep } from '../../../workflows';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
-import { isControllerOpen } from '../stream';
+import { isControllerOpen } from '../utils';
 
 type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   model: MastraLanguageModelV2;

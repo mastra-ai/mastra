@@ -1,5 +1,5 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
-import { MastraVoice } from '.';
+import { MastraVoice } from './voice';
 
 export class DefaultVoice extends MastraVoice {
   constructor() {

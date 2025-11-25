@@ -1,9 +1,9 @@
 import z from 'zod';
-import type { AgentExecutionOptions } from '../../agent';
-import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
-import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
+import { Agent } from '../../agent/agent';
+import type { AgentExecutionOptions, MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
 import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../../agent/message-list';
+import { tryGenerateWithJsonFallback } from '../../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
