@@ -298,7 +298,7 @@ function uiMessageTest(version: 'v1' | 'v2') {
 
     it('should handle content as string', async () => {
       const agent = new Agent({
-        name: 'mixed-metadata-agent',
+        name: 'simple-content-agent',
         instructions: 'You are a helpful assistant',
         model: dummyModel,
         memory: mockMemory,
@@ -317,9 +317,9 @@ function uiMessageTest(version: 'v1' | 'v2') {
           ],
           {
             memory: {
-              resource: 'mixed-user',
+              resource: 'simple-content-user',
               thread: {
-                id: 'mixed-thread',
+                id: 'simple-content-thread',
               },
             },
           },
@@ -337,9 +337,9 @@ function uiMessageTest(version: 'v1' | 'v2') {
           ],
           {
             memory: {
-              resource: 'mixed-user',
+              resource: 'simple-content-user',
               thread: {
-                id: 'mixed-thread',
+                id: 'simple-content-thread',
               },
             },
           },
@@ -347,12 +347,30 @@ function uiMessageTest(version: 'v1' | 'v2') {
       }
 
       const result = await mockMemory.recall({
-        threadId: 'mixed-thread',
-        resourceId: 'mixed-user',
+        threadId: 'simple-content-thread',
+        resourceId: 'simple-content-user',
         perPage: 10,
       });
 
       expect(result?.messages.length).toBeGreaterThan(0);
+
+      // Find the user message
+      const userMessage = result.messages.find(m => m.role === 'user');
+      expect(userMessage).toBeDefined();
+
+      // Verify metadata was preserved in the simple content-only format
+      if (
+        userMessage &&
+        'content' in userMessage &&
+        typeof userMessage.content === 'object' &&
+        'metadata' in userMessage.content
+      ) {
+        expect(userMessage.content.metadata).toEqual({
+          foo: 'bar',
+        });
+      } else {
+        throw new Error('Expected user message to have content.metadata field');
+      }
     });
   });
 }
