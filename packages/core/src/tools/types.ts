@@ -242,4 +242,9 @@ export interface ToolAction<
       input: InferZodLikeSchema<TSchemaIn>;
     } & ToolCallOptions,
   ) => void | PromiseLike<void>;
+  onOutput?: (
+    options: {
+      output: TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : any;
+    } & ToolCallOptions,
+  ) => void | PromiseLike<void>;
 }
