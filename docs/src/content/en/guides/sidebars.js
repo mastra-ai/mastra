@@ -23,75 +23,52 @@ const sidebars = {
           id: "getting-started/manual-install",
           label: "Manual Installation",
         },
+        {
+          type: "doc",
+          id: "getting-started/next-js",
+          label: "Next.js",
+        },
+        {
+          type: "doc",
+          id: "getting-started/astro",
+          label: "Astro",
+        },
+        {
+          type: "doc",
+          id: "getting-started/vite-react",
+          label: "React",
+        },
+        {
+          type: "doc",
+          id: "getting-started/sveltekit",
+          label: "SvelteKit",
+        },
+        {
+          type: "doc",
+          id: "getting-started/express",
+          label: "Express",
+        },
       ],
     },
     {
       type: "category",
-      label: "Frameworks",
+      label: "Build your UI",
       collapsed: false,
       items: [
         {
-          type: "category",
-          label: "Agentic UIs",
-          items: [
-            {
-              type: "doc",
-              id: "frameworks/agentic-uis/ai-sdk-ui",
-              label: "With AI SDK UI",
-            },
-            {
-              type: "doc",
-              id: "frameworks/agentic-uis/copilotkit",
-              label: "With CopilotKit",
-            },
-            {
-              type: "doc",
-              id: "frameworks/agentic-uis/assistant-ui",
-              label: "With Assistant UI",
-            },
-            {
-              type: "doc",
-              id: "frameworks/agentic-uis/cedar-os",
-              label: "With Cedar-OS",
-            },
-          ],
+          type: "doc",
+          id: "build-your-ui/ai-sdk-ui",
+          label: "With AI SDK UI",
         },
         {
-          type: "category",
-          label: "Servers",
-          items: [
-            {
-              type: "doc",
-              id: "frameworks/servers/express",
-              label: "With Express",
-            },
-          ],
+          type: "doc",
+          id: "build-your-ui/copilotkit",
+          label: "With CopilotKit",
         },
         {
-          type: "category",
-          label: "Web Frameworks",
-          items: [
-            {
-              type: "doc",
-              id: "frameworks/web-frameworks/vite-react",
-              label: "With Vite/React",
-            },
-            {
-              type: "doc",
-              id: "frameworks/web-frameworks/next-js",
-              label: "With Next.js",
-            },
-            {
-              type: "doc",
-              id: "frameworks/web-frameworks/astro",
-              label: "With Astro",
-            },
-            {
-              type: "doc",
-              id: "frameworks/web-frameworks/sveltekit",
-              label: "With SvelteKit",
-            },
-          ],
+          type: "doc",
+          id: "build-your-ui/assistant-ui",
+          label: "With Assistant UI",
         },
       ],
     },

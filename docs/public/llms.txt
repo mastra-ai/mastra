@@ -52,7 +52,6 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Running Scorers in CI | Evals](https://mastra.ai/en/docs/evals/running-in-ci): Learn how to run scorer experiments in your CI/CD pipeline using the runEvals function.
 - [Using AI SDK | Frameworks](https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk): Learn how Mastra leverages the AI SDK library and how you can leverage it further with Mastra
 - [Using Assistant UI | Frameworks](https://mastra.ai/en/docs/frameworks/agentic-uis/assistant-ui): Learn how to integrate Assistant UI with Mastra
-- [Using Cedar-OS | Frameworks](https://mastra.ai/en/docs/frameworks/agentic-uis/cedar-os): Learn how to integrate Cedar-OS with Mastra
 - [Using CopilotKit | Frameworks](https://mastra.ai/en/docs/frameworks/agentic-uis/copilotkit): Learn how to integrate CopilotKit with Mastra
 - [Using OpenRouter | Frameworks](https://mastra.ai/en/docs/frameworks/agentic-uis/openrouter): Learn how to integrate OpenRouter with Mastra
 - [Integrate Mastra in your Express project | Frameworks](https://mastra.ai/en/docs/frameworks/servers/express): A step-by-step guide to integrating Mastra with an Express backend.

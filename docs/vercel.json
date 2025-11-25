@@ -116,11 +116,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/frameworks/agentic-uis/cedar-os",
-      "destination": "/guides/frameworks/agentic-uis/cedar-os",
-      "permanent": true
-    },
-    {
       "source": "/docs/frameworks/agentic-uis/openrouter",
       "destination": "/guides/frameworks/agentic-uis/openrouter",
       "permanent": true
@@ -188,11 +183,6 @@
     {
       "source": "/docs/v1/frameworks/agentic-uis/assistant-ui",
       "destination": "/guides/v1/frameworks/agentic-uis/assistant-ui",
-      "permanent": true
-    },
-    {
-      "source": "/docs/v1/frameworks/agentic-uis/cedar-os",
-      "destination": "/guides/v1/frameworks/agentic-uis/cedar-os",
       "permanent": true
     },
     {
@@ -268,6 +258,36 @@
     {
       "source": "/guides/v1/quickstarts/:path*",
       "destination": "/guides/v1/getting-started/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/frameworks/agentic-uis/:path*",
+      "destination": "/guides/build-your-ui/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/v1/frameworks/agentic-uis/:path*",
+      "destination": "/guides/v1/build-your-ui/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/frameworks/web-frameworks/:path*",
+      "destination": "/guides/getting-started/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/v1/frameworks/web-frameworks/:path*",
+      "destination": "/guides/v1/getting-started/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/frameworks/servers/express",
+      "destination": "/guides/getting-started/express",
+      "permanent": true
+    },
+    {
+      "source": "/guides/v1/frameworks/servers/express",
+      "destination": "/guides/v1/getting-started/express",
       "permanent": true
     }
   ]
