@@ -1,8 +1,3 @@
----
-title: "Example: Response Validator | Processors"
-description: Example of creating a custom output processor that validates AI responses contain required keywords before returning them to users.
----
-
 # Response Validator
 
 This example shows how to create a custom output processor that validates AI responses after generation but before they are returned to users. This processor checks that responses contain required keywords and can reject responses that don't meet validation criteria, ensuring quality and compliance.

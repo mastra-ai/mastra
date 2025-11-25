@@ -6,7 +6,7 @@ description: Choose how to get started with Mastra - quickstart, framework integ
 import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";
  
 # Start
-Create a new Mastra project, or integrate Mastra with your preferred framework to start building.
+Create a new Mastra project, or integrate Mastra with your preferred framework to get started.
 
 ## New project
 

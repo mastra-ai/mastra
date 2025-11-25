@@ -174,6 +174,21 @@
       "source": "/examples/v1/agents/whatsapp-chat-bot",
       "destination": "/guides/v1/guide/whatsapp-chat-bot",
       "permanent": true
+    },
+    {
+      "source": "/examples/v1/processors/message-length-limiter",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/processors-message-length-limiter",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/processors/response-length-limiter",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-length-limiter",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/processors/response-validator",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-validator",
+      "permanent": true
     }
   ]
 }

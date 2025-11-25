@@ -1,8 +1,3 @@
----
-title: "Example: Message Length Limiter | Processors"
-description: Example of creating a custom input processor that limits message length before sending to the language model.
----
-
 # Message Length Limiter
 
 This example shows how to create a custom input processor that validates and limits the total length of messages before they are sent to the language model. This processor helps prevent expensive API calls and ensures consistent input constraints across your application.

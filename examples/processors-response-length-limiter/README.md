@@ -1,8 +1,3 @@
----
-title: "Example: Response Length Limiter | Processors"
-description: Example of creating a custom output processor that limits AI response length during streaming to prevent excessively long outputs.
----
-
 # Response Length Limiter
 
 This example shows how to create a custom output processor that monitors and limits the length of AI responses during streaming. This processor tracks cumulative response length and aborts generation when a specified character limit is reached, helping control costs and response quality.
