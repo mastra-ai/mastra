@@ -67,12 +67,12 @@
     },
     {
       "source": "/docs/v1/getting-started/installation",
-      "destination": "/guides/v1/quickstarts/standalone-server",
+      "destination": "/guides/v1/getting-started/quickstart",
       "permanent": true
     },
     {
       "source": "/examples/v1/agents/ai-sdk-v5-integration",
-      "destination": "/guides/v1/quickstarts/nextjs",
+      "destination": "/guides/v1/getting-started/next-js",
       "permanent": true
     },
     {
@@ -113,11 +113,6 @@
     {
       "source": "/docs/frameworks/agentic-uis/copilotkit",
       "destination": "/guides/build-your-ui/copilotkit",
-      "permanent": true
-    },
-    {
-      "source": "/docs/frameworks/agentic-uis/cedar-os",
-      "destination": "/guides/build-your-ui",
       "permanent": true
     },
     {
