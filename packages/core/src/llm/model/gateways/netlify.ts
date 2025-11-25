@@ -189,13 +189,14 @@ export class NetlifyGateway extends MastraModelGateway {
 
     switch (providerId) {
       case 'openai':
-        return createOpenAI({ apiKey, baseURL }).responses(modelId);
+        return createOpenAI({ apiKey, baseURL, headers }).responses(modelId);
       case 'gemini':
         return createGoogleGenerativeAI({
           baseURL: `${baseURL}/v1beta/`,
           apiKey,
           headers: {
             'user-agent': 'google-genai-sdk/',
+            ...(headers ? headers : {}),
           },
         }).chat(modelId);
       case 'anthropic':
@@ -205,6 +206,7 @@ export class NetlifyGateway extends MastraModelGateway {
           headers: {
             'anthropic-version': '2023-06-01',
             'user-agent': 'anthropic/',
+            ...(headers ? headers : {}),
           },
         })(modelId);
       default:
