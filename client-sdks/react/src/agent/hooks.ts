@@ -14,6 +14,7 @@ import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserM
 
 export interface MastraChatProps {
   agentId: string;
+  resourceId?: string;
   initializeMessages?: () => MastraUIMessage[];
 }
 
@@ -42,7 +43,7 @@ export type NetworkArgs = SharedArgs & {
   onNetworkChunk?: (chunk: NetworkChunkType) => Promise<void>;
 };
 
-export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
+export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatProps) => {
   const _currentRunId = useRef<string | undefined>(undefined);
   const _onChunk = useRef<((chunk: ChunkType) => Promise<void>) | undefined>(undefined);
   const [messages, setMessages] = useState<MastraUIMessage[]>(() =>
@@ -101,7 +102,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
       },
       instructions,
       requestContext,
-      ...(threadId ? { threadId, resourceId: agentId } : {}),
+      ...(threadId ? { threadId, resourceId: resourceId || agentId } : {}),
       providerOptions: providerOptions as any,
     });
 
@@ -163,7 +164,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
       },
       instructions,
       requestContext,
-      ...(threadId ? { threadId, resourceId: agentId } : {}),
+      ...(threadId ? { threadId, resourceId: resourceId || agentId } : {}),
       providerOptions: providerOptions as any,
       requireToolApproval,
     });
@@ -220,7 +221,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
       },
       runId: agentId,
       requestContext,
-      ...(threadId ? { thread: threadId, resourceId: agentId } : {}),
+      ...(threadId ? { thread: threadId, resourceId: resourceId || agentId } : {}),
     });
 
     const transformer = new AISdkNetworkTransformer();

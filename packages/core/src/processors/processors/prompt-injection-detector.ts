@@ -82,7 +82,7 @@ export interface PromptInjectionOptions {
  * Provides multiple response strategies including content rewriting to neutralize
  * attacks while preserving legitimate user intent.
  */
-export class PromptInjectionDetector implements Processor {
+export class PromptInjectionDetector implements Processor<'prompt-injection-detector'> {
   readonly id = 'prompt-injection-detector';
   readonly name = 'Prompt Injection Detector';
 

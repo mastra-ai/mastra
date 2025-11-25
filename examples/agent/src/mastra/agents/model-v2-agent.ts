@@ -45,6 +45,25 @@ const testAPICallError = new APICallError({
   responseBody: 'Test API error response',
 });
 
+export const errorAgent = new Agent({
+  id: 'error-agent',
+  name: 'Error Agent',
+  instructions: 'You are an error agent that always errors',
+  model: new MockLanguageModelV2({
+    doStream: async () => {
+      throw testAPICallError;
+    },
+  }),
+});
+
+export const moderationProcessor = new ModerationProcessor({
+  model: openai('gpt-4.1-nano'),
+  categories: ['hate', 'harassment', 'violence'],
+  threshold: 0.7,
+  strategy: 'block',
+  instructions: 'Detect and flag inappropriate content in user messages',
+});
+
 export const chefModelV2Agent = new Agent({
   id: 'chef-model-v2-agent',
   name: 'Chef Agent V2 Model',
@@ -61,7 +80,6 @@ export const chefModelV2Agent = new Agent({
     model: openai_v5('gpt-4o-mini'),
     middleware: logDataMiddleware,
   }),
-
   tools: {
     weatherInfo,
     cookingTool,
@@ -81,15 +99,7 @@ export const chefModelV2Agent = new Agent({
     };
   },
   memory,
-  inputProcessors: [
-    new ModerationProcessor({
-      model: openai('gpt-4.1-nano'),
-      categories: ['hate', 'harassment', 'violence'],
-      threshold: 0.7,
-      strategy: 'block',
-      instructions: 'Detect and flag inappropriate content in user messages',
-    }),
-  ],
+  inputProcessors: [moderationProcessor],
 });
 
 const weatherAgent = new Agent({

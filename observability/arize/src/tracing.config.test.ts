@@ -3,10 +3,12 @@ import { ARIZE_AX_ENDPOINT, ArizeExporter } from './tracing';
 
 // Mock OtelExporter to spy on its constructor
 vi.mock('@mastra/otel-exporter', () => ({
-  OtelExporter: vi.fn().mockImplementation(() => ({
-    exportTracingEvent: vi.fn(),
-    shutdown: vi.fn(),
-  })),
+  OtelExporter: vi.fn().mockImplementation(function () {
+    return {
+      exportTracingEvent: vi.fn(),
+      shutdown: vi.fn(),
+    };
+  }),
 }));
 
 describe('ArizeExporterConfig', () => {

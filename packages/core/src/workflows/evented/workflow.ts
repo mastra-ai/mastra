@@ -169,7 +169,7 @@ export function createStep<
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType> {
   if (isAgent(params)) {
     return {
-      id: params.name,
+      id: params.id,
       description: params.getDescription(),
       // @ts-ignore
       inputSchema: z.object({
