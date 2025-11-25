@@ -10,18 +10,60 @@ const sidebars = {
     "index",
     {
       type: "category",
-      label: "Quickstarts",
+      label: "Getting Started",
       collapsed: false,
       items: [
         {
           type: "doc",
-          id: "quickstarts/standalone-server",
-          label: "Standalone Server",
+          id: "getting-started/quickstart",
+          label: "Quickstart",
         },
         {
           type: "doc",
-          id: "quickstarts/nextjs",
+          id: "getting-started/next-js",
           label: "Next.js",
+        },
+        {
+          type: "doc",
+          id: "getting-started/astro",
+          label: "Astro",
+        },
+        {
+          type: "doc",
+          id: "getting-started/vite-react",
+          label: "React",
+        },
+        {
+          type: "doc",
+          id: "getting-started/sveltekit",
+          label: "SvelteKit",
+        },
+        {
+          type: "doc",
+          id: "getting-started/express",
+          label: "Express",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "Build your UI",
+      collapsed: false,
+      items: [
+        {
+          type: "doc",
+          id: "build-your-ui/ai-sdk-ui",
+          label: "AI SDK UI",
+        },
+        {
+          type: "doc",
+          id: "build-your-ui/copilotkit",
+          label: "CopilotKit",
+        },
+        {
+          type: "doc",
+          id: "build-your-ui/assistant-ui",
+          label: "Assistant UI",
         },
       ],
     },
@@ -59,11 +101,6 @@ const sidebars = {
           type: "doc",
           id: "guide/web-search",
           label: "Tools: Web Search",
-        },
-        {
-          type: "doc",
-          id: "guide/manual-install",
-          label: "Manual Install",
         },
       ],
     },
