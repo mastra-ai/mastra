@@ -1412,17 +1412,9 @@ describe('MCPServer', () => {
         tools: minimalTestTool,
       });
 
-      let serverlessModeCalled = false;
-
       sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
         const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
-
-        // Spy on the handleServerlessRequest method to verify it's called
-        const originalHandleServerlessRequest = (sessionServer as any).handleServerlessRequest.bind(sessionServer);
-        (sessionServer as any).handleServerlessRequest = async (...args: any[]) => {
-          serverlessModeCalled = true;
-          return originalHandleServerlessRequest(...args);
-        };
+        
 
         await sessionServer.startHTTP({
           url,
