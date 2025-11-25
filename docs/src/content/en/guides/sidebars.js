@@ -10,18 +10,13 @@ const sidebars = {
     "index",
     {
       type: "category",
-      label: "Quickstarts",
+      label: "Getting Started",
       collapsed: false,
       items: [
         {
           type: "doc",
           id: "getting-started/quickstart",
-          label: "Mastra",
-        },
-        {
-          type: "doc",
-          id: "getting-started/manual-install",
-          label: "Mastra (manual)",
+          label: "Quickstart",
         },
         {
           type: "doc",
@@ -58,17 +53,17 @@ const sidebars = {
         {
           type: "doc",
           id: "build-your-ui/ai-sdk-ui",
-          label: "With AI SDK UI",
+          label: "AI SDK UI",
         },
         {
           type: "doc",
           id: "build-your-ui/copilotkit",
-          label: "With CopilotKit",
+          label: "CopilotKit",
         },
         {
           type: "doc",
           id: "build-your-ui/assistant-ui",
-          label: "With Assistant UI",
+          label: "Assistant UI",
         },
       ],
     },
