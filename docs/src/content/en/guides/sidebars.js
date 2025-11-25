@@ -10,18 +10,18 @@ const sidebars = {
     "index",
     {
       type: "category",
-      label: "Getting Started",
+      label: "Quickstarts",
       collapsed: false,
       items: [
         {
           type: "doc",
           id: "getting-started/quickstart",
-          label: "Quickstart",
+          label: "Mastra",
         },
         {
           type: "doc",
           id: "getting-started/manual-install",
-          label: "Manual Installation",
+          label: "Mastra (manual)",
         },
         {
           type: "doc",
