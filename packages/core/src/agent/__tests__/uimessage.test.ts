@@ -1,8 +1,7 @@
 import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { MastraMessageV2 } from '../../memory';
-import { MockMemory } from '../../memory';
+import { MastraDBMessage, MockMemory } from '../../memory';
 import { Agent } from '../agent';
 
 function uiMessageTest(version: 'v1' | 'v2') {
@@ -274,7 +273,7 @@ function uiMessageTest(version: 'v1' | 'v2') {
       expect(result.messages.length).toBeGreaterThan(0);
 
       // Find messages and check metadata
-      const messagesAsV2 = result.messages as MastraMessageV2[];
+      const messagesAsV2 = result.messages as MastraDBMessage[];
       const firstUserMessage = messagesAsV2.find(
         m =>
           m.role === 'user' &&
@@ -294,6 +293,66 @@ function uiMessageTest(version: 'v1' | 'v2') {
 
       // Second message should not have metadata
       expect(secondUserMessage?.content.metadata).toBeUndefined();
+    });
+
+    it('should handle content as string', async () => {
+      const agent = new Agent({
+        name: 'mixed-metadata-agent',
+        instructions: 'You are a helpful assistant',
+        model: dummyModel,
+        memory: mockMemory,
+      });
+
+      if (version === 'v2') {
+        await agent.generate(
+          [
+            {
+              role: 'user',
+              content: 'First message with metadata',
+              parts: [{ type: 'text' as const, text: 'First message with metadata' }],
+              metadata: {
+                foo: 'bar',
+              },
+            },
+          ],
+          {
+            memory: {
+              resource: 'mixed-user',
+              thread: {
+                id: 'mixed-thread',
+              },
+            },
+          },
+        );
+      } else {
+        await agent.generateLegacy(
+          [
+            {
+              role: 'user',
+              content: 'First message with metadata',
+              metadata: {
+                foo: 'bar',
+              },
+            },
+          ],
+          {
+            memory: {
+              resource: 'mixed-user',
+              thread: {
+                id: 'mixed-thread',
+              },
+            },
+          },
+        );
+      }
+
+      const result = await mockMemory.recall({
+        threadId: 'mixed-thread',
+        resourceId: 'mixed-user',
+        perPage: 10,
+      });
+
+      expect(result?.messages.length).toBeGreaterThan(0);
     });
   });
 }
