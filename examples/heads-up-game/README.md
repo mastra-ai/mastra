@@ -41,7 +41,7 @@ A multi-turn human-in-the-loop workflow.
    pnpm dev
    ```
 
-5. Test in Playground:
+5. Test in Mastra Studio:
 
    ```bash
    http://localhost:4111
