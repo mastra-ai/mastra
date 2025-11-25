@@ -861,7 +861,9 @@ export function transformNetwork(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
           );
         }
-        return payload;
+
+        const { runId, ...eventPayload } = payload;
+        return eventPayload;
       }
       if (isAgentExecutionDataChunkType(payload)) {
         if (!('data' in payload.payload)) {
@@ -869,7 +871,9 @@ export function transformNetwork(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
           );
         }
-        return payload.payload;
+
+        const { runId, ...eventPayload } = payload.payload;
+        return eventPayload;
       }
       if (isWorkflowExecutionDataChunkType(payload)) {
         if (!('data' in payload.payload)) {
@@ -877,7 +881,8 @@ export function transformNetwork(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
           );
         }
-        return payload.payload;
+        const { runId, ...eventPayload } = payload.payload;
+        return eventPayload;
       }
       return null;
     }

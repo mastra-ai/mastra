@@ -398,7 +398,7 @@ describe('Custom Data Handling', () => {
     });
   });
 
-  describe('network custom data', () => {
+  describe.only('network custom data', () => {
     it('should generate a network data chunk', async () => {
       const { networkStreamFixture } = await import('./__fixtures__/network.stream');
       const mockStream = ReadableStream.from(networkStreamFixture);
@@ -433,6 +433,31 @@ describe('Custom Data Handling', () => {
       expect(customDataChunk.data.steps[3].task.id).toEqual('purchase-workflow-step');
       expect(customDataChunk.data.steps[5].task.id).toEqual('create-invoice');
       expect(customDataChunk.data.steps[6].task.id).toEqual('');
+    });
+
+    it('should pass a custom data chunk through the network', async () => {
+      const { networkStreamFixture } = await import('./__fixtures__/network.stream');
+      const mockStream = ReadableStream.from(networkStreamFixture);
+
+      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraAgentNetworkStream, { from: 'network' });
+
+      const chunks: any[] = [];
+      for await (const chunk of aiSdkStream) {
+        chunks.push(chunk);
+      }
+
+      const customDataChunk = chunks.find(chunk => chunk.type === 'data-inventory-search');
+
+      // Verify the number of steps is correct
+      expect(customDataChunk).toMatchInlineSnapshot(`
+        {
+          "data": {
+            "description": "search for laptops in inventory",
+            "name": "laptop",
+          },
+          "type": "data-inventory-search",
+        }
+      `);
     });
   });
 });
