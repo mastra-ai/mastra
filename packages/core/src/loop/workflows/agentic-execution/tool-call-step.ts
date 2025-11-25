@@ -64,7 +64,12 @@ export function createToolCallStep<
         const lastAssistantMessage = [...allMessages].reverse().find(msg => msg.role === 'assistant');
 
         if (lastAssistantMessage) {
-          const metadata = lastAssistantMessage.content.metadata as Record<string, any> | undefined;
+          const content = lastAssistantMessage.content;
+          if (!content) return;
+          const metadata =
+            typeof content.metadata === 'object' && content.metadata !== null
+              ? (content.metadata as Record<string, any>)
+              : undefined;
           const pendingToolApprovals = metadata?.pendingToolApprovals as Record<string, any> | undefined;
 
           if (pendingToolApprovals && typeof pendingToolApprovals === 'object') {
