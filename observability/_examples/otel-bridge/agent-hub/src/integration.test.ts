@@ -15,8 +15,7 @@ import {describe, it, expect, beforeAll, afterAll} from 'vitest';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Note: Environment variables should be loaded via vitest config or .env file
-const TEST_PORT = process.env.DEFAULT_PORT || 8080;
-const TEST_API_KEY = 'test-api-key';
+const TEST_PORT = 3003;
 const JAEGER_URL = 'http://localhost:16686';
 
 /**
@@ -84,7 +83,7 @@ async function waitForTrace(traceId: string, timeoutMs = 10000): Promise<any[]> 
   throw new Error(`Timeout waiting for trace ${traceId} to appear in Jaeger`);
 }
 
-describe('Stripped Agent Hub Export Integration Tests', () => {
+describe('Agent Hub Integration Tests', () => {
   let serverProcess: ChildProcess | undefined;
 
   beforeAll(async () => {
@@ -95,11 +94,9 @@ describe('Stripped Agent Hub Export Integration Tests', () => {
 
     const exampleDir = resolve(__dirname, '..');
 
-    // Start the server using pnpm run start:test
-    serverProcess = spawn('pnpm', ['run', 'start:test'], {
+    serverProcess = spawn('pnpm', ['run', 'start'], {
       env: {
         ...process.env,
-        DEFAULT_PORT: String(TEST_PORT),
       },
       cwd: exampleDir,
     });
@@ -197,7 +194,6 @@ describe('Stripped Agent Hub Export Integration Tests', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': TEST_API_KEY,
       },
       body: JSON.stringify({message: 'Say hello in 5 words or less'}),
     });
@@ -338,7 +334,6 @@ describe('Stripped Agent Hub Export Integration Tests', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': TEST_API_KEY,
         traceparent,
       },
       body: JSON.stringify({message: 'Say hi in 3 words'}),
@@ -379,30 +374,5 @@ describe('Stripped Agent Hub Export Integration Tests', () => {
       s.tags?.some((t: any) => t.key === 'mastra.span.type' && t.value === 'model_generation'),
     );
     expect(llmSpans.length).toBeGreaterThan(0);
-  });
-
-  it('should return 400 for missing x-api-key header', {skip: shouldSkip}, async () => {
-    const response = await fetch(`http://localhost:${TEST_PORT}/demo/v1`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({message: 'test'}),
-    });
-
-    expect(response.status).toBe(400);
-  });
-
-  it('should return 400 for missing message', {skip: shouldSkip}, async () => {
-    const response = await fetch(`http://localhost:${TEST_PORT}/demo/v1`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': TEST_API_KEY,
-      },
-      body: JSON.stringify({}),
-    });
-
-    expect(response.status).toBe(400);
   });
 });

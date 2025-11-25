@@ -37,6 +37,7 @@ export const startTelemetry = async (): Promise<NodeSDK> => {
     textMapPropagator: new W3CTraceContextPropagator(),
   });
   openTelemetrySDK.start();
+  sdk = openTelemetrySDK;
 
   return Promise.resolve(openTelemetrySDK);
 };

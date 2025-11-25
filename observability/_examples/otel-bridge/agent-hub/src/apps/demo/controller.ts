@@ -6,7 +6,6 @@ import {
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
 import z from 'zod';
-import {parse as parseUriTemplate} from 'uri-template';
 import {scienceChatAgent} from './agents/test-agent';
 import {asException} from '../../core/telemetry/utils';
 
@@ -21,9 +20,6 @@ const demoController: FastifyPluginAsyncZod = async fastify => {
     '/v1',
     {
       schema: {
-        headers: z.object({
-          'x-api-key': z.string(),
-        }),
         body: z.object({
           message: z.string(),
         }),
@@ -31,28 +27,28 @@ const demoController: FastifyPluginAsyncZod = async fastify => {
     },
     async (req, res) => {
       const {message} = req.body;
-      return tracer.startActiveSpan(
-        'demo-controller',
-        {attributes: {message, apiKey: req.headers['x-api-key']}},
-        async span => {
-          try {
-            const response = await scienceChatAgent.generate([
-              {
-                role: 'user',
-                content: message,
-              },
-            ]);
-            return res.status(200).send({
-              response: response.text,
-              traceId: response.traceId,
-            });
-          } catch (error) {
-            span.recordException(asException(error));
-          } finally {
-            span.end();
-          }
-        },
-      );
+      return tracer.startActiveSpan('demo-controller', {attributes: {message}}, async span => {
+        try {
+          const response = await scienceChatAgent.generate([
+            {
+              role: 'user',
+              content: message,
+            },
+          ]);
+          return res.status(200).send({
+            response: response.text,
+            traceId: response.traceId,
+          });
+        } catch (error) {
+          span.recordException(asException(error));
+          return res.status(500).send({
+            error: 'Internal server error',
+            message: error instanceof Error ? error.message : 'Unknown error',
+          });
+        } finally {
+          span.end();
+        }
+      });
     },
   );
 };

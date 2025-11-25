@@ -55,7 +55,6 @@ The server runs on http://localhost:8080 with these endpoints:
 curl --request POST \
   --url http://localhost:8080/demo/v1 \
   --header 'Content-Type: application/json' \
-  --header 'x-api-key: test-key' \
   --data '{"message": "hello"}'
 ```
 

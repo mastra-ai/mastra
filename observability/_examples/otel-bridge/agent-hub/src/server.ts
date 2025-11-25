@@ -1,13 +1,13 @@
 import createApp from './core/app';
 import {rootLogger} from './core/logger';
 
-async function startServer(port: string | number) {
+async function startServer() {
   const app = await createApp();
-  app.listen({port: typeof port === 'string' ? parseInt(port) : port, host: '::'});
+  app.listen({port: 3003});
 }
 
-function serve(port: string | number) {
-  startServer(port).catch(error => rootLogger.error(error, 'Failed to start server'));
+function serve() {
+  startServer().catch(error => rootLogger.error(error, 'Failed to start server'));
 }
 
-serve(process.env.DEFAULT_PORT ?? 8080);
+serve();

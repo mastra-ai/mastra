@@ -28,9 +28,10 @@ import type { Span as OtelSpan, Context as OtelContext } from '@opentelemetry/ap
 /**
  * Configuration for the OtelBridge
  */
-export interface OtelBridgeConfig {
-  // Currently no configuration options
-}
+
+export type OtelBridgeConfig = {
+  // Currently no configuration options - placeholder for future options
+};
 
 /**
  * OpenTelemetry Bridge implementation

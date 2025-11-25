@@ -56,7 +56,7 @@ echo "OPENAI_API_KEY=your-key-here" > .env
 
 ### 3. Install Dependencies
 
-From the monorepo root:
+From the example root:
 
 ```bash
 pnpm install
@@ -77,22 +77,22 @@ You need three terminal windows:
 **Terminal 1 - service-one:**
 
 ```bash
-cd observability/_examples/hono-multi/service-one
-pnpm dev
+cd observability/_examples/otel-bridge/hono-multi/service-one
+pnpm start
 ```
 
 **Terminal 2 - service-two:**
 
 ```bash
-cd observability/_examples/hono-multi/service-two
-pnpm dev
+cd observability/_examples/otel-bridge/hono-multi/service-two
+pnpm start
 ```
 
 **Terminal 3 - service-mastra:**
 
 ```bash
-cd observability/_examples/hono-multi/service-mastra
-pnpm dev
+cd observability/_examples/otel-bridge/hono-multi/service-mastra
+pnpm start
 ```
 
 ## Testing Trace Propagation
@@ -159,16 +159,6 @@ All services use a shared instrumentation package that:
 - `docker-compose.yml` - Arize Phoenix configuration
 
 ## Troubleshooting
-
-### Services won't start
-
-Check if ports are in use:
-
-```bash
-lsof -i:3000  # service-one
-lsof -i:3001  # service-two
-lsof -i:4000  # service-mastra
-```
 
 ### Disconnected traces (different trace IDs)
 

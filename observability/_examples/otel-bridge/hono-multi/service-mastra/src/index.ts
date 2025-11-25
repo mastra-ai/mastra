@@ -3,6 +3,7 @@ import { Observability, SensitiveDataFilter } from '@mastra/observability';
 import { httpInstrumentationMiddleware } from '@hono/otel';
 import { testAgent } from './agent';
 import { OtelBridge } from '@mastra/otel-bridge';
+import { stopTelemetry } from '@mastra/hono-multi-instrumentation';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
@@ -50,7 +51,7 @@ app.use('/swagger-ui/*', swaggerUI({ url: '/openapi.json' }));
 
 const port = 3002;
 
-serve(
+const server = serve(
   {
     fetch: app.fetch,
     port,
@@ -65,10 +66,24 @@ serve(
   },
 );
 
-const gracefulShutdown = async () => {
-  await mastra.shutdown();
+const gracefulShutdown = async (signal: string) => {
+  console.log(`[service-mastra] Received ${signal}, shutting down gracefully...`);
+
+  await new Promise<void>((resolve, reject) => {
+    server.close(err => {
+      if (err) {
+        console.error('[service-mastra] Error closing server:', err);
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+
+  await stopTelemetry();
+  console.log('[service-mastra] Shutdown complete');
   process.exit(0);
 };
 
-process.on('SIGTERM', gracefulShutdown);
-process.on('SIGINT', gracefulShutdown);
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

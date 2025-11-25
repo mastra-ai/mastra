@@ -40,7 +40,7 @@ const sdk = new NodeSDK({
       '@opentelemetry/instrumentation-http': {
         headersToSpanAttributes: {
           server: {
-            requestHeaders: ['x-request-id', 'x-api-key'],
+            requestHeaders: ['x-request-id'],
           },
         },
         ignoreIncomingRequestHook: isIgnorableRequest,
@@ -65,6 +65,6 @@ process.on('SIGTERM', async () => {
   } catch (error) {
     console.error('Error shutting down OpenTelemetry SDK', error);
   } finally {
-    process.exit(0);
+    process.exit(1);
   }
 });

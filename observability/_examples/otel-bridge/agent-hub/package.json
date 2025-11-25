@@ -8,7 +8,7 @@
     "lint": "prettier --check '*/**/*.{js,jsx,ts,tsx}'",
     "lint:fix": "prettier --write '*/**/*.{js,jsx,ts,tsx}'",
     "test": "vitest run",
-    "start:test": "KNOWN_EXTS=js,ts node -r dotenv/config --loader ts-node/esm --import=specifier-resolution-node/register --import=@opentelemetry/instrumentation/hook.mjs --import=./src/core/telemetry/init.ts src/server.ts",
+    "start": "KNOWN_EXTS=js,ts node -r dotenv/config --loader ts-node/esm --import=specifier-resolution-node/register --import=@opentelemetry/instrumentation/hook.mjs --import=./src/core/telemetry/init.ts src/server.ts",
     "docker:up": "docker compose -f docker-compose.yml up -d",
     "docker:down": "docker compose -f docker-compose.yml down"
   },
