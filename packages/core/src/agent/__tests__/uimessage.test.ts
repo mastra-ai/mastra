@@ -309,7 +309,6 @@ function uiMessageTest(version: 'v1' | 'v2') {
             {
               role: 'user',
               content: 'First message with metadata',
-              parts: [{ type: 'text' as const, text: 'First message with metadata' }],
               metadata: {
                 foo: 'bar',
               },
