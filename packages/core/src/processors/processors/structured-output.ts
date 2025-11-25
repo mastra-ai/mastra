@@ -1,5 +1,5 @@
 import type { TransformStreamDefaultController } from 'stream/web';
-import { Agent } from '../../agent';
+import { Agent } from '../../agent/agent';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { TracingContext } from '../../observability';
@@ -7,11 +7,10 @@ import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
 import type { InferSchemaOutput } from '../../stream/base/schema';
 import type { ToolCallChunk, ToolResultChunk } from '../../stream/types';
+import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../constants';
 import type { Processor } from '../index';
 
 export type { StructuredOutputOptions } from '../../agent/types';
-
-export const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
 
 /**
  * StructuredOutputProcessor transforms unstructured agent output into structured JSON

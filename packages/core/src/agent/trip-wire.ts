@@ -8,13 +8,7 @@ import type { ChunkType } from '../stream/types';
 import type { InnerAgentExecutionOptions } from './agent.types';
 import type { MessageList } from './message-list';
 
-export class TripWire extends Error {
-  constructor(reason: string) {
-    super(reason);
-
-    Object.setPrototypeOf(this, new.target.prototype);
-  }
-}
+export { TripWire } from './trip-wire.error';
 
 export const getModelOutputForTripwire = async <
   OUTPUT extends OutputSchema | undefined = undefined,

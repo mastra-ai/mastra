@@ -3,7 +3,7 @@ import { openai } from '@ai-sdk/openai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import z from 'zod';
-import { Agent } from '../../agent';
+import { Agent } from '../../agent/agent';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { createTool } from '../../tools';

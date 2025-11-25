@@ -211,6 +211,7 @@ When extracting shared code, use descriptive names:
 - [ ] All imports use direct paths (no internal barrel imports)
 - [ ] TypeScript compilation succeeds
 - [ ] The `packages/core/public-exports.test.ts` test passes. This test ensures that the public API exports stay the same.
+- [ ] All unit tests pass that were changed. You can run tests in the core package with `pnpm test <path-to-test-file>`
 - [ ] tsup build succeeds (use `pnpm turbo build` in package to run build)
 - [ ] Public API exports in `package.json` are still correct
 

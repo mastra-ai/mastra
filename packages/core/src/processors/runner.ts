@@ -1,5 +1,5 @@
 import type { MastraDBMessage, MessageList } from '../agent/message-list';
-import { TripWire } from '../agent/trip-wire';
+import { TripWire } from '../agent/trip-wire.error';
 import type { IMastraLogger } from '../logger';
 import { SpanType } from '../observability';
 import type { Span, TracingContext } from '../observability';

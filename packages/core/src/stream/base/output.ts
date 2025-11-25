@@ -1,11 +1,11 @@
 import { EventEmitter } from 'events';
 import { ReadableStream, TransformStream } from 'stream/web';
-import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
+import { TripWire } from '../../agent/trip-wire.error';
 import { MastraBase } from '../../base';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
-import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
+import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/constants';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { WorkflowRunStatus } from '../../workflows';
 import { DelayedPromise, consumeStream } from '../aisdk/v5/compat';

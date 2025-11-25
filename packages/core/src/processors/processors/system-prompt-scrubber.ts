@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Agent } from '../../agent';
+import { Agent } from '../../agent/agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { TracingContext } from '../../observability';

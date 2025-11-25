@@ -3,7 +3,7 @@ import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/mo
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig } from '../../../memory/types';
 import type { Span, SpanType, TracingContext } from '../../../observability';
-import { StructuredOutputProcessor } from '../../../processors';
+import { StructuredOutputProcessor } from '../../../processors/processors/structured-output';
 import type { RequestContext } from '../../../request-context';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type { InnerAgentExecutionOptions } from '../../agent.types';

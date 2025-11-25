@@ -1,7 +1,7 @@
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
-import { TripWire } from '../../agent/trip-wire';
+import { TripWire } from '../../agent/trip-wire.error';
 import type { LanguageDetectionResult, TranslationResult } from './language-detector';
 import { LanguageDetector } from './language-detector';
 

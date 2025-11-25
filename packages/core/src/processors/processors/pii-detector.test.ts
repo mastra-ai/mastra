@@ -2,7 +2,7 @@ import type { TextPart } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
-import { TripWire } from '../../agent/trip-wire';
+import { TripWire } from '../../agent/trip-wire.error';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 import type { PIIDetectionResult, PIIDetection } from './pii-detector';

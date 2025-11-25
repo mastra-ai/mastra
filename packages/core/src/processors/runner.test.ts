@@ -1,7 +1,7 @@
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../agent/message-list';
-import { TripWire } from '../agent/trip-wire';
+import { TripWire } from '../agent/trip-wire.error';
 import type { IMastraLogger } from '../logger';
 import type { ChunkType } from '../stream';
 import { ChunkFrom } from '../stream/types';
