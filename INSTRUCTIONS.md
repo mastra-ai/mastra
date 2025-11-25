@@ -93,6 +93,7 @@ Barrel files (`index.ts` that re-exports from multiple files) are a common sourc
 1. **Keep barrel files only for public APIs** - Files that correspond to `package.json` `exports` field entries
 2. **Remove internal barrel files** - Replace imports from internal barrels with direct file imports
 3. **Never import from a barrel file within the same package** - Always use direct imports internally
+4. **Check if public API barrel files are importing from internal barrel files** - If so, refactor to avoid these internal barrel files and directly from the necessary files
 
 **Example:**
 
@@ -210,7 +211,6 @@ When extracting shared code, use descriptive names:
 - [ ] All imports use direct paths (no internal barrel imports)
 - [ ] TypeScript compilation succeeds
 - [ ] tsup build succeeds (use `pnpm build` in package to run build)
-- [ ] Tests pass
 - [ ] Public API exports in `package.json` are still correct
 
 ## Common Patterns That Cause Cycles

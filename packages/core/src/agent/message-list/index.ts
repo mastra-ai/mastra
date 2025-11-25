@@ -88,9 +88,6 @@ export type MessageInput =
   | MastraMessageV1
   | MastraDBMessage; // <- this is how we currently store in the DB
 
-export { convertMessages } from './utils/convert-messages';
-export type { OutputFormat } from './utils/convert-messages';
-
 type MessageSource =
   | 'memory'
   | 'response'

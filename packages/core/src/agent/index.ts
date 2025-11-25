@@ -1,6 +1,7 @@
 export { TripWire } from './trip-wire';
-export { MessageList, convertMessages } from './message-list';
-export type { OutputFormat } from './message-list';
+export { MessageList } from './message-list';
+export { convertMessages } from './message-list/utils/convert-messages';
+export type { OutputFormat } from './message-list/utils/convert-messages';
 export * from './types';
 export * from './agent';
 export * from './utils';
