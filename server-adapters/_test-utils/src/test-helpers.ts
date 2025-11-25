@@ -353,6 +353,16 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     },
   });
 
+  const failingTool = createTool({
+    id: 'failingTool',
+    description: 'A tool that always throws an error for testing error handling',
+    inputSchema: z.object({}),
+    outputSchema: z.object({}),
+    execute: async () => {
+      throw new Error('Tool execution failed intentionally');
+    },
+  });
+
   // Create real MCP servers with tools
   const mcpServer1 = new MCPServer({
     name: 'Test Server 1',
@@ -368,7 +378,9 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     name: 'Test Server 2',
     version: '1.1.0',
     description: 'Test MCP Server 2',
-    tools: {},
+    tools: {
+      failingTool: failingTool,
+    },
   });
 
   // Create Mastra instance with all test entities

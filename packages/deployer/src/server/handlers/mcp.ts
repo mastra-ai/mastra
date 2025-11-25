@@ -1,5 +1,4 @@
 import type { Mastra } from '@mastra/core/mastra';
-import type { MCPServerBase as MastraMCPServerImplementation, ServerInfo } from '@mastra/core/mcp';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context } from 'hono';
 
