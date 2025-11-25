@@ -5,6 +5,7 @@ import {
   checkFileExists,
   createDirectory,
   createSandbox,
+  createTunnel,
   deleteFile,
   getFileInfo,
   getFileSize,
@@ -41,6 +42,10 @@ You have access to a complete development toolkit:
 ### **Sandbox & Code Execution**
 - \`createSandbox\` - Initialize new isolated environments for each session/project
 - \`runCode\` - Execute Python/JS/TS code with proper error handling and output capture
+- \`createTunnel\` - Create a tunnel to expose a port from a devbox to the public internet (useful for web apps, APIs, etc.)
+
+**CRITICAL: Tunnel Requirements**
+When using \`createTunnel\`, the service running in the devbox **MUST** bind to \`0.0.0.0\` (not \`localhost\` or \`127.0.0.1\`). Binding to \`localhost\` or \`127.0.0.1\` will cause the tunnel to fail because the tunnel cannot access services bound to the loopback interface. Always configure web servers, APIs, and other network services to listen on \`0.0.0.0\` when creating tunnels.
 
 ### **File Management** (Use extensively for complex projects)
 - \`writeFile\` - Create individual files (configs, source code, documentation)
@@ -137,6 +142,16 @@ For complex projects (5+ files):
 - Track file changes and compilation status
 - Provide real-time feedback on development progress
 
+### **Tunnel Usage & Network Services**
+When creating tunnels with \`createTunnel\`:
+1. **ALWAYS bind services to \`0.0.0.0\`** - Never use \`localhost\`, \`127.0.0.1\`, or \`::1\`. The tunnel cannot access services bound to loopback interfaces.
+2. **Start the service first** - Ensure your web server, API, or other service is running and listening on \`0.0.0.0:PORT\` before creating the tunnel.
+3. **Verify binding** - After starting a service, verify it's listening on \`0.0.0.0\` using commands like \`netstat -tuln | grep PORT\` or \`ss -tuln | grep PORT\`.
+4. **Common examples**:
+   - Node.js/Express: \`app.listen(3000, '0.0.0.0')\`
+   - Python Flask: \`app.run(host='0.0.0.0', port=3000)\`
+   - Python HTTP server: \`http.server.HTTPServer(('0.0.0.0', 3000), handler)\`
+
 ## Error Handling & Recovery
 
 ### **File Operation Errors**
@@ -203,6 +218,7 @@ Remember: You are not just a code executor, but a complete development environme
     getFileSize,
     watchDirectory,
     runCommand,
+    createTunnel,
   },
   memory: new Memory({
     storage: new LibSQLStore({ url: 'file:../../mastra.db' }),

@@ -873,3 +873,41 @@ export const runCommand = createTool({
     }
   },
 });
+
+export const createTunnel = createTool({
+  id: 'createTunnel',
+  description: 'Create a tunnel to expose a port from a Runloop devbox to the public internet',
+  inputSchema: z.object({
+    sandboxId: z
+      .string()
+      .describe('The sandboxId (devbox ID) for the devbox to create a tunnel for'),
+    port: z.number().describe('The port number to expose through the tunnel'),
+  }),
+  outputSchema: z
+    .object({
+      url: z.string().describe('The public URL to access the tunneled service'),
+      port: z.number().describe('The port that was tunneled'),
+      sandboxId: z.string().describe('The devbox ID the tunnel is associated with'),
+    })
+    .or(
+      z.object({
+        error: z.string().describe('The error from a failed tunnel creation'),
+      })
+    ),
+  execute: async ({ context: input }) => {
+    try {
+      const devbox = runloop.devbox.fromId(input.sandboxId);
+      const tunnel = await devbox.net.createTunnel({ port: input.port });
+
+      return {
+        url: tunnel.url,
+        port: input.port,
+        sandboxId: input.sandboxId,
+      };
+    } catch (e) {
+      return {
+        error: JSON.stringify(e),
+      };
+    }
+  },
+});
