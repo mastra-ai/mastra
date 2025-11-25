@@ -4,7 +4,7 @@ import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/mo
 import { RequestContext } from '../../../request-context';
 import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
 import type { OutputSchema } from '../../../stream/base/schema';
-import { createStep } from '../../../workflows';
+import { createStep } from '../../../workflows/workflow';
 import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 

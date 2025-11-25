@@ -7,7 +7,7 @@ import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
 import type { OutputSchema } from '../../../stream/base/schema';
-import { createWorkflow } from '../../../workflows';
+import { createWorkflow } from '../../../workflows/workflow';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
 import type { AgentMethodType } from '../../types';
