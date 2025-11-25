@@ -798,9 +798,25 @@ export class MessageList {
     if (m.content.parts.length) {
       for (const part of m.content.parts) {
         if (part.type === `file`) {
+          // Normalize part.data to ensure it's a valid URL or data URI
+          let normalizedUrl: string;
+          if (typeof part.data === 'string') {
+            const categorized = categorizeFileData(part.data, part.mimeType);
+            if (categorized.type === 'raw') {
+              // Raw base64 - convert to data URI
+              normalizedUrl = createDataUri(part.data, part.mimeType || 'application/octet-stream');
+            } else {
+              // Already a URL or data URI
+              normalizedUrl = part.data;
+            }
+          } else {
+            // It's a non-string (shouldn't happen in practice for file parts, but handle it)
+            normalizedUrl = part.data;
+          }
+
           experimentalAttachments.push({
             contentType: part.mimeType,
-            url: part.data,
+            url: normalizedUrl,
           });
         } else if (
           part.type === 'tool-invocation' &&
@@ -1961,14 +1977,30 @@ export class MessageList {
           if (role === `tool` || role === `assistant`) {
             throw new Error(incompatibleMessage);
           }
+
+          let processedImage: URL | Uint8Array;
+
+          if (part.image instanceof URL || part.image instanceof Uint8Array) {
+            processedImage = part.image;
+          } else if (Buffer.isBuffer(part.image) || part.image instanceof ArrayBuffer) {
+            processedImage = new Uint8Array(part.image);
+          } else {
+            // part.image is a string - could be a URL, data URI, or raw base64
+            const categorized = categorizeFileData(part.image, part.mimeType);
+
+            if (categorized.type === 'raw') {
+              // Raw base64 - convert to data URI before creating URL
+              const dataUri = createDataUri(part.image, part.mimeType || 'image/png');
+              processedImage = new URL(dataUri);
+            } else {
+              // It's already a URL or data URI
+              processedImage = new URL(part.image);
+            }
+          }
+
           roleContent[role].push({
             ...part,
-            image:
-              part.image instanceof URL || part.image instanceof Uint8Array
-                ? part.image
-                : Buffer.isBuffer(part.image) || part.image instanceof ArrayBuffer
-                  ? new Uint8Array(part.image)
-                  : new URL(part.image),
+            image: processedImage,
           });
           break;
         }
