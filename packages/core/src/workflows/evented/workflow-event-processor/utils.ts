@@ -1,6 +1,6 @@
 import type { Step, StepFlowEntry, Workflow } from '../..';
 import type { Mastra } from '../../../mastra';
-import { EventedWorkflow } from '../workflow';
+import { EventedWorkflow } from '../evented-workflow';
 import type { ParentWorkflow } from '.';
 
 export function getNestedWorkflow(

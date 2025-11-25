@@ -210,7 +210,8 @@ When extracting shared code, use descriptive names:
 - [ ] No circular dependencies remain (verify with `dpdm`)
 - [ ] All imports use direct paths (no internal barrel imports)
 - [ ] TypeScript compilation succeeds
-- [ ] tsup build succeeds (use `pnpm build` in package to run build)
+- [ ] The `packages/core/public-exports.test.ts` test passes. This test ensures that the public API exports stay the same.
+- [ ] tsup build succeeds (use `pnpm turbo build` in package to run build)
 - [ ] Public API exports in `package.json` are still correct
 
 ## Common Patterns That Cause Cycles
@@ -230,3 +231,68 @@ Be watchful for these anti-patterns:
 - **Don't create a "god" shared file** - Extract only what's needed for the specific cycle
 - **Don't break public APIs** - Ensure `package.json` exports still work after refactoring
 - **Don't add re-exports from non-public barrel files** - When extracting code to a new file, update the importing files to use direct imports to the new file. Don't add `export { foo } from './new-file'` to the original file unless it's a public-facing barrel file.
+- **Don't change runtime logic to fix cycles** - Avoid replacing `instanceof` checks with property checks or other logic changes. Instead, restructure imports/exports by extracting code to new files.
+- **Don't leave unused imports** - After extracting code to a new file, clean up any imports that are no longer used in the original file. You can use `eslint` for checking that.
+
+## Example: Extracting a Class to Break a Cycle
+
+When a class is imported by files that the class's file also imports (creating a cycle), extract the class to its own file:
+
+```typescript
+// BEFORE - Circular dependency
+// workflow.ts imports from execution-engine.ts
+// execution-engine.ts imports from utils.ts
+// utils.ts imports EventedWorkflow from workflow.ts (CYCLE!)
+
+// workflow.ts
+import { ExecutionEngine } from './execution-engine';
+export class EventedWorkflow {
+  /* ... */
+}
+export function createWorkflow() {
+  /* uses EventedWorkflow */
+}
+
+// utils.ts
+import { EventedWorkflow } from './workflow'; // Creates cycle!
+export function getStep(workflow) {
+  if (step instanceof EventedWorkflow) {
+    /* ... */
+  }
+}
+```
+
+```typescript
+// AFTER - Extract the class to break the cycle
+
+// evented-workflow.ts (NEW - contains only the class, no problematic imports)
+export class EventedWorkflow {
+  /* ... */
+}
+
+// workflow.ts (import the class for local use, no re-export needed)
+import { EventedWorkflow } from './evented-workflow';
+import { ExecutionEngine } from './execution-engine';
+export function createWorkflow() {
+  /* uses EventedWorkflow */
+}
+
+// utils.ts (import directly from the new file)
+import { EventedWorkflow } from './evented-workflow'; // No cycle!
+export function getStep(workflow) {
+  if (step instanceof EventedWorkflow) {
+    /* ... */
+  }
+}
+
+// index.ts (public barrel - add export here for public API)
+export * from './evented-workflow';
+export * from './workflow';
+```
+
+Key points:
+
+- The extracted file (`evented-workflow.ts`) should NOT import from files that would recreate the cycle
+- Files that need the class import directly from the new file
+- Only the public-facing barrel (`index.ts`) should re-export for external consumers
+- Don't add re-exports in `workflow.ts` - it's not a public barrel file
