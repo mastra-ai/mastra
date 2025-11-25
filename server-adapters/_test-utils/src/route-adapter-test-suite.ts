@@ -92,7 +92,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
             // Validate response schema (if defined)
             if (route.responseSchema) {
-              const parsedData = parseDatesInResponse(response.data);
+              const parsedData = parseDatesInResponse(response.data, route.responseSchema);
               expectValidSchema(route.responseSchema, parsedData);
             }
 

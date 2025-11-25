@@ -4,7 +4,6 @@ import { Mock, vi } from 'vitest';
 import { Workflow } from '@mastra/core/workflows';
 import { createScorer } from '@mastra/core/evals';
 import { SpanType } from '@mastra/core/observability';
-import { RequestContext } from '@mastra/core/request-context';
 import { CompositeVoice } from '@mastra/core/voice';
 import { MockMemory } from '@mastra/core/memory';
 import { MastraVector } from '@mastra/core/vector';
@@ -511,32 +510,72 @@ export function createTestWorkflow(
  * @param data - The response data from HTTP (with dates as ISO strings)
  * @returns The same data with ISO date strings converted to Date objects
  */
-export function parseDatesInResponse(data: any): any {
+/**
+ * Check if a Zod schema expects a Date type at a given path
+ */
+function schemaExpectsDate(schema: any, path: string[] = []): boolean {
+  if (!schema) return false;
+
+  // Unwrap effects, optional, nullable, default to get to the base type
+  while (
+    schema._def?.typeName === 'ZodEffects' ||
+    schema._def?.typeName === 'ZodOptional' ||
+    schema._def?.typeName === 'ZodNullable' ||
+    schema._def?.typeName === 'ZodDefault'
+  ) {
+    if (schema._def.typeName === 'ZodEffects') {
+      schema = schema._def.schema;
+    } else if (schema._def.typeName === 'ZodOptional' || schema._def.typeName === 'ZodNullable') {
+      schema = schema._def.innerType;
+    } else if (schema._def.typeName === 'ZodDefault') {
+      schema = schema._def.innerType;
+    }
+  }
+
+  // If we have a path, navigate to that field
+  if (path.length > 0) {
+    if (schema._def?.typeName === 'ZodObject') {
+      const shape = schema._def.shape();
+      const fieldSchema = shape[path[0]];
+      return schemaExpectsDate(fieldSchema, path.slice(1));
+    } else if (schema._def?.typeName === 'ZodArray') {
+      // For arrays, check the element type (ignore the array index in path)
+      return schemaExpectsDate(schema._def.type, path.slice(1));
+    }
+    return false;
+  }
+
+  // Check if this is a Date type
+  return schema._def?.typeName === 'ZodDate';
+}
+
+export function parseDatesInResponse(data: any, schema?: any, currentPath: string[] = []): any {
   if (data === null || data === undefined) {
     return data;
   }
 
   if (typeof data === 'string') {
-    // Check if string matches ISO 8601 date format
-    const isoDateRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?$/;
-    if (isoDateRegex.test(data)) {
-      const parsed = new Date(data);
-      // Verify it's a valid date (not NaN)
-      if (!isNaN(parsed.getTime())) {
-        return parsed;
+    // Only parse dates if the schema expects a Date at this path
+    if (schema && schemaExpectsDate(schema, currentPath)) {
+      const isoDateRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?$/;
+      if (isoDateRegex.test(data)) {
+        const parsed = new Date(data);
+        if (!isNaN(parsed.getTime())) {
+          return parsed;
+        }
       }
     }
     return data;
   }
 
   if (Array.isArray(data)) {
-    return data.map(parseDatesInResponse);
+    return data.map((item, index) => parseDatesInResponse(item, schema, [...currentPath, String(index)]));
   }
 
   if (typeof data === 'object') {
     const result: any = {};
     for (const [key, value] of Object.entries(data)) {
-      result[key] = parseDatesInResponse(value);
+      result[key] = parseDatesInResponse(value, schema, [...currentPath, key]);
     }
     return result;
   }
@@ -552,7 +591,7 @@ async function setupWorkflowRegistryMocks(workflows: Record<string, Workflow>, m
       storage: mastra.getStorage(),
       agents: mastra.listAgents(),
       tts: mastra.getTTS(),
-      vectors: mastra.getVectors(),
+      vectors: mastra.listVectors(),
     });
     await mockWorkflowRun(workflow);
   }
@@ -568,7 +607,7 @@ async function setupWorkflowRegistryMocks(workflows: Record<string, Workflow>, m
           storage: mastra.getStorage(),
           agents: mastra.listAgents(),
           tts: mastra.getTTS(),
-          vectors: mastra.getVectors(),
+          vectors: mastra.listVectors(),
         });
       }
       WorkflowRegistry['additionalWorkflows'][id] = workflow;

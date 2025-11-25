@@ -3,7 +3,6 @@ import { describe } from 'vitest';
 import express from 'express';
 import type { Application } from 'express';
 import { MastraServer } from '../index';
-import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { createMCPRouteTestSuite } from '@internal/server-adapter-test-utils';
 import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
 

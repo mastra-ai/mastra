@@ -12,6 +12,9 @@ import {
   listMcpServersResponseSchema,
   serverDetailSchema,
   mcpServerIdPathParams,
+  listMcpServerToolsResponseSchema,
+  mcpToolInfoSchema,
+  executeToolResponseSchema,
 } from '../schemas/mcp';
 
 // ============================================================================
@@ -107,6 +110,7 @@ export const LIST_MCP_SERVER_TOOLS_ROUTE = createRoute({
   path: '/api/mcp/:serverId/tools',
   responseType: 'json',
   pathParamSchema: mcpServerIdPathParams,
+  responseSchema: listMcpServerToolsResponseSchema,
   summary: 'List MCP server tools',
   description: 'Returns a list of tools available on the specified MCP server',
   tags: ['MCP'],
@@ -134,6 +138,7 @@ export const GET_MCP_SERVER_TOOL_DETAIL_ROUTE = createRoute({
   path: '/api/mcp/:serverId/tools/:toolId',
   responseType: 'json',
   pathParamSchema: mcpServerToolPathParams,
+  responseSchema: mcpToolInfoSchema,
   summary: 'Get MCP server tool details',
   description: 'Returns detailed information about a specific tool on the MCP server',
   tags: ['MCP'],
@@ -167,6 +172,7 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
   responseType: 'json',
   pathParamSchema: mcpServerToolPathParams,
   bodySchema: executeToolBodySchema,
+  responseSchema: executeToolResponseSchema,
   summary: 'Execute MCP server tool',
   description: 'Executes a tool on the specified MCP server with the provided arguments',
   tags: ['MCP'],

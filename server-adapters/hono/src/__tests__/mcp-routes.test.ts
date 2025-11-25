@@ -1,7 +1,6 @@
 import { describe } from 'vitest';
 import { Hono } from 'hono';
 import { MastraServer } from '../index';
-import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { createMCPRouteTestSuite } from '@internal/server-adapter-test-utils';
 import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
 
