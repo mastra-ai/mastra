@@ -1230,7 +1230,7 @@ export class MCPServer extends MCPServerBase {
     httpPath,
     req,
     res,
-    options = { sessionIdGenerator: () => randomUUID() },
+    options,
   }: {
     url: URL;
     httpPath: string;
@@ -1246,6 +1246,10 @@ export class MCPServer extends MCPServerBase {
       res.end();
       return;
     }
+    const mergedOptions = {
+      sessionIdGenerator: () => randomUUID(), // default: enabled
+      ...options, // user-provided overrides default
+    };
 
     // Serverless mode: stateless, single request/response
     if (options?.serverless) {
@@ -1319,8 +1323,8 @@ export class MCPServer extends MCPServerBase {
 
             // Create a new transport for the new session
             transport = new StreamableHTTPServerTransport({
-              ...options,
-              sessionIdGenerator: () => randomUUID(),
+              ...mergedOptions,
+              sessionIdGenerator: mergedOptions.sessionIdGenerator,
               onsessioninitialized: id => {
                 this.streamableHTTPTransports.set(id, transport!);
               },
