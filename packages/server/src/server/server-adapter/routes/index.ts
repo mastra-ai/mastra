@@ -16,6 +16,7 @@ import type { MastraStreamReturn } from './stream-types';
 import { TOOLS_ROUTES } from './tools';
 import { VECTORS_ROUTES } from './vectors';
 import { WORKFLOWS_ROUTES } from './workflows';
+import { MCP_ROUTES } from './mcp';
 
 /**
  * Runtime context fields that are available to route handlers.
@@ -85,6 +86,7 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...A2A_ROUTES,
   ...AGENT_BUILDER_ROUTES,
   ...LEGACY_ROUTES,
+  ...MCP_ROUTES,
 ];
 
 // Export route builder and OpenAPI utilities

@@ -5,3 +5,4 @@ export {
   type HttpResponse,
   type RouteAdapterTestSuiteConfig,
 } from './route-adapter-test-suite';
+export { createMCPRouteTestSuite, type MCPRouteTestSuiteConfig } from './mcp-route-test-suite';

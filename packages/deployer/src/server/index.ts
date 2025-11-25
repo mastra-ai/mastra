@@ -199,11 +199,6 @@ export async function createHonoServer(
   // Cast needed due to Hono type variance - safe because registerRoutes is generic
   await honoServerAdapter.registerRoutes();
 
-  // Register MCP routes (separate from SERVER_ROUTES due to fetch-to-node bundling requirements)
-  for (const route of MCP_ROUTES) {
-    await honoServerAdapter.registerRoute(app as any, route, { prefix: '' });
-  }
-
   // Register MCP standalone handlers (these use raw Hono Context, not createRoute pattern)
   app.all('/api/mcp/:serverId/mcp', getMcpServerMessageHandler);
   app.get('/api/mcp/:serverId/sse', getMcpServerSseHandler);
