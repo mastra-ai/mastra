@@ -656,7 +656,9 @@ export function transformNetwork(
       } as const;
     }
     case 'tool-execution-start': {
-      const current = bufferedNetworks.get(payload.runId) || { name: '', steps: [], usage: null, output: null };
+      const current = bufferedNetworks.get(payload.runId);
+
+      if (!current) return null;
       current.steps.push({
         id: payload.payload.runId,
         name: payload.payload.args?.toolName!,
