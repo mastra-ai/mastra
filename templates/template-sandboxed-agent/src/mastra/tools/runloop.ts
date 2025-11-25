@@ -153,12 +153,21 @@ export const createSandbox = createTool({
     try {
       const blueprintName = process.env.RUNLOOP_BLUEPRINT_NAME;
 
+      // Ports: 3000-9000
+      const availablePorts = [3000, 4000, 5000, 6000, 7000, 8000, 9000];
+
       const createOptions: {
         name: string;
         blueprint_name?: string;
         environment_variables?: Record<string, string>;
+        launch_parameters?: {
+          available_ports?: number[];
+        };
       } = {
         name: `devbox-${Date.now()}`,
+        launch_parameters: {
+          available_ports: availablePorts,
+        },
       };
 
       if (blueprintName) {
@@ -865,6 +874,58 @@ export const runCommand = createTool({
         stderr: typeof stderr === 'string' ? stderr : '',
         command: input.command,
         executionTime,
+      };
+    } catch (e) {
+      return {
+        error: JSON.stringify(e),
+      };
+    }
+  },
+});
+
+export const runCommandAsync = createTool({
+  id: 'runCommandAsync',
+  description:
+    'Run a shell command asynchronously in the background in a Runloop devbox. Use this for long-running processes like servers, dev servers, or background tasks that should not block the agent. The command will start immediately and continue running in the background.',
+  inputSchema: z.object({
+    sandboxId: z.string().describe('The sandboxId for the devbox to run the command in'),
+    command: z
+      .string()
+      .describe(
+        'The shell command to execute asynchronously (e.g., servers, dev servers, long-running processes)'
+      ),
+    workingDirectory: z.string().optional().describe('The working directory to run the command in'),
+  }),
+  outputSchema: z
+    .object({
+      executionId: z.string().describe('The execution ID for tracking this background process'),
+      command: z.string().describe('The command that was started'),
+      status: z
+        .string()
+        .describe('Status message indicating the command has been started in the background'),
+      sandboxId: z.string().describe('The devbox ID where the command is running'),
+    })
+    .or(
+      z.object({
+        error: z.string().describe('The error from a failed command execution start'),
+      })
+    ),
+  execute: async ({ context: input }) => {
+    try {
+      const devbox = runloop.devbox.fromId(input.sandboxId);
+
+      let command = input.command;
+      if (input.workingDirectory) {
+        command = `cd "${input.workingDirectory}" && ${command}`;
+      }
+
+      const execution = await devbox.cmd.execAsync({ command });
+
+      return {
+        executionId: execution.executionId,
+        command: input.command,
+        status: 'Command started successfully in the background',
+        sandboxId: input.sandboxId,
       };
     } catch (e) {
       return {

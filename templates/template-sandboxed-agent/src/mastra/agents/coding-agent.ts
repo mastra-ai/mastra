@@ -13,6 +13,7 @@ import {
   readFile,
   runCode,
   runCommand,
+  runCommandAsync,
   watchDirectory,
   writeFile,
   writeFiles,
@@ -62,7 +63,8 @@ When using \`createTunnel\`, the service running in the devbox **MUST** bind to 
 
 ### **Development Workflow**
 - \`watchDirectory\` - Monitor file changes during development, track build processes
-- \`runCommand\` - Execute shell commands (git operations, build scripts, system utilities)
+- \`runCommand\` - Execute short-running shell commands synchronously (git operations, build scripts, system utilities, package installations). **Use this for commands that complete quickly and you need immediate output.**
+- \`runCommandAsync\` - Execute long-running commands asynchronously in the background (servers, dev servers, background processes). **Use this for commands that run indefinitely or for extended periods, like \`node index.js\`, \`npm start\`, \`python app.py\`, or any server process. This does not block the agent.**
 
 ## Enhanced Development Approach
 
@@ -131,10 +133,29 @@ For complex projects (5+ files):
 - Use proper directory structures for organization
 
 ### **Command Execution Strategy**
-- Use \`runCommand\` for quick, synchronous operations
-- Set appropriate timeouts based on operation complexity
-- Capture and analyze both stdout and stderr
-- Handle background processes appropriately
+
+**When to use \`runCommand\` (synchronous):**
+- Short-running commands that complete quickly (< 30 seconds typically)
+- Commands where you need immediate output and results
+- Package installations (\`npm install\`, \`pip install\`)
+- Build scripts (\`npm run build\`, \`tsc\`)
+- Git operations (\`git clone\`, \`git status\`)
+- File operations via shell (\`ls\`, \`cat\`, \`grep\`)
+- Quick validation and testing commands
+
+**When to use \`runCommandAsync\` (asynchronous/background):**
+- Long-running processes that run indefinitely
+- Web servers and development servers (\`node index.js\`, \`npm start\`, \`python app.py\`, \`rails server\`)
+- Background tasks and daemons
+- Processes that need to keep running while you do other work
+- Any command that would block the agent if run synchronously
+
+**Best Practices:**
+- Always use \`runCommandAsync\` for servers - they should run in the background
+- Start servers with \`runCommandAsync\` before creating tunnels
+- Use \`runCommand\` for setup, installation, and quick operations
+- Set appropriate timeouts for synchronous operations
+- Capture and analyze both stdout and stderr for debugging
 
 ### **Development Monitoring**
 - Set up file watching for active development workflows (note: uses polling since native watching is not available)
@@ -145,9 +166,13 @@ For complex projects (5+ files):
 ### **Tunnel Usage & Network Services**
 When creating tunnels with \`createTunnel\`:
 1. **ALWAYS bind services to \`0.0.0.0\`** - Never use \`localhost\`, \`127.0.0.1\`, or \`::1\`. The tunnel cannot access services bound to loopback interfaces.
-2. **Start the service first** - Ensure your web server, API, or other service is running and listening on \`0.0.0.0:PORT\` before creating the tunnel.
-3. **Verify binding** - After starting a service, verify it's listening on \`0.0.0.0\` using commands like \`netstat -tuln | grep PORT\` or \`ss -tuln | grep PORT\`.
-4. **Common examples**:
+2. **Start the service first with \`runCommandAsync\`** - Use \`runCommandAsync\` to start your web server, API, or other service in the background. The service must be running and listening on \`0.0.0.0:PORT\` before creating the tunnel.
+3. **Typical workflow for servers**:
+   - Step 1: Start the server with \`runCommandAsync\` (e.g., \`node index.js\`, \`npm start\`, \`python app.py\`)
+   - Step 2: Wait a moment for the server to start (you can verify with \`runCommand\` if needed)
+   - Step 3: Create the tunnel with \`createTunnel\` to expose the port
+4. **Verify binding** - After starting a service, verify it's listening on \`0.0.0.0\` using commands like \`netstat -tuln | grep PORT\` or \`ss -tuln | grep PORT\`.
+5. **Common examples**:
    - Node.js/Express: \`app.listen(3000, '0.0.0.0')\`
    - Python Flask: \`app.run(host='0.0.0.0', port=3000)\`
    - Python HTTP server: \`http.server.HTTPServer(('0.0.0.0', 3000), handler)\`
@@ -203,7 +228,7 @@ For sophisticated projects, leverage:
 
 Remember: You are not just a code executor, but a complete development environment that can handle sophisticated, multi-file projects with professional development workflows and comprehensive monitoring capabilities.
 `,
-  model: 'openai/gpt-5-codex',
+  model: 'openai/gpt-4o',
   tools: {
     createSandbox,
     runCode,
@@ -218,6 +243,7 @@ Remember: You are not just a code executor, but a complete development environme
     getFileSize,
     watchDirectory,
     runCommand,
+    runCommandAsync,
     createTunnel,
   },
   memory: new Memory({
