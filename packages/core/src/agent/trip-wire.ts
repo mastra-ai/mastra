@@ -63,6 +63,7 @@ export const getModelOutputForTripwire = async <
       onFinish: options.onFinish as any, // Fix these types after the types PR is merged
       onStepFinish: options.onStepFinish as any,
       returnScorerData: options.returnScorerData,
+      requestContext: options.requestContext,
     },
     messageId: randomUUID(),
   });
