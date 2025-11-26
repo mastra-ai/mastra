@@ -553,15 +553,15 @@ export class InngestRun<
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
     const writer = writable.getWriter();
+    void writer.write({
+      // @ts-ignore
+      type: 'start',
+      // @ts-ignore
+      payload: { runId: this.runId },
+    });
+
     const unwatch = this.watch(async event => {
       try {
-        await writer.write({
-          // @ts-ignore
-          type: 'start',
-          // @ts-ignore
-          payload: { runId: this.runId },
-        });
-
         const e: any = {
           ...event,
           type: event.type.replace('workflow-', ''),
