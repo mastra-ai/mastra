@@ -80,7 +80,7 @@ export type AgentDataPart = {
   data: LLMStepResult;
 };
 
-export function WorkflowStreamToAISDKTransformer() {
+export function WorkflowStreamToAISDKTransformer(sendText: boolean = true) {
   const bufferedWorkflows = new Map<
     string,
     {
@@ -92,7 +92,9 @@ export function WorkflowStreamToAISDKTransformer() {
     ChunkType,
     | {
         data?: string;
-        type?: 'start' | 'finish';
+        type?: 'start' | 'finish' | 'text-start' | 'text-delta';
+        id?: string;
+        delta?: string;
       }
     | WorkflowDataPart
     | ChunkType
@@ -108,9 +110,16 @@ export function WorkflowStreamToAISDKTransformer() {
       });
     },
     transform(chunk, controller) {
-      const transformed = transformWorkflow<any>(chunk, bufferedWorkflows);
+      const transformed = transformWorkflow<any>(chunk, bufferedWorkflows, false, sendText);
 
-      if (transformed) controller.enqueue(transformed);
+      if (transformed) {
+        // Handle array of transforms (for nested agent chunks)
+        if (Array.isArray(transformed)) {
+          transformed.forEach(t => controller.enqueue(t));
+        } else {
+          controller.enqueue(transformed);
+        }
+      }
     },
   });
 }
@@ -203,7 +212,7 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>({
           if (agentTransformed) controller.enqueue(agentTransformed);
         } else if (transformedChunk.type === 'tool-workflow') {
           const payload = transformedChunk.payload;
-          const workflowChunk = transformWorkflow(payload, bufferedSteps, true);
+          const workflowChunk = transformWorkflow(payload, bufferedSteps, true, true);
           if (workflowChunk) controller.enqueue(workflowChunk);
         } else if (transformedChunk.type === 'tool-network') {
           const payload = transformedChunk.payload;
@@ -390,7 +399,8 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
     }
   >,
   isNested?: boolean,
-) {
+  sendText: boolean = true,
+): any {
   switch (payload.type) {
     case 'workflow-start':
       bufferedWorkflows.set(payload.runId!, {
@@ -485,6 +495,47 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
     }
     case 'workflow-step-output': {
       const output = payload.payload.output;
+
+      // Handle nested agent stream chunks when sendText is enabled
+      if (sendText && output && typeof output === 'object') {
+        const results: any[] = [];
+
+        // Check if it's an agent stream chunk
+        if ('type' in output && 'runId' in output) {
+          const chunkType = output.type as string;
+
+          // Handle text streaming chunks
+          if (chunkType === 'text-start') {
+            results.push({
+              type: 'text-start',
+              id: output.runId,
+            });
+          } else if (chunkType === 'text-delta' && 'payload' in output) {
+            const outputWithPayload = output as any;
+            if (outputWithPayload.payload?.text) {
+              results.push({
+                type: 'text-delta',
+                id: outputWithPayload.runId,
+                delta: outputWithPayload.payload.text,
+              });
+            }
+          }
+        }
+
+        // Also check for DataChunkType as before
+        if (isDataChunkType(output)) {
+          if (!('data' in output)) {
+            throw new Error(
+              `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(output)}`,
+            );
+          }
+          results.push(output);
+        }
+
+        return results.length > 0 ? results : null;
+      }
+
+      // Original DataChunkType handling when sendText is false
       if (output && isDataChunkType(output)) {
         if (!('data' in output)) {
           throw new Error(
