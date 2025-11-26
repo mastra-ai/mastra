@@ -1,6 +1,16 @@
 # @mastra/ai-sdk
 
-## 1.0.1
+## 0.3.1
+
+### Minor Changes
+
+- Add sendStart, sendFinish, sendReasoning, and sendSources options to toAISdkV5Stream function, allowing fine-grained control over which message chunks are included in the converted stream. Previously, these values were hardcoded in the transformer. ([#10250](https://github.com/mastra-ai/mastra/pull/10250))
+
+  BREAKING CHANGE: AgentStreamToAISDKTransformer now accepts an options object instead of a single lastMessageId parameter
+
+  Also, add sendStart, sendFinish, sendReasoning, and sendSources parameters to
+  chatRoute function, enabling fine-grained control over which chunks are
+  included in the AI SDK stream output.
 
 ### Patch Changes
 
@@ -28,69 +38,6 @@
 
 - Updated dependencies [[`7491cc0`](https://github.com/mastra-ai/mastra/commit/7491cc0350b2ba067f98c4915bf607119bd0150f), [`0d10ac7`](https://github.com/mastra-ai/mastra/commit/0d10ac7b8efa03c2f0c330eb2520148bfa6091e9), [`e3e899c`](https://github.com/mastra-ai/mastra/commit/e3e899c650f4c435445303bd97a66f5840a52a1e)]:
   - @mastra/core@0.24.3
-
-## 1.0.1-alpha.0
-
-### Patch Changes
-
-- Added support for tripwire data chunks in streaming responses. ([#10291](https://github.com/mastra-ai/mastra/pull/10291))
-
-  Tripwire chunks allow the AI SDK to emit special data events when certain conditions are triggered during stream processing. These chunks include a `tripwireReason` field explaining why the tripwire was activated.
-
-  #### Usage
-
-  When converting Mastra chunks to AI SDK v5 format, tripwire chunks are now automatically handled:
-
-  ```typescript
-  // Tripwire chunks are converted to data-tripwire format
-  const chunk = {
-    type: 'tripwire',
-    payload: { tripwireReason: 'Rate limit approaching' }
-  };
-
-  // Converts to:
-  {
-    type: 'data-tripwire',
-    data: { tripwireReason: 'Rate limit approaching' }
-  }
-  ```
-
-- Updated dependencies [[`7491cc0`](https://github.com/mastra-ai/mastra/commit/7491cc0350b2ba067f98c4915bf607119bd0150f), [`0d10ac7`](https://github.com/mastra-ai/mastra/commit/0d10ac7b8efa03c2f0c330eb2520148bfa6091e9), [`e3e899c`](https://github.com/mastra-ai/mastra/commit/e3e899c650f4c435445303bd97a66f5840a52a1e)]:
-  - @mastra/core@0.24.3-alpha.0
-
-## 1.0.0
-
-### Major Changes
-
-- Add sendStart, sendFinish, sendReasoning, and sendSources options to toAISdkV5Stream function, allowing fine-grained control over which message chunks are included in the converted stream. Previously, these values were hardcoded in the transformer. ([#10250](https://github.com/mastra-ai/mastra/pull/10250))
-
-  BREAKING CHANGE: AgentStreamToAISDKTransformer now accepts an options object instead of a single lastMessageId parameter
-
-  Also, add sendStart, sendFinish, sendReasoning, and sendSources parameters to
-  chatRoute function, enabling fine-grained control over which chunks are
-  included in the AI SDK stream output.
-
-### Patch Changes
-
-- Updated dependencies [[`eebb7bb`](https://github.com/mastra-ai/mastra/commit/eebb7bb407c57342a3be3a2efbe68c696589feeb), [`c6e6d07`](https://github.com/mastra-ai/mastra/commit/c6e6d071ecf346a80dceab410af2c567c7e66a57), [`0e6df8f`](https://github.com/mastra-ai/mastra/commit/0e6df8f66340992cb1b319834657deb17368de52), [`6295fd7`](https://github.com/mastra-ai/mastra/commit/6295fd783d49075d5bf2c18ff9486e94d36aaa56), [`d813cf7`](https://github.com/mastra-ai/mastra/commit/d813cf7251695d85cc60469058384ffa74974484)]:
-  - @mastra/core@0.24.2
-
-## 1.0.0-alpha.0
-
-### Major Changes
-
-- Add sendStart, sendFinish, sendReasoning, and sendSources options to toAISdkV5Stream function, allowing fine-grained control over which message chunks are included in the converted stream. Previously, these values were hardcoded in the transformer. ([#10250](https://github.com/mastra-ai/mastra/pull/10250))
-
-  BREAKING CHANGE: AgentStreamToAISDKTransformer now accepts an options object instead of a single lastMessageId parameter
-
-  Also, add sendStart, sendFinish, sendReasoning, and sendSources parameters to
-  chatRoute function, enabling fine-grained control over which chunks are
-  included in the AI SDK stream output.
-
-### Patch Changes
-
-- Updated dependencies [[`eebb7bb`](https://github.com/mastra-ai/mastra/commit/eebb7bb407c57342a3be3a2efbe68c696589feeb), [`c6e6d07`](https://github.com/mastra-ai/mastra/commit/c6e6d071ecf346a80dceab410af2c567c7e66a57), [`0e6df8f`](https://github.com/mastra-ai/mastra/commit/0e6df8f66340992cb1b319834657deb17368de52), [`6295fd7`](https://github.com/mastra-ai/mastra/commit/6295fd783d49075d5bf2c18ff9486e94d36aaa56), [`d813cf7`](https://github.com/mastra-ai/mastra/commit/d813cf7251695d85cc60469058384ffa74974484)]:
-  - @mastra/core@0.24.2-alpha.0
 
 ## 0.2.7
 
