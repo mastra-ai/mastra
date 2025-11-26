@@ -104,7 +104,7 @@ globalThis.__dirname = dirname(__filename);
   }
 
   return spawn(
-    'node',
+    process.execPath,
     [
       '--import',
       import.meta.resolve('@mastra/deployer/loader'),

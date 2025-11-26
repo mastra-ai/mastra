@@ -49,7 +49,7 @@ export const mastra = new Mastra({
   });
 }
 
-function getPackageName(moduleName: string) {
+function getPackageNameFromBundledModuleName(moduleName: string) {
   const chunks = moduleName.split('-');
 
   if (!chunks.length) {
@@ -63,7 +63,12 @@ function getPackageName(moduleName: string) {
   return chunks[0];
 }
 
-function validateError(err: ValidationError | Error, file: OutputChunk, logger: IMastraLogger) {
+function validateError(
+  err: ValidationError | Error,
+  file: OutputChunk,
+  binaryMapData: Record<string, string[]>,
+  logger: IMastraLogger,
+) {
   let moduleName: string | undefined | null = null;
   let errorConfig: {
     id: ErrorId;
@@ -78,7 +83,7 @@ function validateError(err: ValidationError | Error, file: OutputChunk, logger: 
         messagePrefix: `Mastra wasn't able to bundle ${moduleName}, might be an older commonJS module. Please add`,
       };
     } else if (err.type === 'ModuleNotFoundError') {
-      moduleName = getPackageName(basename(file.name));
+      moduleName = getPackageNameFromBundledModuleName(basename(file.name));
       const missingModule = err.info.moduleName as string;
 
       errorConfig = {
@@ -89,7 +94,7 @@ function validateError(err: ValidationError | Error, file: OutputChunk, logger: 
   }
 
   if (err.message.includes('No native build was found')) {
-    moduleName = basename(file.name);
+    moduleName = binaryMapData[file.fileName]?.[0] ?? getPackageNameFromBundledModuleName(basename(file.name));
     errorConfig = {
       id: 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD',
       messagePrefix: 'We found a binary dependency in your bundle but we cannot bundle it yet. Please add',
@@ -106,7 +111,12 @@ function validateError(err: ValidationError | Error, file: OutputChunk, logger: 
   }
 }
 
-async function validateFile(root: string, file: OutputChunk, logger: IMastraLogger) {
+async function validateFile(
+  root: string,
+  file: OutputChunk,
+  binaryMapData: Record<string, string[]>,
+  logger: IMastraLogger,
+) {
   try {
     if (!file.isDynamicEntry && file.isEntry) {
       // validate if the chunk is actually valid, a failsafe to make sure bundling didn't make any mistakes
@@ -128,7 +138,7 @@ async function validateFile(root: string, file: OutputChunk, logger: IMastraLogg
     }
 
     if (errorToHandle instanceof Error) {
-      validateError(errorToHandle, file, logger);
+      validateError(errorToHandle, file, binaryMapData, logger);
     }
   }
 }
@@ -178,6 +188,9 @@ async function validateOutput(
     }
   }
 
+  const binaryMap = await readFile(join(outputDir, 'binary-map.json'), 'utf-8');
+  const binaryMapData = JSON.parse(binaryMap);
+
   for (const file of output) {
     if (file.type === 'asset') {
       continue;
@@ -189,7 +202,7 @@ async function validateOutput(
     }
 
     // validate if the chunk is actually valid, a failsafe to make sure bundling didn't make any mistakes
-    await validateFile(projectRoot, file, logger);
+    await validateFile(projectRoot, file, binaryMapData, logger);
   }
 
   return result;

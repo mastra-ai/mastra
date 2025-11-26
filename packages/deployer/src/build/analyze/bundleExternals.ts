@@ -17,6 +17,7 @@ import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import { readFile } from 'node:fs/promises';
 import { getPackageInfo } from 'local-pkg';
 import { ErrorCategory, ErrorDomain, MastraBaseError } from '@mastra/core/error';
+import { nodeGypDetector } from '../plugins/node-gyp-detector';
 
 type VirtualDependency = {
   name: string;
@@ -207,6 +208,7 @@ async function getInputPlugins(
     // hono is imported from deployer, so we need to resolve from here instead of the project root
     aliasHono(),
     json(),
+    nodeGypDetector(),
     {
       name: 'not-found-resolver',
       resolveId: {
@@ -348,6 +350,7 @@ async function buildExternalDependencies(
 
       return `${outputDirRelative}/[name].mjs`;
     },
+    assetFileNames: `${outputDirRelative}/[name][extname]`,
     hoistTransitiveImports: false,
   });
 
