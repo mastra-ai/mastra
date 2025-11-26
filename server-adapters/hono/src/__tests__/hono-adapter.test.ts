@@ -1,21 +1,20 @@
 import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
 import { createRouteAdapterTestSuite } from '@internal/server-adapter-test-utils';
-import { SERVER_ROUTES } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
 import { describe } from 'vitest';
-import { HonoServerAdapter } from '../index';
+import { MastraServer } from '../index';
 
 // Wrapper describe block so the factory can call describe() inside
 describe('Hono Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Hono Adapter Integration Tests',
-    routes: SERVER_ROUTES,
 
     setupAdapter: (context: AdapterTestContext) => {
       const app = new Hono();
 
       // Create Hono adapter
-      const adapter = new HonoServerAdapter({
+      const adapter = new MastraServer({
+        app,
         mastra: context.mastra,
         tools: context.tools,
         taskStore: context.taskStore,
@@ -24,13 +23,7 @@ describe('Hono Server Adapter', () => {
         isDev: context.isDev,
       });
 
-      // Register context middleware
-      app.use('*', adapter.createContextMiddleware());
-
-      // Register all routes
-      SERVER_ROUTES.forEach(route => {
-        adapter.registerRoute(app, route, { prefix: '' });
-      });
+      adapter.init();
 
       return { adapter, app };
     },
@@ -64,7 +57,7 @@ describe('Hono Server Adapter', () => {
       });
 
       // Execute request through Hono
-      let response: Response;
+      let response: Response | ReadableStream;
       try {
         response = await app.request(req);
       } catch (error) {
@@ -83,6 +76,16 @@ describe('Hono Server Adapter', () => {
           status: 500,
           type: 'json',
           data: { error: 'No response returned from handler' },
+          headers: {},
+        };
+      }
+
+      // Handle case where Hono returns a ReadableStream directly (datastream-response type)
+      if (response instanceof ReadableStream) {
+        return {
+          status: 200, // Assume success if we get a stream
+          type: 'stream',
+          stream: response,
           headers: {},
         };
       }

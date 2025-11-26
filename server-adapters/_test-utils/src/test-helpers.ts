@@ -1,11 +1,9 @@
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
 import { Mock, vi } from 'vitest';
-import type { AdapterTestContext } from './route-adapter-test-suite';
 import { Workflow } from '@mastra/core/workflows';
 import { createScorer } from '@mastra/core/evals';
 import { SpanType } from '@mastra/core/observability';
-import { RequestContext } from '@mastra/core/request-context';
 import { CompositeVoice } from '@mastra/core/voice';
 import { MockMemory } from '@mastra/core/memory';
 import { MastraVector } from '@mastra/core/vector';
@@ -16,7 +14,9 @@ import type { ZodTypeAny } from 'zod';
 import { ServerRoute, WorkflowRegistry } from '@mastra/server/server-adapter';
 import { BaseLogMessage, IMastraLogger, LogLevel } from '@mastra/core/logger';
 import { generateValidDataFromSchema, getDefaultValidPathParams } from './route-test-utils';
-
+import { MCPServer } from '@mastra/mcp';
+import type { Tool } from '@mastra/core/tools';
+import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 vi.mock('@mastra/core/vector');
 
 vi.mock('zod', async importOriginal => {
@@ -34,6 +34,74 @@ vi.mock('zod', async importOriginal => {
 });
 
 const z = require('zod');
+
+/**
+ * Test context for adapter integration tests
+ * Convention: Create entities with IDs that match auto-generated values:
+ * - agentId: 'test-agent'
+ * - workflowId: 'test-workflow'
+ * - toolId: 'test-tool'
+ * - etc.
+ */
+export interface AdapterTestContext {
+  mastra: Mastra;
+  tools?: Record<string, Tool>;
+  taskStore?: InMemoryTaskStore;
+  customRouteAuthConfig?: Map<string, boolean>;
+  playground?: boolean;
+  isDev?: boolean;
+}
+
+/**
+ * HTTP request to execute through adapter
+ */
+export interface HttpRequest {
+  method: string;
+  path: string;
+  query?: Record<string, string | string[]>;
+  body?: unknown;
+  headers?: Record<string, string>;
+}
+
+/**
+ * HTTP response from adapter
+ */
+export interface HttpResponse {
+  status: number;
+  type: 'json' | 'stream';
+  data?: unknown;
+  stream?: ReadableStream | AsyncIterable<unknown>;
+  headers: Record<string, string>;
+}
+
+/**
+ * Configuration for adapter integration test suite
+ */
+export interface AdapterTestSuiteConfig {
+  /** Name for the test suite */
+  suiteName?: string;
+
+  /**
+   * Setup adapter and app for testing
+   * Called once before all tests
+   */
+  setupAdapter: (context: AdapterTestContext) => {
+    adapter: any;
+    app: any;
+  };
+
+  /**
+   * Execute HTTP request through the adapter's framework (Express/Hono)
+   */
+  executeHttpRequest: (app: any, request: HttpRequest) => Promise<HttpResponse>;
+
+  /**
+   * Create test context with Mastra instance, agents, etc.
+   * Convention: Create entities with IDs matching auto-generated values
+   * Optional - uses createDefaultTestContext() if not provided
+   */
+  createTestContext?: () => Promise<AdapterTestContext> | AdapterTestContext;
+}
 
 /**
  * Creates a test agent with all common mocks configured
@@ -96,24 +164,37 @@ export function mockAgentMethods(agent: Agent) {
     });
   };
 
-  // Mock stream method
-  vi.spyOn(agent, 'stream').mockResolvedValue(createMockStream() as any);
+  // Mock stream method - returns object with fullStream property
+  vi.spyOn(agent, 'stream').mockResolvedValue({ fullStream: createMockStream() } as any);
 
   // Mock legacy generate - returns a stream
   vi.spyOn(agent, 'generateLegacy').mockResolvedValue(createMockStream() as any);
 
-  // Mock streamLegacy - needs to return an object with toDataStreamResponse method
+  // Helper to create a mock Response object for datastream-response routes
+  const createMockResponse = () => {
+    const stream = createMockStream();
+    return new Response(stream, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Transfer-Encoding': 'chunked',
+      },
+    });
+  };
+
+  // Mock streamLegacy - needs to return an object with toDataStreamResponse/toTextStreamResponse methods
   const mockStreamResult = {
     ...createMockStream(),
-    toDataStreamResponse: vi.fn().mockReturnValue(createMockStream()),
+    toDataStreamResponse: vi.fn().mockImplementation(() => createMockResponse()),
+    toTextStreamResponse: vi.fn().mockImplementation(() => createMockResponse()),
   };
   vi.spyOn(agent, 'streamLegacy').mockResolvedValue(mockStreamResult as any);
 
-  // Mock approveToolCall method
-  vi.spyOn(agent, 'approveToolCall').mockResolvedValue(createMockStream() as any);
+  // Mock approveToolCall method - returns object with fullStream property
+  vi.spyOn(agent, 'approveToolCall').mockResolvedValue({ fullStream: createMockStream() } as any);
 
-  // Mock declineToolCall method
-  vi.spyOn(agent, 'declineToolCall').mockResolvedValue(createMockStream() as any);
+  // Mock declineToolCall method - returns object with fullStream property
+  vi.spyOn(agent, 'declineToolCall').mockResolvedValue({ fullStream: createMockStream() } as any);
 
   // Mock network method
   vi.spyOn(agent, 'network').mockResolvedValue(createMockStream() as any);
@@ -225,6 +306,83 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
 
   mockLogger.listLogs.mockResolvedValue({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
 
+  const weatherTool = createTool({
+    id: 'getWeather',
+    description: 'Gets the current weather for a location',
+    inputSchema: z.object({
+      location: z.string().describe('The location to get weather for'),
+    }),
+    outputSchema: z.object({
+      temperature: z.number(),
+      condition: z.string(),
+    }),
+    execute: async ({ location }) => ({
+      temperature: 72,
+      condition: `Sunny in ${location}`,
+    }),
+  });
+
+  const calculatorTool = createTool({
+    id: 'calculate',
+    description: 'Performs basic calculations',
+    inputSchema: z.object({
+      operation: z.enum(['add', 'subtract', 'multiply', 'divide']),
+      a: z.number(),
+      b: z.number(),
+    }),
+    outputSchema: z.object({
+      result: z.number(),
+    }),
+    execute: async ({ operation, a, b }) => {
+      let result = 0;
+      switch (operation) {
+        case 'add':
+          result = a + b;
+          break;
+        case 'subtract':
+          result = a - b;
+          break;
+        case 'multiply':
+          result = a * b;
+          break;
+        case 'divide':
+          result = a / b;
+          break;
+      }
+      return { result };
+    },
+  });
+
+  const failingTool = createTool({
+    id: 'failingTool',
+    description: 'A tool that always throws an error for testing error handling',
+    inputSchema: z.object({}),
+    outputSchema: z.object({}),
+    execute: async () => {
+      throw new Error('Tool execution failed intentionally');
+    },
+  });
+
+  // Create real MCP servers with tools
+  const mcpServer1 = new MCPServer({
+    name: 'Test Server 1',
+    version: '1.0.0',
+    description: 'Test MCP Server 1',
+    tools: {
+      getWeather: weatherTool,
+      calculate: calculatorTool,
+    },
+  });
+
+  const mcpServer2 = new MCPServer({
+    name: 'Test Server 2',
+    version: '1.1.0',
+    description: 'Test MCP Server 2',
+    tools: {
+      failingTool: failingTool,
+    },
+  });
+
   // Create Mastra instance with all test entities
   const mastra = new Mastra({
     logger: mockLogger as unknown as IMastraLogger,
@@ -237,6 +395,10 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     },
     scorers: { 'test-scorer': testScorer },
     vectors: { 'test-vector': vector },
+    mcpServers: {
+      'test-server-1': mcpServer1,
+      'test-server-2': mcpServer2,
+    },
   });
 
   await mockWorkflowRun(workflow);
@@ -280,7 +442,10 @@ async function mockWorkflowRun(workflow: Workflow) {
   const workflowBuilderRun = await workflow.createRun({
     runId: 'test-run',
   });
-  vi.spyOn(workflowBuilderRun, 'streamLegacy').mockResolvedValue(createMockWorkflowStream() as any);
+  // streamLegacy returns an object with a stream property
+  vi.spyOn(workflowBuilderRun, 'streamLegacy').mockReturnValue({
+    stream: createMockWorkflowStream(),
+  } as any);
   // observeStreamLegacy returns an object with a stream property
   vi.spyOn(workflowBuilderRun, 'observeStreamLegacy').mockReturnValue({
     stream: createMockWorkflowStream(),
@@ -373,32 +538,72 @@ export function createTestWorkflow(
  * @param data - The response data from HTTP (with dates as ISO strings)
  * @returns The same data with ISO date strings converted to Date objects
  */
-export function parseDatesInResponse(data: any): any {
+/**
+ * Check if a Zod schema expects a Date type at a given path
+ */
+function schemaExpectsDate(schema: any, path: string[] = []): boolean {
+  if (!schema) return false;
+
+  // Unwrap effects, optional, nullable, default to get to the base type
+  while (
+    schema._def?.typeName === 'ZodEffects' ||
+    schema._def?.typeName === 'ZodOptional' ||
+    schema._def?.typeName === 'ZodNullable' ||
+    schema._def?.typeName === 'ZodDefault'
+  ) {
+    if (schema._def.typeName === 'ZodEffects') {
+      schema = schema._def.schema;
+    } else if (schema._def.typeName === 'ZodOptional' || schema._def.typeName === 'ZodNullable') {
+      schema = schema._def.innerType;
+    } else if (schema._def.typeName === 'ZodDefault') {
+      schema = schema._def.innerType;
+    }
+  }
+
+  // If we have a path, navigate to that field
+  if (path.length > 0) {
+    if (schema._def?.typeName === 'ZodObject') {
+      const shape = schema._def.shape();
+      const fieldSchema = shape[path[0]];
+      return schemaExpectsDate(fieldSchema, path.slice(1));
+    } else if (schema._def?.typeName === 'ZodArray') {
+      // For arrays, check the element type (ignore the array index in path)
+      return schemaExpectsDate(schema._def.type, path.slice(1));
+    }
+    return false;
+  }
+
+  // Check if this is a Date type
+  return schema._def?.typeName === 'ZodDate';
+}
+
+export function parseDatesInResponse(data: any, schema?: any, currentPath: string[] = []): any {
   if (data === null || data === undefined) {
     return data;
   }
 
   if (typeof data === 'string') {
-    // Check if string matches ISO 8601 date format
-    const isoDateRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?$/;
-    if (isoDateRegex.test(data)) {
-      const parsed = new Date(data);
-      // Verify it's a valid date (not NaN)
-      if (!isNaN(parsed.getTime())) {
-        return parsed;
+    // Only parse dates if the schema expects a Date at this path
+    if (schema && schemaExpectsDate(schema, currentPath)) {
+      const isoDateRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?$/;
+      if (isoDateRegex.test(data)) {
+        const parsed = new Date(data);
+        if (!isNaN(parsed.getTime())) {
+          return parsed;
+        }
       }
     }
     return data;
   }
 
   if (Array.isArray(data)) {
-    return data.map(parseDatesInResponse);
+    return data.map((item, index) => parseDatesInResponse(item, schema, [...currentPath, String(index)]));
   }
 
   if (typeof data === 'object') {
     const result: any = {};
     for (const [key, value] of Object.entries(data)) {
-      result[key] = parseDatesInResponse(value);
+      result[key] = parseDatesInResponse(value, schema, [...currentPath, key]);
     }
     return result;
   }
@@ -414,7 +619,7 @@ async function setupWorkflowRegistryMocks(workflows: Record<string, Workflow>, m
       storage: mastra.getStorage(),
       agents: mastra.listAgents(),
       tts: mastra.getTTS(),
-      vectors: mastra.getVectors(),
+      vectors: mastra.listVectors(),
     });
     await mockWorkflowRun(workflow);
   }
@@ -430,7 +635,7 @@ async function setupWorkflowRegistryMocks(workflows: Record<string, Workflow>, m
           storage: mastra.getStorage(),
           agents: mastra.listAgents(),
           tts: mastra.getTTS(),
-          vectors: mastra.getVectors(),
+          vectors: mastra.listVectors(),
         });
       }
       WorkflowRegistry['additionalWorkflows'][id] = workflow;

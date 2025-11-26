@@ -1,15 +1,17 @@
 import type { Server } from 'http';
-import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
-import { createRouteAdapterTestSuite } from '@internal/server-adapter-test-utils';
+import { describe } from 'vitest';
 import express from 'express';
 import type { Application } from 'express';
-import { describe } from 'vitest';
 import { MastraServer } from '../index';
+import { createMCPRouteTestSuite } from '@internal/server-adapter-test-utils';
+import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
 
-// Wrapper describe block so the factory can call describe() inside
-describe('Express Server Adapter', () => {
-  createRouteAdapterTestSuite({
-    suiteName: 'Express Adapter Integration Tests',
+/**
+ * Express Integration Tests for MCP Registry Routes
+ */
+describe('Express MCP Registry Routes Integration', () => {
+  createMCPRouteTestSuite({
+    suiteName: 'Express Adapter',
 
     setupAdapter: (context: AdapterTestContext) => {
       // Create Express app
@@ -26,6 +28,7 @@ describe('Express Server Adapter', () => {
         isDev: context.isDev,
       });
 
+      // Register context middleware
       adapter.init();
 
       return { app, adapter };
@@ -85,47 +88,19 @@ describe('Express Server Adapter', () => {
           headers[key] = value;
         });
 
-        // Check if stream response
-        const contentType = response.headers.get('content-type') || '';
-        const transferEncoding = response.headers.get('transfer-encoding') || '';
-        const isStream = contentType.includes('text/plain') || transferEncoding === 'chunked';
+        // Parse JSON response
+        const data = await response.json();
 
-        if (isStream && response.body) {
-          // Return stream response
-          return {
-            status: response.status,
-            type: 'stream',
-            stream: response.body,
-            headers,
-          };
-        } else {
-          // JSON response - check content type to decide how to parse
-          let data: unknown;
-          const responseContentType = response.headers.get('content-type') || '';
-
-          if (responseContentType.includes('application/json')) {
-            try {
-              data = await response.json();
-            } catch {
-              // If JSON parsing fails, return empty object
-              data = {};
-            }
-          } else {
-            // Not JSON content type, read as text
-            data = await response.text();
-          }
-
-          return {
-            status: response.status,
-            type: 'json',
-            data,
-            headers,
-          };
-        }
+        return {
+          status: response.status,
+          type: 'json',
+          data,
+          headers,
+        };
       } finally {
-        // Always close server
-        await new Promise<void>(resolve => {
-          server.close(() => resolve());
+        // Clean up server
+        await new Promise<void>((resolve, reject) => {
+          server.close(err => (err ? reject(err) : resolve()));
         });
       }
     },

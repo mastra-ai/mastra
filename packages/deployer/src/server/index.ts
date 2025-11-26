@@ -18,7 +18,6 @@ import { describeRoute } from 'hono-openapi';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
-import { MCP_ROUTES, getMcpServerMessageHandler, getMcpServerSseHandler } from './handlers/mcp';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
@@ -198,16 +197,6 @@ export async function createHonoServer(
   // Register adapter routes (adapter was created earlier with configuration)
   // Cast needed due to Hono type variance - safe because registerRoutes is generic
   await honoServerAdapter.registerRoutes();
-
-  // Register MCP routes (separate from SERVER_ROUTES due to fetch-to-node bundling requirements)
-  for (const route of MCP_ROUTES) {
-    await honoServerAdapter.registerRoute(app as any, route, { prefix: '' });
-  }
-
-  // Register MCP standalone handlers (these use raw Hono Context, not createRoute pattern)
-  app.all('/api/mcp/:serverId/mcp', getMcpServerMessageHandler);
-  app.get('/api/mcp/:serverId/sse', getMcpServerSseHandler);
-  app.post('/api/mcp/:serverId/messages', getMcpServerSseHandler);
 
   if (options?.isDev || server?.build?.swaggerUI) {
     app.get(
