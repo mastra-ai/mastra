@@ -85,7 +85,6 @@ export const createMastraProject = async ({
   llmProvider,
   llmApiKey,
   needsInteractive,
-  gitInit,
 }: {
   projectName?: string;
   createVersionTag?: string;
@@ -93,7 +92,6 @@ export const createMastraProject = async ({
   llmProvider?: LLMProvider;
   llmApiKey?: string;
   needsInteractive?: boolean;
-  gitInit?: boolean;
 }) => {
   p.intro(color.inverse(' Mastra Create '));
 
@@ -117,12 +115,22 @@ export const createMastraProject = async ({
   }
 
   let result;
+  let shouldInitGit = false;
 
   if (needsInteractive) {
     result = await interactivePrompt({
       options: { showBanner: false },
       skip: { llmProvider: llmProvider !== undefined, llmApiKey: llmApiKey !== undefined },
     });
+
+    const gitConfirmResult = await p.confirm({
+      message: 'Initialize a new git repository?',
+      initialValue: true,
+    });
+
+    if (!p.isCancel(gitConfirmResult)) {
+      shouldInitGit = Boolean(gitConfirmResult);
+    }
   }
   const s = p.spinner();
 
@@ -227,21 +235,6 @@ export const createMastraProject = async ({
       throw new Error(`Failed to create .gitignore: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
     s.stop('.gitignore added');
-
-    // Handle git initialization
-    let shouldInitGit = gitInit;
-    if (shouldInitGit === undefined && needsInteractive) {
-      const gitConfirmResult = await p.confirm({
-        message: 'Would you like to initialize a git repository?',
-        initialValue: true,
-      });
-
-      if (p.isCancel(gitConfirmResult)) {
-        shouldInitGit = false;
-      } else {
-        shouldInitGit = gitConfirmResult;
-      }
-    }
 
     if (shouldInitGit) {
       s.start('Initializing git repository');

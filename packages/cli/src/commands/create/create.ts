@@ -28,7 +28,6 @@ export const create = async (args: {
   directory?: string;
   mcpServer?: Editor;
   template?: string | boolean;
-  gitInit?: boolean;
   analytics?: PosthogAnalytics;
 }) => {
   if (args.template !== undefined) {
@@ -49,7 +48,6 @@ export const create = async (args: {
     llmProvider: args?.llmProvider,
     llmApiKey: args?.llmApiKey,
     needsInteractive,
-    gitInit: args?.gitInit,
   });
   const directory = args.directory || 'src/';
 
@@ -222,7 +220,6 @@ async function createFromTemplate(args: {
   projectName?: string;
   template?: string | boolean;
   timeout?: number;
-  gitInit?: boolean;
   injectedAnalytics?: PosthogAnalytics;
 }) {
   let selectedTemplate: Template | undefined;
@@ -309,18 +306,14 @@ async function createFromTemplate(args: {
     await installDependencies(projectPath);
 
     // Handle git initialization for templates
-    let shouldInitGit = args.gitInit;
-    if (shouldInitGit === undefined) {
-      const gitConfirmResult = await p.confirm({
-        message: 'Would you like to initialize a git repository?',
-        initialValue: true,
-      });
+    let shouldInitGit = false;
+    const gitConfirmResult = await p.confirm({
+      message: 'Initialize a new git repository?',
+      initialValue: true,
+    });
 
-      if (p.isCancel(gitConfirmResult)) {
-        shouldInitGit = false;
-      } else {
-        shouldInitGit = gitConfirmResult;
-      }
+    if (!p.isCancel(gitConfirmResult)) {
+      shouldInitGit = Boolean(gitConfirmResult);
     }
 
     if (shouldInitGit) {
