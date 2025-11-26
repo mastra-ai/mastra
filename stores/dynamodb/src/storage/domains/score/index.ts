@@ -64,45 +64,47 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     const now = new Date();
     const scoreId = `score-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
+    const scorer =
+      typeof validatedScore.scorer === 'string' ? validatedScore.scorer : JSON.stringify(validatedScore.scorer);
+    const preprocessStepResult =
+      typeof validatedScore.preprocessStepResult === 'string'
+        ? validatedScore.preprocessStepResult
+        : JSON.stringify(validatedScore.preprocessStepResult);
+    const analyzeStepResult =
+      typeof validatedScore.analyzeStepResult === 'string'
+        ? validatedScore.analyzeStepResult
+        : JSON.stringify(validatedScore.analyzeStepResult);
+    const input =
+      typeof validatedScore.input === 'string' ? validatedScore.input : JSON.stringify(validatedScore.input);
+    const output =
+      typeof validatedScore.output === 'string' ? validatedScore.output : JSON.stringify(validatedScore.output);
+    const additionalContext =
+      typeof validatedScore.additionalContext === 'string'
+        ? validatedScore.additionalContext
+        : JSON.stringify(validatedScore.additionalContext);
+    const requestContext =
+      typeof validatedScore.requestContext === 'string'
+        ? validatedScore.requestContext
+        : JSON.stringify(validatedScore.requestContext);
+    const entity =
+      typeof validatedScore.entity === 'string' ? validatedScore.entity : JSON.stringify(validatedScore.entity);
+
     const scoreData = {
+      ...validatedScore,
       entity: 'score',
       id: scoreId,
-      scorerId: validatedScore.scorerId,
+      scorer,
+      preprocessStepResult,
+      analyzeStepResult,
+      input,
+      output,
+      additionalContext,
+      requestContext,
+      entityData: entity,
       traceId: validatedScore.traceId || '',
-      spanId: validatedScore.spanId || '',
-      runId: validatedScore.runId,
-      scorer: typeof validatedScore.scorer === 'string' ? validatedScore.scorer : JSON.stringify(validatedScore.scorer),
-      preprocessStepResult:
-        typeof validatedScore.preprocessStepResult === 'string'
-          ? validatedScore.preprocessStepResult
-          : JSON.stringify(validatedScore.preprocessStepResult),
-      analyzeStepResult:
-        typeof validatedScore.analyzeStepResult === 'string'
-          ? validatedScore.analyzeStepResult
-          : JSON.stringify(validatedScore.analyzeStepResult),
-      score: validatedScore.score,
-      reason: validatedScore.reason,
-      preprocessPrompt: validatedScore.preprocessPrompt,
-      generateScorePrompt: validatedScore.generateScorePrompt,
-      generateReasonPrompt: validatedScore.generateReasonPrompt,
-      analyzePrompt: validatedScore.analyzePrompt,
-      input: typeof validatedScore.input === 'string' ? validatedScore.input : JSON.stringify(validatedScore.input),
-      output: typeof validatedScore.output === 'string' ? validatedScore.output : JSON.stringify(validatedScore.output),
-      additionalContext:
-        typeof validatedScore.additionalContext === 'string'
-          ? validatedScore.additionalContext
-          : JSON.stringify(validatedScore.additionalContext),
-      requestContext:
-        typeof validatedScore.requestContext === 'string'
-          ? validatedScore.requestContext
-          : JSON.stringify(validatedScore.requestContext),
-      entityType: validatedScore.entityType,
-      entityData:
-        typeof validatedScore.entity === 'string' ? validatedScore.entity : JSON.stringify(validatedScore.entity),
-      entityId: validatedScore.entityId,
-      source: validatedScore.source,
       resourceId: validatedScore.resourceId || '',
       threadId: validatedScore.threadId || '',
+      spanId: validatedScore.spanId || '',
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
     };
