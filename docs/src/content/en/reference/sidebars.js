@@ -223,6 +223,11 @@ const sidebars = {
               id: "workflows/run-methods/cancel",
               label: ".cancel()",
             },
+            {
+              type: "doc",
+              id: "workflows/run-methods/restart",
+              label: ".restart()",
+            },
           ],
         },
       ],
@@ -489,6 +494,17 @@ const sidebars = {
               type: "doc",
               id: "observability/tracing/interfaces",
               label: "Interfaces",
+            },
+            {
+              type: "category",
+              label: "Bridges",
+              items: [
+                {
+                  type: "doc",
+                  id: "observability/tracing/bridges/otel",
+                  label: "OtelBridge",
+                },
+              ],
             },
             {
               type: "category",
