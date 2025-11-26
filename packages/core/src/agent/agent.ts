@@ -48,6 +48,7 @@ import { AgentLegacyHandler } from './agent-legacy';
 import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
+import { SaveQueueManager } from './save-queue';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
@@ -2488,6 +2489,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const memory = await this.getMemory({ requestContext });
 
+    const saveQueueManager = new SaveQueueManager({
+      logger: this.logger,
+      memory,
+    });
+
     if (process.env.NODE_ENV !== 'test') {
       this.logger.debug(`[Agents:${this.name}] - Starting generation`, { runId });
     }
@@ -2526,6 +2532,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       instructions,
       memoryConfig,
       memory,
+      saveQueueManager,
       returnScorerData: options.returnScorerData,
       requireToolApproval: options.requireToolApproval,
       resumeContext,

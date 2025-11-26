@@ -9,6 +9,7 @@ import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createWorkflow } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
+import type { SaveQueueManager } from '../../save-queue';
 import type { AgentMethodType } from '../../types';
 import { createMapResultsStep } from './map-results-step';
 import { createPrepareMemoryStep } from './prepare-memory-step';
@@ -32,6 +33,7 @@ interface CreatePrepareStreamWorkflowOptions<
   memoryConfig?: MemoryConfig;
   memory?: MastraMemory;
   returnScorerData?: boolean;
+  saveQueueManager?: SaveQueueManager;
   requireToolApproval?: boolean;
   resumeContext?: {
     resumeData: any;
@@ -57,6 +59,7 @@ export function createPrepareStreamWorkflow<
   memoryConfig,
   memory,
   returnScorerData,
+  saveQueueManager,
   requireToolApproval,
   resumeContext,
   agentId,
