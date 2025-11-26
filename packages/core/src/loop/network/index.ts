@@ -317,10 +317,15 @@ export async function createNetworkLoop({
           memory: {
             thread: initData?.threadId ?? runId,
             resource: initData?.threadResourceId ?? networkName,
-            readOnly: true,
+            options: {
+              readOnly: true,
+              workingMemory: {
+                enabled: false,
+              },
+            },
           },
           ...routingAgentOptions,
-        };
+        } satisfies AgentExecutionOptions<any>;
 
         // Try streaming with structured output
         let completionStream = await routingAgent.stream(completionPrompt, streamOptions);
@@ -499,7 +504,12 @@ export async function createNetworkLoop({
         memory: {
           thread: initData?.threadId ?? runId,
           resource: initData?.threadResourceId ?? networkName,
-          readOnly: true,
+          options: {
+            readOnly: true,
+            workingMemory: {
+              enabled: false,
+            },
+          },
         },
         ...routingAgentOptions,
       };
