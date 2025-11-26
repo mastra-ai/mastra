@@ -93,6 +93,45 @@ The storage implementation handles collection creation and management automatica
 - `mastra_scorers`: Stores scoring and evaluation data
 - `mastra_resources`: Stores resource working memory data
 
+### Initialization
+
+When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
+
+```typescript copy
+import { Mastra } from "@mastra/core";
+import { MongoDBStore } from "@mastra/mongodb";
+
+const storage = new MongoDBStore({
+  url: process.env.MONGODB_URL,
+  dbName: process.env.MONGODB_DATABASE,
+});
+
+const mastra = new Mastra({
+  storage, // init() is called automatically
+});
+```
+
+If you're using storage directly without Mastra, you must call `init()` explicitly to create the collections:
+
+```typescript copy
+import { MongoDBStore } from "@mastra/mongodb";
+
+const storage = new MongoDBStore({
+  url: process.env.MONGODB_URL,
+  dbName: process.env.MONGODB_DATABASE,
+});
+
+// Required when using storage directly
+await storage.init();
+
+// Now you can use the storage
+await storage.getThread({ threadId: "..." });
+```
+
+:::warning
+If `init()` is not called, collections won't be created and storage operations will fail silently or throw errors.
+:::
+
 ## Vector Search Capabilities
 
 MongoDB storage includes built-in vector search capabilities for AI applications:
