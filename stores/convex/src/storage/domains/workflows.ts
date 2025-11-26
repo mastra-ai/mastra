@@ -1,6 +1,6 @@
 import { TABLE_WORKFLOW_SNAPSHOT, normalizePerPage, WorkflowsStorage } from '@mastra/core/storage';
 import type { StorageListWorkflowRunsInput, StorageWorkflowRun, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
 
 import type { StoreOperationsConvex } from '../operations';
 
@@ -54,7 +54,7 @@ export class WorkflowsConvex extends WorkflowsStorage {
     workflowName: string;
     runId: string;
     opts: {
-      status: string;
+      status: WorkflowRunStatus;
       result?: StepResult<any, any, any, any>;
       error?: string;
       suspendedPaths?: Record<string, number[]>;
@@ -65,7 +65,7 @@ export class WorkflowsConvex extends WorkflowsStorage {
     if (!run) return undefined;
 
     const snapshot = this.ensureSnapshot(run);
-    const updated = { ...snapshot, ...opts };
+    const updated: WorkflowRunState = { ...snapshot, ...opts };
 
     await this.persistWorkflowSnapshot({
       workflowName,
@@ -89,6 +89,12 @@ export class WorkflowsConvex extends WorkflowsStorage {
     snapshot: WorkflowRunState;
   }): Promise<void> {
     const now = new Date();
+    // Check if a record already exists to preserve createdAt
+    const existing = await this.operations.load<{ createdAt?: string } | null>({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      keys: { workflow_name: workflowName, run_id: runId },
+    });
+
     await this.operations.insert({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       record: {
@@ -96,7 +102,7 @@ export class WorkflowsConvex extends WorkflowsStorage {
         run_id: runId,
         resourceId,
         snapshot,
-        createdAt: snapshot.createdAt ?? now.toISOString(),
+        createdAt: existing?.createdAt ?? now.toISOString(),
         updatedAt: now.toISOString(),
       },
     });

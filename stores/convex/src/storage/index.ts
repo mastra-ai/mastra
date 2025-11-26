@@ -1,4 +1,4 @@
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/evals';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
   StorageColumn,
@@ -15,7 +15,7 @@ import type {
   TABLE_NAMES,
 } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
 
 import type { ConvexAdminClientConfig } from './client';
 import { ConvexAdminClient } from './client';
@@ -186,7 +186,7 @@ export class ConvexStore extends MastraStorage {
     workflowName: string;
     runId: string;
     opts: {
-      status: string;
+      status: WorkflowRunStatus;
       result?: StepResult<any, any, any, any>;
       error?: string;
       suspendedPaths?: Record<string, number[]>;
@@ -252,7 +252,7 @@ export class ConvexStore extends MastraStorage {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string | undefined;
-    entityType?: string | undefined;
+    entityType?: ScoringEntityType | undefined;
     source?: ScoringSource | undefined;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     return this.scores.listScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
@@ -275,7 +275,7 @@ export class ConvexStore extends MastraStorage {
   }: {
     pagination: StoragePagination;
     entityId: string;
-    entityType: string;
+    entityType: ScoringEntityType;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     return this.scores.listScoresByEntityId({ entityId, entityType, pagination });
   }
