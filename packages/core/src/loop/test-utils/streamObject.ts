@@ -7,10 +7,9 @@ import {
 import type { LanguageModelV2CallWarning, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { jsonSchema, NoObjectGeneratedError, pipeTextStreamToResponse } from 'ai-v5';
 import type { FinishReason, LanguageModelResponseMetadata, LanguageModelUsage } from 'ai-v5';
-import { MockLanguageModelV2 } from 'ai-v5/test';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 import { assert, beforeEach, describe, expect, it, vi } from 'vitest';
 import z from 'zod';
-import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import { createMockServerResponse } from './mock-server-response';
 import { createMessageListWithUserMessage, mockDate, testUsage } from './utils';
@@ -1036,12 +1035,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "id-0",
                     "messages": [
                       {
-                        "content": [
-                          {
-                            "text": "{ "content": "Hello, world!" }",
-                            "type": "text",
-                          },
-                        ],
+                        "content": "{ "content": "Hello, world!" }",
                         "role": "assistant",
                       },
                     ],
@@ -1250,12 +1244,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "id-0",
                     "messages": [
                       {
-                        "content": [
-                          {
-                            "text": "{ "invalid": "Hello, world!" }",
-                            "type": "text",
-                          },
-                        ],
+                        "content": "{ "invalid": "Hello, world!" }",
                         "role": "assistant",
                       },
                     ],
@@ -1461,12 +1450,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "id-0",
                     "messages": [
                       {
-                        "content": [
-                          {
-                            "text": "{ "invalid": "Hello, world!" }",
-                            "type": "text",
-                          },
-                        ],
+                        "content": "{ "invalid": "Hello, world!" }",
                         "role": "assistant",
                       },
                     ],

@@ -67,7 +67,9 @@ describe('LangfuseExporter', () => {
 
     // Get the mocked Langfuse constructor and configure it
     LangfuseMock = vi.mocked(Langfuse);
-    LangfuseMock.mockImplementation(() => mockLangfuseClient);
+    LangfuseMock.mockImplementation(function () {
+      return mockLangfuseClient;
+    });
 
     config = {
       publicKey: 'test-public-key',

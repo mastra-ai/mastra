@@ -1,0 +1,135 @@
+---
+title: "Azure OpenAI | Gateways | Mastra"
+description: "Use Azure OpenAI Service with custom model deployments."
+---
+
+{/* This file is MANUALLY MAINTAINED - DO NOT AUTO-GENERATE */}
+{/* Azure uses deployment-based routing which differs from standard providers */}
+
+# <img src="https://models.dev/logos/azure.svg" alt="Azure OpenAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Azure OpenAI
+
+Azure OpenAI provides enterprise-grade access to OpenAI models through dedicated deployments with security, compliance, and SLA guarantees.
+
+Unlike other providers that have fixed model names, Azure uses **deployment names** that you configure in the Azure Portal.
+
+## How Azure Deployments Work
+
+Azure model IDs follow this pattern: `azure-openai/your-deployment-name`
+
+The deployment name is **specific to your Azure account** and chosen when you create a deployment in Azure Portal. Common examples:
+- `azure-openai/my-gpt4-deployment`
+- `azure-openai/production-gpt-35-turbo`
+- `azure-openai/staging-gpt-4o`
+
+## Setup
+
+Create deployments in [Azure OpenAI Studio](https://oai.azure.com/). The resource name and API key are in Azure Portal under "Keys and Endpoint".
+
+## Configuration
+
+Instantiate the gateway and pass it to Mastra. Three configuration modes are available.
+
+### Static Deployments
+
+Provide deployment names from Azure Portal.
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { AzureOpenAIGateway } from "@mastra/core/llm";
+
+export const mastra = new Mastra({
+  gateways: [
+    new AzureOpenAIGateway({
+      resourceName: "my-openai-resource",
+      apiKey: process.env.AZURE_API_KEY!,
+      deployments: ["gpt-4-prod", "gpt-35-turbo-dev"],
+    }),
+  ],
+});
+```
+
+### Dynamic Discovery
+
+Provide Management API credentials. The gateway queries Azure Management API to list deployments.
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { AzureOpenAIGateway } from "@mastra/core/llm";
+
+export const mastra = new Mastra({
+  gateways: [
+    new AzureOpenAIGateway({
+      resourceName: "my-openai-resource",
+      apiKey: process.env.AZURE_API_KEY!,
+      management: {
+        tenantId: process.env.AZURE_TENANT_ID!,
+        clientId: process.env.AZURE_CLIENT_ID!,
+        clientSecret: process.env.AZURE_CLIENT_SECRET!,
+        subscriptionId: process.env.AZURE_SUBSCRIPTION_ID!,
+        resourceGroup: "my-resource-group",
+      },
+    }),
+  ],
+});
+```
+
+The Service Principal requires "Cognitive Services User" role. See [Azure documentation](https://learn.microsoft.com/en-us/entra/identity-platform/howto-create-service-principal-portal).
+
+### Manual Deployment Names
+
+Provide resource name and API key only. Specify deployment names when creating agents. No IDE autocomplete.
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { AzureOpenAIGateway } from "@mastra/core/llm";
+
+export const mastra = new Mastra({
+  gateways: [
+    new AzureOpenAIGateway({
+      resourceName: "my-openai-resource",
+      apiKey: process.env.AZURE_API_KEY!,
+    }),
+  ],
+});
+```
+
+## Configuration Reference
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `resourceName` | `string` | Yes | Azure OpenAI resource name |
+| `apiKey` | `string` | Yes | API key from "Keys and Endpoint" |
+| `apiVersion` | `string` | No | API version (default: `2024-04-01-preview`) |
+| `deployments` | `string[]` | No | Deployment names for static mode |
+| `management` | `object` | No | Management API credentials |
+| `management.tenantId` | `string` | Yes* | Azure AD tenant ID |
+| `management.clientId` | `string` | Yes* | Service Principal client ID |
+| `management.clientSecret` | `string` | Yes* | Service Principal secret |
+| `management.subscriptionId` | `string` | Yes* | Azure subscription ID |
+| `management.resourceGroup` | `string` | Yes* | Resource group name |
+
+\* Required if `management` is provided
+
+## Usage
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "azure-openai/my-gpt4-deployment"  // Use your Azure deployment name (autocompleted in dev mode)
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+Check [Azure OpenAI model availability](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models) for region-specific options.

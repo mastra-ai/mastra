@@ -768,9 +768,7 @@ describe('Observability Registry', () => {
           'mastra-cloud-observability-exporter disabled: MASTRA_CLOUD_ACCESS_TOKEN environment variable not set',
         ),
       );
-      expect(infoSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Sign up for Mastra Cloud at https://cloud.mastra.ai'),
-      );
+      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('Sign up at https://cloud.mastra.ai'));
 
       // Verify exporter is disabled but doesn't throw
       const event = {

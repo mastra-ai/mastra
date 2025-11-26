@@ -37,7 +37,6 @@ interface TokenData {
 export class NetlifyGateway extends MastraModelGateway {
   readonly id = 'netlify';
   readonly name = 'Netlify AI Gateway';
-  readonly prefix = 'netlify'; // All providers will be prefixed with "netlify/"
   private tokenCache = new InMemoryServerCache();
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
@@ -46,9 +45,9 @@ export class NetlifyGateway extends MastraModelGateway {
       throw new Error(`Failed to fetch from Netlify: ${response.statusText}`);
     }
     const data = (await response.json()) as NetlifyResponse;
-    const netlify: ProviderConfig = {
+    const config: ProviderConfig = {
       apiKeyEnvVar: ['NETLIFY_TOKEN', 'NETLIFY_SITE_ID'],
-      apiKeyHeader: 'Authorization', // Netlify uses standard Bearer auth
+      apiKeyHeader: 'Authorization',
       name: `Netlify`,
       gateway: `netlify`,
       models: [],
@@ -57,10 +56,11 @@ export class NetlifyGateway extends MastraModelGateway {
     // Convert Netlify format to our standard format
     for (const [providerId, provider] of Object.entries(data.providers)) {
       for (const model of provider.models) {
-        netlify.models.push(`${providerId}/${model}`);
+        config.models.push(`${providerId}/${model}`);
       }
     }
-    return { netlify };
+    // Return with gateway ID as key - registry generator will detect this and avoid doubling the prefix
+    return { netlify: config };
   }
 
   async buildUrl(routerId: string, envVars?: typeof process.env): Promise<string> {
@@ -178,22 +178,25 @@ export class NetlifyGateway extends MastraModelGateway {
     modelId,
     providerId,
     apiKey,
+    headers,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
+    headers?: Record<string, string>;
   }): Promise<LanguageModelV2> {
     const baseURL = await this.buildUrl(`${providerId}/${modelId}`);
 
     switch (providerId) {
       case 'openai':
-        return createOpenAI({ apiKey, baseURL }).responses(modelId);
+        return createOpenAI({ apiKey, baseURL, headers }).responses(modelId);
       case 'gemini':
         return createGoogleGenerativeAI({
           baseURL: `${baseURL}/v1beta/`,
           apiKey,
           headers: {
             'user-agent': 'google-genai-sdk/',
+            ...(headers ? headers : {}),
           },
         }).chat(modelId);
       case 'anthropic':
@@ -203,6 +206,7 @@ export class NetlifyGateway extends MastraModelGateway {
           headers: {
             'anthropic-version': '2023-06-01',
             'user-agent': 'anthropic/',
+            ...(headers ? headers : {}),
           },
         })(modelId);
       default:

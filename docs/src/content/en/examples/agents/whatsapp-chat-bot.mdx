@@ -88,7 +88,6 @@ export async function sendWhatsAppMessage({ to, message }: SendMessageParams) {
 This agent handles the main conversation logic with a friendly, conversational personality.
 
 ```typescript title="src/mastra/agents/chat-agent.ts" showLineNumbers copy
-import { anthropic } from "@ai-sdk/anthropic";
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
@@ -123,7 +122,7 @@ export const chatAgent = new Agent({
 
     Always aim to be helpful while maintaining a friendly, approachable conversation style.
   `,
-  model: anthropic("claude-4-sonnet-20250514"),
+  model: "anthropic/claude-4-sonnet-20250514",
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'agent-storage',
@@ -138,7 +137,6 @@ export const chatAgent = new Agent({
 This agent converts longer responses into natural, bite-sized text messages suitable for WhatsApp.
 
 ```typescript title="src/mastra/agents/text-message-agent.ts" showLineNumbers copy
-import { anthropic } from "@ai-sdk/anthropic";
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
@@ -162,7 +160,7 @@ export const textMessageAgent = new Agent({
 
     Always return exactly 5-8 messages in the messages array.
   `,
-  model: anthropic("claude-4-sonnet-20250514"),
+  model: "anthropic/claude-4-sonnet-20250514",
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'agent-storage',

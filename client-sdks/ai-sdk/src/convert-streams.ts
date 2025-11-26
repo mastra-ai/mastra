@@ -6,7 +6,7 @@ import type {
   WorkflowRunOutput,
 } from '@mastra/core/stream';
 import type { MastraWorkflowStream, Step, WorkflowResult } from '@mastra/core/workflows';
-import type { InferUIMessageChunk, UIMessage } from 'ai';
+import type { InferUIMessageChunk, UIMessage, UIMessageStreamOptions } from 'ai';
 import type { ZodObject, ZodType } from 'zod';
 import {
   AgentNetworkToAISDKTransformer,
@@ -37,6 +37,8 @@ type ToAISDKFrom = 'agent' | 'network' | 'workflow';
  * @param {boolean} [options.sendFinish=true] - (Agent only) Whether to send finish events. Defaults to true
  * @param {boolean} [options.sendReasoning] - (Agent only) Whether to include reasoning in the output
  * @param {boolean} [options.sendSources] - (Agent only) Whether to include sources in the output
+ * @param {Function} [options.messageMetadata] - (Agent only) A function that receives the current stream part and returns metadata to attach to start and finish chunks
+ * @param {Function} [options.onError] - (Agent only) A function to handle errors during stream conversion. Receives the error and should return a string representation
  *
  * @returns {ReadableStream<InferUIMessageChunk<UIMessage>>} A ReadableStream compatible with AI SDK v5
  *
@@ -58,6 +60,16 @@ type ToAISDKFrom = 'agent' | 'network' | 'workflow';
  *   lastMessageId: 'msg-123',
  *   sendReasoning: true,
  *   sendSources: true
+ * });
+ *
+ * @example
+ * // Convert an agent stream with messageMetadata
+ * const aiSDKStream = toAISdkV5Stream(agentStream, {
+ *   from: 'agent',
+ *   messageMetadata: ({ part }) => ({
+ *     timestamp: Date.now(),
+ *     partType: part.type
+ *   })
  * });
  */
 export function toAISdkV5Stream<
@@ -91,6 +103,8 @@ export function toAISdkV5Stream<TOutput extends OutputSchema>(
     sendFinish?: boolean;
     sendReasoning?: boolean;
     sendSources?: boolean;
+    messageMetadata?: UIMessageStreamOptions<UIMessage>['messageMetadata'];
+    onError?: UIMessageStreamOptions<UIMessage>['onError'];
   },
 ): ReadableStream<InferUIMessageChunk<UIMessage>>;
 export function toAISdkV5Stream(
@@ -106,6 +120,8 @@ export function toAISdkV5Stream(
     sendFinish?: boolean;
     sendReasoning?: boolean;
     sendSources?: boolean;
+    messageMetadata?: UIMessageStreamOptions<UIMessage>['messageMetadata'];
+    onError?: UIMessageStreamOptions<UIMessage>['onError'];
   } = {
     from: 'agent',
     sendStart: true,
@@ -135,6 +151,8 @@ export function toAISdkV5Stream(
       sendFinish: options?.sendFinish,
       sendReasoning: options?.sendReasoning,
       sendSources: options?.sendSources,
+      messageMetadata: options?.messageMetadata,
+      onError: options?.onError,
     }),
   ) as ReadableStream<InferUIMessageChunk<UIMessage>>;
 }

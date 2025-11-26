@@ -229,6 +229,8 @@ export class InternalMastraMCPClient extends MastraBase {
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
   private currentOperationContext: RequestContext | null = null;
+  private exitHookUnsubscribe?: () => void;
+  private sigTermHandler?: () => void;
 
   /** Provides access to resource operations (list, read, subscribe, etc.) */
   public readonly resources: ResourceClientActions;
@@ -355,7 +357,7 @@ export class InternalMastraMCPClient extends MastraBase {
           authProvider: authProvider,
         });
         await this.client.connect(streamableTransport, {
-          timeout: 
+          timeout:
             connectTimeout ?? DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC,
         });
         this.transport = streamableTransport;
@@ -433,15 +435,22 @@ export class InternalMastraMCPClient extends MastraBase {
       }
     });
 
-    asyncExitHook(
-      async () => {
-        this.log('debug', `Disconnecting MCP server during exit`);
-        await this.disconnect();
-      },
-      { wait: 5000 },
-    );
+    // Only register exit hooks if not already registered
+    if (!this.exitHookUnsubscribe) {
+      this.exitHookUnsubscribe = asyncExitHook(
+        async () => {
+          this.log('debug', `Disconnecting MCP server during exit`);
+          await this.disconnect();
+        },
+        { wait: 5000 },
+      );
+    }
 
-    process.on('SIGTERM', () => gracefulExit());
+    if (!this.sigTermHandler) {
+      this.sigTermHandler = () => gracefulExit();
+      process.on('SIGTERM', this.sigTermHandler);
+    }
+
     this.log('debug', `Successfully connected to MCP server`);
     return this.isConnected;
   }
@@ -479,6 +488,16 @@ export class InternalMastraMCPClient extends MastraBase {
     } finally {
       this.transport = undefined;
       this.isConnected = Promise.resolve(false);
+
+      // Clean up exit hooks to prevent memory leaks
+      if (this.exitHookUnsubscribe) {
+        this.exitHookUnsubscribe();
+        this.exitHookUnsubscribe = undefined;
+      }
+      if (this.sigTermHandler) {
+        process.off('SIGTERM', this.sigTermHandler);
+        this.sigTermHandler = undefined;
+      }
     }
   }
 
@@ -699,6 +718,13 @@ export class InternalMastraMCPClient extends MastraBase {
               );
 
               this.log('debug', `Tool executed successfully: ${tool.name}`);
+
+              // When a tool has an outputSchema, return the structuredContent directly
+              // so that output validation works correctly
+              if (res.structuredContent !== undefined) {
+                return res.structuredContent;
+              }
+
               return res;
             } catch (e) {
               this.log('error', `Error calling tool: ${tool.name}`, {
