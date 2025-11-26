@@ -63,7 +63,7 @@ export async function getAgentCardByIdHandler({
     url: string;
   };
 }): Promise<AgentCard> {
-  const agent = mastra.getAgent(agentId);
+  const agent = mastra.getAgentById(agentId);
 
   if (!agent) {
     throw new Error(`Agent with ID ${agentId} not found`);
@@ -353,7 +353,7 @@ export async function getAgentExecutionHandler({
   taskStore: InMemoryTaskStore;
   logger?: IMastraLogger;
 }): Promise<any> {
-  const agent = mastra.getAgent(agentId);
+  const agent = mastra.getAgentById(agentId);
 
   let taskId: string | undefined; // For error context
 
@@ -439,7 +439,7 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
     };
     const version = '1.0';
 
-    const agent = mastra.getAgent(agentId as string);
+    const agent = mastra.getAgentById(agentId as string);
 
     if (!agent) {
       throw new Error(`Agent with ID ${agentId} not found`);
