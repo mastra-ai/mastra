@@ -2,41 +2,12 @@ import { join } from 'path';
 import process from 'process';
 import { Deployer } from '@mastra/deployer';
 import { DepsService } from '@mastra/deployer/services';
-import fsExtra, { move, writeJson } from 'fs-extra/esm';
-
-export interface NetlifyBuildConfig {
-  /**
-   * Build command to execute. Defaults to "npm run build"
-   */
-  command?: string;
-  /**
-   * Directory to publish. Defaults to ".netlify/v1/functions"
-   */
-  publish?: string;
-  /**
-   * Environment variables to set during build
-   */
-  environment?: Record<string, string>;
-}
-
-export interface NetlifyDeployerConfig {
-  /**
-   * Build configuration options
-   */
-  build?: NetlifyBuildConfig;
-}
+import { move, writeJson } from 'fs-extra/esm';
 
 export class NetlifyDeployer extends Deployer {
-  private buildConfig: NetlifyBuildConfig;
-
-  constructor(config?: NetlifyDeployerConfig) {
+  constructor() {
     super({ name: 'NETLIFY' });
     this.outputDir = join('.netlify', 'v1', 'functions', 'api');
-    this.buildConfig = {
-      command: config?.build?.command || 'npm run build',
-      publish: config?.build?.publish || '.netlify/v1/functions',
-      environment: config?.build?.environment || {},
-    };
   }
 
   protected async installDependencies(outputDirectory: string, rootDir = process.cwd()) {
@@ -61,37 +32,6 @@ export class NetlifyDeployer extends Deployer {
     await super.prepare(outputDirectory);
   }
 
-  private async writeNetlifyToml(rootDir = process.cwd()): Promise<void> {
-    const filePath = join(rootDir, 'netlify.toml');
-
-    if (await fsExtra.pathExists(filePath)) {
-      this.logger?.info('Existing netlify.toml found, preserving it');
-      return;
-    }
-
-    let netlifyTomlContent = `[build]
-  command = "${this.buildConfig.command}"
-  publish = "${this.buildConfig.publish}"`;
-
-    // Add build environment variables if any
-    if (this.buildConfig.environment && Object.keys(this.buildConfig.environment).length > 0) {
-      netlifyTomlContent += '\n\n[build.environment]';
-
-      for (const [key, value] of Object.entries(this.buildConfig.environment)) {
-        netlifyTomlContent += `\n  ${key} = "${value}"`;
-      }
-    }
-
-    netlifyTomlContent += `
-
-[[redirects]]
-  from = "/*"
-  to = "/.netlify/functions/api/:splat"
-  status = 200`;
-
-    await fsExtra.outputFile(filePath, netlifyTomlContent);
-  }
-
   async bundle(
     entryFile: string,
     outputDirectory: string,
@@ -105,7 +45,14 @@ export class NetlifyDeployer extends Deployer {
       join(outputDirectory, this.outputDir),
     );
 
+    // Use Netlify Frameworks API config.json
+    // https://docs.netlify.com/build/frameworks/frameworks-api/
     await writeJson(join(outputDirectory, '.netlify', 'v1', 'config.json'), {
+      functions: {
+        directory: '.netlify/v1/functions',
+        node_bundler: 'none',
+        included_files: ['.netlify/v1/functions/**'],
+      },
       redirects: [
         {
           force: true,
@@ -115,8 +62,6 @@ export class NetlifyDeployer extends Deployer {
         },
       ],
     });
-
-    await this.writeNetlifyToml();
 
     await move(join(outputDirectory, '.netlify', 'v1'), join(process.cwd(), '.netlify', 'v1'), {
       overwrite: true,
