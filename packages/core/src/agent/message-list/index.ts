@@ -2493,7 +2493,12 @@ export class MessageList {
               return p;
             }, '') ??
               '');
-          if (text || part.details?.length) {
+          // IMPORTANT: Also include reasoning parts that have providerMetadata even if
+          // they have no text/details content. This is critical for OpenAI GPT-5 models
+          // (using the Responses API) which require reasoning items to be present with
+          // their itemId even when the reasoning content is empty.
+          // See GitHub issue #9005 for more details.
+          if (text || part.details?.length || part.providerMetadata) {
             parts.push({
               type: 'reasoning',
               text: text || '',
@@ -2623,7 +2628,9 @@ export class MessageList {
         } satisfies AIV5Type.ModelMessage;
       }
 
-      // Restore part-level providerOptions for tool-call parts
+      // Restore part-level providerOptions for tool-call and reasoning parts
+      // For tool-call: restore from callProviderMetadata
+      // For reasoning: restore from providerMetadata (required for OpenAI GPT-5 Responses API - see GitHub issue #9005)
       if (updatedMsg.role === 'assistant' && Array.isArray(updatedMsg.content)) {
         const updatedContent = updatedMsg.content.map((part, partIndex) => {
           if (part.type === 'tool-call') {
@@ -2632,7 +2639,18 @@ export class MessageList {
             if (uiPart && 'callProviderMetadata' in uiPart && uiPart.callProviderMetadata) {
               return {
                 ...part,
-                providerMetadata: uiPart.callProviderMetadata,
+                providerOptions: uiPart.callProviderMetadata,
+              };
+            }
+          }
+          if (part.type === 'reasoning') {
+            // Find corresponding UI part to get providerMetadata
+            // This is critical for OpenAI GPT-5 models which require itemId on reasoning parts
+            const uiPart = uiMsg?.parts[partIndex];
+            if (uiPart && 'providerMetadata' in uiPart && uiPart.providerMetadata) {
+              return {
+                ...part,
+                providerOptions: uiPart.providerMetadata,
               };
             }
           }
