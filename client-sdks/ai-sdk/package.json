@@ -1,6 +1,6 @@
 {
   "name": "@mastra/ai-sdk",
-  "version": "1.0.1",
+  "version": "0.3.1",
   "description": "Adds custom API routes to be compatible with the AI SDK UI parts",
   "type": "module",
   "main": "dist/index.js",

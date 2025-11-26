@@ -7,7 +7,7 @@
     "@mastra/auth-firebase": "0.10.7",
     "@mastra/auth-supabase": "0.10.9",
     "@mastra/auth-workos": "0.10.10",
-    "@mastra/ai-sdk": "1.0.1",
+    "@mastra/ai-sdk": "0.3.1",
     "@mastra/client-js": "0.16.14",
     "@mastra/react": "0.0.20",
     "@mastra/deployer-cloud": "0.24.5",
