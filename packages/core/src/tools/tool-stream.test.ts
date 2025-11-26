@@ -43,27 +43,27 @@ describe('ToolStream - writer.custom', () => {
       inputSchema: z.object({
         message: z.string(),
       }),
-      execute: async (inputData, context) => {
+      execute: async ({ writer, context }: any) => {
         // Use writer.custom to send a custom data chunk
-        await context?.writer?.custom({
+        await writer?.custom({
           type: 'data-custom-progress',
           data: {
             status: 'processing',
-            message: inputData.message,
+            message: context.message,
             progress: 50,
           },
         });
 
         // Send another custom chunk
-        await context?.writer?.custom({
+        await writer.custom({
           type: 'data-custom-result',
           data: {
             status: 'complete',
-            result: `Processed: ${inputData.message}`,
+            result: `Processed: ${  context.message}`,
           },
         });
 
-        return { success: true, message: inputData.message };
+        return { success: true, message: context.message };
       },
     });
 
@@ -108,26 +108,26 @@ describe('ToolStream - writer.custom', () => {
       inputSchema: z.object({
         task: z.string(),
       }),
-      execute: async (inputData, context) => {
+      execute: async ({ writer, context }: any) => {
         // Send custom progress updates
-        await context?.writer?.custom({
+        await writer?.custom({
           type: 'data-sub-agent-progress',
           data: {
             step: 'initializing',
-            task: inputData.task,
+            task: context.task,
           },
         });
 
-        await context?.writer?.custom({
+        await writer.custom({
           type: 'data-sub-agent-progress',
           data: {
             step: 'processing',
-            task: inputData.task,
+            task: context.task,
             progress: 75,
           },
         });
 
-        return { completed: true, task: inputData.task };
+        return { completed: true, task: context.task };
       },
     });
 
@@ -225,29 +225,29 @@ describe('ToolStream - writer.custom', () => {
       inputSchema: z.object({
         value: z.string(),
       }),
-      execute: async (inputData, context) => {
+      execute: async ({ writer, context }: any) => {
         // Use regular write
-        await context?.writer?.write({
+        await writer?.write({
           type: 'status-update',
           message: 'Starting processing',
         });
 
         // Use custom for data chunks
-        await context?.writer?.custom({
+        await writer?.custom({
           type: 'data-processing-metrics',
           data: {
-            value: inputData.value,
+            value: context.value,
             timestamp: Date.now(),
           },
         });
 
         // Another regular write
-        await context?.writer?.write({
+        await writer.write({
           type: 'status-update',
           message: 'Processing complete',
         });
 
-        return { processed: inputData.value };
+        return { processed: context.value };
       },
     });
 
