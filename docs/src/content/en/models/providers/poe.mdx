@@ -7,6 +7,8 @@ description: "Use Poe models with Mastra. 100 models available."
 
 
 
+
+
 # <img src="https://models.dev/logos/poe.svg" alt="Poe logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Poe
 
 Access 100 Poe models through Mastra's model router. Authentication is handled automatically using the `POE_API_KEY` environment variable.
@@ -18,11 +20,10 @@ POE_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  id: "my-agent",
-  name: "My Agent",
+  name: "my-agent",
   instructions: "You are a helpful assistant",
   model: "poe/anthropic/claude-haiku-3"
 });
@@ -1256,7 +1257,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
-  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.poe.com/v1",
@@ -1273,10 +1273,9 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  id: "dynamic-agent",
-  name: "Dynamic Agent",
-  model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === "complex";
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced
       ? "poe/xai/grok-code-fast-1"
       : "poe/anthropic/claude-haiku-3";
