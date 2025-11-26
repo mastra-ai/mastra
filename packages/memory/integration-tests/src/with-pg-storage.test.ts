@@ -61,6 +61,39 @@ describe('Memory with PostgresStore Integration', () => {
     },
   });
 
+  // Clean up orphaned vector embeddings before tests
+  beforeAll(async () => {
+    const vector = memory.vector as PgVector;
+    if (vector && vector.pool) {
+      try {
+        const client = await vector.pool.connect();
+        try {
+          // Delete all embeddings for the test resource from all vector tables
+          const tablesResult = await client.query(`
+            SELECT tablename 
+            FROM pg_tables 
+            WHERE schemaname = 'public' 
+            AND (tablename = 'memory_messages' OR tablename LIKE 'memory_messages_%')
+          `);
+
+          for (const row of tablesResult.rows) {
+            const tableName = row.tablename;
+            // Clean up all test data - both 'test-resource' and any UUID-based resources
+            await client.query(`
+              DELETE FROM "public"."${tableName}" 
+              WHERE metadata->>'resource_id' LIKE 'test-%' 
+                 OR metadata->>'resource_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            `);
+          }
+        } finally {
+          client.release();
+        }
+      } catch (error) {
+        console.error('Failed to clean up orphaned embeddings:', error);
+      }
+    }
+  });
+
   getResuableTests(memory);
 
   describe('Pagination Bug #6787', () => {

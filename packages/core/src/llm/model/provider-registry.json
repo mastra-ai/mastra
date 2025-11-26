@@ -208,6 +208,15 @@
       "docUrl": "https://console.groq.com/docs/models",
       "gateway": "models.dev"
     },
+    "bailing": {
+      "url": "https://api.tbox.cn/api/llm/v1/chat/completions",
+      "apiKeyEnvVar": "BAILING_API_TOKEN",
+      "apiKeyHeader": "Authorization",
+      "name": "Bailing",
+      "models": ["Ling-1T", "Ring-1T"],
+      "docUrl": "https://alipaytbox.yuque.com/sxs0ba/ling/intro",
+      "gateway": "models.dev"
+    },
     "mistral": {
       "url": "https://api.mistral.ai/v1",
       "apiKeyEnvVar": "MISTRAL_API_KEY",
@@ -1265,10 +1274,12 @@
         "anthropic/claude-haiku-4-5",
         "anthropic/claude-opus-4",
         "anthropic/claude-opus-4-1",
+        "anthropic/claude-opus-4-5",
         "anthropic/claude-sonnet-4",
         "anthropic/claude-sonnet-4-5",
         "google/gemini-2.5-flash",
         "google/gemini-2.5-pro",
+        "google/gemini-3-pro-preview",
         "openai/gpt-4.1",
         "openai/gpt-4.1-mini",
         "openai/gpt-4o-mini",
@@ -1709,6 +1720,7 @@
       "qwen-qwq-32b",
       "qwen/qwen3-32b"
     ],
+    "bailing": ["Ling-1T", "Ring-1T"],
     "mistral": [
       "codestral-latest",
       "devstral-medium-2507",
@@ -2511,10 +2523,12 @@
       "anthropic/claude-haiku-4-5",
       "anthropic/claude-opus-4",
       "anthropic/claude-opus-4-1",
+      "anthropic/claude-opus-4-5",
       "anthropic/claude-sonnet-4",
       "anthropic/claude-sonnet-4-5",
       "google/gemini-2.5-flash",
       "google/gemini-2.5-pro",
+      "google/gemini-3-pro-preview",
       "openai/gpt-4.1",
       "openai/gpt-4.1-mini",
       "openai/gpt-4o-mini",

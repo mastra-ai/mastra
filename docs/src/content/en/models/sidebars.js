@@ -118,6 +118,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/bailing",
+          label: "Bailing",
+        },
+        {
+          type: "doc",
           id: "providers/baseten",
           label: "Baseten",
         },
