@@ -1,11 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
 import { saveScorePayloadSchema } from '@mastra/core/scores';
-import {
-  ScoresStorage,
-  TABLE_SCORERS,
-  safelyParseJSON,
-} from '@mastra/core/storage';
+import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsMongoDB } from '../operations';
 import { transformRow } from '../utils';
