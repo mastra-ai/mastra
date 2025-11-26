@@ -18,6 +18,7 @@ import {
   MastraLanguageModelV2Mock as MockLanguageModelV2,
   simulateReadableStream,
 } from '@mastra/core/test-utils/llm-mock';
+import { MockLanguageModelV1 } from 'ai/test';
 import { $ } from 'execa';
 import { Inngest } from 'inngest';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9700,7 +9701,7 @@ describe('MastraInngestWorkflow', () => {
           target: workflow,
         });
         srv.close();
-        expect(result.scores.toxicity).toBe(0.9);
+        expect(result.scores['mock-scorer-toxicity']).toBe(0.9);
         expect(result.summary.totalItems).toBe(2);
       });
     });
@@ -10882,7 +10883,7 @@ describe('MastraInngestWorkflow', () => {
           target: workflow,
         });
         srv.close();
-        expect(result.scores.toxicity).toBe(0.9);
+        expect(result.scores['mock-scorer-toxicity']).toBe(0.9);
         expect(result.summary.totalItems).toBe(2);
       });
     });
