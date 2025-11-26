@@ -179,7 +179,6 @@ async function captureDependenciesToOptimize(
           if (innerMeta.isWorkspace && !internalMap.has(innerDep) && !depsToOptimize.has(innerDep)) {
             depsToOptimize.set(innerDep, innerMeta);
             internalMap.set(innerDep, innerMeta);
-            console.log('added dep', innerDep);
             hasAddedDeps = true;
           }
         }
