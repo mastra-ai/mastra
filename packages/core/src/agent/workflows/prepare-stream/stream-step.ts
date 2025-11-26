@@ -1,10 +1,13 @@
 import { z } from 'zod';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
+import type { MastraMemory } from '../../../memory/memory';
+import type { MemoryConfig } from '../../../memory/types';
 import { RuntimeContext } from '../../../runtime-context';
 import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
+import type { SaveQueueManager } from '../../save-queue';
 import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 
@@ -24,6 +27,10 @@ interface StreamStepOptions<FORMAT extends 'aisdk' | 'mastra' | undefined = unde
   agentId: string;
   toolCallId?: string;
   methodType: AgentMethodType;
+  saveQueueManager?: SaveQueueManager;
+  memoryConfig?: MemoryConfig;
+  memory?: MastraMemory;
+  resourceId?: string;
 }
 
 export function createStreamStep<
@@ -39,6 +46,10 @@ export function createStreamStep<
   agentId,
   toolCallId,
   methodType,
+  saveQueueManager,
+  memoryConfig,
+  memory,
+  resourceId,
 }: StreamStepOptions<FORMAT>) {
   return createStep({
     id: 'stream-text-step',
@@ -76,6 +87,11 @@ export function createStreamStep<
         resumeContext,
         _internal: {
           generateId: capabilities.generateMessageId,
+          saveQueueManager,
+          memoryConfig,
+          threadId: validatedInputData.threadId,
+          resourceId,
+          memory,
         },
         agentId,
         toolCallId,

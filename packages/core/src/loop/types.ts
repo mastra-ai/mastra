@@ -13,12 +13,14 @@ import type {
 } from 'ai-v5';
 import z from 'zod';
 import type { MessageList } from '../agent/message-list';
+import type { SaveQueueManager } from '../agent/save-queue';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { ModelSpanTracker } from '../ai-tracing';
 import type { ModelMethodType } from '../llm/model/model.loop.types';
 import type { MastraLanguageModelV2 } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { MastraMemory, MemoryConfig } from '../memory';
 import type { OutputProcessor, ProcessorState } from '../processors';
 import type { OutputSchema } from '../stream/base/schema';
 import type {
@@ -33,6 +35,12 @@ export type StreamInternal = {
   now?: () => number;
   generateId?: IdGenerator;
   currentDate?: () => Date;
+  saveQueueManager?: SaveQueueManager; // SaveQueueManager from agent/save-queue
+  memoryConfig?: MemoryConfig; // MemoryConfig from memory/types
+  threadId?: string;
+  resourceId?: string;
+  memory?: MastraMemory; // MastraMemory from memory/memory
+  threadExists?: boolean;
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {

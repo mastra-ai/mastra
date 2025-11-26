@@ -678,8 +678,9 @@ export class StoreMemoryUpstash extends MemoryStorage {
         messagesData = messagesData.filter(msg => msg && new Date(msg.createdAt).getTime() <= toDate.getTime());
       }
 
-      // Sort messages by their position in the sorted set
-      messagesData.sort((a, b) => allMessageIds.indexOf(a!.id) - allMessageIds.indexOf(b!.id));
+      // Sort messages by createdAt before pagination
+      // This ensures consistent chronological ordering regardless of storage order
+      messagesData.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
       const total = messagesData.length;
 
@@ -691,9 +692,13 @@ export class StoreMemoryUpstash extends MemoryStorage {
       messages.push(...paginatedMessages);
 
       const list = new MessageList().add(messages, 'memory');
-      const finalMessages = (format === `v2` ? list.get.all.v2() : list.get.all.v1()) as
+      let finalMessages = (format === `v2` ? list.get.all.v2() : list.get.all.v1()) as
         | MastraMessageV1[]
         | MastraMessageV2[];
+
+      // Always sort final messages by createdAt to ensure correct chronological ordering
+      // This is critical when `include` parameter brings in messages from semantic recall
+      finalMessages = finalMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
       return {
         messages: finalMessages,

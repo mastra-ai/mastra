@@ -16,7 +16,7 @@ function NavbarContentDesktop() {
   const { i18n } = useDocusaurusContext();
   const locale = i18n?.currentLocale;
   return (
-    <div className="flex px-4 border-b-[0.5px] h-[var(--ifm-navbar-height)] border-(--border-subtle) mx-auto w-full items-center justify-between @container">
+    <div className="flex px-4 border-b-[0.5px] h-(--ifm-navbar-height) border-(--border-subtle) mx-auto w-full items-center justify-between @container">
       <div className="flex gap-2 items-center">
         <Link href="/docs">
           <Logo />
