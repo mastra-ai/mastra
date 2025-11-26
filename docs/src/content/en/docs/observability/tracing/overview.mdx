@@ -99,6 +99,23 @@ In addition to the internal exporters, Mastra supports integration with popular 
 - **[OpenTelemetry](/docs/v1/observability/tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
   - Supports: Dash0, MLflow, Laminar, New Relic, SigNoz, Traceloop, Zipkin, and others!
 
+## Bridges
+
+Bridges provide bidirectional integration with external tracing systems. Unlike exporters that send trace data to external platforms, bridges create native spans in external systems and inherit context from them. This enables Mastra operations to participate in existing distributed traces.
+
+- **[OpenTelemetry Bridge](/docs/v1/observability/tracing/bridges/otel)** - Integrate with existing OpenTelemetry infrastructure
+
+### Bridges vs Exporters
+
+| Feature | Bridges | Exporters |
+| --- | --- | --- |
+| Creates native spans in external systems | Yes | No |
+| Inherits context from external systems | Yes | No |
+| Sends data to backends | Via external SDK | Directly |
+| Use case | Existing distributed tracing | Standalone Mastra tracing |
+
+You can use both together — a bridge for context propagation and exporters to send traces to additional destinations.
+
 ## Sampling Strategies
 
 Sampling allows you to control which traces are collected, helping you balance between observability needs and resource costs. In production environments with high traffic, collecting every trace can be expensive and unnecessary. Sampling strategies let you capture a representative subset of traces while ensuring you don't miss critical information about errors or important operations.
@@ -768,6 +785,10 @@ Mastra automatically creates spans for:
 - [Langfuse](/reference/v1/observability/tracing/exporters/langfuse) - Langfuse integration
 - [MLflow](/reference/v1/observability/tracing/exporters/otel#mlflow) - MLflow OTLP endpoint setup
 - [OpenTelemetry](/reference/v1/observability/tracing/exporters/otel) - OTEL-compatible platforms
+
+### Bridges
+
+- [OpenTelemetry Bridge](/reference/v1/observability/tracing/bridges/otel) - OTEL context integration
 
 ### Processors
 
