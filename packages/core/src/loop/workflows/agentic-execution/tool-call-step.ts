@@ -107,7 +107,6 @@ export function createToolCallStep<
         const { saveQueueManager, memoryConfig, threadId, resourceId, memory } = _internal || {};
 
         if (!saveQueueManager || !threadId) {
-          console.warn('flushMessagesBeforeSuspension: saveQueueManager or threadId is missing');
           return;
         }
 
