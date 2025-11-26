@@ -160,6 +160,7 @@ export class MastraLLMVNext extends MastraBase {
     agentId,
     toolCallId,
     methodType,
+    includeRawChunks,
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     let stopWhenToUse;
 
@@ -224,6 +225,7 @@ export class MastraLLMVNext extends MastraBase {
         requireToolApproval,
         agentId,
         methodType,
+        includeRawChunks,
         options: {
           ...options,
           onStepFinish: async props => {
@@ -263,10 +265,8 @@ export class MastraLLMVNext extends MastraBase {
               runId,
             });
 
-            if (
-              props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
-              parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
-            ) {
+            const remainingTokens = parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'] ?? '', 10);
+            if (!isNaN(remainingTokens) && remainingTokens > 0 && remainingTokens < 2000) {
               this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
               await delay(10 * 1000);
             }

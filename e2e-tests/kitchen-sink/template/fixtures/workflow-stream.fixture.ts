@@ -22,6 +22,16 @@ const toolStream = [
   {
     type: 'tool-input-delta',
     id: 'call_IfDE6cqXEE0xgtrAHVwJ5FSC',
+    delta: 'inputData',
+  },
+  {
+    type: 'tool-input-delta',
+    id: 'call_IfDE6cqXEE0xgtrAHVwJ5FSC',
+    delta: '":{"',
+  },
+  {
+    type: 'tool-input-delta',
+    id: 'call_IfDE6cqXEE0xgtrAHVwJ5FSC',
     delta: 'text',
   },
   {
@@ -42,7 +52,7 @@ const toolStream = [
   {
     type: 'tool-input-delta',
     id: 'call_IfDE6cqXEE0xgtrAHVwJ5FSC',
-    delta: '"}',
+    delta: '"}}',
   },
   {
     type: 'tool-input-end',
@@ -52,7 +62,7 @@ const toolStream = [
     type: 'tool-call',
     toolCallId: 'call_IfDE6cqXEE0xgtrAHVwJ5FSC',
     toolName: 'workflow-lessComplexWorkflow',
-    input: '{"text":"tomato"}',
+    input: '{"inputData":{"text":"tomato"}}',
     providerMetadata: {
       openai: {
         itemId: 'fc_0ddb9e4833fc14e80068f88c201ebc81a3bd8ba5d6b741a44a',

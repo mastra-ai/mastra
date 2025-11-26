@@ -72,12 +72,12 @@
     },
     {
       "source": "/docs/v1/getting-started/installation",
-      "destination": "/guides/v1/quickstarts/standalone-server",
+      "destination": "/guides/v1/getting-started/quickstart",
       "permanent": true
     },
     {
       "source": "/examples/v1/agents/ai-sdk-v5-integration",
-      "destination": "/guides/v1/quickstarts/nextjs",
+      "destination": "/guides/v1/getting-started/next-js",
       "permanent": true
     },
     {
@@ -103,6 +103,76 @@
     {
       "source": "/examples/v1/memory/working-memory-template",
       "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-template",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/frameworks/agentic-uis/ai-sdk",
+      "destination": "/guides/v1/build-your-ui/ai-sdk-ui",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/frameworks/agentic-uis/assistant-ui",
+      "destination": "/guides/v1/build-your-ui/assistant-ui",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/frameworks/agentic-uis/copilotkit",
+      "destination": "/guides/v1/build-your-ui/copilotkit",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/frameworks/agentic-uis/openrouter",
+      "destination": "/models/v1/gateways/openrouter",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/frameworks/web-frameworks/astro",
+      "destination": "/guides/v1/getting-started/astro",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/frameworks/web-frameworks/next-js",
+      "destination": "/guides/v1/getting-started/next-js",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/frameworks/web-frameworks/sveltekit",
+      "destination": "/guides/v1/getting-started/sveltekit",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/frameworks/web-frameworks/vite-react",
+      "destination": "/guides/v1/getting-started/vite-react",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/frameworks/servers/express",
+      "destination": "/guides/v1/getting-started/express",
+      "permanent": true
+    },
+    {
+      "source": "/guides/v1/guide/manual-install",
+      "destination": "/guides/v1/getting-started/manual-install",
+      "permanent": true
+    },
+    {
+      "source": "/guides/v1/quickstarts/nextjs",
+      "destination": "/guides/v1/getting-started/next-js",
+      "permanent": true
+    },
+    {
+      "source": "/guides/v1/quickstarts/standalone-server",
+      "destination": "/guides/v1/getting-started/quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/getting-started/quickstart",
+      "destination": "/guides/v1/getting-started/quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/getting-started/templates",
+      "destination": "/docs/v1/getting-started/start",
       "permanent": true
     }
   ]
