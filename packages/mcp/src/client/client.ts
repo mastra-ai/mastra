@@ -362,7 +362,7 @@ export class InternalMastraMCPClient extends MastraBase {
         });
         this.transport = streamableTransport;
         this.log('debug', 'Successfully connected using Streamable HTTP transport.');
-      } catch (error) {
+      } catch (error: any) {
         this.log('debug', `Streamable HTTP transport failed: ${error}`);
         
         const status =
@@ -370,7 +370,8 @@ export class InternalMastraMCPClient extends MastraBase {
           error?.status ??
           error?.cause?.statusCode ??
           null;
-
+        // Allowed fallback status codes for switching to SSE.
+        // https://modelcontextprotocol.io/specification/2025-11-25/basic/transports
         const allowedFallback = [400, 404, 405];
 
         if (allowedFallback.includes(status)) {
