@@ -1,5 +1,6 @@
 import type { IMastraLogger } from '@mastra/core/logger';
-import { safelyParseJSON, TABLE_SCHEMAS, type TABLE_NAMES } from '@mastra/core/storage';
+import { safelyParseJSON, TABLE_SCHEMAS } from '@mastra/core/storage';
+import type { TABLE_NAMES } from '@mastra/core/storage';
 
 export function formatDateForMongoDB(date: Date | string): Date {
   return typeof date === 'string' ? new Date(date) : date;
