@@ -17,6 +17,7 @@ import type { MCPServerBase } from '../mcp';
 import type { ObservabilityEntrypoint } from '../observability';
 import { NoOpObservability } from '../observability';
 import type { Processor } from '../processors';
+import type { MastraServerAdapterBase } from '../server/adapter-base';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage, WorkflowRuns } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -259,6 +260,7 @@ export class Mastra<
   #tools?: TTools;
   #processors?: TProcessors;
   #server?: ServerConfig;
+  #serverAdapter?: MastraServerAdapterBase;
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
@@ -1788,6 +1790,73 @@ export class Mastra<
 
   public getServer() {
     return this.#server;
+  }
+
+  /**
+   * Sets the server adapter for this Mastra instance.
+   *
+   * The server adapter provides access to the underlying server app (e.g., Hono, Express)
+   * and allows users to call routes directly via `app.fetch()` instead of making HTTP requests.
+   *
+   * This is typically called by `createHonoServer` or similar factory functions during
+   * server initialization.
+   *
+   * @param adapter - The server adapter instance (e.g., HonoServerAdapter, ExpressServerAdapter)
+   *
+   * @example
+   * ```typescript
+   * const adapter = new HonoServerAdapter({ mastra });
+   * adapter.setApp(app);
+   * mastra.setServerAdapter(adapter);
+   * ```
+   */
+  public setServerAdapter(adapter: MastraServerAdapterBase): void {
+    this.#serverAdapter = adapter;
+    // Inject the logger into the adapter
+    if (this.#logger) {
+      adapter.__setLogger(this.#logger);
+    }
+  }
+
+  /**
+   * Gets the server adapter for this Mastra instance.
+   *
+   * @returns The server adapter, or undefined if not set
+   *
+   * @example
+   * ```typescript
+   * const adapter = mastra.getServerAdapter();
+   * if (adapter) {
+   *   const app = adapter.getApp<Hono>();
+   * }
+   * ```
+   */
+  public getServerAdapter(): MastraServerAdapterBase | undefined {
+    return this.#serverAdapter;
+  }
+
+  /**
+   * Gets the server app from the server adapter.
+   *
+   * This is a convenience method that calls `getServerAdapter()?.getApp<T>()`.
+   * Use this to access the underlying server framework's app instance (e.g., Hono, Express)
+   * for direct operations like calling routes via `app.fetch()`.
+   *
+   * @template T - The expected type of the app (e.g., Hono, Express Application)
+   * @returns The server app, or undefined if no adapter is set
+   *
+   * @example
+   * ```typescript
+   * // After createHonoServer() is called:
+   * const app = mastra.getServerApp<Hono>();
+   *
+   * // Call routes directly without HTTP overhead
+   * const response = await app?.fetch(new Request('http://localhost/health'));
+   * const data = await response?.json();
+   * ```
+   */
+  public getServerApp<T = unknown>(): T | undefined {
+    return this.#serverAdapter?.getApp<T>();
   }
 
   public getBundlerConfig() {

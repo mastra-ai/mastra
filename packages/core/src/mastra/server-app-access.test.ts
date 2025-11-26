@@ -75,10 +75,10 @@ describe('Server App Access (Issue #8031)', () => {
       const mockAdapter = {
         getApp: <T = unknown>() => mockApp as T,
         setApp: () => {},
+        __setLogger: () => {}, // Required by MastraBase
       };
 
       // Set the adapter
-      // Currently FAILS because setServerAdapter doesn't exist yet
       mastra.setServerAdapter(mockAdapter as any);
 
       // Retrieve the adapter
@@ -100,10 +100,10 @@ describe('Server App Access (Issue #8031)', () => {
       const mockAdapter = {
         getApp: <T = unknown>() => mockApp as T,
         setApp: () => {},
+        __setLogger: () => {}, // Required by MastraBase
       };
 
       // Set the adapter
-      // Currently FAILS because setServerAdapter doesn't exist yet
       mastra.setServerAdapter(mockAdapter as any);
 
       // Get the app via convenience method
@@ -130,9 +130,9 @@ describe('Server App Access (Issue #8031)', () => {
       const mockAdapter = {
         getApp: <T = unknown>() => mockApp as T,
         setApp: () => {},
+        __setLogger: () => {}, // Required by MastraBase
       };
 
-      // Currently FAILS because setServerAdapter doesn't exist yet
       mastra.setServerAdapter(mockAdapter as any);
 
       // Get the app with type parameter
@@ -168,9 +168,9 @@ describe('Server App Access (Issue #8031)', () => {
       const mockAdapter = {
         getApp: <T = unknown>() => mockApp as T,
         setApp: () => {},
+        __setLogger: () => {}, // Required by MastraBase
       };
 
-      // Currently FAILS because setServerAdapter doesn't exist yet
       mastra.setServerAdapter(mockAdapter as any);
 
       // Get the app and call a route directly (the use case from the issue)

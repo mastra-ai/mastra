@@ -95,6 +95,11 @@ export async function createHonoServer(
     bodyLimitOptions,
   });
 
+  // Store the app on the adapter and register the adapter with Mastra
+  // This allows users to access the app via mastra.getServerApp()
+  honoServerAdapter.setApp(app);
+  mastra.setServerAdapter(honoServerAdapter);
+
   // Register context middleware FIRST - this sets mastra, requestContext, tools, taskStore in context
   // Cast needed due to Hono type variance - safe because registerContextMiddleware is generic
   honoServerAdapter.registerContextMiddleware(app as any);

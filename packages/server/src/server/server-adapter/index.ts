@@ -1,5 +1,6 @@
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
+import { MastraServerAdapterBase } from '@mastra/core/server';
 import type { Tool } from '@mastra/core/tools';
 import { generateOpenAPIDocument } from './openapi-utils';
 import { SERVER_ROUTES } from './routes';
@@ -21,7 +22,20 @@ export interface BodyLimitOptions {
   onError: (error: unknown) => unknown;
 }
 
-export abstract class MastraServerAdapter<TApp, TRequest, TResponse> {
+/**
+ * Abstract base class for server adapters that handle HTTP requests.
+ *
+ * This class extends `MastraServerAdapterBase` to inherit app storage functionality
+ * and provides the framework for registering routes, middleware, and handling requests.
+ *
+ * Concrete implementations (like `HonoServerAdapter`, `ExpressServerAdapter`) extend
+ * this class and implement the abstract methods for their specific framework.
+ *
+ * @template TApp - The type of the server app (e.g., Hono, Express Application)
+ * @template TRequest - The type of the request object
+ * @template TResponse - The type of the response object
+ */
+export abstract class MastraServerAdapter<TApp, TRequest, TResponse> extends MastraServerAdapterBase<TApp> {
   protected mastra: Mastra;
   protected bodyLimitOptions?: BodyLimitOptions;
   protected tools?: Record<string, Tool>;
@@ -35,6 +49,7 @@ export abstract class MastraServerAdapter<TApp, TRequest, TResponse> {
     bodyLimitOptions?: BodyLimitOptions;
     tools?: Record<string, Tool>;
   }) {
+    super({ name: 'MastraServerAdapter' });
     this.mastra = mastra;
     this.bodyLimitOptions = bodyLimitOptions;
     this.tools = tools;

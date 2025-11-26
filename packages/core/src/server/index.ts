@@ -8,6 +8,7 @@ export type { MastraAuthConfig, ContextWithMastra, ApiRoute } from './types';
 export { MastraAuthProvider } from './auth';
 export type { MastraAuthProviderOptions } from './auth';
 export { CompositeAuth } from './composite-auth';
+export { MastraServerAdapterBase } from './adapter-base';
 
 // Helper type for inferring parameters from a path
 // Thank you Claude!
