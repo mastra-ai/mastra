@@ -118,12 +118,6 @@ async function captureDependenciesToOptimize(
 
     const normalizedRootPath = rootPath ? slash(rootPath) : null;
 
-    // let version = isWorkspace ? 'workspace' : 'unknown';
-    // if (normalizedRootPath) {
-    //   const packageJsonString = await readFile(join(normalizedRootPath, 'package.json'));
-    //   version = JSON.parse(packageJsonString).version || 'unknown';
-    // }
-
     depsToOptimize.set(dependency, {
       exports: bindings,
       rootPath: normalizedRootPath,
