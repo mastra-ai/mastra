@@ -698,6 +698,13 @@ export class InternalMastraMCPClient extends MastraBase {
               );
 
               this.log('debug', `Tool executed successfully: ${tool.name}`);
+              
+              // When a tool has an outputSchema, return the structuredContent directly
+              // so that output validation works correctly
+              if (res.structuredContent !== undefined) {
+                return res.structuredContent;
+              }
+              
               return res;
             } catch (e) {
               this.log('error', `Error calling tool: ${tool.name}`, {

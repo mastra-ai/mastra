@@ -94,9 +94,12 @@ export async function resolveModelConfig(
     return modelConfig;
   }
 
+  const gatewayRecord = mastra?.listGateways();
+  const customGateways = gatewayRecord ? Object.values(gatewayRecord) : undefined;
+
   // If it's a string (magic string like "openai/gpt-4o") or OpenAICompatibleConfig, create ModelRouterLanguageModel
   if (typeof modelConfig === 'string' || isOpenAICompatibleObjectConfig(modelConfig)) {
-    return new ModelRouterLanguageModel(modelConfig);
+    return new ModelRouterLanguageModel(modelConfig, customGateways);
   }
 
   throw new Error('Invalid model configuration provided');

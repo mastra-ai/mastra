@@ -473,6 +473,18 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
         },
       } as const;
     }
+    case 'workflow-step-output': {
+      const output = payload.payload.output;
+      if (output && isDataChunkType(output)) {
+        if (!('data' in output)) {
+          throw new Error(
+            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(output)}`,
+          );
+        }
+        return output;
+      }
+      return null;
+    }
     default: {
       // return the chunk as is if it's not a known type
       if (isDataChunkType(payload)) {

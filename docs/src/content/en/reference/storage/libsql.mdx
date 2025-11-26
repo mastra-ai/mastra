@@ -72,3 +72,40 @@ The storage implementation handles schema creation and updates automatically. It
 - `mastra_traces`: Stores telemetry and tracing data
 - `mastra_scorers`: Stores scoring and evaluation data
 - `mastra_resources`: Stores resource working memory data
+
+### Initialization
+
+When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
+
+```typescript copy
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+
+const storage = new LibSQLStore({
+  url: "file:./storage.db",
+});
+
+const mastra = new Mastra({
+  storage, // init() is called automatically
+});
+```
+
+If you're using storage directly without Mastra, you must call `init()` explicitly to create the tables:
+
+```typescript copy
+import { LibSQLStore } from "@mastra/libsql";
+
+const storage = new LibSQLStore({
+  url: "file:./storage.db",
+});
+
+// Required when using storage directly
+await storage.init();
+
+// Now you can use the storage
+await storage.getThread({ threadId: "..." });
+```
+
+:::warning
+If `init()` is not called, tables won't be created and storage operations will fail silently or throw errors.
+:::
