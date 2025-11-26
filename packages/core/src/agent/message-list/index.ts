@@ -2280,15 +2280,19 @@ export class MessageList {
                   type: 'file',
                   mimeType: p.mediaType,
                   data: fileDataSource,
-                  providerMetadata: p.providerMetadata,
+                  ...(p.providerMetadata ? { providerMetadata: p.providerMetadata } : {}),
                 };
               }
               case 'reasoning':
-                if (p.text === '') return null;
+                // Skip empty reasoning parts that have no providerMetadata
+                // (but keep ones with providerMetadata for GPT-5 compatibility)
+                if (p.text === '' && !p.providerMetadata) return null;
                 return {
                   type: 'reasoning',
-                  reasoning: p.text,
-                  details: [{ type: 'text', text: p.text }],
+                  // Keep reasoning field empty to match the format used in llm-execution-step
+                  // This ensures cache keys match for deduplication when merging assistant messages
+                  reasoning: '',
+                  details: p.text ? [{ type: 'text', text: p.text }] : [],
                   providerMetadata: p.providerMetadata,
                 };
 
@@ -2521,7 +2525,7 @@ export class MessageList {
               type: 'file',
               url: part.data,
               mediaType: categorized.mimeType || 'image/png',
-              providerMetadata: part.providerMetadata,
+              ...(part.providerMetadata ? { providerMetadata: part.providerMetadata } : {}),
             });
             fileUrls.add(part.data);
           } else {
@@ -2565,7 +2569,7 @@ export class MessageList {
               type: 'file',
               url: dataUri, // Use url field with data URI
               mediaType: finalMimeType,
-              providerMetadata: part.providerMetadata,
+              ...(part.providerMetadata ? { providerMetadata: part.providerMetadata } : {}),
             });
           }
           fileUrls.add(part.data);
@@ -2720,8 +2724,10 @@ export class MessageList {
   }
 
   private static mastraMessageV3ToAIV5UIMessage(m: MastraMessageV3): AIV5Type.UIMessage {
+    // Filter out internal fields from metadata before creating UIMessage
+    const { __originalContent, ...cleanMetadata } = (m.content.metadata || {}) as any;
     const metadata: Record<string, any> = {
-      ...(m.content.metadata || {}),
+      ...cleanMetadata,
     };
     if (m.createdAt) metadata.createdAt = m.createdAt;
     if (m.threadId) metadata.threadId = m.threadId;
