@@ -1380,6 +1380,7 @@ export function init(inngest: Inngest) {
         outputSchema: workflow.outputSchema,
         steps: workflow.stepDefs,
         mastra: workflow.mastra,
+        options: workflow.options,
       });
 
       wf.setStepFlow(workflow.stepGraph);
