@@ -36,6 +36,32 @@ const GLOBAL_PROVIDER_TYPES_DTS = () => path.join(CACHE_DIR(), 'provider-types.g
 let modelRouterCacheFailed = false;
 
 /**
+ * Write a file atomically using the write-to-temp-then-rename pattern (synchronous version).
+ * This prevents file corruption when multiple processes write to the same file concurrently.
+ *
+ * @param filePath - The target file path
+ * @param content - The content to write
+ * @param encoding - The encoding to use (default: 'utf-8')
+ */
+function atomicWriteFileSync(filePath: string, content: string, encoding: BufferEncoding = 'utf-8'): void {
+  // Use random suffix to avoid collisions between concurrent writes
+  const randomSuffix = Math.random().toString(36).substring(2, 15);
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.${randomSuffix}.tmp`;
+
+  try {
+    fs.writeFileSync(tempPath, content, encoding);
+    fs.renameSync(tempPath, filePath);
+  } catch (error) {
+    try {
+      fs.unlinkSync(tempPath);
+    } catch {
+      // Ignore cleanup errors
+    }
+    throw error;
+  }
+}
+
+/**
  * Syncs provider files from global cache to local dist/ directory if needed.
  * Compares file contents to determine if copy is necessary.
  */
@@ -70,7 +96,8 @@ function syncGlobalCacheToLocal(): void {
       }
 
       if (shouldCopyJson) {
-        fs.writeFileSync(localJsonPath, globalJsonContent, 'utf-8');
+        // Use atomic write to prevent corruption from concurrent writes
+        atomicWriteFileSync(localJsonPath, globalJsonContent, 'utf-8');
       }
     }
 
@@ -85,7 +112,8 @@ function syncGlobalCacheToLocal(): void {
       }
 
       if (shouldCopyDts) {
-        fs.writeFileSync(localDtsPath, globalDtsContent, 'utf-8');
+        // Use atomic write to prevent corruption from concurrent writes
+        atomicWriteFileSync(localDtsPath, globalDtsContent, 'utf-8');
       }
     }
   } catch (error) {

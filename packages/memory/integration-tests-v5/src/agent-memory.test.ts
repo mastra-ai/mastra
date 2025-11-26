@@ -756,3 +756,155 @@ describe('Agent memory test gemini', () => {
     ).resolves.not.toThrow();
   });
 });
+
+/**
+ * Issue #9005: GPT-5 Mini Reasoning Model Compatibility
+ *
+ * This test reproduces the exact issue from the bug report:
+ * - Create an agent with GPT-5 mini and tools
+ * - Call generate twice on the same thread
+ * - Second call fails with: "Item 'fc_xxx' of type 'function_call' was provided without its required 'reasoning' item: 'rs_xxx'"
+ *
+ * OpenAI's GPT-5 models (using the Responses API) require:
+ * - Each function_call item must be accompanied by its associated reasoning item
+ * - Reasoning items MUST have `providerOptions.openai.itemId` set
+ * - Without the itemId, the OpenAI SDK will skip the reasoning entirely
+ *
+ * The bug is more reliably triggered when:
+ * - Tool execution fails/throws an error
+ * - Multiple tool calls happen in one turn
+ */
+describe('Issue #9005 - GPT-5 Reasoning Model with Memory', () => {
+  const dbFile = 'file:gpt5-reasoning.db';
+
+  const gpt5Memory = new Memory({
+    storage: new LibSQLStore({ url: dbFile }),
+    options: {
+      lastMessages: 10,
+    },
+  });
+
+  // Create a simple test tool - exactly like in the bug report
+  const testTool = {
+    id: 'testTool',
+    description: 'A test tool that returns a message',
+    inputSchema: z.object({
+      message: z.string().describe('The message to echo'),
+    }),
+    execute: async (input: { message: string }) => {
+      return { result: `Tool executed: ${input.message}` };
+    },
+  };
+
+  // Create a tool that always fails - to reproduce the bug more reliably
+  const failingTool = {
+    id: 'failingTool',
+    description: 'A tool that always fails',
+    inputSchema: z.object({
+      message: z.string().describe('The message'),
+    }),
+    execute: async (_input: { message: string }) => {
+      throw new Error('Tool intentionally failed');
+    },
+  };
+
+  // Create the GPT-5 agent with the tool - exactly like in the bug report
+  const gpt5Agent = new Agent({
+    id: 'gpt5-test-agent',
+    name: 'GPT-5 Test Agent',
+    instructions: 'You are a helpful assistant. When asked to use the testTool, always use it.',
+    model: 'openai/gpt-5-mini',
+    memory: gpt5Memory,
+    tools: { testTool },
+  });
+
+  // Agent with a failing tool to reproduce the bug
+  const gpt5AgentWithFailingTool = new Agent({
+    id: 'gpt5-failing-tool-agent',
+    name: 'GPT-5 Failing Tool Agent',
+    instructions: 'You are a helpful assistant. When asked to use the failingTool, always use it.',
+    model: 'openai/gpt-5-mini',
+    memory: gpt5Memory,
+    tools: { failingTool },
+  });
+
+  it('should NOT fail on second generate call with tool usage history (REPRODUCTION TEST)', async () => {
+    const threadId = randomUUID();
+    const resourceId = randomUUID();
+
+    // First message - should work fine, will trigger tool call
+    console.log('Starting first generate call...');
+    await gpt5Agent.stream('Use the testTool to say hello', {
+      threadId,
+      resourceId,
+    });
+
+    // Give a moment for memory to be saved
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // DEBUG: Inspect what's stored in memory
+    const agentMemory = await gpt5Agent.getMemory();
+    if (agentMemory) {
+      const { messages } = await agentMemory.query({ threadId });
+      console.log('DEBUG - Stored messages in memory:');
+      for (const msg of messages) {
+        console.log(`  Role: ${msg.role}, Content parts:`);
+        if (msg.content && typeof msg.content === 'object' && 'parts' in msg.content) {
+          for (const part of (msg.content as any).parts) {
+            if (part.type === 'reasoning') {
+              console.log(`    - reasoning: providerMetadata=${JSON.stringify(part.providerMetadata)}`);
+            } else if (part.type === 'tool-invocation') {
+              console.log(
+                `    - tool-invocation: ${part.toolInvocation?.toolName}, providerMetadata=${JSON.stringify(part.providerMetadata)}`,
+              );
+            } else {
+              console.log(`    - ${part.type}`);
+            }
+          }
+        }
+      }
+    }
+
+    // Second message - THIS IS WHERE THE BUG OCCURS
+    // The second call retrieves conversation history including the previous function_call
+    // but the associated reasoning item is missing, causing OpenAI to reject the request
+    console.log('Starting second generate call...');
+    const response2 = await gpt5Agent.generate('Now use the tool to say goodbye', {
+      threadId,
+      resourceId,
+    });
+    console.log('Second response:', response2.text);
+
+    // If we get here without an error, the bug is fixed!
+    expect(response2.text).toBeDefined();
+    expect(response2.text.length).toBeGreaterThan(0);
+  }, 60000); // 60 second timeout for API calls
+
+  it('should NOT fail on second generate call when first tool call failed (BUG REPRODUCTION)', async () => {
+    const threadId = randomUUID();
+    const resourceId = 'gpt5-failing-tool-test';
+
+    // First message - tool will fail, but agent should handle it
+    console.log('Starting first generate call with failing tool...');
+    const response1 = await gpt5AgentWithFailingTool.generate('Use the failingTool to say hello', {
+      threadId,
+      resourceId,
+    });
+    console.log('First response (after tool failure):', response1.text);
+
+    // Give a moment for memory to be saved
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Second message - THIS IS WHERE THE BUG OCCURS
+    // When the tool failed in the first call, the reasoning item may be missing
+    console.log('Starting second generate call...');
+    const response2 = await gpt5AgentWithFailingTool.generate('Try using the tool again', {
+      threadId,
+      resourceId,
+    });
+    console.log('Second response:', response2.text);
+
+    // If we get here without an error, the bug is fixed!
+    expect(response2.text).toBeDefined();
+  }, 60000); // 60 second timeout for API calls
+});
