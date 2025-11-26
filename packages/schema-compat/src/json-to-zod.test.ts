@@ -187,7 +187,7 @@ describe('jsonSchemaToZod', () => {
       expect(result).not.toContain('z.discriminatedUnion');
     });
 
-    it('should NOT create discriminatedUnion when no common const property exists', () => {
+    it('should create discriminatedUnion when at least one common const property exists', () => {
       const schema: JsonSchema = {
         anyOf: [
           {
@@ -212,6 +212,45 @@ describe('jsonSchemaToZod', () => {
       const result = jsonSchemaToZod(schema);
       expect(result).toContain('z.discriminatedUnion');
       expect(result).toContain('"type"');
+    });
+
+    it('should preserve discriminatedUnion when nested inside allOf intersection', () => {
+      const schema: JsonSchema = {
+        allOf: [
+          {
+            anyOf: [
+              {
+                type: 'object',
+                properties: {
+                  type: { const: 'byCity' },
+                  city: { type: 'string' },
+                },
+                required: ['type', 'city'],
+              },
+              {
+                type: 'object',
+                properties: {
+                  type: { const: 'byCoords' },
+                  lat: { type: 'number' },
+                  lon: { type: 'number' },
+                },
+                required: ['type', 'lat', 'lon'],
+              },
+            ],
+          },
+          {
+            type: 'object',
+            properties: {
+              orderBy: { type: 'string' },
+            },
+            required: ['orderBy'],
+          },
+        ],
+      };
+
+      const result = jsonSchemaToZod(schema);
+      expect(result).toContain('z.discriminatedUnion');
+      expect(result).toContain('.intersection('); // intersection with the ordering object
     });
 
     it('should handle discriminatedUnion with multiple const properties and use first common one', () => {
