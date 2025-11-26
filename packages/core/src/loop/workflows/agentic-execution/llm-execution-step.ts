@@ -361,9 +361,14 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         const error = getErrorFromUnknown(chunk.payload.error, {
           fallbackMessage: 'Unknown error in agent stream',
         });
-        controller.enqueue({ ...chunk, payload: { ...chunk.payload, error } });
+        // Don't enqueue the error here - let the caller decide whether to enqueue
+        // based on whether this is the last model in the fallback chain.
+        // The caller will enqueue the error if it's the last model.
         await options?.onError?.({ error });
-        break;
+        // Throw the error so it can be caught by the fallback mechanism
+        // This allows executeStreamWithFallbackModels to try the next model
+        // when a mid-stream error (like quota exceeded) occurs
+        throw error;
 
       default:
         if (isControllerOpen(controller)) {

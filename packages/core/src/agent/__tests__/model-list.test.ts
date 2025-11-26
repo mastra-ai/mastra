@@ -834,3 +834,342 @@ function modelListTests(version: 'v1' | 'v2') {
 
 modelListTests('v1');
 modelListTests('v2');
+
+describe('model fallback - mid-stream errors', () => {
+  it('should fallback to next model when first model returns a mid-stream error (like quota exceeded)', async () => {
+    /**
+     * This test simulates the scenario from GitHub issue #9306:
+     * When a model hits a quota error mid-stream (after the connection is established),
+     * the fallback to the next model should still trigger.
+     *
+     * The error comes as a stream chunk (type: 'error') after some data has been streamed,
+     * which simulates what happens when a provider like Anthropic returns an insufficient_quota
+     * error mid-stream.
+     */
+    let usedModelName = '';
+
+    // Model that returns an error chunk mid-stream (simulating quota exceeded)
+    const quotaExceededModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        throw new Error('Quota exceeded');
+      },
+      doStream: async () => {
+        // Create a custom ReadableStream that emits chunks including an error
+        const stream = new ReadableStream({
+          async start(controller) {
+            // First, emit some normal chunks (simulating connection established)
+            controller.enqueue({
+              type: 'stream-start',
+              warnings: [],
+            });
+            controller.enqueue({
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'quota-exceeded-model',
+              timestamp: new Date(0),
+            });
+            // Then emit an error chunk (simulating quota exceeded mid-stream)
+            controller.enqueue({
+              type: 'error',
+              error: {
+                type: 'insufficient_quota',
+                code: 'insufficient_quota',
+                message: 'You exceeded your current quota, please check your plan and billing details.',
+              },
+            });
+            controller.close();
+          },
+        });
+
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream,
+        };
+      },
+    });
+
+    // Fallback model that works correctly
+    const fallbackModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        usedModelName = 'fallback';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: `Fallback response`,
+          content: [{ type: 'text', text: `Fallback response` }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        usedModelName = 'fallback';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'fallback-model',
+              timestamp: new Date(0),
+            },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Fallback response' },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-mid-stream-fallback',
+      name: 'Test Mid-Stream Fallback',
+      instructions: 'test agent',
+      model: [
+        {
+          model: quotaExceededModel,
+          maxRetries: 0, // No retries, should immediately fallback
+        },
+        {
+          model: fallbackModel,
+        },
+      ],
+    });
+
+    const streamResult = await agent.stream('Test message');
+    const fullText = await streamResult.text;
+
+    // This assertion currently fails because the fallback doesn't trigger
+    // when the error comes as a stream chunk
+    expect(usedModelName).toBe('fallback');
+    expect(fullText).toBe('Fallback response');
+  });
+
+  it('should fallback when model returns rate limit error mid-stream after partial content', async () => {
+    /**
+     * Similar to quota errors, rate limit errors that come mid-stream
+     * should also trigger the fallback mechanism. This test verifies that
+     * even after partial content is streamed, an error triggers fallback.
+     */
+    let usedModelName = '';
+
+    const rateLimitedModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        throw new Error('Rate limited');
+      },
+      doStream: async () => {
+        // Create a custom ReadableStream that emits partial content then an error
+        const stream = new ReadableStream({
+          async start(controller) {
+            controller.enqueue({
+              type: 'stream-start',
+              warnings: [],
+            });
+            controller.enqueue({
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'rate-limited-model',
+              timestamp: new Date(0),
+            });
+            // Emit some partial content first
+            controller.enqueue({ type: 'text-start', id: '1' });
+            controller.enqueue({ type: 'text-delta', id: '1', delta: 'Partial...' });
+            // Then emit an error chunk
+            controller.enqueue({
+              type: 'error',
+              error: new Error('Rate limit exceeded. Please retry after 60 seconds.'),
+            });
+            controller.close();
+          },
+        });
+
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream,
+        };
+      },
+    });
+
+    const fallbackModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        usedModelName = 'fallback';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: `Complete fallback response`,
+          content: [{ type: 'text', text: `Complete fallback response` }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        usedModelName = 'fallback';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'fallback-model',
+              timestamp: new Date(0),
+            },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Complete fallback response' },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-rate-limit-fallback',
+      name: 'Test Rate Limit Fallback',
+      instructions: 'test agent',
+      model: [
+        {
+          model: rateLimitedModel,
+          maxRetries: 0,
+        },
+        {
+          model: fallbackModel,
+        },
+      ],
+    });
+
+    const streamResult = await agent.stream('Test message');
+    const fullText = await streamResult.text;
+
+    expect(usedModelName).toBe('fallback');
+    // Note: Partial content from the first model is preserved before the fallback kicks in
+    // This is expected behavior - the fallback happens after the error, not discarding prior content
+    expect(fullText).toContain('Complete fallback response');
+    expect(fullText).toContain('Partial...');
+  });
+
+  it('should fallback to next model when first model returns a mid-stream error during generate()', async () => {
+    /**
+     * This test verifies that the fallback mechanism also works with the generate() method,
+     * not just stream(). When a quota error occurs mid-stream, the fallback should trigger.
+     */
+    let usedModelName = '';
+
+    // Model that returns an error chunk mid-stream (simulating quota exceeded)
+    const quotaExceededModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        // Simulate quota error during generate
+        throw {
+          type: 'insufficient_quota',
+          code: 'insufficient_quota',
+          message: 'You exceeded your current quota, please check your plan and billing details.',
+        };
+      },
+      doStream: async () => {
+        // Create a custom ReadableStream that emits chunks including an error
+        const stream = new ReadableStream({
+          async start(controller) {
+            controller.enqueue({
+              type: 'stream-start',
+              warnings: [],
+            });
+            controller.enqueue({
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'quota-exceeded-model',
+              timestamp: new Date(0),
+            });
+            // Then emit an error chunk (simulating quota exceeded mid-stream)
+            controller.enqueue({
+              type: 'error',
+              error: {
+                type: 'insufficient_quota',
+                code: 'insufficient_quota',
+                message: 'You exceeded your current quota, please check your plan and billing details.',
+              },
+            });
+            controller.close();
+          },
+        });
+
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream,
+        };
+      },
+    });
+
+    // Fallback model that works correctly
+    const fallbackModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        usedModelName = 'fallback';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: `Fallback generate response`,
+          content: [{ type: 'text', text: `Fallback generate response` }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        usedModelName = 'fallback';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'fallback-model',
+              timestamp: new Date(0),
+            },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Fallback generate response' },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-generate-mid-stream-fallback',
+      name: 'Test Generate Mid-Stream Fallback',
+      instructions: 'test agent',
+      model: [
+        {
+          model: quotaExceededModel,
+          maxRetries: 0, // No retries, should immediately fallback
+        },
+        {
+          model: fallbackModel,
+        },
+      ],
+    });
+
+    const result = await agent.generate('Test message');
+
+    expect(usedModelName).toBe('fallback');
+    expect(result.text).toBe('Fallback generate response');
+  });
+});
