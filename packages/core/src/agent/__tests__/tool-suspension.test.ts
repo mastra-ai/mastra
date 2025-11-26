@@ -1,10 +1,10 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { MockMemory } from '../test-utils';
 import { createTool } from '../../tools';
 import { delay } from '../../utils';
 import { Agent } from '../agent';
+import { MockMemory } from '../test-utils';
 
 describe('Tool suspension memory persistence', () => {
   it('should save thread and messages to memory before suspension when tool requires approval', async () => {
