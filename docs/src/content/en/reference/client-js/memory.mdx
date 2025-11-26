@@ -125,6 +125,49 @@ const result = await thread.deleteMessages([
 // Returns: { success: true, message: "3 messages deleted successfully" }
 ```
 
+## Working Memory
+
+Working memory allows agents to maintain persistent information about users across interactions. It can be scoped to either a specific thread or across all threads for a resource (user).
+
+### Get Working Memory
+
+Retrieve the current working memory for a thread:
+
+```typescript
+const workingMemory = await mastraClient.getWorkingMemory({
+  agentId: "agent-1",
+  threadId: "thread-1",
+  resourceId: "user-123", // Optional, required for resource-scoped memory
+});
+```
+
+The response includes:
+- `workingMemory`: The current working memory content (string or null)
+- `source`: Whether the memory is from `"thread"` or `"resource"` scope
+- `workingMemoryTemplate`: The template used for working memory (if configured)
+- `threadExists`: Whether the thread exists
+
+### Update Working Memory
+
+Update the working memory content for a thread:
+
+```typescript
+await mastraClient.updateWorkingMemory({
+  agentId: "agent-1",
+  threadId: "thread-1",
+  workingMemory: `# User Profile
+- Name: John Doe
+- Location: New York
+- Preferences: Prefers formal communication
+`,
+  resourceId: "user-123", // Optional, required for resource-scoped memory
+});
+
+// Returns: { success: true }
+```
+
+**Note:** For resource-scoped working memory, you must provide the `resourceId` parameter. This allows the memory to persist across all conversation threads for that user.
+
 ### Get Memory Status
 
 Check the status of the memory system:
