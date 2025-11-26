@@ -495,7 +495,22 @@ export class SemanticRecall implements Processor {
       const metadataList: Record<string, any>[] = [];
       let vectorDimension = 0;
 
-      for (const message of messages) {
+      // Get all new messages that need embeddings (both user and response messages)
+      // The 'messages' argument only contains response messages, so we also need
+      // to get user messages from the messageList for embedding
+      let messagesToEmbed = [...messages];
+      if (messageList) {
+        const newUserMessages = messageList.get.input.db().filter(m => messageList.isNewMessage(m));
+        // Combine user and response messages, avoiding duplicates
+        const existingIds = new Set(messagesToEmbed.map(m => m.id));
+        for (const userMsg of newUserMessages) {
+          if (!existingIds.has(userMsg.id)) {
+            messagesToEmbed.push(userMsg);
+          }
+        }
+      }
+
+      for (const message of messagesToEmbed) {
         // Skip system messages - they're instructions, not user content
         if (message.role === 'system') {
           continue;

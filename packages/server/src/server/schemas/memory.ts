@@ -74,6 +74,20 @@ const filterSchema = z.preprocess(
 );
 
 /**
+ * Memory config schema - handles JSON parsing from query strings
+ */
+const memoryConfigSchema = z.preprocess(val => {
+  if (typeof val === 'string') {
+    try {
+      return JSON.parse(val);
+    } catch {
+      return undefined;
+    }
+  }
+  return val;
+}, z.record(z.string(), z.unknown()).optional());
+
+/**
  * Thread object structure
  */
 const threadSchema = z.object({
@@ -142,7 +156,7 @@ export const listMessagesQuerySchema = createPagePaginationSchema(40).extend({
 export const getWorkingMemoryQuerySchema = z.object({
   agentId: z.string(),
   resourceId: z.string().optional(),
-  memoryConfig: z.record(z.string(), z.unknown()).optional(), // Complex config object
+  memoryConfig: memoryConfigSchema,
 });
 
 // ============================================================================
@@ -318,7 +332,7 @@ export const searchMemoryQuerySchema = z.object({
   resourceId: z.string(),
   threadId: z.string().optional(),
   limit: z.coerce.number().optional().default(20),
-  memoryConfig: z.record(z.string(), z.unknown()).optional(),
+  memoryConfig: memoryConfigSchema,
 });
 
 /**
