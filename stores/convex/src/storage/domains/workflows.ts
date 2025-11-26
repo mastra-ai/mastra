@@ -189,11 +189,8 @@ export class WorkflowsConvex extends WorkflowsStorage {
     return runs.find(run => run.run_id === runId) ?? null;
   }
 
-  private ensureSnapshot(run: { run_id: string; snapshot: WorkflowRunState | string }): WorkflowRunState {
+  private ensureSnapshot(run: { snapshot: WorkflowRunState | string }): WorkflowRunState {
     if (!run.snapshot) {
-      if (!run.run_id) {
-        throw new Error('Cannot create default snapshot: run_id is missing');
-      }
       return {
         context: {},
         activePaths: [],
@@ -205,7 +202,7 @@ export class WorkflowsConvex extends WorkflowsStorage {
         value: {},
         waitingPaths: {},
         status: 'pending',
-        runId: run.run_id,
+        runId: '',
       };
     }
 
