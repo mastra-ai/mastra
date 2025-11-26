@@ -66,11 +66,6 @@
       "permanent": true
     },
     {
-      "source": "/:path(ja)?/docs/agents/human-in-the-loop-with-tools",
-      "destination": "/:path/docs/agents/agent-approval",
-      "permanent": true
-    },
-    {
       "source": "/docs/v1/getting-started/installation",
       "destination": "/guides/v1/getting-started/quickstart",
       "permanent": true
@@ -208,6 +203,11 @@
     {
       "source": "/examples/v1/observability/basic-ai-tracing",
       "destination": "/docs/v1/observability/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/agents/human-in-the-loop-with-tools",
+      "destination": "/docs/agents/agent-approval",
       "permanent": true
     }
   ]

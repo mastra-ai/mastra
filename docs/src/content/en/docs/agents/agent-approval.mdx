@@ -13,7 +13,7 @@ Tool call approval can be enabled at the agent level and apply to every tool the
 
 ### Storage
 
-Agent approval uses a snapshot to capture the state of the request, ensure you've enabled a storage provider in your main Mastra instance. If storage isn't enabled you'll see an error relating to snapshot not found.
+Agent approval uses a snapshot to capture the state of the request. Ensure you've enabled a storage provider in your main Mastra instance. If storage isn't enabled you'll see an error relating to snapshot not found.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core/mastra";
@@ -29,9 +29,9 @@ export const mastra = new Mastra({
 ```
 
 
-## Agent level approval
+## Agent-level approval
 
-When calling an agent using `.stream()` set `requireToolApproval` to `true` which will prevent the agent from calling any of the tools defined in it's configuration.
+When calling an agent using `.stream()` set `requireToolApproval` to `true` which will prevent the agent from calling any of the tools defined in its configuration.
 
 ```typescript showLineNumbers
 const stream = await agent.stream("What's the weather in London?", {
@@ -41,7 +41,7 @@ const stream = await agent.stream("What's the weather in London?", {
 
 ### Approving tool calls
 
-To approve a tool call, access `approveToolCall` from the `agent`, passing in the `runId` of the stream. This will let the agent know it's now ok to call it's tools.
+To approve a tool call, access `approveToolCall` from the `agent`, passing in the `runId` of the stream. This will let the agent know its now OK to call its tools.
 
 ```typescript showLineNumbers
 const handleApproval = async () => {
@@ -56,7 +56,7 @@ const handleApproval = async () => {
 
 ### Declining tool calls
 
-To decline a tool call, access the `declineToolCall` from the `agent`. You will see the streamed response from the agent, but it won't call it's tools.
+To decline a tool call, access the `declineToolCall` from the `agent`. You will see the streamed response from the agent, but it won't call its tools.
 
 ```typescript showLineNumbers
 const handleDecline = async () => {
@@ -69,13 +69,13 @@ const handleDecline = async () => {
 };
 ```
 
-## Tool level approval
+## Tool-level approval
 
-There are two types of tool call approval. The first uses `requireToolApproval` and prevents an agent from calling a tool until `resumeStream` is invoked. The second uses `suspend` and lets the agent provide context or confirmation prompts so the user can decide whether the tool call should continue.
+There are two types of tool call approval. The first uses `requireApproval`, which is a property on the tool definition, while `requireToolApproval` is a parameter passed to `agent.stream()`. The second uses `suspend` and lets the agent provide context or confirmation prompts so the user can decide whether the tool call should continue.
 
 ### Tool approval using `requireToolApproval`
 
-In this approach `requireApproval` is moved from the agent definition to the tool.
+In this approach, `requireApproval` is configured on the tool definition (shown below) rather than on the agent.
 
 ```typescript
 export const testTool = createTool({
@@ -124,7 +124,7 @@ const handleResume = async () => {
 
 ### Tool approval using `suspend`
 
-With this approach neither the agent or tool use `requireApproval`. Instead, the tool implementation calls `suspend` to pause execution and return context or confirmation prompts to the user.
+With this approach, neither the agent nor the tool uses `requireApproval`. Instead, the tool implementation calls `suspend` to pause execution and return context or confirmation prompts to the user.
 
 ```typescript
 
