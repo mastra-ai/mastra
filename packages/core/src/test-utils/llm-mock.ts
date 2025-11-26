@@ -3,6 +3,10 @@ import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 
 import { MastraLLMV1 } from '../llm/model/model';
+import { MastraLanguageModelV2Mock } from '../loop/test-utils/MastraLanguageModelV2Mock';
+
+// Re-export for external use
+export { simulateReadableStream, MastraLanguageModelV2Mock };
 
 export function createMockModel({
   objectGenerationMode,
