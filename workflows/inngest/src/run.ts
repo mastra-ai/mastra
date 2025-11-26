@@ -3,7 +3,7 @@ import { subscribe } from '@inngest/realtime';
 import type { Mastra } from '@mastra/core/mastra';
 import type { TracingContext, TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
-import { WorkflowRunOutput } from '@mastra/core/stream';
+import { WorkflowRunOutput, ChunkFrom } from '@mastra/core/stream';
 import { createTimeTravelExecutionParams, Run } from '@mastra/core/workflows';
 import type {
   ExecutionEngine,
