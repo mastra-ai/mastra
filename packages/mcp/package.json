@@ -28,7 +28,7 @@
     "test:client": "vitest run ./src/client/client.test.ts",
     "test:server": "vitest run ./src/server/server.test.ts",
     "test:integration": "cd integration-tests && pnpm test:mcp",
-    "test": "pnpm test:integration && vitest run",
+    "test": "pnpm test:server && pnpm test:client && pnpm test:integration",
     "lint": "eslint ."
   },
   "keywords": [],
