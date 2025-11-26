@@ -73,6 +73,39 @@ The LanceStorage implementation automatically handles schema creation and update
 - `jsonb`, `json` → Utf8 (serialized)
 - `binary` → Binary
 
+### Initialization
+
+When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
+
+```typescript copy
+import { Mastra } from "@mastra/core";
+import { LanceStorage } from "@mastra/lance";
+
+const storage = await LanceStorage.create("my-storage", "/path/to/db");
+
+const mastra = new Mastra({
+  storage, // init() is called automatically
+});
+```
+
+If you're using storage directly without Mastra, you must call `init()` explicitly to create the tables:
+
+```typescript copy
+import { LanceStorage } from "@mastra/lance";
+
+const storage = await LanceStorage.create("my-storage", "/path/to/db");
+
+// Required when using storage directly
+await storage.init();
+
+// Now you can use the storage
+await storage.getThread({ threadId: "..." });
+```
+
+:::warning
+If `init()` is not called, tables won't be created and storage operations will fail silently or throw errors.
+:::
+
 ### Deployment Options
 
 LanceDB storage can be configured for different deployment scenarios:
