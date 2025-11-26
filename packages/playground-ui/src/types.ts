@@ -2,6 +2,7 @@ import { GetAgentResponse } from '@mastra/client-js';
 import type { AiMessageType } from '@mastra/core/memory';
 import type { LLMStepResult } from '@mastra/core/agent';
 import { MastraUIMessage } from '@mastra/react';
+import type { UIMessageWithMetadata } from '@mastra/client-js';
 
 export type Message = AiMessageType;
 
@@ -58,7 +59,7 @@ export interface ChatProps {
   modelVersion?: string;
   threadId?: string;
   initialMessages?: MastraUIMessage[];
-  initialLegacyMessages?: Message[];
+  initialLegacyMessages?: UIMessageWithMetadata[];
   memory?: boolean;
   refreshThreadList?: () => void;
   settings?: AgentSettingsType;
