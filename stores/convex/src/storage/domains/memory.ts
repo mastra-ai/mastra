@@ -186,8 +186,14 @@ export class MemoryConvex extends MemoryStorage {
     }
 
     rows.sort((a, b) => {
-      const aValue = field === 'createdAt' || field === 'updatedAt' ? new Date(a[field]).getTime() : (a as any)[field];
-      const bValue = field === 'createdAt' || field === 'updatedAt' ? new Date(b[field]).getTime() : (b as any)[field];
+      const aValue =
+        field === 'createdAt' || field === 'updatedAt'
+          ? new Date((a as Record<string, any>)[field]).getTime()
+          : (a as Record<string, any>)[field];
+      const bValue =
+        field === 'createdAt' || field === 'updatedAt'
+          ? new Date((b as Record<string, any>)[field]).getTime()
+          : (b as Record<string, any>)[field];
       if (typeof aValue === 'number' && typeof bValue === 'number') {
         return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       }
@@ -202,16 +208,31 @@ export class MemoryConvex extends MemoryStorage {
     const messageIds = new Set(messages.map(msg => msg.id));
 
     if (include && include.length > 0) {
+      // Cache messages from other threads as needed
+      const threadMessagesCache = new Map<string, StoredMessage[]>();
+      threadMessagesCache.set(threadId, rows);
+
       for (const includeItem of include) {
-        const target = rows.find(row => row.id === includeItem.id);
+        const targetThreadId = includeItem.threadId || threadId;
+
+        // Fetch messages from other threads if needed
+        if (!threadMessagesCache.has(targetThreadId)) {
+          const otherThreadRows = await this.operations.queryTable<StoredMessage>(TABLE_MESSAGES, [
+            { field: 'thread_id', value: targetThreadId },
+          ]);
+          threadMessagesCache.set(targetThreadId, otherThreadRows);
+        }
+
+        const targetThreadRows = threadMessagesCache.get(targetThreadId) || [];
+        const target = targetThreadRows.find(row => row.id === includeItem.id);
         if (target && !messageIds.has(target.id)) {
           messages.push(this.parseStoredMessage(target));
           messageIds.add(target.id);
         }
         await this.addContextMessages({
           includeItem,
-          allMessages: rows,
-          targetThreadId: includeItem.threadId || threadId,
+          allMessages: targetThreadRows,
+          targetThreadId,
           messageIds,
           messages,
         });
@@ -284,6 +305,25 @@ export class MemoryConvex extends MemoryStorage {
       records: normalized,
     });
 
+    // Update thread updatedAt timestamps for all affected threads
+    const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean) as string[])];
+    const now = new Date();
+    for (const threadId of threadIds) {
+      const thread = await this.getThreadById({ threadId });
+      if (thread) {
+        await this.operations.insert({
+          tableName: TABLE_THREADS,
+          record: {
+            ...thread,
+            id: thread.id,
+            updatedAt: now.toISOString(),
+            createdAt: thread.createdAt instanceof Date ? thread.createdAt.toISOString() : thread.createdAt,
+            metadata: thread.metadata ?? {},
+          },
+        });
+      }
+    }
+
     const list = new MessageList().add(messages, 'memory');
     return { messages: list.get.all.db() };
   }
@@ -300,11 +340,18 @@ export class MemoryConvex extends MemoryStorage {
 
     const existing = await this.operations.queryTable<StoredMessage>(TABLE_MESSAGES, undefined);
     const updated: MastraDBMessage[] = [];
+    const affectedThreadIds = new Set<string>();
+
     for (const update of messages) {
       const current = existing.find(row => row.id === update.id);
       if (!current) continue;
 
+      // Track old thread for timestamp update
+      affectedThreadIds.add(current.thread_id);
+
       if (update.threadId) {
+        // Track new thread for timestamp update when moving messages
+        affectedThreadIds.add(update.threadId);
         current.thread_id = update.threadId;
       }
       if (update.resourceId !== undefined) {
@@ -315,10 +362,6 @@ export class MemoryConvex extends MemoryStorage {
       }
       if (update.type) {
         current.type = update.type;
-      }
-      if (update.createdAt) {
-        current.createdAt =
-          update.createdAt instanceof Date ? update.createdAt.toISOString() : (update.createdAt as string);
       }
       if (update.content) {
         const existingContent = safelyParseJSON(current.content) || {};
@@ -339,6 +382,24 @@ export class MemoryConvex extends MemoryStorage {
       updated.push(this.parseStoredMessage(current));
     }
 
+    // Update thread updatedAt timestamps for all affected threads
+    const now = new Date();
+    for (const threadId of affectedThreadIds) {
+      const thread = await this.getThreadById({ threadId });
+      if (thread) {
+        await this.operations.insert({
+          tableName: TABLE_THREADS,
+          record: {
+            ...thread,
+            id: thread.id,
+            updatedAt: now.toISOString(),
+            createdAt: thread.createdAt instanceof Date ? thread.createdAt.toISOString() : thread.createdAt,
+            metadata: thread.metadata ?? {},
+          },
+        });
+      }
+    }
+
     return updated;
   }
 
@@ -347,14 +408,18 @@ export class MemoryConvex extends MemoryStorage {
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
+    const record: Record<string, unknown> = {
+      ...resource,
+      createdAt: resource.createdAt instanceof Date ? resource.createdAt.toISOString() : resource.createdAt,
+      updatedAt: resource.updatedAt instanceof Date ? resource.updatedAt.toISOString() : resource.updatedAt,
+    };
+    // Only include metadata if it's defined
+    if (resource.metadata !== undefined) {
+      record.metadata = resource.metadata;
+    }
     await this.operations.insert({
       tableName: TABLE_RESOURCES,
-      record: {
-        ...resource,
-        metadata: resource.metadata ?? {},
-        createdAt: resource.createdAt instanceof Date ? resource.createdAt.toISOString() : resource.createdAt,
-        updatedAt: resource.updatedAt instanceof Date ? resource.updatedAt.toISOString() : resource.updatedAt,
-      },
+      record,
     });
     return resource;
   }

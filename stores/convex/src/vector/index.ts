@@ -48,6 +48,7 @@ export class ConvexVector extends MastraVector<VectorFilter> {
       tableName: INDEX_METADATA_TABLE,
       record: {
         id: indexName,
+        indexName,
         dimension,
         metric: 'cosine',
         createdAt: new Date().toISOString(),
