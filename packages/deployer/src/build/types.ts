@@ -14,8 +14,4 @@ export interface DependencyMetadata {
    * Whether the dependency is a workspace package
    */
   isWorkspace: boolean;
-  /**
-   * The location of the import
-   */
-  importLocation: string;
 }

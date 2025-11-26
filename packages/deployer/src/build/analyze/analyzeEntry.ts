@@ -128,7 +128,6 @@ async function captureDependenciesToOptimize(
       exports: bindings,
       rootPath: normalizedRootPath,
       isWorkspace,
-      importLocation: output.moduleIds[0]!,
     });
   }
 
@@ -214,7 +213,6 @@ async function captureDependenciesToOptimize(
           exports: ['*'],
           rootPath: null,
           isWorkspace: false,
-          importLocation: output.moduleIds[0]!,
         });
       }
     }
