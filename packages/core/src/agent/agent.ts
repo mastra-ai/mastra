@@ -1978,7 +1978,13 @@ export class Agent<
                 let fullText = '';
                 for await (const chunk of streamResult.fullStream) {
                   if (writer) {
-                    await writer.write(chunk);
+                    // Data chunks from writer.custom() should bubble up directly without wrapping
+                    if (chunk.type.startsWith('data-')) {
+                      // Write data chunks directly to original stream to bubble up
+                      await writer.custom(chunk as any);
+                    } else {
+                      await writer.write(chunk);
+                    }
                   }
 
                   if (chunk.type === 'text-delta') {
@@ -1997,7 +2003,13 @@ export class Agent<
                 let fullText = '';
                 for await (const chunk of streamResult.fullStream) {
                   if (writer) {
-                    await writer.write(chunk);
+                    // Data chunks from writer.custom() should bubble up directly without wrapping
+                    if (chunk.type.startsWith('data-')) {
+                      // Write data chunks directly to original stream to bubble up
+                      await writer.custom(chunk as any);
+                    } else {
+                      await writer.write(chunk);
+                    }
                   }
 
                   if (chunk.type === 'text-delta') {
