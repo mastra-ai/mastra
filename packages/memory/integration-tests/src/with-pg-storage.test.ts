@@ -542,4 +542,87 @@ describe('Memory with PostgresStore Integration', () => {
       expect(result.messages).toBeDefined();
     });
   });
+
+  describe('lastMessages should return newest messages, not oldest', () => {
+    it('should return the LAST N messages when using lastMessages config without explicit orderBy', async () => {
+      // This test exposes a critical bug where recall() with lastMessages config
+      // returns the OLDEST messages instead of the NEWEST messages.
+      //
+      // The bug: When you set lastMessages: 3 and have 10 messages in a thread,
+      // you expect to get messages 8, 9, 10 (the last 3).
+      // Instead, the buggy behavior returns messages 1, 2, 3 (the first 3).
+      //
+      // This breaks conversation history for any thread that exceeds lastMessages.
+
+      const memoryWithLimit = new Memory({
+        storage: new PostgresStore(config),
+        options: {
+          lastMessages: 3, // Limit to 3 messages
+        },
+      });
+
+      const threadId = randomUUID();
+      const resourceId = randomUUID();
+
+      // Create thread
+      await memoryWithLimit.createThread({
+        threadId,
+        resourceId,
+      });
+
+      // Create 10 messages with sequential timestamps
+      // Message 1 is oldest, Message 10 is newest
+      const messages = [];
+      const baseTime = Date.now();
+      for (let i = 1; i <= 10; i++) {
+        messages.push({
+          id: randomUUID(),
+          threadId,
+          resourceId,
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: `Message ${i}` }],
+          },
+          role: 'user' as const,
+          createdAt: new Date(baseTime + i * 1000), // Each message 1 second apart
+        });
+      }
+
+      await memoryWithLimit.saveMessages({ messages });
+
+      // Call recall WITHOUT explicit orderBy - this is the typical usage pattern
+      // The config says lastMessages: 3, so we expect the LAST 3 messages
+      const result = await memoryWithLimit.recall({
+        threadId,
+        resourceId,
+        // NO orderBy - this is the bug trigger
+      });
+
+      expect(result.messages).toHaveLength(3);
+
+      // Extract text content for comparison
+      const contents = result.messages.map(m => {
+        if (typeof m.content === 'string') return m.content;
+        if (m.content?.parts?.[0]?.text) return m.content.parts[0].text;
+        if (m.content?.content) return m.content.content;
+        return '';
+      });
+
+      // The CORRECT behavior: should return the NEWEST 3 messages (8, 9, 10)
+      // in chronological order (oldest to newest within the window)
+      expect(contents).toContain('Message 8');
+      expect(contents).toContain('Message 9');
+      expect(contents).toContain('Message 10');
+
+      // Should NOT contain old messages
+      expect(contents).not.toContain('Message 1');
+      expect(contents).not.toContain('Message 2');
+      expect(contents).not.toContain('Message 3');
+
+      // Verify chronological order (oldest first within the returned window)
+      expect(contents[0]).toBe('Message 8');
+      expect(contents[1]).toBe('Message 9');
+      expect(contents[2]).toBe('Message 10');
+    });
+  });
 });
