@@ -9224,19 +9224,19 @@ describe('MastraInngestWorkflow', () => {
       const { stream, getWorkflowState } = run.streamLegacy({ inputData: { input: 'test' } });
 
       for await (const data of stream) {
-        if (data.type === 'workflow-step-suspended') {
+        if (data.type === 'step-suspended') {
           expect(promptAgentAction).toHaveBeenCalledTimes(1);
 
           // make it async to show that execution is not blocked
-          setImmediate(() => {
+          setTimeout(() => {
             const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
             run.resume({ resumeData: resumeData as any, step: promptAgent });
-          });
+          }, 1000);
           expect(evaluateToneAction).not.toHaveBeenCalledTimes(1);
         }
       }
 
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise(resolve => setTimeout(resolve, 1000));
       const resumeResult = await getWorkflowState();
 
       srv.close();
