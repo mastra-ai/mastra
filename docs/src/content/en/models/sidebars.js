@@ -278,6 +278,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/siliconflow",
+          label: "SiliconFlow",
+        },
+        {
+          type: "doc",
           id: "providers/submodel",
           label: "submodel",
         },
