@@ -284,6 +284,11 @@
       "source": "/examples/v1/rag/usage/basic-rag",
       "destination": "/docs/v1/rag/retrieval",
       "permanent": true
+    },
+    {
+      "source": "/docs/v1/agents/human-in-the-loop-with-tools",
+      "destination": "/docs/v1/agents/agent-approval",
+      "permanent": true
     }
   ]
 }
