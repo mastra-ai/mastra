@@ -33,7 +33,7 @@ export const moderatedAgent = new Agent({
   model: "openai/gpt-5.1",
   inputProcessors: [
     new ModerationProcessor({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       categories: ["hate", "harassment", "violence"],
       threshold: 0.7,
       strategy: "block",
@@ -82,7 +82,7 @@ export const secureAgent = new Agent({
   // ...
   inputProcessors: [
     new PromptInjectionDetector({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       threshold: 0.8,
       strategy: "rewrite",
       detectionTypes: ["injection", "jailbreak", "system-override"],
@@ -106,7 +106,7 @@ export const multilingualAgent = new Agent({
   // ...
   inputProcessors: [
     new LanguageDetector({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       targetLanguages: ["English", "en"],
       strategy: "translate",
       threshold: 0.8,
@@ -179,7 +179,7 @@ const scrubbedAgent = new Agent({
   name: "Scrubbed Agent",
   outputProcessors: [
     new SystemPromptScrubber({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       strategy: "redact",
       customPatterns: ["system prompt", "internal instructions"],
       includeDetections: true,
@@ -211,7 +211,7 @@ export const moderatedAgent = new Agent({
   // ...
   inputProcessors: [
     new ModerationProcessor({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       threshold: 0.7,
       strategy: "block",
       categories: ["hate", "harassment", "violence"],
@@ -240,7 +240,7 @@ export const privateAgent = new Agent({
   // ...
   inputProcessors: [
     new PIIDetector({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       threshold: 0.6,
       strategy: "redact",
       redactionMethod: "mask",
