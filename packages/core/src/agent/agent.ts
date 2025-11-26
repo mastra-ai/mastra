@@ -1246,7 +1246,7 @@ export class Agent<
     message: string | MessageInput;
     runtimeContext?: RuntimeContext;
     tracingContext: TracingContext;
-    model?: DynamicArgument<MastraLanguageModel>;
+    model?: DynamicArgument<MastraModelConfig>;
     instructions?: DynamicArgument<string>;
   }) {
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
@@ -1341,7 +1341,7 @@ export class Agent<
     userMessage: string | MessageInput | undefined,
     runtimeContext: RuntimeContext,
     tracingContext: TracingContext,
-    model?: DynamicArgument<MastraLanguageModel>,
+    model?: DynamicArgument<MastraModelConfig>,
     instructions?: DynamicArgument<string>,
   ) {
     try {
@@ -4937,11 +4937,11 @@ export class Agent<
   resolveTitleGenerationConfig(
     generateTitleConfig:
       | boolean
-      | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> }
+      | { model: DynamicArgument<MastraModelConfig>; instructions?: DynamicArgument<string> }
       | undefined,
   ): {
     shouldGenerate: boolean;
-    model?: DynamicArgument<MastraLanguageModel>;
+    model?: DynamicArgument<MastraModelConfig>;
     instructions?: DynamicArgument<string>;
   } {
     if (typeof generateTitleConfig === 'boolean') {
