@@ -42,7 +42,6 @@ import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, isZodType } from '../utils';
 import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
-import { DefaultVoice } from '../voice';
 import type { Workflow, WorkflowResult } from '../workflows';
 import { AgentLegacyHandler } from './agent-legacy';
 import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
@@ -121,7 +120,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   #tools: DynamicArgument<TTools>;
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
-  #voice: CompositeVoice;
+  #voice?: CompositeVoice;
   #inputProcessors?: DynamicArgument<InputProcessor[]>;
   #outputProcessors?: DynamicArgument<OutputProcessor[]>;
   readonly #options?: AgentCreateOptions;
@@ -236,8 +235,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       if (typeof config.instructions === 'string') {
         this.#voice?.addInstructions(config.instructions);
       }
-    } else {
-      this.#voice = new DefaultVoice();
     }
 
     if (config.inputProcessors) {
@@ -547,9 +544,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       const instructions = await this.getInstructions({ requestContext });
       voice?.addInstructions(this.#convertInstructionsToString(instructions));
       return voice;
-    } else {
-      return new DefaultVoice();
     }
+    return undefined;
   }
 
   /**
