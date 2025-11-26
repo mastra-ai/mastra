@@ -86,9 +86,6 @@ function validateError(err: ValidationError | Error, file: OutputChunk, logger: 
         messagePrefix: `Mastra wasn't able to build your project, We couldn't load "${missingModule}" from "${moduleName}". Please add`,
       };
 
-      // if (moduleName === missingModule) {
-      //   return;
-      // }
     }
   }
 
