@@ -1,3 +1,4 @@
+import { openai } from '@ai-sdk/openai';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
@@ -793,3 +794,188 @@ function toolsTest(version: 'v1' | 'v2') {
 
 toolsTest('v1');
 toolsTest('v2');
+
+describe('requireApproval property preservation', () => {
+  it('should preserve requireApproval property from tools passed via toolsets', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        text: 'ok',
+        content: [
+          {
+            type: 'text',
+            text: 'ok',
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    // Create a tool with requireApproval: true
+    const deleteUserTool = createTool({
+      id: 'delete-user',
+      description: 'Delete a user from the system',
+      inputSchema: z.object({ userId: z.string() }),
+      requireApproval: true,
+      execute: async ({ userId }) => {
+        return { success: true, userId };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for requireApproval',
+      model: mockModel,
+    });
+
+    // Convert tools with toolsets parameter
+    const tools = await agent['convertTools']({
+      runtimeContext: new RuntimeContext(),
+      methodType: 'generate',
+      toolsets: {
+        admin: {
+          deleteUser: deleteUserTool,
+        },
+      },
+    });
+
+    // Check that the converted tool has requireApproval property set
+    expect(tools.deleteUser).toBeDefined();
+    expect((tools.deleteUser as any).requireApproval).toBe(true);
+  });
+
+  it('should preserve requireApproval property from tools passed via clientTools', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        text: 'ok',
+        content: [
+          {
+            type: 'text',
+            text: 'ok',
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    // Create a tool with requireApproval: true
+    const sensitiveActionTool = createTool({
+      id: 'sensitive-action',
+      description: 'Perform a sensitive action',
+      inputSchema: z.object({ action: z.string() }),
+      requireApproval: true,
+      execute: async ({ action }) => {
+        return { success: true, action };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for requireApproval',
+      model: mockModel,
+    });
+
+    // Convert tools with clientTools parameter
+    const tools = await agent['convertTools']({
+      runtimeContext: new RuntimeContext(),
+      methodType: 'generate',
+      clientTools: {
+        sensitiveAction: sensitiveActionTool,
+      },
+    });
+
+    // Check that the converted tool has requireApproval property set
+    expect(tools.sensitiveAction).toBeDefined();
+    expect((tools.sensitiveAction as any).requireApproval).toBe(true);
+  });
+
+  it('should preserve requireApproval property from assigned tools', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        text: 'ok',
+        content: [
+          {
+            type: 'text',
+            text: 'ok',
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    // Create a tool with requireApproval: true
+    const criticalTool = createTool({
+      id: 'critical-action',
+      description: 'Perform a critical action',
+      inputSchema: z.object({ data: z.string() }),
+      requireApproval: true,
+      execute: async ({ data }) => {
+        return { success: true, data };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for requireApproval',
+      model: mockModel,
+      tools: {
+        criticalAction: criticalTool,
+      },
+    });
+
+    // Convert tools
+    const tools = await agent['convertTools']({
+      runtimeContext: new RuntimeContext(),
+      methodType: 'generate',
+    });
+
+    // Check that the converted tool has requireApproval property set
+    expect(tools.criticalAction).toBeDefined();
+    expect((tools.criticalAction as any).requireApproval).toBe(true);
+  });
+
+  it('should suspend when requireApproval is true', async () => {
+    // Create a tool with requireApproval: true
+    const criticalTool = createTool({
+      id: 'critical-action',
+      description: 'Perform a critical action',
+      inputSchema: z.object({ data: z.string() }),
+      requireApproval: true,
+      execute: async ({ data }) => {
+        return { success: true, data };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for requireApproval',
+      model: openai('gpt-4.1'),
+    });
+
+    const result = await agent.stream('Use the critical-action tool with data "test"', {
+      toolsets: {
+        actions: {
+          criticalAction: criticalTool,
+        },
+      },
+    });
+
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'tool-call-approval') {
+        expect(chunk.payload.toolName).toBe('criticalAction');
+      }
+    }
+  });
+});
