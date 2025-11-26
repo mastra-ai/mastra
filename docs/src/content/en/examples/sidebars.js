@@ -44,38 +44,6 @@ const sidebars = {
       items: [
         {
           type: "category",
-          label: "Chunking",
-          items: [
-            { type: "doc", id: "rag/chunking/chunk-text", label: "Chunk Text" },
-            {
-              type: "doc",
-              id: "rag/chunking/chunk-markdown",
-              label: "Chunk Markdown",
-            },
-            {
-              type: "doc",
-              id: "rag/chunking/chunk-html",
-              label: "Chunk HTML",
-            },
-            {
-              type: "doc",
-              id: "rag/chunking/chunk-json",
-              label: "Chunk JSON",
-            },
-            {
-              type: "doc",
-              id: "rag/chunking/adjust-chunk-size",
-              label: "Adjust Chunk Size",
-            },
-            {
-              type: "doc",
-              id: "rag/chunking/adjust-chunk-delimiters",
-              label: "Adjust Chunk Delimiters",
-            },
-          ],
-        },
-        {
-          type: "category",
           label: "Embedding",
           items: [
             {
