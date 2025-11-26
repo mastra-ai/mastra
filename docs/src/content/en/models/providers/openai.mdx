@@ -516,6 +516,12 @@ const response = await agent.generate("Hello!", {
 <PropertiesTable
   content={[
     {
+        "name": "conversation",
+        "type": "string | null | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
         "name": "include",
         "type": "(\"file_search_call.results\" | \"message.output_text.logprobs\" | \"reasoning.encrypted_content\")[] | null | undefined",
         "description": "",
@@ -560,6 +566,12 @@ const response = await agent.generate("Hello!", {
     {
         "name": "promptCacheKey",
         "type": "string | null | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "promptCacheRetention",
+        "type": "\"in_memory\" | \"24h\" | null | undefined",
         "description": "",
         "isOptional": true
     },
