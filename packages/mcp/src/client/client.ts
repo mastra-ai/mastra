@@ -364,7 +364,22 @@ export class InternalMastraMCPClient extends MastraBase {
         this.log('debug', 'Successfully connected using Streamable HTTP transport.');
       } catch (error) {
         this.log('debug', `Streamable HTTP transport failed: ${error}`);
-        shouldTrySSE = true;
+        
+        const status =
+          error?.response?.status ??
+          error?.status ??
+          error?.cause?.statusCode ??
+          null;
+
+        const allowedFallback = [400, 404, 405];
+
+        if (allowedFallback.includes(status)) {
+          this.log('debug', `Falling back to SSE due to allowed HTTP status: ${status}`);
+          shouldTrySSE = true;
+        } else {
+          this.log('debug', `Not falling back to SSE — throwing error for status: ${status}`);
+          throw error;
+        }
       }
     }
 
