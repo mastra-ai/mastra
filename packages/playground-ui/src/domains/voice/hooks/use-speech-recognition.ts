@@ -37,8 +37,12 @@ export const useSpeechRecognition = ({
 
     const check = async () => {
       try {
-        await agent.voice.getSpeakers(requestContext);
-        setAgent(agent as unknown as Agent);
+        const speakers = await agent.voice.getSpeakers(requestContext);
+        if (speakers.length > 0) {
+          setAgent(agent as unknown as Agent);
+        } else {
+          setAgent(null);
+        }
       } catch (error) {
         setAgent(null);
       }
@@ -151,7 +155,7 @@ const useMastraSpeechToText = ({ agent }: { agent: Agent | null }) => {
   }
 
   const handleFinish = (file: File) => {
-    agent.voice.listen(file as any).then(res => {
+    agent.voice?.listen(file as any).then(res => {
       setTranscript((res as unknown as { text: string }).text);
     });
   };

@@ -21,7 +21,7 @@ export class VoiceAttachmentAdapter implements SpeechSynthesisAdapter {
       },
       subscribe: callback => {
         this.agent.voice
-          .speak(text)
+          ?.speak(text)
           .then(res => {
             if (res) {
               return (res as unknown as { body: ReadableStream }).body;

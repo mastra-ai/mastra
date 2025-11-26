@@ -43,7 +43,7 @@ export const GET_SPEAKERS_ROUTE = createRoute({
       const voice = await agent.getVoice({ requestContext });
 
       if (!voice) {
-        throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
+        return [];
       }
 
       const speakers = await voice.getSpeakers();
@@ -213,7 +213,7 @@ export const GET_LISTENER_ROUTE = createRoute({
       const voice = await agent.getVoice({ requestContext });
 
       if (!voice) {
-        throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
+        return { enabled: false };
       }
 
       const listeners = await voice.getListener();
