@@ -7,28 +7,28 @@ This example shows how to create a custom input processor that validates and lim
 A custom input processor in Mastra implements the `Processor` interface with the `processInput` method. This processor validates the total character count of all text content in the message thread and blocks requests that exceed the configured limit.
 
 ```typescript title="src/mastra/processors/message-length-limiter.ts" showLineNumbers copy
-import type { Processor } from "@mastra/core/processors";
-import type { MastraMessageV2 } from "@mastra/core/agent/message-list";
-import { TripWire } from "@mastra/core/agent";
+import type { Processor } from '@mastra/core/processors';
+import type { MastraMessageV2 } from '@mastra/core/agent/message-list';
+import { TripWire } from '@mastra/core/agent';
 
 type MessageLengthLimiterOptions = {
   maxLength?: number;
-  strategy?: "block" | "warn" | "truncate";
+  strategy?: 'block' | 'warn' | 'truncate';
 };
 
 export class MessageLengthLimiter implements Processor {
-  readonly id  = "message-length-limiter";
-  readonly name = "Message Length Limiter";
+  readonly id = 'message-length-limiter';
+  readonly name = 'Message Length Limiter';
   private maxLength: number;
-  private strategy: "block" | "warn" | "truncate";
+  private strategy: 'block' | 'warn' | 'truncate';
 
   constructor(options: MessageLengthLimiterOptions | number = {}) {
-    if (typeof options === "number") {
+    if (typeof options === 'number') {
       this.maxLength = options;
-      this.strategy = "block";
+      this.strategy = 'block';
     } else {
       this.maxLength = options.maxLength ?? 1000;
-      this.strategy = options.strategy ?? "block";
+      this.strategy = options.strategy ?? 'block';
     }
   }
 
@@ -44,24 +44,22 @@ export class MessageLengthLimiter implements Processor {
         return (
           sum +
           msg.content.parts
-            .filter((part) => part.type === "text")
-            .reduce((partSum, part) => partSum + (part.type === "text" ? part.text.length : 0), 0)
+            .filter(part => part.type === 'text')
+            .reduce((partSum, part) => partSum + (part.type === 'text' ? part.text.length : 0), 0)
         );
       }, 0);
 
       if (totalLength > this.maxLength) {
         switch (this.strategy) {
-          case "block":
-            abort(
-              `Message too long: ${totalLength} characters (max: ${this.maxLength})`,
-            );
+          case 'block':
+            abort(`Message too long: ${totalLength} characters (max: ${this.maxLength})`);
             break;
-          case "warn":
+          case 'warn':
             console.warn(
               `Warning: Message length ${totalLength} exceeds recommended limit of ${this.maxLength} characters`,
             );
             break;
-          case "truncate":
+          case 'truncate':
             return this.truncateMessages(messages, this.maxLength);
         }
       }
@@ -69,18 +67,13 @@ export class MessageLengthLimiter implements Processor {
       if (error instanceof TripWire) {
         throw error;
       }
-      throw new Error(
-        `Length validation failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
+      throw new Error(`Length validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
     return messages;
   }
 
-  private truncateMessages(
-    messages: MastraMessageV2[],
-    maxLength: number,
-  ): MastraMessageV2[] {
+  private truncateMessages(messages: MastraMessageV2[], maxLength: number): MastraMessageV2[] {
     const truncatedMessages = [...messages];
     let currentLength = 0;
 
@@ -90,13 +83,13 @@ export class MessageLengthLimiter implements Processor {
 
       for (let j = 0; j < parts.length; j++) {
         const part = parts[j];
-        if (part.type === "text") {
+        if (part.type === 'text') {
           const partLength = part.text.length;
 
           if (currentLength + partLength > maxLength) {
             const remainingChars = maxLength - currentLength;
             if (remainingChars > 0) {
-              part.text = part.text.substring(0, remainingChars) + "...";
+              part.text = part.text.substring(0, remainingChars) + '...';
             } else {
               parts.splice(j);
               break;
@@ -139,31 +132,29 @@ export class MessageLengthLimiter implements Processor {
 Using the options object approach with explicit strategy configuration:
 
 ```typescript title="src/mastra/agents/blocking-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-import { MessageLengthLimiter } from "../processors/message-length-limiter";
+import { Agent } from '@mastra/core/agent';
+import { MessageLengthLimiter } from '../processors/message-length-limiter';
 
 export const blockingAgent = new Agent({
-  id: "blocking-agent",
-  name: "Blocking Agent",
-  instructions: "You are a helpful assistant with input length limits",
-  model: "openai/gpt-5.1",
-  inputProcessors: [
-    new MessageLengthLimiter({ maxLength: 2000, strategy: "block" }),
-  ],
+  id: 'blocking-agent',
+  name: 'Blocking Agent',
+  instructions: 'You are a helpful assistant with input length limits',
+  model: 'openai/gpt-5.1',
+  inputProcessors: [new MessageLengthLimiter({ maxLength: 2000, strategy: 'block' })],
 });
 ```
 
 Using the simple number approach (defaults to 'block' strategy):
 
 ```typescript title="src/mastra/agents/simple-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-import { MessageLengthLimiter } from "../processors/message-length-limiter";
+import { Agent } from '@mastra/core/agent';
+import { MessageLengthLimiter } from '../processors/message-length-limiter';
 
 export const simpleAgent = new Agent({
-  id: "simple-agent",
-  name: "Simple Agent",
-  instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  id: 'simple-agent',
+  name: 'Simple Agent',
+  instructions: 'You are a helpful assistant',
+  model: 'openai/gpt-5.1',
   inputProcessors: [new MessageLengthLimiter(500)],
 });
 ```
@@ -173,21 +164,21 @@ export const simpleAgent = new Agent({
 This example shows a message that stays within the configured character limit and processes successfully.
 
 ```typescript title="src/example-high-message-length.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter";
+import { Agent } from '@mastra/core/agent';
+import { MessageLengthLimiter } from './mastra/processors/message-length-limiter';
 
 // Create agent with generous character limit
 export const agent = new Agent({
-  id: "length-limited-agent",
-  name: "Length Limited Agent",
-  instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  id: 'length-limited-agent',
+  name: 'Length Limited Agent',
+  instructions: 'You are a helpful assistant',
+  model: 'openai/gpt-5.1',
   inputProcessors: [
     new MessageLengthLimiter(500), // 500 character limit
   ],
 });
 
-const shortMessage = "What is the capital of France?"; // 31 characters
+const shortMessage = 'What is the capital of France?'; // 31 characters
 
 const result = await agent.generate(shortMessage);
 console.log(result.text);
@@ -206,15 +197,15 @@ The message processes successfully because it's well under the 500-character lim
 This example shows a message that's close to but still within the character limit.
 
 ```typescript title="src/example-partial-message-length.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter";
+import { Agent } from '@mastra/core/agent';
+import { MessageLengthLimiter } from './mastra/processors/message-length-limiter';
 
 // Reuse same agent but with tighter character limit
 export const agent = new Agent({
-  id: "length-limited-agent",
-  name: "Length Limited Agent",
-  instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  id: 'length-limited-agent',
+  name: 'Length Limited Agent',
+  instructions: 'You are a helpful assistant',
+  model: 'openai/gpt-5.1',
   inputProcessors: [
     new MessageLengthLimiter(300), // 300 character limit
   ],
@@ -232,7 +223,7 @@ console.log(result.text);
 The message processes successfully as it's under the 300-character limit:
 
 ```typescript
-"Machine learning is a subset of artificial intelligence. AI is the broader concept of machines performing tasks in a smart way...";
+'Machine learning is a subset of artificial intelligence. AI is the broader concept of machines performing tasks in a smart way...';
 ```
 
 ## Low example (exceeds limits)
@@ -240,27 +231,27 @@ The message processes successfully as it's under the 300-character limit:
 This example shows what happens when a message exceeds the configured character limit.
 
 ```typescript title="src/example-low-message-length.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter";
+import { Agent } from '@mastra/core/agent';
+import { MessageLengthLimiter } from './mastra/processors/message-length-limiter';
 
 // Reuse same agent but with very strict character limit
 export const agent = new Agent({
-  id: "length-limited-agent",
-  name: "Length Limited Agent",
-  instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  id: 'length-limited-agent',
+  name: 'Length Limited Agent',
+  instructions: 'You are a helpful assistant',
+  model: 'openai/gpt-5.1',
   inputProcessors: [
     new MessageLengthLimiter(100), // Very strict 100 character limit
   ],
 });
 
 const longMessage =
-  "I need you to provide a comprehensive analysis of the economic implications of artificial intelligence on global markets, including detailed examination of how AI adoption affects employment rates, productivity metrics, consumer behavior patterns, and long-term economic forecasting models that governments and corporations use for strategic planning purposes."; // ~400+ characters
+  'I need you to provide a comprehensive analysis of the economic implications of artificial intelligence on global markets, including detailed examination of how AI adoption affects employment rates, productivity metrics, consumer behavior patterns, and long-term economic forecasting models that governments and corporations use for strategic planning purposes.'; // ~400+ characters
 
 const result = await agent.generate(longMessage);
 
 if (result.tripwire) {
-  console.log("Request blocked:", result.tripwireReason);
+  console.log('Request blocked:', result.tripwireReason);
 } else {
   console.log(result.text);
 }

@@ -7,27 +7,27 @@ This example shows how to create a custom output processor that monitors and lim
 A custom output processor in Mastra implements the `Processor` interface with the `processOutputStream` method for streaming responses. This processor tracks the cumulative length of text deltas and terminates the stream when the limit is exceeded.
 
 ```typescript title="src/mastra/processors/response-length-limiter.ts" showLineNumbers copy
-import type { Processor } from "@mastra/core/processors";
-import type { ChunkType } from "@mastra/core/stream";
+import type { Processor } from '@mastra/core/processors';
+import type { ChunkType } from '@mastra/core/stream';
 
 type ResponseLengthLimiterOptions = {
   maxLength?: number;
-  strategy?: "block" | "warn" | "truncate";
+  strategy?: 'block' | 'warn' | 'truncate';
 };
 
 export class ResponseLengthLimiter implements Processor {
-  readonly id = "response-length-limiter";
-  readonly name = "Response Length Limiter";
+  readonly id = 'response-length-limiter';
+  readonly name = 'Response Length Limiter';
   private maxLength: number;
-  private strategy: "block" | "warn" | "truncate";
+  private strategy: 'block' | 'warn' | 'truncate';
 
   constructor(options: ResponseLengthLimiterOptions | number = {}) {
-    if (typeof options === "number") {
+    if (typeof options === 'number') {
       this.maxLength = options;
-      this.strategy = "block";
+      this.strategy = 'block';
     } else {
       this.maxLength = options.maxLength ?? 1000;
-      this.strategy = options.strategy ?? "block";
+      this.strategy = options.strategy ?? 'block';
     }
   }
 
@@ -46,29 +46,24 @@ export class ResponseLengthLimiter implements Processor {
       state.cumulativeLength = 0;
     }
 
-    if (part.type === "text-delta") {
+    if (part.type === 'text-delta') {
       const newLength = state.cumulativeLength + part.payload.text.length;
 
       if (newLength > this.maxLength) {
         switch (this.strategy) {
-          case "block":
-            abort(
-              `Response too long: ${newLength} characters (max: ${this.maxLength})`,
-            );
+          case 'block':
+            abort(`Response too long: ${newLength} characters (max: ${this.maxLength})`);
             break;
-          case "warn":
+          case 'warn':
             console.warn(
               `Warning: Response length ${newLength} exceeds recommended limit of ${this.maxLength} characters`,
             );
             state.cumulativeLength = newLength;
             return part;
-          case "truncate":
+          case 'truncate':
             const remainingChars = this.maxLength - state.cumulativeLength;
             if (remainingChars > 0) {
-              const truncatedText = part.payload.text.substring(
-                0,
-                remainingChars,
-              );
+              const truncatedText = part.payload.text.substring(0, remainingChars);
               state.cumulativeLength = this.maxLength;
               return {
                 ...part,
@@ -103,31 +98,29 @@ export class ResponseLengthLimiter implements Processor {
 Using the options object approach with explicit strategy configuration:
 
 ```typescript title="src/mastra/agents/blocking-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-import { ResponseLengthLimiter } from "../processors/response-length-limiter";
+import { Agent } from '@mastra/core/agent';
+import { ResponseLengthLimiter } from '../processors/response-length-limiter';
 
 export const blockingAgent = new Agent({
-  id: "blocking-agent",
-  name: "Blocking Agent",
-  instructions: "You are a helpful assistant with response length limits",
-  model: "openai/gpt-5.1",
-  outputProcessors: [
-    new ResponseLengthLimiter({ maxLength: 1000, strategy: "block" }),
-  ],
+  id: 'blocking-agent',
+  name: 'Blocking Agent',
+  instructions: 'You are a helpful assistant with response length limits',
+  model: 'openai/gpt-5.1',
+  outputProcessors: [new ResponseLengthLimiter({ maxLength: 1000, strategy: 'block' })],
 });
 ```
 
 Using the simple number approach (defaults to 'block' strategy):
 
 ```typescript title="src/mastra/agents/simple-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-import { ResponseLengthLimiter } from "../processors/response-length-limiter";
+import { Agent } from '@mastra/core/agent';
+import { ResponseLengthLimiter } from '../processors/response-length-limiter';
 
 export const simpleAgent = new Agent({
-  id: "simple-agent",
-  name: "Simple Agent",
-  instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  id: 'simple-agent',
+  name: 'Simple Agent',
+  instructions: 'You are a helpful assistant',
+  model: 'openai/gpt-5.1',
   outputProcessors: [new ResponseLengthLimiter(300)],
 });
 ```
@@ -137,23 +130,23 @@ export const simpleAgent = new Agent({
 This example shows a response that stays within the configured character limit and streams successfully to completion.
 
 ```typescript title="src/example-high-response-length.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-import { ResponseLengthLimiter } from "./mastra/processors/response-length-limiter";
+import { Agent } from '@mastra/core/agent';
+import { ResponseLengthLimiter } from './mastra/processors/response-length-limiter';
 
 // Create agent with generous response limit
 export const agent = new Agent({
-  id: "response-limited-agent",
-  name: "Response Limited Agent",
-  instructions: "You are a helpful assistant. Keep responses concise.",
-  model: "openai/gpt-5.1",
+  id: 'response-limited-agent',
+  name: 'Response Limited Agent',
+  instructions: 'You are a helpful assistant. Keep responses concise.',
+  model: 'openai/gpt-5.1',
   outputProcessors: [
     new ResponseLengthLimiter(300), // 300 character limit
   ],
 });
 
-const result = await agent.generate("What is the capital of France?");
+const result = await agent.generate('What is the capital of France?');
 console.log(result.text);
-console.log("Character count:", result.text.length);
+console.log('Character count:', result.text.length);
 ```
 
 ### High example output
@@ -171,29 +164,29 @@ Character count: 156
 This example shows what happens when a response reaches exactly the character limit during generation.
 
 ```typescript title="src/example-partial-response-length.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-import { ResponseLengthLimiter } from "./mastra/processors/response-length-limiter";
+import { Agent } from '@mastra/core/agent';
+import { ResponseLengthLimiter } from './mastra/processors/response-length-limiter';
 
 // Reuse same agent but with stricter response limit
 export const agent = new Agent({
-  id: "response-limited-agent",
-  name: "Response Limited Agent",
-  instructions: "You are a helpful assistant.",
-  model: "openai/gpt-5.1",
+  id: 'response-limited-agent',
+  name: 'Response Limited Agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'openai/gpt-5.1',
   outputProcessors: [
     new ResponseLengthLimiter(200), // Strict 200 character limit
   ],
 });
 
-const result = await agent.generate("Explain machine learning in detail.");
+const result = await agent.generate('Explain machine learning in detail.');
 
 if (result.tripwire) {
-  console.log("Response blocked:", result.tripwireReason);
-  console.log("Partial response received:", result.text);
+  console.log('Response blocked:', result.tripwireReason);
+  console.log('Partial response received:', result.text);
 } else {
   console.log(result.text);
 }
-console.log("Character count:", result.text.length);
+console.log('Character count:', result.text.length);
 ```
 
 ### Partial example output
@@ -211,44 +204,41 @@ Character count: 200
 This example demonstrates streaming behavior when the response limit is exceeded.
 
 ```typescript title="src/example-low-response-length.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-import { ResponseLengthLimiter } from "./mastra/processors/response-length-limiter";
+import { Agent } from '@mastra/core/agent';
+import { ResponseLengthLimiter } from './mastra/processors/response-length-limiter';
 
 // Reuse same agent but with very strict response limit
 export const agent = new Agent({
-  id: "response-limited-agent",
-  name: "Response Limited Agent",
-  instructions:
-    "You are a verbose assistant who provides detailed explanations.",
-  model: "openai/gpt-5.1",
+  id: 'response-limited-agent',
+  name: 'Response Limited Agent',
+  instructions: 'You are a verbose assistant who provides detailed explanations.',
+  model: 'openai/gpt-5.1',
   outputProcessors: [
     new ResponseLengthLimiter(100), // Very strict 100 character limit
   ],
 });
 
-const stream = await agent.stream(
-  "Write a comprehensive essay about artificial intelligence.",
-);
+const stream = await agent.stream('Write a comprehensive essay about artificial intelligence.');
 
-let responseText = "";
+let responseText = '';
 let wasBlocked = false;
-let blockReason = "";
+let blockReason = '';
 
 for await (const part of stream.fullStream) {
-  if (part.type === "text-delta") {
+  if (part.type === 'text-delta') {
     responseText += part.payload.text;
     process.stdout.write(part.payload.text);
-  } else if (part.type === "tripwire") {
+  } else if (part.type === 'tripwire') {
     wasBlocked = true;
     blockReason = part.payload.tripwireReason;
-    console.log("\n\nStream blocked:", blockReason);
+    console.log('\n\nStream blocked:', blockReason);
     break;
   }
 }
 
 if (wasBlocked) {
-  console.log("Final response length:", responseText.length);
-  console.log("Reason:", blockReason);
+  console.log('Final response length:', responseText.length);
+  console.log('Reason:', blockReason);
 }
 ```
 
