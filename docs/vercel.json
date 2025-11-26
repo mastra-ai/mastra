@@ -206,6 +206,86 @@
       "permanent": true
     },
     {
+      "source": "/examples/v1/rag/chunking/chunk-text",
+      "destination": "/docs/v1/rag/chunking-and-embedding",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/chunking/chunk-html",
+      "destination": "/docs/v1/rag/chunking-and-embedding",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/chunking/chunk-json",
+      "destination": "/docs/v1/rag/chunking-and-embedding",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/chunking/chunk-markdown",
+      "destination": "/docs/v1/rag/chunking-and-embedding",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/chunking/adjust-chunk-size",
+      "destination": "/docs/v1/rag/chunking-and-embedding",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/chunking/adjust-chunk-delimiters",
+      "destination": "/docs/v1/rag/chunking-and-embedding",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/embedding/embed-text-chunk",
+      "destination": "/docs/v1/rag/chunking-and-embedding",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/embedding/embed-chunk-array",
+      "destination": "/docs/v1/rag/chunking-and-embedding",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/embedding/embed-text-with-cohere",
+      "destination": "/docs/v1/rag/chunking-and-embedding",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/upsert/upsert-embeddings",
+      "destination": "/docs/v1/rag/vector-databases",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/query/retrieve-results",
+      "destination": "/docs/v1/rag/retrieval",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/rerank/rerank",
+      "destination": "/docs/v1/rag/retrieval#re-ranking",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/rerank/rerank-rag",
+      "destination": "/docs/v1/rag/retrieval#re-ranking",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/rerank/reranking-with-cohere",
+      "destination": "/docs/v1/rag/retrieval#re-ranking",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/rerank/reranking-with-zeroentropy",
+      "destination": "/docs/v1/rag/retrieval#re-ranking",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/usage/basic-rag",
+      "destination": "/docs/v1/rag/retrieval",
+      "permanent": true
+    },
+    {
       "source": "/docs/v1/agents/human-in-the-loop-with-tools",
       "destination": "/docs/v1/agents/agent-approval",
       "permanent": true

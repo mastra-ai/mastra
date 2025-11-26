@@ -52,6 +52,8 @@ const results = await pgVector.query({
 console.log(results);
 ```
 
+The `topK` parameter specifies the maximum number of most similar results to return from the vector search.
+
 Results include both the text content and a similarity score:
 
 ```ts showLineNumbers copy
@@ -69,8 +71,6 @@ Results include both the text content and a similarity score:
   // ... more results
 ];
 ```
-
-For an example of how to use the basic retrieval method, see the [Retrieve Results](/examples/v1/rag/query/retrieve-results) example.
 
 ## Advanced Retrieval options
 
@@ -510,12 +510,24 @@ const relevanceProvider = new MastraAgentRelevanceScorer('relevance-scorer', "op
 const rerankedResults = await rerank({
   results: initialResults,
   query,
-  provider: relevanceProvider,
+  scorer: relevanceProvider,
   options: {
+    weights: {
+      semantic: 0.5, // How well the content matches the query semantically
+      vector: 0.3, // Original vector similarity score
+      position: 0.2, // Preserves original result ordering
+    },
     topK: 10,
   },
 );
 ```
+
+The weights control how different factors influence the final ranking:
+
+- `semantic`: Higher values prioritize semantic understanding and relevance to the query
+- `vector`: Higher values favor the original vector similarity scores
+- `position`: Higher values help maintain the original ordering of results
+
 
 > **Note:** For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
 
@@ -532,8 +544,6 @@ const relevanceProvider = new ZeroEntropyRelevanceScorer("zerank-1");
 The re-ranked results combine vector similarity with semantic understanding to improve retrieval quality.
 
 For more details about re-ranking, see the [rerank()](/reference/v1/rag/rerankWithScorer) method.
-
-For an example of how to use the re-ranking method, see the Re-ranking Results example in the examples section.
 
 ### Graph-based Retrieval
 
