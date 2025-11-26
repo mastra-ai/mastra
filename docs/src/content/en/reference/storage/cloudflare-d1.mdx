@@ -95,6 +95,43 @@ The storage implementation handles schema creation and updates automatically. It
 - `messages`: Stores individual messages
 - `metadata`: Stores additional metadata for threads and messages
 
+### Initialization
+
+When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
+
+```typescript copy
+import { Mastra } from "@mastra/core";
+import { D1Store } from "@mastra/cloudflare-d1";
+
+const storage = new D1Store({
+  binding: D1Database,
+});
+
+const mastra = new Mastra({
+  storage, // init() is called automatically
+});
+```
+
+If you're using storage directly without Mastra, you must call `init()` explicitly to create the tables:
+
+```typescript copy
+import { D1Store } from "@mastra/cloudflare-d1";
+
+const storage = new D1Store({
+  binding: D1Database,
+});
+
+// Required when using storage directly
+await storage.init();
+
+// Now you can use the storage
+await storage.getThread({ threadId: "..." });
+```
+
+:::warning
+If `init()` is not called, tables won't be created and storage operations will fail silently or throw errors.
+:::
+
 ### Transactions & Consistency
 
 Cloudflare D1 provides transactional guarantees for single-row operations. This means that multiple operations can be executed as a single, all-or-nothing unit of work.
