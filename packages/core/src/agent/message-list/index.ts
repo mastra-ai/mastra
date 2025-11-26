@@ -1690,6 +1690,16 @@ export class MessageList {
 
     if (experimentalAttachments.length) content.experimental_attachments = experimentalAttachments;
 
+    // Preserve message-level providerOptions (e.g., for cache breakpoints)
+    if (coreMessage.providerOptions) {
+      content.providerMetadata = coreMessage.providerOptions;
+    }
+
+    // Preserve metadata field if present (matches aiV4UIMessageToMastraDBMessage behavior)
+    if ('metadata' in coreMessage && coreMessage.metadata !== null && coreMessage.metadata !== undefined) {
+      content.metadata = coreMessage.metadata as Record<string, unknown>;
+    }
+
     return {
       id,
       role: MessageList.getRole(coreMessage),
