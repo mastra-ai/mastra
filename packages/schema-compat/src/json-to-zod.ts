@@ -231,7 +231,7 @@ const parserOverride = (schema: JsonSchemaObject, refs: Refs) => {
         return acc;
       }, [] as string[][]);
 
-      if (propertiesWithConst.length > 0) {
+      if (propertiesWithConst.length === schema.anyOf.length) {
         if (seen) {
           if (seen.r !== undefined) {
             return seen.r;
@@ -333,3 +333,6 @@ const addAnnotations = (schema: JsonSchemaObject, parsed: string): string => {
 export function jsonSchemaToZod(schema: JsonSchema, options: Options = {}): string {
   return jsonSchemaToZodOriginal(schema, { ...options, parserOverride });
 }
+
+// Re-export all named exports from json-schema-to-zod (excluding the default export)
+export * from 'json-schema-to-zod';

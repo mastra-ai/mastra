@@ -206,7 +206,6 @@
     "hono-openapi": "^0.4.8",
     "js-tiktoken": "^1.0.20",
     "json-schema": "^0.4.0",
-    "json-schema-to-zod": "^2.7.0",
     "p-map": "^7.0.3",
     "p-retry": "^7.1.0",
     "radash": "^12.1.1"
