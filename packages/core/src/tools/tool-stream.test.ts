@@ -59,7 +59,7 @@ describe('ToolStream - writer.custom', () => {
           type: 'data-custom-result',
           data: {
             status: 'complete',
-            result: `Processed: ${  context.message}`,
+            result: `Processed: ${context.message}`,
           },
         });
 
