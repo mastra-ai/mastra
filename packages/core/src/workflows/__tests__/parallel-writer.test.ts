@@ -34,7 +34,7 @@ describe('Parallel Steps with Writer', () => {
       ])
       .commit();
 
-    const run = await workflow.createRun({
+    const run = await workflow.createRunAsync({
       runId: 'test-parallel-writer',
     });
 
@@ -92,7 +92,7 @@ describe('Parallel Steps with Writer', () => {
       ])
       .commit();
 
-    const run = await workflow.createRun({
+    const run = await workflow.createRunAsync({
       runId: 'test-multi-parallel-writer',
     });
 

@@ -1521,6 +1521,7 @@ export class Agent<
           tracingContext,
           model: await this.getModel({ runtimeContext }),
           tracingPolicy: this.#options?.tracingPolicy,
+          requireApproval: (toolObj as any).requireApproval,
         };
         const convertedToCoreTool = makeCoreTool(toolObj, options);
         convertedMemoryTools[toolName] = convertedToCoreTool;
@@ -1823,6 +1824,7 @@ export class Agent<
             tracingContext,
             model: await this.getModel({ runtimeContext }),
             tracingPolicy: this.#options?.tracingPolicy,
+            requireApproval: (toolObj as any).requireApproval,
           };
           const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
           toolsForRequest[toolName] = convertedToCoreTool;
@@ -1877,6 +1879,7 @@ export class Agent<
           tracingContext,
           model: await this.getModel({ runtimeContext }),
           tracingPolicy: this.#options?.tracingPolicy,
+          requireApproval: (tool as any).requireApproval,
         };
         const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
         toolsForRequest[toolName] = convertedToCoreTool;
