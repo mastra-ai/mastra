@@ -308,6 +308,7 @@ interface TripwirePayload {
 // Network-specific payload interfaces
 interface RoutingAgentStartPayload {
   agentId: string;
+  networkId: string;
   runId: string;
   inputData: {
     task: string;
@@ -324,8 +325,8 @@ interface RoutingAgentStartPayload {
 
 interface RoutingAgentEndPayload {
   task: string;
-  resourceId: string;
-  resourceType: string;
+  primitiveId: string;
+  primitiveType: string;
   prompt: string;
   result: string;
   isComplete?: boolean;
@@ -365,10 +366,12 @@ interface AgentExecutionEndPayload {
   isComplete: boolean;
   iteration: number;
   usage: LanguageModelV2Usage;
+  runId: string;
 }
 
 interface WorkflowExecutionStartPayload {
   name: string;
+  workflowId: string;
   args: {
     task: string;
     primitiveId: string;
@@ -384,6 +387,7 @@ interface WorkflowExecutionStartPayload {
 
 interface WorkflowExecutionEndPayload {
   name: string;
+  workflowId: string;
   task: string;
   primitiveId: string;
   primitiveType: string;
@@ -391,6 +395,7 @@ interface WorkflowExecutionEndPayload {
   isComplete: boolean;
   iteration: number;
   usage: LanguageModelV2Usage;
+  runId: string;
 }
 
 interface ToolExecutionStartPayload {
