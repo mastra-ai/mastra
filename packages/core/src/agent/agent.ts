@@ -2765,6 +2765,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       messages,
       threadId: typeof options?.memory?.thread === 'string' ? options?.memory?.thread : options?.memory?.thread?.id,
       resourceId: options?.memory?.resource,
+      AgentClass: Agent,
     });
   }
 

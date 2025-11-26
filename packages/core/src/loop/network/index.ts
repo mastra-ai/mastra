@@ -1,5 +1,5 @@
 import z from 'zod';
-import { Agent } from '../../agent/agent';
+import type { Agent } from '../../agent/agent';
 import type { AgentExecutionOptions, MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
 import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../../agent/message-list';
@@ -14,7 +14,17 @@ import { createStep, createWorkflow } from '../../workflows/workflow';
 import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
 
-async function getRoutingAgent({ requestContext, agent }: { agent: Agent; requestContext: RequestContext }) {
+type Constructor<T> = new (...args: any[]) => T;
+
+async function getRoutingAgent({
+  requestContext,
+  agent,
+  AgentClass,
+}: {
+  agent: Agent;
+  requestContext: RequestContext;
+  AgentClass: Constructor<Agent>;
+}) {
   const instructionsToUse = await agent.getInstructions({ requestContext: requestContext });
   const agentsToUse = await agent.listAgents({ requestContext: requestContext });
   const workflowsToUse = await agent.listWorkflows({ requestContext: requestContext });
@@ -69,7 +79,7 @@ async function getRoutingAgent({ requestContext, agent }: { agent: Agent; reques
           Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.
         `;
 
-  return new Agent({
+  return new AgentClass({
     id: 'routing-agent',
     name: 'Routing Agent',
     instructions,
@@ -225,6 +235,7 @@ export async function createNetworkLoop({
   agent,
   generateId,
   routingAgentOptions,
+  AgentClass,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -232,6 +243,7 @@ export async function createNetworkLoop({
   agent: Agent;
   routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'modelSettings'>;
   generateId: () => string;
+  AgentClass: Constructor<Agent>;
 }) {
   const routingStep = createStep({
     id: 'routing-agent-step',
@@ -265,7 +277,7 @@ export async function createNetworkLoop({
         completionReason: z.string(),
       });
 
-      const routingAgent = await getRoutingAgent({ requestContext, agent });
+      const routingAgent = await getRoutingAgent({ requestContext, agent, AgentClass });
 
       let completionResult;
 
@@ -1116,6 +1128,7 @@ export async function networkLoop<
   threadId,
   resourceId,
   messages,
+  AgentClass,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -1127,6 +1140,7 @@ export async function networkLoop<
   threadId?: string;
   resourceId?: string;
   messages: MessageListInput;
+  AgentClass: Constructor<Agent>;
 }) {
   // Validate that memory is available before starting the network
   const memoryToUse = await routingAgent.getMemory({ requestContext });
@@ -1152,6 +1166,7 @@ export async function networkLoop<
     agent: routingAgent,
     routingAgentOptions: routingAgentOptionsWithoutMemory,
     generateId,
+    AgentClass,
   });
 
   const finalStep = createStep({
