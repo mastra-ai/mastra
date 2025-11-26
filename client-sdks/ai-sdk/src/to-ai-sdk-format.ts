@@ -32,6 +32,7 @@ type ToAISDKFrom = 'agent' | 'network' | 'workflow';
  *
  * @param {Object} options - Conversion options
  * @param {'workflow' | 'network' | 'agent'} options.from - The type of stream being converted. Defaults to 'agent'
+ * @param {boolean} [options.includeTextStreamParts=true] - (Workflow only) Whether to include text stream parts from agent outputs. Defaults to true
  * @param {string} [options.lastMessageId] - (Agent only) The ID of the last message in the conversation
  * @param {boolean} [options.sendStart=true] - (Agent only) Whether to send start events. Defaults to true
  * @param {boolean} [options.sendFinish=true] - (Agent only) Whether to send finish events. Defaults to true
@@ -67,7 +68,7 @@ export function toAISdkFormat<
   TState extends ZodObject<any>,
 >(
   stream: MastraWorkflowStream<TState, TInput, TOutput, TSteps>,
-  options: { from: 'workflow' },
+  options: { from: 'workflow'; includeTextStreamParts?: boolean },
 ): ReadableStream<InferUIMessageChunk<UIMessage>>;
 export function toAISdkFormat<
   TOutput extends ZodType<any>,
@@ -76,7 +77,7 @@ export function toAISdkFormat<
   TState extends ZodObject<any>,
 >(
   stream: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>,
-  options: { from: 'workflow' },
+  options: { from: 'workflow'; includeTextStreamParts?: boolean },
 ): ReadableStream<InferUIMessageChunk<UIMessage>>;
 export function toAISdkFormat(
   stream: MastraAgentNetworkStream,
@@ -101,6 +102,7 @@ export function toAISdkFormat(
     | WorkflowRunOutput<WorkflowResult<any, any, any, any>>,
   options: {
     from: ToAISDKFrom;
+    includeTextStreamParts?: boolean;
     lastMessageId?: string;
     sendStart?: boolean;
     sendFinish?: boolean;
@@ -115,9 +117,11 @@ export function toAISdkFormat(
   const from = options?.from;
 
   if (from === 'workflow') {
-    return (stream as ReadableStream<ChunkType>).pipeThrough(WorkflowStreamToAISDKTransformer()) as ReadableStream<
-      InferUIMessageChunk<UIMessage>
-    >;
+    const includeTextStreamParts = options?.includeTextStreamParts ?? true;
+
+    return (stream as ReadableStream<ChunkType>).pipeThrough(
+      WorkflowStreamToAISDKTransformer({ includeTextStreamParts }),
+    ) as ReadableStream<InferUIMessageChunk<UIMessage>>;
   }
 
   if (from === 'network') {

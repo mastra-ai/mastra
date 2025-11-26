@@ -15,12 +15,13 @@ type WorkflowRouteBody = {
 };
 
 export type WorkflowRouteOptions =
-  | { path: `${string}:workflowId${string}`; workflow?: never }
-  | { path: string; workflow: string };
+  | { path: `${string}:workflowId${string}`; workflow?: never; includeTextStreamParts?: boolean }
+  | { path: string; workflow: string; includeTextStreamParts?: boolean };
 
 export function workflowRoute({
   path = '/api/workflows/:workflowId/stream',
   workflow,
+  includeTextStreamParts = true,
 }: WorkflowRouteOptions): ReturnType<typeof registerApiRoute> {
   if (!workflow && !path.includes('/:workflowId')) {
     throw new Error('Path must include :workflowId to route to the correct workflow or pass the workflow explicitly');
@@ -93,7 +94,7 @@ export function workflowRoute({
         throw new Error('Workflow ID is required');
       }
 
-      const workflowObj = mastra.getWorkflow(workflowToUse);
+      const workflowObj = mastra.getWorkflowById(workflowToUse);
       if (!workflowObj) {
         throw new Error(`Workflow ${workflowToUse} not found`);
       }
@@ -114,7 +115,7 @@ export function workflowRoute({
 
       const uiMessageStream = createUIMessageStream({
         execute: async ({ writer }) => {
-          for await (const part of toAISdkFormat(stream, { from: 'workflow' })) {
+          for await (const part of toAISdkFormat(stream, { from: 'workflow', includeTextStreamParts })) {
             writer.write(part);
           }
         },
