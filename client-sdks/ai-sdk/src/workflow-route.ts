@@ -93,7 +93,7 @@ export function workflowRoute({
         throw new Error('Workflow ID is required');
       }
 
-      const workflowObj = mastra.getWorkflow(workflowToUse);
+      const workflowObj = mastra.getWorkflowById(workflowToUse);
       if (!workflowObj) {
         throw new Error(`Workflow ${workflowToUse} not found`);
       }
