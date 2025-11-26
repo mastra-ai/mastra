@@ -1,6 +1,7 @@
 ---
 '@mastra/cloudflare-d1': patch
 '@mastra/cloudflare': patch
+'@mastra/clickhouse': patch
 '@mastra/dynamodb': patch
 '@mastra/mongodb': patch
 '@mastra/lance': patch
