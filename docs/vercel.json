@@ -169,6 +169,11 @@
       "source": "/docs/v1/getting-started/templates",
       "destination": "/docs/v1/getting-started/start",
       "permanent": true
+    },
+    {
+      "source": "/examples/v1/observability/basic-ai-tracing",
+      "destination": "/docs/v1/observability/overview",
+      "permanent": true
     }
   ]
 }
