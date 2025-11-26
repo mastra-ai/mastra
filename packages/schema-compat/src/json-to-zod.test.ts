@@ -348,7 +348,7 @@ describe('jsonSchemaToZod', () => {
         };
 
         const result = jsonSchemaToZod(schema);
-        expect(result).to.not.contain('.strict()');
+        expect(result).not.toContain('.strict()');
       });
 
       it('should handle object with only additionalProperties (no properties)', () => {
