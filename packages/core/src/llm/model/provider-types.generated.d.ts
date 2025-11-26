@@ -791,6 +791,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3-32b:free',
     'qwen/qwen3-8b:free',
     'qwen/qwen3-coder',
+    'qwen/qwen3-coder-flash',
     'qwen/qwen3-coder:exacto',
     'qwen/qwen3-coder:free',
     'qwen/qwen3-max',
