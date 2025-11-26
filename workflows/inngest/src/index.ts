@@ -20,6 +20,7 @@ import {
   runCountDeprecationMessage,
   validateStepResumeData,
   createTimeTravelExecutionParams,
+  validateStepSuspendData,
 } from '@mastra/core/workflows';
 import type {
   ExecuteFunction,
@@ -552,15 +553,15 @@ export class InngestRun<
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
     const writer = writable.getWriter();
+    void writer.write({
+      // @ts-ignore
+      type: 'start',
+      // @ts-ignore
+      payload: { runId: this.runId },
+    });
+
     const unwatch = this.watch(async event => {
       try {
-        await writer.write({
-          // @ts-ignore
-          type: 'start',
-          // @ts-ignore
-          payload: { runId: this.runId },
-        });
-
         const e: any = {
           ...event,
           type: event.type.replace('workflow-', ''),
@@ -1155,7 +1156,7 @@ export function createStep<
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType> {
   if (isAgent(params)) {
     return {
-      id: params.name,
+      id: params.name as TStepId,
       description: params.getDescription(),
       inputSchema: z.object({
         prompt: z.string(),
@@ -1268,6 +1269,8 @@ export function createStep<
       description: params.description,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
+      suspendSchema: params.suspendSchema,
+      resumeSchema: params.resumeSchema,
       execute: async ({
         inputData,
         mastra,
@@ -1285,9 +1288,9 @@ export function createStep<
           mastra,
           requestContext,
           tracingContext,
-          resumeData,
           workflow: {
             runId,
+            resumeData,
             suspend,
             workflowId,
             state,
@@ -1377,6 +1380,7 @@ export function init(inngest: Inngest) {
         outputSchema: workflow.outputSchema,
         steps: workflow.stepDefs,
         mastra: workflow.mastra,
+        options: workflow.options,
       });
 
       wf.setStepFlow(workflow.stepGraph);
@@ -2021,6 +2025,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(this, stepResults),
             suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions) => {
+              const { suspendData, validationError } = await validateStepSuspendData({
+                suspendData: suspendPayload,
+                step,
+              });
+              if (validationError) {
+                throw validationError;
+              }
               executionContext.suspendedPaths[step.id] = executionContext.executionPath;
               if (suspendOptions?.resumeLabel) {
                 const resumeLabel = Array.isArray(suspendOptions.resumeLabel)
@@ -2033,7 +2044,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                   };
                 }
               }
-              suspended = { payload: suspendPayload };
+              suspended = { payload: suspendData };
             },
             bail: (result: any) => {
               bailed = { payload: result };

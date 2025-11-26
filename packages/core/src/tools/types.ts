@@ -212,8 +212,9 @@ export interface ToolAction<
     TSuspendSchema,
     TResumeSchema
   >,
+  TId extends string = string,
 > {
-  id: string;
+  id: TId;
   description: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
@@ -240,5 +241,11 @@ export interface ToolAction<
     options: {
       input: InferZodLikeSchema<TSchemaIn>;
     } & ToolCallOptions,
+  ) => void | PromiseLike<void>;
+  onOutput?: (
+    options: {
+      output: TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : any;
+      toolName: string;
+    } & Omit<ToolCallOptions, 'messages'>,
   ) => void | PromiseLike<void>;
 }

@@ -32,7 +32,6 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
 
 // Main execution
 async function main() {
-  // Configure which gateways to use
   const gateways: MastraModelGateway[] = [new ModelsDevGateway(), new NetlifyGateway()];
 
   await generateProviderRegistry(gateways);

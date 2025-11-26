@@ -25,6 +25,7 @@ import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
 import { SpanType } from '../../observability';
+import { executeWithContext, executeWithContextSync } from '../../observability/utils';
 import { delay, isZodType } from '../../utils';
 
 import type {
@@ -249,7 +250,10 @@ export class MastraLLMV1 extends MastraBase {
     };
 
     try {
-      const result: GenerateTextResult<Tools, Z> = await generateText(argsForExecute);
+      const result: GenerateTextResult<Tools, Z> = await executeWithContext({
+        span: llmSpan,
+        fn: () => generateText(argsForExecute),
+      });
 
       if (schema && result.finishReason === 'stop') {
         result.object = (result as any).experimental_output;
@@ -601,7 +605,7 @@ export class MastraLLMV1 extends MastraBase {
     };
 
     try {
-      return streamText(argsForExecute);
+      return executeWithContextSync({ span: llmSpan, fn: () => streamText(argsForExecute) });
     } catch (e: unknown) {
       const mastraError = new MastraError(
         {

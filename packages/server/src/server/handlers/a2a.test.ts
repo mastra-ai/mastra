@@ -174,7 +174,7 @@ describe('A2A Handler', () => {
         message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
       };
 
-      const mockAgent = mockMastra.getAgent(agentId);
+      const mockAgent = mockMastra.getAgentById(agentId);
       // @ts-expect-error - mockResolvedValue is not available on the Agent class
       mockAgent.generate.mockResolvedValue({ text: agentResponseText });
 
@@ -241,7 +241,7 @@ describe('A2A Handler', () => {
         message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
       };
 
-      const mockAgent = mockMastra.getAgent(agentId);
+      const mockAgent = mockMastra.getAgentById(agentId);
       // @ts-expect-error - mockRejectedValue is not available on the Agent class
       mockAgent.generate.mockRejectedValue(new Error(errorMessage));
       vi.setSystemTime(new Date('2025-05-08T11:47:38.458Z'));
@@ -326,7 +326,7 @@ describe('A2A Handler', () => {
       // Use real InMemoryTaskStore
       await mockTaskStore.save({ agentId, data: existingTask });
 
-      const mockAgent = mockMastra.getAgent(agentId);
+      const mockAgent = mockMastra.getAgentById(agentId);
       // @ts-expect-error - mockResolvedValue is not available on the Agent class
       mockAgent.generate.mockResolvedValue({ text: agentResponseText });
       vi.setSystemTime(new Date('2025-05-08T12:00:00.000Z'));
@@ -415,7 +415,7 @@ describe('A2A Handler', () => {
         message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
       };
 
-      const mockAgent = mockMastra.getAgent(agentId);
+      const mockAgent = mockMastra.getAgentById(agentId);
       // @ts-expect-error - mockResolvedValue is not available on the Agent class
       mockAgent.generate.mockResolvedValue({ text: agentResponseText });
 
@@ -503,7 +503,7 @@ describe('A2A Handler', () => {
         message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
       };
 
-      const mockAgent = mockMastra.getAgent(agentId);
+      const mockAgent = mockMastra.getAgentById(agentId);
       // @ts-expect-error - mockRejectedValue is not available on the Agent class
       mockAgent.generate.mockRejectedValue(new Error(errorMessage));
 

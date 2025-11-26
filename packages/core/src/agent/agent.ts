@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
 import type { TextPart, UIMessage, StreamObjectResult } from '@internal/ai-sdk-v4';
+import { OpenAIReasoningSchemaCompatLayer, OpenAISchemaCompatLayer } from '@mastra/schema-compat';
+import type { ModelInformation } from '@mastra/schema-compat';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodSchema } from 'zod';
@@ -37,7 +39,7 @@ import type { ChunkType } from '../stream/types';
 import { createTool } from '../tools';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
+import { makeCoreTool, createMastraProxy, ensureToolProperties, isZodType } from '../utils';
 import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
@@ -104,7 +106,7 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>
  */
 export class Agent<TAgentId extends string = string, TTools extends ToolsInput = ToolsInput> extends MastraBase {
   public id: TAgentId;
-  public name: TAgentId;
+  public name: string;
   #instructions: DynamicAgentInstructions;
   readonly #description?: string;
   model: DynamicArgument<MastraModelConfig> | ModelFallbacks;
@@ -1136,7 +1138,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     message: string | MessageInput;
     requestContext?: RequestContext;
     tracingContext: TracingContext;
-    model?: DynamicArgument<MastraLanguageModel>;
+    model?: DynamicArgument<MastraModelConfig>;
     instructions?: DynamicArgument<string>;
   }) {
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
@@ -1231,7 +1233,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     userMessage: string | MessageInput | undefined,
     requestContext: RequestContext,
     tracingContext: TracingContext,
-    model?: DynamicArgument<MastraLanguageModel>,
+    model?: DynamicArgument<MastraModelConfig>,
     instructions?: DynamicArgument<string>,
   ) {
     try {
@@ -1312,6 +1314,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingContext,
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
+          requireApproval: (toolObj as any).requireApproval,
         };
         const convertedToCoreTool = makeCoreTool(toolObj, options);
         convertedMemoryTools[toolName] = convertedToCoreTool;
@@ -1575,6 +1578,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
             tracingContext,
             model: await this.getModel({ requestContext }),
             tracingPolicy: this.#options?.tracingPolicy,
+            requireApproval: (toolObj as any).requireApproval,
           };
           const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
           toolsForRequest[toolName] = convertedToCoreTool;
@@ -1629,6 +1633,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingContext,
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
+          requireApproval: (tool as any).requireApproval,
         };
         const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
         toolsForRequest[toolName] = convertedToCoreTool;
@@ -1667,7 +1672,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           threadId: z.string().optional().describe('Thread ID for conversation continuity for memory messages'),
           resourceId: z.string().optional().describe('Resource/user identifier for memory messages'),
           instructions: z.string().optional().describe('Custom instructions to override agent defaults'),
-          maxSteps: z.number().optional().describe('Maximum number of execution steps for the sub-agent'),
+          maxSteps: z.number().min(3).optional().describe('Maximum number of execution steps for the sub-agent'),
+          // using minimum of 3 to ensure if the agent has a tool call, the llm gets executed again after the tool call step, using the tool call result
+          // to return a proper llm response
         });
 
         const agentOutputSchema = z.object({
@@ -2414,6 +2421,44 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const llm = (await this.getLLM({ requestContext, model: options.model })) as MastraLLMVNext;
 
+    // Apply OpenAI schema compatibility layer automatically for OpenAI models
+    // In direct mode, use the main model; in processor mode, use structuredOutput.model
+    if ('structuredOutput' in options && options.structuredOutput && options.structuredOutput.schema) {
+      let structuredOutputModel = llm.getModel();
+      if (options.structuredOutput?.model) {
+        structuredOutputModel = (await this.resolveModelConfig(
+          options.structuredOutput?.model,
+          requestContext,
+        )) as MastraLanguageModelV2;
+      }
+
+      const targetProvider = structuredOutputModel.provider;
+      const targetModelId = structuredOutputModel.modelId;
+      // Only transform Zod schemas for OpenAI models, OpenAI is the most common and there is a huge issue that so many users run into
+      // We transform all .optional() to .nullable().transform(v => v === null ? undefined : v)
+      // OpenAI can't handle optional fields, we turn them to nullable and then transform the data received back so the types match the users schema
+      if (targetProvider.includes('openai') || targetModelId.includes('openai')) {
+        if (isZodType(options.structuredOutput.schema) && targetModelId) {
+          const modelInfo: ModelInformation = {
+            provider: targetProvider,
+            modelId: targetModelId,
+            supportsStructuredOutputs: false, // Set to false to enable transform
+          };
+
+          const isReasoningModel = /^o[1-5]/.test(targetModelId);
+          const compatLayer = isReasoningModel
+            ? new OpenAIReasoningSchemaCompatLayer(modelInfo)
+            : new OpenAISchemaCompatLayer(modelInfo);
+
+          if (compatLayer.shouldApply() && options.structuredOutput.schema) {
+            options.structuredOutput.schema = compatLayer.processZodType(
+              options.structuredOutput.schema,
+            ) as OUTPUT extends OutputSchema ? OUTPUT : never;
+          }
+        }
+      }
+    }
+
     const runId = options.runId || this.#mastra?.generateId() || randomUUID();
     const instructions = options.instructions || (await this.getInstructions({ requestContext }));
 
@@ -3090,11 +3135,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   resolveTitleGenerationConfig(
     generateTitleConfig:
       | boolean
-      | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> }
+      | { model: DynamicArgument<MastraModelConfig>; instructions?: DynamicArgument<string> }
       | undefined,
   ): {
     shouldGenerate: boolean;
-    model?: DynamicArgument<MastraLanguageModel>;
+    model?: DynamicArgument<MastraModelConfig>;
     instructions?: DynamicArgument<string>;
   } {
     if (typeof generateTitleConfig === 'boolean') {
