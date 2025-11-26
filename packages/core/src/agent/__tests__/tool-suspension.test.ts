@@ -110,13 +110,11 @@ describe('Tool suspension memory persistence', () => {
 
     // Assert 2: User message should be saved
     const messagesAfterSuspension = await mockMemory.query();
-
-    const userMessages = messagesAfterSuspension.messages.filter(m => m.role === 'user');
+    const userMessages = messagesAfterSuspension.messagesV2.filter(m => m.role === 'user');
     expect(userMessages.length).toBeGreaterThan(0);
 
     const userMessage = userMessages.find(m => {
       const content = m.content;
-      if (typeof content === 'string') return content.includes('software engineer job');
       if (typeof content === 'object' && 'parts' in content) {
         return content.parts.some(p => p.type === 'text' && p.text.includes('software engineer job'));
       }
@@ -125,7 +123,7 @@ describe('Tool suspension memory persistence', () => {
     expect(userMessage).toBeDefined();
 
     // Assert 3: Assistant message with tool call should be saved
-    const assistantMessages = messagesAfterSuspension.messages.filter(m => m.role === 'assistant');
+    const assistantMessages = messagesAfterSuspension.messagesV2.filter(m => m.role === 'assistant');
     expect(assistantMessages.length).toBeGreaterThan(0);
 
     const assistantWithToolCall = assistantMessages.find(m => {
@@ -227,18 +225,14 @@ Always follow this order.`,
     expect(threadAfterSuspension?.resourceId).toBe(resourceId);
 
     // Assert: All messages should be saved
-    const messagesAfterSuspension = await mockMemory.recall({
-      threadId,
-      resourceId,
-    });
+    const messagesAfterSuspension = await mockMemory.query();
 
     // Assert: User message should be saved
-    const userMessages = messagesAfterSuspension.messages.filter(m => m.role === 'user');
+    const userMessages = messagesAfterSuspension.messagesV2.filter(m => m.role === 'user');
     expect(userMessages.length).toBeGreaterThan(0);
 
     const userMessage = userMessages.find(m => {
       const content = m.content;
-      if (typeof content === 'string') return content.includes('process');
       if (typeof content === 'object' && 'parts' in content) {
         return content.parts.some(p => p.type === 'text' && p.text.includes('process'));
       }
@@ -247,7 +241,7 @@ Always follow this order.`,
     expect(userMessage).toBeDefined();
 
     // Assert: Assistant messages with tool call should be saved
-    const assistantMessages = messagesAfterSuspension.messages.filter(m => m.role === 'assistant');
+    const assistantMessages = messagesAfterSuspension.messagesV2.filter(m => m.role === 'assistant');
     expect(assistantMessages.length).toBeGreaterThan(0);
 
     // Verify both tool calls are saved - validation tool and suspending tool

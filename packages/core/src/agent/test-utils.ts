@@ -3,6 +3,7 @@ import { MastraMemory } from '../memory';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2, MemoryConfig } from '../memory';
 import type { StorageGetMessagesArg } from '../storage';
 import { MessageList } from './message-list';
+import type { CoreMessage } from '../llm';
 
 export class MockMemory extends MastraMemory {
   threads: Record<string, StorageThreadType> = {};
@@ -117,7 +118,12 @@ export class MockMemory extends MastraMemory {
     };
   }
   async query() {
-    return { messages: [], uiMessages: [], messagesV2: [] };
+    const list = new MessageList().add(Array.from(this.messages.values()), `memory`);
+    return {
+      messages: list.get.all.v1() as CoreMessage[],
+      uiMessages: list.get.all.ui(),
+      messagesV2: list.get.all.v2(),
+    };
   }
   async deleteThread(threadId: string) {
     delete this.threads[threadId];
