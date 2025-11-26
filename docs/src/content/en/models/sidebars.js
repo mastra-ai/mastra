@@ -118,6 +118,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/bailing",
+          label: "Bailing",
+        },
+        {
+          type: "doc",
           id: "providers/baseten",
           label: "Baseten",
         },
@@ -275,6 +280,11 @@ const sidebars = {
           type: "doc",
           id: "providers/scaleway",
           label: "Scaleway",
+        },
+        {
+          type: "doc",
+          id: "providers/siliconflow",
+          label: "SiliconFlow",
         },
         {
           type: "doc",

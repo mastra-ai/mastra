@@ -713,7 +713,7 @@ await agent.stream("message for agent", {
   },
   // Output processors for streaming response validation
   outputProcessors: [
-    new ModerationProcessor({ model: "openai/gpt-4.1-nano" }),
+    new ModerationProcessor({ model: "openrouter/openai/gpt-oss-safeguard-20b" }),
     new BatchPartsProcessor({ maxBatchSize: 3, maxWaitTime: 100 }),
   ],
 });
