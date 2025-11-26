@@ -32,15 +32,18 @@ class Gateway1 extends MastraModelGateway {
     modelId,
     providerId,
     apiKey,
+    headers,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
+    headers?: Record<string, string>;
   }): Promise<LanguageModelV2> {
     return createOpenAICompatible({
       name: providerId,
       apiKey,
       baseURL: this.buildUrl(`${providerId}/${modelId}`),
+      headers,
       supportsStructuredOutputs: true,
     }).chatModel(modelId);
   }
@@ -69,15 +72,18 @@ class Gateway2 extends MastraModelGateway {
     modelId,
     providerId,
     apiKey,
+    headers,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
+    headers?: Record<string, string>;
   }): Promise<LanguageModelV2> {
     return createOpenAICompatible({
       name: providerId,
       apiKey,
       baseURL: this.buildUrl(`${providerId}/${modelId}`),
+      headers,
       supportsStructuredOutputs: true,
     }).chatModel(modelId);
   }
@@ -113,16 +119,19 @@ class TestGateway extends MastraModelGateway {
     modelId,
     providerId,
     apiKey,
+    headers,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
+    headers?: Record<string, string>;
   }): Promise<LanguageModelV2> {
     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
     return createOpenAICompatible({
       name: providerId,
       apiKey,
       baseURL,
+      headers,
       supportsStructuredOutputs: true,
     }).chatModel(modelId);
   }

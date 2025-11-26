@@ -40,16 +40,19 @@ class TestCustomGateway extends MastraModelGateway {
     modelId,
     providerId,
     apiKey,
+    headers,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
+    headers?: Record<string, string>;
   }): Promise<LanguageModelV2> {
     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
     return createOpenAICompatible({
       name: providerId,
       apiKey,
       baseURL,
+      headers,
       supportsStructuredOutputs: true,
     }).chatModel(modelId);
   }
@@ -88,16 +91,19 @@ class AnotherCustomGateway extends MastraModelGateway {
     modelId,
     providerId,
     apiKey,
+    headers,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
+    headers?: Record<string, string>;
   }): Promise<LanguageModelV2> {
     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
     return createOpenAICompatible({
       name: providerId,
       apiKey,
       baseURL,
+      headers,
       supportsStructuredOutputs: true,
     }).chatModel(modelId);
   }
