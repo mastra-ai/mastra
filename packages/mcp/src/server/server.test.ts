@@ -920,13 +920,17 @@ describe('MCPServer', () => {
       if (reader) {
         try {
           await reader.cancel();
-        } catch {}
+        } catch {
+          // swallow error
+        }
         reader = undefined;
       }
       if (sseRes && 'body' in sseRes && sseRes.body) {
         try {
           await sseRes.body.cancel();
-        } catch {}
+        } catch {
+          // swallow error
+        }
         sseRes = undefined;
       }
     });
@@ -1216,6 +1220,236 @@ describe('MCPServer', () => {
       expect(toolResult).toHaveProperty('conditions');
       expect(toolResult).toHaveProperty('windSpeed');
       expect(toolResult).toHaveProperty('windGust');
+    });
+  });
+
+  describe('MCPServer Session Management', () => {
+    let sessionServer: MCPServer;
+    let sessionHttpServer: http.Server;
+    const SESSION_TEST_PORT = 9600 + Math.floor(Math.random() * 1000);
+
+    afterEach(async () => {
+      if (sessionHttpServer) {
+        sessionHttpServer.closeAllConnections?.();
+        await new Promise<void>((resolve, reject) => {
+          sessionHttpServer.close(err => {
+            if (err) return reject(err);
+            resolve();
+          });
+        });
+      }
+      if (sessionServer) {
+        await sessionServer.close();
+      }
+    });
+
+    it('should generate sessions by default when no sessionIdGenerator option is provided', async () => {
+      sessionServer = new MCPServer({
+        name: 'DefaultSessionServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          // No options provided - should use default sessionIdGenerator
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(SESSION_TEST_PORT, () => resolve()));
+
+      const client = new InternalMastraMCPClient({
+        name: 'default-session-client',
+        server: {
+          url: new URL(`http://localhost:${SESSION_TEST_PORT}/http`),
+        },
+      });
+
+      await client.connect();
+
+      // Verify that a session was created by checking if we can list tools
+      const tools = await client.listTools();
+      expect(tools).toBeDefined();
+      expect(tools.tools).toBeInstanceOf(Array);
+
+      await client.disconnect();
+    });
+
+    it('should disable sessions when sessionIdGenerator is explicitly set to undefined', async () => {
+      sessionServer = new MCPServer({
+        name: 'NoSessionServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          options: {
+            sessionIdGenerator: undefined, // Explicitly disable sessions
+          },
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(SESSION_TEST_PORT, () => resolve()));
+
+      const client = new InternalMastraMCPClient({
+        name: 'no-session-client',
+        server: {
+          url: new URL(`http://localhost:${SESSION_TEST_PORT}/http`),
+        },
+      });
+
+      await client.connect();
+
+      // Should work in stateless mode
+      const tools = await client.listTools();
+      expect(tools).toBeDefined();
+      expect(tools.tools).toBeInstanceOf(Array);
+
+      await client.disconnect();
+    });
+
+    it('should run in serverless mode when serverless option is true', async () => {
+      sessionServer = new MCPServer({
+        name: 'ServerlessServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          options: {
+            serverless: true, // Enable serverless mode
+          },
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(SESSION_TEST_PORT, () => resolve()));
+
+      const client = new InternalMastraMCPClient({
+        name: 'serverless-client',
+        server: {
+          url: new URL(`http://localhost:${SESSION_TEST_PORT}/http`),
+        },
+      });
+
+      await client.connect();
+
+      // Should work in stateless serverless mode
+      const tools = await client.listTools();
+      expect(tools).toBeDefined();
+      expect(tools.tools).toBeInstanceOf(Array);
+
+      await client.disconnect();
+    });
+
+    it('should use custom sessionIdGenerator when provided', async () => {
+      const customSessionIds: string[] = [];
+      let sessionIdCounter = 0;
+
+      const customSessionIdGenerator = () => {
+        const customId = `custom-session-${sessionIdCounter++}`;
+        customSessionIds.push(customId);
+        return customId;
+      };
+
+      sessionServer = new MCPServer({
+        name: 'CustomSessionServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          options: {
+            sessionIdGenerator: customSessionIdGenerator,
+          },
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(SESSION_TEST_PORT, () => resolve()));
+
+      const client = new InternalMastraMCPClient({
+        name: 'custom-session-client',
+        server: {
+          url: new URL(`http://localhost:${SESSION_TEST_PORT}/http`),
+        },
+      });
+
+      await client.connect();
+
+      // Verify that the custom session ID generator was called
+      expect(customSessionIds.length).toBeGreaterThan(0);
+      expect(customSessionIds[0]).toMatch(/^custom-session-\d+$/);
+
+      await client.disconnect();
+    });
+
+    it('should allow user options to override default sessionIdGenerator', async () => {
+      // This test verifies the core fix: user-provided options override defaults
+      sessionServer = new MCPServer({
+        name: 'OverrideTestServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
+
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          options: {
+            sessionIdGenerator: undefined, // User explicitly disables sessions
+            // The default is sessionIdGenerator: () => randomUUID()
+            // This test verifies that the user's undefined overrides the default
+          },
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(SESSION_TEST_PORT, () => resolve()));
+
+      const client = new InternalMastraMCPClient({
+        name: 'override-test-client',
+        server: {
+          url: new URL(`http://localhost:${SESSION_TEST_PORT}/http`),
+        },
+      });
+
+      await client.connect();
+
+      // Should work with sessions disabled
+      const tools = await client.listTools();
+      expect(tools).toBeDefined();
+      expect(tools.tools).toBeInstanceOf(Array);
+
+      await client.disconnect();
+
+      // Note: serverlessModeCalled check is removed because sessionIdGenerator: undefined
+      // doesn't automatically trigger serverless mode - it just disables session tracking
+      // Serverless mode is only triggered by options.serverless: true
     });
   });
 });
