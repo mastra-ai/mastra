@@ -20,17 +20,29 @@ export class StoreOperationsConvex extends StoreOperations {
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    await this.client.callStorage({
-      op: 'clearTable',
-      tableName,
-    });
+    // Delete in batches since each mutation can only delete a small number of docs
+    // to stay within Convex's 1-second mutation timeout.
+    let hasMore = true;
+    while (hasMore) {
+      const response = await this.client.callStorageRaw({
+        op: 'clearTable',
+        tableName,
+      });
+      hasMore = response.hasMore ?? false;
+    }
   }
 
   async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    await this.client.callStorage({
-      op: 'dropTable',
-      tableName,
-    });
+    // Delete in batches since each mutation can only delete a small number of docs
+    // to stay within Convex's 1-second mutation timeout.
+    let hasMore = true;
+    while (hasMore) {
+      const response = await this.client.callStorageRaw({
+        op: 'dropTable',
+        tableName,
+      });
+      hasMore = response.hasMore ?? false;
+    }
   }
 
   async alterTable(_args: {

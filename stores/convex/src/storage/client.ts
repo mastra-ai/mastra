@@ -6,6 +6,12 @@ export type ConvexAdminClientConfig = {
   storageFunction?: string;
 };
 
+/** Response from callStorageRaw that includes batch info */
+export type RawStorageResult<T = any> = {
+  result: T;
+  hasMore?: boolean;
+};
+
 const DEFAULT_STORAGE_FUNCTION = 'mastra/storage:handle';
 
 export class ConvexAdminClient {
@@ -27,7 +33,11 @@ export class ConvexAdminClient {
     this.storageFunction = storageFunction ?? DEFAULT_STORAGE_FUNCTION;
   }
 
-  async callStorage<T = any>(request: StorageRequest): Promise<T> {
+  /**
+   * Call storage and return the full response including hasMore flag.
+   * Use this for operations that may need multiple calls (e.g., clearTable).
+   */
+  async callStorageRaw<T = any>(request: StorageRequest): Promise<RawStorageResult<T>> {
     // Use Convex HTTP API directly with admin auth
     const url = `${this.deploymentUrl}/api/mutation`;
 
@@ -71,6 +81,14 @@ export class ConvexAdminClient {
       throw error;
     }
 
-    return storageResponse.result as T;
+    return {
+      result: storageResponse.result as T,
+      hasMore: storageResponse.hasMore,
+    };
+  }
+
+  async callStorage<T = any>(request: StorageRequest): Promise<T> {
+    const { result } = await this.callStorageRaw<T>(request);
+    return result;
   }
 }

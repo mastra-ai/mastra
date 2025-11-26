@@ -41,6 +41,8 @@ export type StorageResponse =
   | {
       ok: true;
       result?: any;
+      /** Indicates more batches remain for bulk operations (e.g., clearTable) */
+      hasMore?: boolean;
     }
   | {
       ok: false;

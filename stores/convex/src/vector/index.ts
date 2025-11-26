@@ -62,14 +62,18 @@ export class ConvexVector extends MastraVector<VectorFilter> {
       tableName: INDEX_METADATA_TABLE,
       ids: [indexName],
     });
-    await this.callStorage({
+    // Delete in batches since each mutation can only delete a small number of docs
+    // to stay within Convex's 1-second mutation timeout.
+    await this.callStorageUntilComplete({
       op: 'clearTable',
       tableName: this.vectorTable(indexName),
     });
   }
 
   async truncateIndex({ indexName }: DeleteIndexParams): Promise<void> {
-    await this.callStorage({
+    // Delete in batches since each mutation can only delete a small number of docs
+    // to stay within Convex's 1-second mutation timeout.
+    await this.callStorageUntilComplete({
       op: 'clearTable',
       tableName: this.vectorTable(indexName),
     });
@@ -388,6 +392,18 @@ export class ConvexVector extends MastraVector<VectorFilter> {
 
   private async callStorage<T = any>(request: StorageRequest): Promise<T> {
     return this.client.callStorage<T>(request);
+  }
+
+  /**
+   * Call storage repeatedly until hasMore is false.
+   * Use for bulk operations like clearTable that may need multiple batches.
+   */
+  private async callStorageUntilComplete(request: StorageRequest): Promise<void> {
+    let hasMore = true;
+    while (hasMore) {
+      const response = await this.client.callStorageRaw(request);
+      hasMore = response.hasMore ?? false;
+    }
   }
 }
 

@@ -132,7 +132,7 @@ export const mastraVectorsTable = defineTable({
   embedding: v.array(v.float64()),
   metadata: v.optional(v.any()),
 })
-  .index('by_record_id', ['id'])
+  .index('by_index_id', ['indexName', 'id']) // Composite for scoped lookups per index
   .index('by_index', ['indexName']);
 
 // ============================================================================

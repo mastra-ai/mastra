@@ -435,7 +435,7 @@ export class MemoryConvex extends MemoryStorage {
 
     return {
       ...record,
-      metadata: typeof record.metadata === 'string' ? JSON.parse(record.metadata) : record.metadata,
+      metadata: typeof record.metadata === 'string' ? safelyParseJSON(record.metadata) : record.metadata,
       createdAt: new Date(record.createdAt),
       updatedAt: new Date(record.updatedAt),
     };
