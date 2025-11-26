@@ -1759,7 +1759,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           const stepFailure: Omit<StepFailure<any, any, any>, 'error'> & { error?: string } = {
             status: 'failed',
             payload: inputData,
-            error: e instanceof Error ? e.message : String(e),
+            error: e instanceof Error ? (e.stack ?? e.message) : String(e),
             endedAt: Date.now(),
             startedAt,
             resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
@@ -1848,11 +1848,27 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           ? (e?.cause as unknown as Omit<StepFailure<any, any, any>, 'error'> & { error?: string })
           : {
               status: 'failed' as const,
-              error: e instanceof Error ? e.message : String(e),
+              error: e instanceof Error ? (e.stack ?? e.message) : String(e),
               payload: inputData,
               startedAt,
               endedAt: Date.now(),
             };
+
+      await emitter.emit('watch-v2', {
+        type: 'workflow-step-result',
+        payload: {
+          id: step.id,
+          ...stepFailure,
+        },
+      });
+
+      await emitter.emit('watch-v2', {
+        type: 'workflow-step-finish',
+        payload: {
+          id: step.id,
+          metadata: {},
+        },
+      });
 
       stepRes = {
         result: stepFailure,
