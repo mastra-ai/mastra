@@ -1,5 +1,5 @@
 ---
-'@mastra/auth-clerk': major
+'@mastra/auth-clerk': minor
 ---
 
 remove organization requirement from default authorization
