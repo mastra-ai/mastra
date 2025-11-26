@@ -11,6 +11,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
 import { AvailableHooks, registerHook } from '../hooks';
+import type { MastraModelGateway } from '../llm/model/gateways';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
@@ -176,6 +177,12 @@ export interface Config<
   memory?: never;
 
   /**
+   * Custom model router gateways for accessing LLM providers.
+   * Gateways handle provider-specific authentication, URL construction, and model resolution.
+   */
+  gateways?: Record<string, MastraModelGateway>;
+
+  /**
    * Event handlers for custom application events.
    * Maps event topics to handler functions for event-driven architectures.
    */
@@ -261,6 +268,7 @@ export class Mastra<
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
   #pubsub: PubSub;
+  #gateways?: Record<string, MastraModelGateway>;
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
@@ -502,6 +510,12 @@ export class Mastra<
       this.#storage.__setTelemetry(this.#telemetry);
     } else {
       this.#storage = storage;
+    }
+
+    // Initialize gateways
+    this.#gateways = config?.gateways;
+    if (config?.gateways) {
+      this.#syncGatewayRegistry();
     }
 
     /*
@@ -1889,6 +1903,64 @@ do:
     }
 
     await this.#pubsub.flush();
+  }
+
+  /**
+   * Returns all registered gateways as a record keyed by their names.
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   gateways: {
+   *     netlify: new NetlifyGateway(),
+   *     custom: new CustomGateway()
+   *   }
+   * });
+   *
+   * const allGateways = mastra.listGateways();
+   * console.log(Object.keys(allGateways)); // ['netlify', 'custom']
+   * ```
+   */
+  public listGateways(): Record<string, MastraModelGateway> | undefined {
+    return this.#gateways;
+  }
+
+  /**
+   * Sync custom gateways with the GatewayRegistry for type generation
+   * @private
+   */
+  #syncGatewayRegistry(): void {
+    try {
+      // Only sync in dev mode (when MASTRA_DEV is set)
+      if (process.env.MASTRA_DEV !== 'true' && process.env.MASTRA_DEV !== '1') {
+        return;
+      }
+
+      // Trigger sync immediately (non-blocking, but logs progress)
+      import('../llm/model/provider-registry.js')
+        .then(async ({ GatewayRegistry }) => {
+          const registry = GatewayRegistry.getInstance();
+          const customGateways = Object.values(this.#gateways || {});
+          registry.registerCustomGateways(customGateways);
+
+          // Log that we're syncing
+          const logger = this.getLogger();
+          logger.info('🔄 Syncing custom gateway types...');
+
+          // Trigger a sync to regenerate types
+          await registry.syncGateways(true);
+
+          logger.info('✅ Custom gateway types synced! Restart your TypeScript server to see autocomplete.');
+        })
+        .catch(err => {
+          const logger = this.getLogger();
+          logger.debug('Gateway registry sync skipped:', err);
+        });
+    } catch (err) {
+      // Silent fail - this is a dev-only feature
+      const logger = this.getLogger();
+      logger.debug('Gateway registry sync failed:', err);
+    }
   }
 
   /**

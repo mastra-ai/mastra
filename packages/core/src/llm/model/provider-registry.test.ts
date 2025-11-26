@@ -631,6 +631,10 @@ describe('Issue #10434: Concurrent write corruption', () => {
   const originalWriteFile = fs.promises.writeFile.bind(fs.promises);
   const originalRename = fs.promises.rename.bind(fs.promises);
   const originalUnlink = fs.promises.unlink.bind(fs.promises);
+  const originalReadFileSync = fs.readFileSync.bind(fs);
+  const originalWriteFileSync = fs.writeFileSync.bind(fs);
+  const originalMkdirSync = fs.mkdirSync.bind(fs);
+  const originalRmSync = fs.rmSync.bind(fs);
 
   // Ensure no mocks from other test suites interfere
   beforeEach(() => {
@@ -664,7 +668,7 @@ describe('Issue #10434: Concurrent write corruption', () => {
     const testJsonPath = path.join(tempDir, 'provider-registry.json');
 
     // Ensure temp directory exists
-    fs.mkdirSync(tempDir, { recursive: true });
+    originalMkdirSync(tempDir, { recursive: true });
 
     // Create two different JSON contents that would be written
     const jsonContent1 = JSON.stringify(
@@ -705,20 +709,20 @@ describe('Issue #10434: Concurrent write corruption', () => {
 
       // Check if the file is valid JSON
       try {
-        const content = fs.readFileSync(testJsonPath, 'utf-8');
+        const content = originalReadFileSync(testJsonPath, 'utf-8');
         JSON.parse(content);
         // If we get here, the JSON is valid (one write "won" atomically)
       } catch {
         // JSON parse error means the file was corrupted
         corruptionDetected = true;
-        const content = fs.readFileSync(testJsonPath, 'utf-8');
+        const content = originalReadFileSync(testJsonPath, 'utf-8');
         console.log(`Corruption detected on iteration ${i + 1}:`);
         console.log('File content (last 200 chars):', content.slice(-200));
       }
     }
 
     // Clean up
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    originalRmSync(tempDir, { recursive: true, force: true });
 
     // With atomic writes, corruption should NEVER occur
     expect(corruptionDetected).toBe(false);
@@ -735,8 +739,8 @@ describe('Issue #10434: Concurrent write corruption', () => {
     const distJsonPath = path.join(distDir, 'provider-registry.json');
 
     // Create directories
-    fs.mkdirSync(globalCacheDir, { recursive: true });
-    fs.mkdirSync(distDir, { recursive: true });
+    originalMkdirSync(globalCacheDir, { recursive: true });
+    originalMkdirSync(distDir, { recursive: true });
 
     // Create initial global cache content (what syncGlobalCacheToLocal would read)
     const globalContent = JSON.stringify(
@@ -748,7 +752,7 @@ describe('Issue #10434: Concurrent write corruption', () => {
       null,
       2,
     );
-    fs.writeFileSync(globalJsonPath, globalContent, 'utf-8');
+    originalWriteFileSync(globalJsonPath, globalContent, 'utf-8');
 
     // Content that writeRegistryFiles would write (fresh from gateway fetch)
     const freshContent = JSON.stringify(
@@ -768,7 +772,7 @@ describe('Issue #10434: Concurrent write corruption', () => {
     for (let i = 0; i < iterations && !corruptionDetected; i++) {
       // Simulate syncGlobalCacheToLocal with atomic write
       const syncGlobalToLocal = async () => {
-        const content = fs.readFileSync(globalJsonPath, 'utf-8');
+        const content = originalReadFileSync(globalJsonPath, 'utf-8');
         await atomicWriteFile(distJsonPath, content);
       };
 
@@ -782,18 +786,18 @@ describe('Issue #10434: Concurrent write corruption', () => {
 
       // Verify the result is valid JSON
       try {
-        const resultContent = fs.readFileSync(distJsonPath, 'utf-8');
+        const resultContent = originalReadFileSync(distJsonPath, 'utf-8');
         JSON.parse(resultContent);
       } catch {
         corruptionDetected = true;
-        const resultContent = fs.readFileSync(distJsonPath, 'utf-8');
+        const resultContent = originalReadFileSync(distJsonPath, 'utf-8');
         console.log(`Corruption detected on iteration ${i + 1}:`);
         console.log('File content (last 200 chars):', resultContent.slice(-200));
       }
     }
 
     // Clean up
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    originalRmSync(tempDir, { recursive: true, force: true });
 
     // With atomic writes, corruption should NEVER occur
     expect(corruptionDetected).toBe(false);

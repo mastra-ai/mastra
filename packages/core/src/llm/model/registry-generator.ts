@@ -65,10 +65,22 @@ export async function fetchProvidersFromGateways(
       try {
         const providers = await gateway.fetchProviders();
 
+        // models.dev is a provider registry, not a true gateway - don't prefix its providers
+        const isProviderRegistry = gateway.id === 'models.dev';
+
         for (const [providerId, config] of Object.entries(providers)) {
-          allProviders[providerId] = config;
+          // For true gateways, use gateway.id as prefix (e.g., "netlify/anthropic")
+          // Special case: if providerId matches gateway.id, it's a unified gateway (e.g., netlify returning {netlify: {...}})
+          // In this case, use just the gateway ID to avoid duplication (netlify, not netlify/netlify)
+          const typeProviderId = isProviderRegistry
+            ? providerId
+            : providerId === gateway.id
+              ? gateway.id
+              : `${gateway.id}/${providerId}`;
+
+          allProviders[typeProviderId] = config;
           // Sort models alphabetically for consistent ordering
-          allModels[providerId] = config.models.sort();
+          allModels[typeProviderId] = config.models.sort();
         }
 
         lastError = null;
