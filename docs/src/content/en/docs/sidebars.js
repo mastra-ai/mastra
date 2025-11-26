@@ -158,7 +158,7 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Tools & MCP",
+      label: "MCP",
       collapsed: true,
       items: [
         {
@@ -420,6 +420,17 @@ const sidebars = {
               id: "observability/tracing/overview",
               key: "observability.tracing.overview",
               label: "Overview",
+            },
+            {
+              type: "category",
+              label: "Bridges",
+              items: [
+                {
+                  type: "doc",
+                  id: "observability/tracing/bridges/otel",
+                  label: "OpenTelemetry",
+                },
+              ],
             },
             {
               type: "category",

@@ -12,7 +12,7 @@ import {
 import { z } from 'zod';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
-import { SpanType, wrapMastra } from '../../observability';
+import { SpanType, wrapMastra, executeWithContext } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
@@ -253,7 +253,10 @@ export class CoreToolBuilder extends MastraBase {
 
         if (isVercelTool(tool)) {
           // Handle Vercel tools (AI SDK tools)
-          result = await tool?.execute?.(args, execOptions as ToolExecutionOptions);
+          result = await executeWithContext({
+            span: toolSpan,
+            fn: async () => tool?.execute?.(args, execOptions as ToolExecutionOptions),
+          });
         } else {
           // Handle Mastra tools - wrap mastra instance with tracing context for context propagation
 
@@ -374,7 +377,7 @@ export class CoreToolBuilder extends MastraBase {
             }
           }
 
-          result = await tool?.execute?.(args, toolContext);
+          result = await executeWithContext({ span: toolSpan, fn: async () => tool?.execute?.(args, toolContext) });
         }
 
         if (suspendData) {
