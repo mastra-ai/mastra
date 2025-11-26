@@ -5,7 +5,6 @@ import { z } from 'zod';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
 import { NoOpObservability } from '../../observability';
-import type { ObservabilityEntrypoint, ObservabilityInstance } from '../../observability/types';
 import { RequestContext } from '../../request-context';
 import { createWorkflow, createStep } from '../../workflows';
 import { createScorer } from '../base';
