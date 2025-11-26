@@ -669,4 +669,165 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       expect(messages.some(msg => msg.resourceId === threads[2]?.resourceId)).toBe(true);
     });
   });
+
+  describe('include parameter with separate batch saves', () => {
+    it('should sort messages by createdAt when include adds messages saved in different batches', async () => {
+      const testThread = createSampleThread();
+      await storage.saveThread({ thread: testThread });
+
+      const now = Date.now();
+
+      // Save first batch: messages 1, 2, 3 (chronologically oldest)
+      const batch1 = [
+        createSampleMessageV2({
+          threadId: testThread.id,
+          resourceId: testThread.resourceId,
+          role: 'user',
+          content: { content: 'User message 1' },
+          createdAt: new Date(now + 1000),
+        }),
+        createSampleMessageV2({
+          threadId: testThread.id,
+          resourceId: testThread.resourceId,
+          role: 'assistant',
+          content: { content: 'Assistant message 1' },
+          createdAt: new Date(now + 2000),
+        }),
+        createSampleMessageV2({
+          threadId: testThread.id,
+          resourceId: testThread.resourceId,
+          role: 'user',
+          content: { content: 'User message 2' },
+          createdAt: new Date(now + 3000),
+        }),
+      ];
+      await storage.saveMessages({ messages: batch1, format: 'v2' });
+
+      // Save second batch: messages 4, 5 (chronologically newer)
+      const batch2 = [
+        createSampleMessageV2({
+          threadId: testThread.id,
+          resourceId: testThread.resourceId,
+          role: 'assistant',
+          content: { content: 'Assistant message 2' },
+          createdAt: new Date(now + 4000),
+        }),
+        createSampleMessageV2({
+          threadId: testThread.id,
+          resourceId: testThread.resourceId,
+          role: 'user',
+          content: { content: 'User message 3' },
+          createdAt: new Date(now + 5000),
+        }),
+      ];
+      await storage.saveMessages({ messages: batch2, format: 'v2' });
+
+      // Now retrieve with pagination (only get latest 2) and include an older message
+      // This simulates what semantic recall does
+      const result = await storage.getMessagesPaginated({
+        threadId: testThread.id,
+        selectBy: {
+          pagination: { page: 0, perPage: 2 },
+          include: [
+            {
+              id: batch1[0]!.id, // Include oldest user message
+              withNextMessages: 1, // Also get the assistant response after it
+            },
+          ],
+        },
+        format: 'v2',
+      });
+
+      // Should have: paginated (2) + included (2, but 1 might overlap)
+      // The key assertion: messages MUST be sorted by createdAt ASC
+      const contents = result.messages.map((m: any) => m.content.content);
+      const timestamps = result.messages.map(m => new Date(m.createdAt).getTime());
+      const sortedTimestamps = [...timestamps].sort((a, b) => a - b);
+
+      // Messages should be in chronological order
+      expect(timestamps).toEqual(sortedTimestamps);
+
+      // Verify we got the expected messages
+      expect(contents).toContain('User message 1');
+      expect(contents).toContain('Assistant message 1');
+    });
+
+    it('should maintain chronological order when include brings in messages from a different thread', async () => {
+      // Create two threads
+      const mainThread = createSampleThread();
+      const otherThread = createSampleThread();
+      await storage.saveThread({ thread: mainThread });
+      await storage.saveThread({ thread: otherThread });
+
+      const now = Date.now();
+
+      // Save messages to main thread
+      const mainMessages = [
+        createSampleMessageV2({
+          threadId: mainThread.id,
+          resourceId: mainThread.resourceId,
+          role: 'user',
+          content: { content: 'Main thread user 1' },
+          createdAt: new Date(now + 1000),
+        }),
+        createSampleMessageV2({
+          threadId: mainThread.id,
+          resourceId: mainThread.resourceId,
+          role: 'assistant',
+          content: { content: 'Main thread assistant 1' },
+          createdAt: new Date(now + 3000),
+        }),
+        createSampleMessageV2({
+          threadId: mainThread.id,
+          resourceId: mainThread.resourceId,
+          role: 'user',
+          content: { content: 'Main thread user 2' },
+          createdAt: new Date(now + 5000),
+        }),
+      ];
+      await storage.saveMessages({ messages: mainMessages, format: 'v2' });
+
+      // Save messages to other thread (some with timestamps between main thread messages)
+      const otherMessages = [
+        createSampleMessageV2({
+          threadId: otherThread.id,
+          resourceId: otherThread.resourceId,
+          role: 'user',
+          content: { content: 'Other thread user' },
+          createdAt: new Date(now + 2000), // Between main thread messages 1 and 2
+        }),
+        createSampleMessageV2({
+          threadId: otherThread.id,
+          resourceId: otherThread.resourceId,
+          role: 'assistant',
+          content: { content: 'Other thread assistant' },
+          createdAt: new Date(now + 4000), // Between main thread messages 2 and 3
+        }),
+      ];
+      await storage.saveMessages({ messages: otherMessages, format: 'v2' });
+
+      // Retrieve from main thread, but include a message from other thread
+      const result = await storage.getMessagesPaginated({
+        threadId: mainThread.id,
+        selectBy: {
+          include: [
+            {
+              id: otherMessages[0]!.id,
+              threadId: otherThread.id,
+            },
+          ],
+        },
+        format: 'v2',
+      });
+
+      // All messages should be sorted by createdAt
+      const timestamps = result.messages.map(m => new Date(m.createdAt).getTime());
+      const sortedTimestamps = [...timestamps].sort((a, b) => a - b);
+      expect(timestamps).toEqual(sortedTimestamps);
+
+      // The other thread message should be interleaved correctly by timestamp
+      const contents = result.messages.map((m: any) => m.content.content);
+      expect(contents).toContain('Other thread user');
+    });
+  });
 }

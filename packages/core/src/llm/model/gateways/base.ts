@@ -55,5 +55,6 @@ export abstract class MastraModelGateway {
     modelId: string;
     providerId: string;
     apiKey: string;
+    headers?: Record<string, string>;
   }): Promise<LanguageModelV2> | LanguageModelV2;
 }

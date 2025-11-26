@@ -1521,6 +1521,7 @@ export class Agent<
           tracingContext,
           model: await this.getModel({ runtimeContext }),
           tracingPolicy: this.#options?.tracingPolicy,
+          requireApproval: (toolObj as any).requireApproval,
         };
         const convertedToCoreTool = makeCoreTool(toolObj, options);
         convertedMemoryTools[toolName] = convertedToCoreTool;
@@ -1823,6 +1824,7 @@ export class Agent<
             tracingContext,
             model: await this.getModel({ runtimeContext }),
             tracingPolicy: this.#options?.tracingPolicy,
+            requireApproval: (toolObj as any).requireApproval,
           };
           const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
           toolsForRequest[toolName] = convertedToCoreTool;
@@ -1877,6 +1879,7 @@ export class Agent<
           tracingContext,
           model: await this.getModel({ runtimeContext }),
           tracingPolicy: this.#options?.tracingPolicy,
+          requireApproval: (tool as any).requireApproval,
         };
         const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
         toolsForRequest[toolName] = convertedToCoreTool;
@@ -1978,7 +1981,13 @@ export class Agent<
                 let fullText = '';
                 for await (const chunk of streamResult.fullStream) {
                   if (writer) {
-                    await writer.write(chunk);
+                    // Data chunks from writer.custom() should bubble up directly without wrapping
+                    if (chunk.type.startsWith('data-')) {
+                      // Write data chunks directly to original stream to bubble up
+                      await writer.custom(chunk as any);
+                    } else {
+                      await writer.write(chunk);
+                    }
                   }
 
                   if (chunk.type === 'text-delta') {
@@ -1997,7 +2006,13 @@ export class Agent<
                 let fullText = '';
                 for await (const chunk of streamResult.fullStream) {
                   if (writer) {
-                    await writer.write(chunk);
+                    // Data chunks from writer.custom() should bubble up directly without wrapping
+                    if (chunk.type.startsWith('data-')) {
+                      // Write data chunks directly to original stream to bubble up
+                      await writer.custom(chunk as any);
+                    } else {
+                      await writer.write(chunk);
+                    }
                   }
 
                   if (chunk.type === 'text-delta') {
