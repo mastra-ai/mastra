@@ -1856,7 +1856,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               payload: {
                 id: step.id,
                 status: 'failed',
-                error: result?.error,
+                error: result?.error?.stack ?? result?.error,
                 payload: prevOutput,
               },
             });
@@ -2073,7 +2073,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           const stepFailure: Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string } = {
             status: 'failed',
             payload: inputData,
-            error: e instanceof Error ? e.message : String(e),
+            error: e instanceof Error ? (e?.stack ?? e?.message) : String(e),
             endedAt: Date.now(),
             startedAt,
             resumedAt: resumeDataToUse ? startedAt : undefined,
@@ -2146,11 +2146,20 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           ? (e?.cause as unknown as Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string })
           : {
               status: 'failed' as const,
-              error: e instanceof Error ? e.message : String(e),
+              error: e instanceof Error ? e?.stack : String(e),
               payload: inputData,
               startedAt,
               endedAt: Date.now(),
             };
+
+      // Emit workflow-step-result event with failed status
+      await emitter.emit('watch', {
+        type: 'workflow-step-result',
+        payload: {
+          id: step.id,
+          ...stepFailure,
+        },
+      });
 
       stepRes = {
         result: stepFailure,
