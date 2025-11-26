@@ -97,6 +97,10 @@ export function createPrepareStreamWorkflow<
     agentId,
     toolCallId,
     methodType,
+    saveQueueManager,
+    memoryConfig,
+    memory,
+    resourceId,
   });
 
   const mapResultsStep = createMapResultsStep({

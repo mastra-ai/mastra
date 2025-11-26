@@ -963,9 +963,25 @@ export class MessageList {
     if (m.content.parts.length) {
       for (const part of m.content.parts) {
         if (part.type === `file`) {
+          // Normalize part.data to ensure it's a valid URL or data URI
+          let normalizedUrl: string;
+          if (typeof part.data === 'string') {
+            const categorized = categorizeFileData(part.data, part.mimeType);
+            if (categorized.type === 'raw') {
+              // Raw base64 - convert to data URI
+              normalizedUrl = createDataUri(part.data, part.mimeType || 'application/octet-stream');
+            } else {
+              // Already a URL or data URI
+              normalizedUrl = part.data;
+            }
+          } else {
+            // It's a non-string (shouldn't happen in practice for file parts, but handle it)
+            normalizedUrl = part.data;
+          }
+
           experimentalAttachments.push({
             contentType: part.mimeType,
-            url: part.data,
+            url: normalizedUrl,
           });
         } else if (
           part.type === 'tool-invocation' &&
@@ -1861,6 +1877,11 @@ export class MessageList {
       content.providerMetadata = coreMessage.providerOptions;
     }
 
+    // Preserve metadata field if present (matches aiV4UIMessageToMastraDBMessage behavior)
+    if ('metadata' in coreMessage && coreMessage.metadata !== null && coreMessage.metadata !== undefined) {
+      content.metadata = coreMessage.metadata as Record<string, unknown>;
+    }
+
     return {
       id,
       role: MessageList.getRole(coreMessage),
@@ -2131,14 +2152,30 @@ export class MessageList {
           if (role === `tool` || role === `assistant`) {
             throw new Error(incompatibleMessage);
           }
+
+          let processedImage: URL | Uint8Array;
+
+          if (part.image instanceof URL || part.image instanceof Uint8Array) {
+            processedImage = part.image;
+          } else if (Buffer.isBuffer(part.image) || part.image instanceof ArrayBuffer) {
+            processedImage = new Uint8Array(part.image);
+          } else {
+            // part.image is a string - could be a URL, data URI, or raw base64
+            const categorized = categorizeFileData(part.image, part.mimeType);
+
+            if (categorized.type === 'raw') {
+              // Raw base64 - convert to data URI before creating URL
+              const dataUri = createDataUri(part.image, part.mimeType || 'image/png');
+              processedImage = new URL(dataUri);
+            } else {
+              // It's already a URL or data URI
+              processedImage = new URL(part.image);
+            }
+          }
+
           roleContent[role].push({
             ...part,
-            image:
-              part.image instanceof URL || part.image instanceof Uint8Array
-                ? part.image
-                : Buffer.isBuffer(part.image) || part.image instanceof ArrayBuffer
-                  ? new Uint8Array(part.image)
-                  : new URL(part.image),
+            image: processedImage,
           });
           break;
         }
@@ -2956,8 +2993,11 @@ export class MessageList {
       .map(p => p.text)
       .join('\n');
 
-    // Store original content in metadata for round-trip
-    const metadata: Record<string, unknown> = {};
+    // Preserve metadata from the input message if present
+    const metadata: Record<string, unknown> =
+      'metadata' in modelMsg && modelMsg.metadata !== null && modelMsg.metadata !== undefined
+        ? (modelMsg.metadata as Record<string, unknown>)
+        : {};
 
     // Generate ID from modelMsg if available, otherwise create a new one
     const id =
@@ -2976,7 +3016,7 @@ export class MessageList {
         reasoning: reasoningParts.length > 0 ? reasoningParts.join('\n') : undefined,
         experimental_attachments: experimental_attachments.length > 0 ? experimental_attachments : undefined,
         content: contentString || undefined,
-        metadata,
+        metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       },
     };
     // Add message-level providerOptions if present (AIV5 ModelMessage uses providerOptions)

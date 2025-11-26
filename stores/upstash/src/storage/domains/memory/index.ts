@@ -582,15 +582,13 @@ export class StoreMemoryUpstash extends MemoryStorage {
         return 0;
       };
 
-      // Sort messages by orderBy field and direction only if orderBy is specified
-      // If orderBy is undefined, keep messages in sorted-set order for correct pagination
-      if (orderBy) {
-        messagesData.sort((a, b) => {
-          const aValue = getFieldValue(a);
-          const bValue = getFieldValue(b);
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        });
-      }
+      // Always sort messages by the sort field/direction before pagination
+      // This ensures consistent ordering whether orderBy is explicit or uses the default (createdAt ASC)
+      messagesData.sort((a, b) => {
+        const aValue = getFieldValue(a);
+        const bValue = getFieldValue(b);
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      });
 
       const total = messagesData.length;
 
@@ -625,25 +623,13 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
       // Sort all messages (paginated + included) for final output - must be done AFTER MessageList
       // because MessageList.get.all.db() sorts by createdAt ASC internally
-      if (orderBy) {
-        finalMessages = finalMessages.sort((a, b) => {
-          const aValue = getFieldValue(a);
-          const bValue = getFieldValue(b);
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        });
-      } else {
-        // Build Map for O(1) lookups instead of O(n) indexOf
-        const messageIdToPosition = new Map<string, number>();
-        allMessageIds.forEach((id, index) => {
-          messageIdToPosition.set(id as string, index);
-        });
-
-        finalMessages = finalMessages.sort((a, b) => {
-          const aPos = messageIdToPosition.get(a.id) ?? Number.MAX_SAFE_INTEGER;
-          const bPos = messageIdToPosition.get(b.id) ?? Number.MAX_SAFE_INTEGER;
-          return aPos - bPos;
-        });
-      }
+      // Always sort by createdAt (or specified field) to ensure consistent chronological ordering
+      // This is critical when `include` parameter brings in messages from semantic recall
+      finalMessages = finalMessages.sort((a, b) => {
+        const aValue = getFieldValue(a);
+        const bValue = getFieldValue(b);
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      });
 
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
