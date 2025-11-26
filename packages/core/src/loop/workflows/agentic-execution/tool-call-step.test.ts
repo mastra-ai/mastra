@@ -76,10 +76,10 @@ describe('createToolCallStep tool approval workflow', () => {
           },
         },
         response: {
-          db: () => [],
+          v2: () => [],
         },
         all: {
-          db: () => [],
+          v2: () => [],
         },
       },
     } as unknown as MessageList;

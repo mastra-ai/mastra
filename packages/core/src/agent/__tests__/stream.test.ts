@@ -438,7 +438,12 @@ function runStreamTest(version: 'v1' | 'v2') {
         // [{ type: 'text', text: 'Hello' }, { type: 'text', text: ' world' }]
         // Instead of: [{ role: 'assistant', content: [{ type: 'text', text: 'Hello world' }] }]
         // should only have a single text part of combined text delta chunks
-        expect(firstMessage.content?.filter(p => p.type === `text`)).toHaveLength(1);
+        if (firstMessage.content && Array.isArray(firstMessage.content)) {
+          expect(firstMessage.content.filter(p => p.type === `text`)).toHaveLength(1);
+        } else {
+          expect(firstMessage.content).toBeDefined();
+          expect(firstMessage.content).toBe('Hello world');
+        }
       }
     });
 
