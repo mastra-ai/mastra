@@ -170,7 +170,14 @@ This is particularly useful when:
 
 #### Database-Specific Configurations
 
-The Vector Query Tool supports database-specific configurations that enable you to leverage unique features and optimizations of different vector stores:
+The Vector Query Tool supports database-specific configurations that enable you to leverage unique features and optimizations of different vector stores.
+
+:::note
+These configurations are for **query-time options** like namespaces, performance tuning, and filtering—not for database connection setup. 
+
+
+Connection credentials (URLs, auth tokens) are configured when you instantiate the vector store class (e.g., `new LibSQLVector({ connectionUrl: '...' })`).
+:::
 
 ```ts showLineNumbers copy
 // Pinecone with namespace
