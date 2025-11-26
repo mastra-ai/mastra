@@ -3,6 +3,9 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent';
+import { Mastra } from '../../mastra';
+import { NoOpObservability } from '../../observability';
+import type { ObservabilityEntrypoint, ObservabilityInstance } from '../../observability/types';
 import { RequestContext } from '../../request-context';
 import { createWorkflow, createStep } from '../../workflows';
 import { createScorer } from '../base';
@@ -466,6 +469,66 @@ describe('runEvals', () => {
       expect(result.scores.steps?.[`test-step`]?.[`step-scorer`]).toBe(0.8);
       expect(result.scores.workflow?.toxicity).toBe(0.9);
       expect(result.summary.totalItems).toBe(1);
+    });
+  });
+
+  describe('Observability integration', () => {
+    it('should create tracing spans when observability is configured in Mastra', async () => {
+      // Create agent with Mastra instance that has observability
+      const dummyModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'Response from agent' }],
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Response' },
+            { type: 'text-end', id: '1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'observableAgent',
+        name: 'Observable Agent',
+        instructions: 'Test agent with observability',
+        model: dummyModel,
+      });
+
+      const observability = new NoOpObservability();
+
+      const selectedInstance = vi.spyOn(observability, 'getSelectedInstance');
+
+      const mastra = new Mastra({
+        agents: {
+          observableAgent: agent,
+        },
+        observability,
+        logger: false,
+      });
+
+      const scorer = createScorer({
+        id: 'testScorer',
+        description: 'Test scorer',
+        name: 'testScorer',
+      }).generateScore(() => 0.9);
+
+      // Run evals
+      await runEvals({
+        data: [{ input: 'test input', groundTruth: 'expected output' }],
+        scorers: [scorer],
+        target: mastra.getAgent('observableAgent'),
+      });
+
+      expect(selectedInstance).toHaveBeenCalled();
     });
   });
 });
