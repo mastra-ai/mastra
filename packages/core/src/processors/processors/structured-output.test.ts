@@ -55,6 +55,7 @@ describe('StructuredOutputProcessor', () => {
       schema: testSchema,
       model: mockModel,
       errorStrategy: 'strict',
+      AgentClass: Agent,
     });
   });
 
@@ -130,6 +131,7 @@ describe('StructuredOutputProcessor', () => {
         model: mockModel,
         errorStrategy: 'fallback',
         fallbackValue: { color: 'default', intensity: 'medium' },
+        AgentClass: Agent,
       });
 
       const { controller, enqueuedChunks } = createMockController();
@@ -178,6 +180,7 @@ describe('StructuredOutputProcessor', () => {
         schema: testSchema,
         model: mockModel,
         errorStrategy: 'warn',
+        AgentClass: Agent,
       });
 
       const { controller } = createMockController();
@@ -379,6 +382,7 @@ describe('StructuredOutputProcessor', () => {
         schema: testSchema,
         model: mockModel,
         instructions: customInstructions,
+        AgentClass: Agent,
       });
 
       const agent = (customProcessor as unknown as { structuringAgent: Agent }).structuringAgent;

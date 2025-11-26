@@ -7,7 +7,9 @@ import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
 import type { OutputSchema } from '../../../stream/base/schema';
+import type { Constructor } from '../../../types';
 import { createWorkflow } from '../../../workflows/workflow';
+import type { Agent } from '../../agent';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
 import type { AgentMethodType } from '../../types';
@@ -41,6 +43,7 @@ interface CreatePrepareStreamWorkflowOptions<
   };
   agentId: string;
   toolCallId?: string;
+  AgentClass: Constructor<Agent>;
 }
 
 export function createPrepareStreamWorkflow<
@@ -64,6 +67,7 @@ export function createPrepareStreamWorkflow<
   resumeContext,
   agentId,
   toolCallId,
+  AgentClass,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -114,6 +118,7 @@ export function createPrepareStreamWorkflow<
     agentSpan,
     agentId,
     methodType,
+    AgentClass,
   });
 
   return createWorkflow({

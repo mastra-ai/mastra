@@ -1,5 +1,5 @@
 import type { TransformStreamDefaultController } from 'stream/web';
-import { Agent } from '../../agent/agent';
+import type { Agent } from '../../agent/agent';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { TracingContext } from '../../observability';
@@ -7,10 +7,15 @@ import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
 import type { InferSchemaOutput } from '../../stream/base/schema';
 import type { ToolCallChunk, ToolResultChunk } from '../../stream/types';
+import type { Constructor } from '../../types';
 import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../constants';
 import type { Processor } from '../index';
 
 export type { StructuredOutputOptions } from '../../agent/types';
+
+export type StructuredOutputProcessorOptions<OUTPUT extends OutputSchema> = StructuredOutputOptions<OUTPUT> & {
+  AgentClass: Constructor<Agent>;
+};
 
 /**
  * StructuredOutputProcessor transforms unstructured agent output into structured JSON
@@ -35,7 +40,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
   private isStructuringAgentStreamStarted = false;
   private jsonPromptInjection?: boolean;
 
-  constructor(options: StructuredOutputOptions<OUTPUT>) {
+  constructor(options: StructuredOutputProcessorOptions<OUTPUT>) {
     if (!options.schema) {
       throw new MastraError({
         id: 'STRUCTURED_OUTPUT_PROCESSOR_SCHEMA_REQUIRED',
@@ -58,7 +63,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
     this.fallbackValue = options.fallbackValue;
     this.jsonPromptInjection = options.jsonPromptInjection;
     // Create internal structuring agent
-    this.structuringAgent = new Agent({
+    this.structuringAgent = new options.AgentClass({
       id: 'structured-output-structurer',
       name: 'structured-output-structurer',
       instructions: options.instructions || this.generateInstructions(),

@@ -6,6 +6,8 @@ import type { Span, SpanType, TracingContext } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors/processors/structured-output';
 import type { RequestContext } from '../../../request-context';
 import type { OutputSchema } from '../../../stream/base/schema';
+import type { Constructor } from '../../../types';
+import type { Agent } from '../../agent';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
@@ -27,6 +29,7 @@ interface MapResultsStepOptions<
   agentSpan: Span<SpanType.AGENT_RUN>;
   agentId: string;
   methodType: AgentMethodType;
+  AgentClass: Constructor<Agent>;
 }
 
 export function createMapResultsStep<
@@ -44,6 +47,7 @@ export function createMapResultsStep<
   agentSpan,
   agentId,
   methodType,
+  AgentClass,
 }: MapResultsStepOptions<OUTPUT, FORMAT>) {
   return async ({
     inputData,
@@ -133,7 +137,10 @@ export function createMapResultsStep<
     // Handle structuredOutput option by creating an StructuredOutputProcessor
     // Only create the processor if a model is explicitly provided
     if (options.structuredOutput?.model) {
-      const structuredProcessor = new StructuredOutputProcessor(options.structuredOutput);
+      const structuredProcessor = new StructuredOutputProcessor({
+        ...options.structuredOutput,
+        AgentClass,
+      });
       effectiveOutputProcessors = effectiveOutputProcessors
         ? [...effectiveOutputProcessors, structuredProcessor]
         : [structuredProcessor];

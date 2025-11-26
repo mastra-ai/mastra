@@ -10,11 +10,10 @@ import type { RequestContext } from '../../request-context';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
+import type { Constructor } from '../../types';
 import { createStep, createWorkflow } from '../../workflows/workflow';
 import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
-
-type Constructor<T> = new (...args: any[]) => T;
 
 async function getRoutingAgent({
   requestContext,
