@@ -1920,6 +1920,232 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
     });
     expect(server.tools()['run_unique_workflow_key_789']).toBeDefined();
   });
+
+  it('should populate RequestContext with MCP extra for workflows', async () => {
+    let capturedRequestContext: any = null;
+
+    const testWorkflow = createMockWorkflow(
+      'ExtraContextWorkflow',
+      'Workflow that captures MCP extra context',
+      z.object({ data: z.string() }),
+    );
+
+    const extraCaptureStep = createStep({
+      id: 'extra-capture-step',
+      description: 'Captures MCP extra from request context',
+      inputSchema: z.object({ data: z.string() }),
+      outputSchema: z.object({ result: z.string() }),
+      execute: async ({ inputData, requestContext }) => {
+        capturedRequestContext = requestContext;
+        return {
+          result: inputData.data,
+        };
+      },
+    });
+
+    testWorkflow.then(extraCaptureStep).commit();
+
+    server = new MCPServer({
+      name: 'WorkflowExtraContextServer',
+      version: '1.0.0',
+      tools: {},
+      workflows: { extraWorkflow: testWorkflow },
+    });
+
+    const mockExtra: MCPRequestHandlerExtra = {
+      signal: new AbortController().signal,
+      sessionId: 'workflow-extra-session',
+      authInfo: {
+        token: 'workflow-auth-token-123',
+        clientId: 'workflow-client-456',
+        scopes: ['read', 'write', 'execute'],
+      },
+      requestId: 'workflow-request-id',
+      sendNotification: vi.fn(),
+      sendRequest: vi.fn(),
+    };
+
+    const serverInstance = server.getServer();
+    // @ts-ignore - accessing private property for testing
+    const requestHandlers = serverInstance._requestHandlers;
+    const callToolHandler = requestHandlers.get('tools/call');
+
+    await callToolHandler(
+      {
+        jsonrpc: '2.0' as const,
+        id: 'test-workflow-extra-1',
+        method: 'tools/call' as const,
+        params: {
+          name: 'run_extraWorkflow',
+          arguments: { data: 'test workflow extra' },
+        },
+      },
+      mockExtra,
+    );
+
+    // Verify that MCP extra fields were populated into the RequestContext
+    expect(capturedRequestContext).toBeDefined();
+    expect(capturedRequestContext.get('sessionId')).toBe('workflow-extra-session');
+    expect(capturedRequestContext.get('requestId')).toBe('workflow-request-id');
+
+    // Verify authInfo is also accessible
+    const authInfo = capturedRequestContext.get('authInfo');
+    expect(authInfo).toBeDefined();
+    expect(authInfo.token).toBe('workflow-auth-token-123');
+    expect(authInfo.clientId).toBe('workflow-client-456');
+    expect(authInfo.scopes).toEqual(['read', 'write', 'execute']);
+  });
+
+  it('should populate RequestContext with MCP extra for agents', async () => {
+    let capturedRequestContext: any = null;
+
+    const extraCaptureToolInstance = createTool({
+      id: 'extraCapture',
+      description: 'Tool that captures MCP extra context',
+      inputSchema: z.object({ query: z.string().optional() }),
+      execute: async (inputData, context) => {
+        capturedRequestContext = context?.requestContext;
+        return {
+          source: 'agent-extra-capture',
+          sessionId: context?.requestContext?.get('sessionId'),
+          requestId: context?.requestContext?.get('requestId'),
+          authInfo: context?.requestContext?.get('authInfo'),
+        };
+      },
+    });
+
+    const agentMock = new MockLanguageModelV2({
+      doGenerate: async params => {
+        const hasToolResults = params.prompt.some(
+          (msg: any) =>
+            msg.role === 'tool' ||
+            (Array.isArray(msg.content) && msg.content.some((c: any) => c.type === 'tool-result')),
+        );
+
+        if (!hasToolResults) {
+          return {
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'call-extra-capture',
+                toolName: 'extraCapture',
+                input: JSON.stringify({ query: 'capture extra' }),
+              },
+            ],
+            warnings: [],
+          };
+        } else {
+          return {
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Extra captured successfully' }],
+            warnings: [],
+          };
+        }
+      },
+      doStream: async params => {
+        const hasToolResults = params.prompt.some(
+          (msg: any) =>
+            msg.role === 'tool' ||
+            (Array.isArray(msg.content) && msg.content.some((c: any) => c.type === 'tool-result')),
+        );
+
+        if (!hasToolResults) {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-extra-capture',
+                toolName: 'extraCapture',
+                input: JSON.stringify({ query: 'capture extra' }),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ] as any),
+          };
+        } else {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-delta', id: 'text-1', delta: 'Extra captured successfully' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ] as any),
+          };
+        }
+      },
+    });
+
+    const agentWithExtraCapture = new Agent({
+      id: 'AgentWithExtraCapture',
+      name: 'AgentWithExtraCapture',
+      instructions: 'You use the extraCapture tool',
+      description: 'Agent that captures MCP extra context',
+      model: agentMock,
+      tools: { extraCapture: extraCaptureToolInstance },
+    });
+
+    server = new MCPServer({
+      name: 'AgentExtraContextServer',
+      version: '1.0.0',
+      tools: {},
+      agents: { extraAgent: agentWithExtraCapture },
+    });
+
+    const mockExtra: MCPRequestHandlerExtra = {
+      signal: new AbortController().signal,
+      sessionId: 'agent-extra-session',
+      authInfo: {
+        token: 'agent-auth-token-789',
+        clientId: 'agent-client-012',
+        scopes: ['admin'],
+      },
+      requestId: 'agent-request-id',
+      sendNotification: vi.fn(),
+      sendRequest: vi.fn(),
+    };
+
+    const serverInstance = server.getServer();
+    // @ts-ignore - accessing private property for testing
+    const requestHandlers = serverInstance._requestHandlers;
+    const callToolHandler = requestHandlers.get('tools/call');
+
+    await callToolHandler(
+      {
+        jsonrpc: '2.0' as const,
+        id: 'test-agent-extra-1',
+        method: 'tools/call' as const,
+        params: {
+          name: 'ask_extraAgent',
+          arguments: { message: 'Please capture extra' },
+        },
+      },
+      mockExtra,
+    );
+
+    // Verify that MCP extra fields were populated into the RequestContext
+    expect(capturedRequestContext).toBeDefined();
+    expect(capturedRequestContext.get('sessionId')).toBe('agent-extra-session');
+    expect(capturedRequestContext.get('requestId')).toBe('agent-request-id');
+
+    // Verify authInfo is also accessible
+    const authInfo = capturedRequestContext.get('authInfo');
+    expect(authInfo).toBeDefined();
+    expect(authInfo.token).toBe('agent-auth-token-789');
+    expect(authInfo.clientId).toBe('agent-client-012');
+    expect(authInfo.scopes).toEqual(['admin']);
+  });
 });
 
 describe('MCPServer - Elicitation', () => {

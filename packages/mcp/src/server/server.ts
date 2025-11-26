@@ -764,14 +764,30 @@ export class MCPServer extends MCPServerBase {
             `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${inputData.message}"`,
           );
           try {
-            const proxiedContext = context?.requestContext || new RequestContext();
-            if (context?.mcp?.extra) {
-              proxiedContext.set('mcp.extra', context.mcp.extra);
+            // Create effective request context with MCP extra if available
+            let effectiveRequestContext: RequestContext;
+
+            const mcpExtra = context?.mcp?.extra;
+            if (mcpExtra) {
+              // Create new context and copy existing entries if any
+              effectiveRequestContext = new RequestContext();
+              if (context?.requestContext) {
+                context.requestContext.forEach((value: unknown, key: string) => {
+                  effectiveRequestContext.set(key as any, value as any);
+                });
+              }
+              // Populate all MCP extra fields into context
+              Object.entries(mcpExtra).forEach(([key, value]) => {
+                effectiveRequestContext.set(key as any, value as any);
+              });
+            } else {
+              // No MCP extra - use existing context or create empty one
+              effectiveRequestContext = context?.requestContext || new RequestContext();
             }
 
             const response = await agent.generate(inputData.message, {
               ...(context ?? {}),
-              requestContext: proxiedContext,
+              requestContext: effectiveRequestContext,
             });
             return response;
           } catch (error) {
@@ -846,11 +862,32 @@ export class MCPServer extends MCPServerBase {
             inputData,
           );
           try {
-            const run = await workflow.createRun({ runId: context?.requestContext?.get('runId') });
+            // Create effective request context with MCP extra if available
+            let effectiveRequestContext: RequestContext;
+
+            const mcpExtra = context?.mcp?.extra;
+            if (mcpExtra) {
+              // Create new context and copy existing entries if any
+              effectiveRequestContext = new RequestContext();
+              if (context?.requestContext) {
+                context.requestContext.forEach((value: unknown, key: string) => {
+                  effectiveRequestContext.set(key as any, value as any);
+                });
+              }
+              // Populate all MCP extra fields into context
+              Object.entries(mcpExtra).forEach(([key, value]) => {
+                effectiveRequestContext.set(key as any, value as any);
+              });
+            } else {
+              // No MCP extra - use existing context or create empty one
+              effectiveRequestContext = context?.requestContext || new RequestContext();
+            }
+
+            const run = await workflow.createRun({ runId: effectiveRequestContext?.get('runId') });
 
             const response = await run.start({
               inputData: inputData,
-              requestContext: context?.requestContext,
+              requestContext: effectiveRequestContext,
               tracingContext: context?.tracingContext,
             });
             return response;
