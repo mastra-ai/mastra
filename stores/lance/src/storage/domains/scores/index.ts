@@ -52,6 +52,9 @@ export class StoreScoresLance extends ScoresStorage {
         }
       }
 
+      filteredScore.createdAt = new Date();
+      filteredScore.updatedAt = new Date();
+
       filteredScore.id = id;
       await table.add([filteredScore], { mode: 'append' });
       return { score };
@@ -277,16 +280,12 @@ export class StoreScoresLance extends ScoresStorage {
       const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
       const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
 
-      // Get total count for pagination
-      const allRecords = await table.query().where(`\`traceId\` = '${traceId}' AND \`spanId\` = '${spanId}'`).toArray();
-      const total = allRecords.length;
-
       return {
         pagination: {
           page,
           perPage,
-          total,
-          hasMore: offset + scores.length < total,
+          total: scores.length,
+          hasMore: offset + scores.length < scores.length,
         },
         scores,
       };

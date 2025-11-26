@@ -1,116 +1,18 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringEntityType, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
 import { saveScorePayloadSchema } from '@mastra/core/scores';
-import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
+import {
+  ScoresStorage,
+  TABLE_SCORERS,
+  safelyParseJSON,
+} from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsMongoDB } from '../operations';
+import { transformRow } from '../utils';
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  let scorerValue: any = null;
-  if (row.scorer) {
-    try {
-      scorerValue = typeof row.scorer === 'string' ? safelyParseJSON(row.scorer) : row.scorer;
-    } catch (e) {
-      console.warn('Failed to parse scorer:', e);
-    }
-  }
-
-  let preprocessStepResultValue: any = null;
-  if (row.preprocessStepResult) {
-    try {
-      preprocessStepResultValue =
-        typeof row.preprocessStepResult === 'string'
-          ? safelyParseJSON(row.preprocessStepResult)
-          : row.preprocessStepResult;
-    } catch (e) {
-      console.warn('Failed to parse preprocessStepResult:', e);
-    }
-  }
-
-  let analyzeStepResultValue: any = null;
-  if (row.analyzeStepResult) {
-    try {
-      analyzeStepResultValue =
-        typeof row.analyzeStepResult === 'string' ? safelyParseJSON(row.analyzeStepResult) : row.analyzeStepResult;
-    } catch (e) {
-      console.warn('Failed to parse analyzeStepResult:', e);
-    }
-  }
-
-  let inputValue: any = null;
-  if (row.input) {
-    try {
-      inputValue = typeof row.input === 'string' ? safelyParseJSON(row.input) : row.input;
-    } catch (e) {
-      console.warn('Failed to parse input:', e);
-    }
-  }
-
-  let outputValue: any = null;
-  if (row.output) {
-    try {
-      outputValue = typeof row.output === 'string' ? safelyParseJSON(row.output) : row.output;
-    } catch (e) {
-      console.warn('Failed to parse output:', e);
-    }
-  }
-
-  let entityValue: any = null;
-  if (row.entity) {
-    try {
-      entityValue = typeof row.entity === 'string' ? safelyParseJSON(row.entity) : row.entity;
-    } catch (e) {
-      console.warn('Failed to parse entity:', e);
-    }
-  }
-
-  let runtimeContextValue: any = null;
-  if (row.runtimeContext) {
-    try {
-      runtimeContextValue =
-        typeof row.runtimeContext === 'string' ? safelyParseJSON(row.runtimeContext) : row.runtimeContext;
-    } catch (e) {
-      console.warn('Failed to parse runtimeContext:', e);
-    }
-  }
-
-  let metadataValue: any = null;
-  if (row.metadata) {
-    try {
-      metadataValue = typeof row.metadata === 'string' ? safelyParseJSON(row.metadata) : row.metadata;
-    } catch (e) {
-      console.warn('Failed to parse metadata:', e);
-    }
-  }
-
-  return {
-    id: row.id as string,
-    entityId: row.entityId as string,
-    entityType: row.entityType as ScoringEntityType,
-    scorerId: row.scorerId as string,
-    traceId: row.traceId as string,
-    spanId: row.spanId as string,
-    runId: row.runId as string,
-    scorer: scorerValue,
-    preprocessStepResult: preprocessStepResultValue,
-    preprocessPrompt: row.preprocessPrompt as string,
-    analyzeStepResult: analyzeStepResultValue,
-    generateScorePrompt: row.generateScorePrompt as string,
-    score: row.score as number,
-    analyzePrompt: row.analyzePrompt as string,
-    reasonPrompt: row.reasonPrompt as string,
-    metadata: metadataValue,
-    input: inputValue,
-    output: outputValue,
-    additionalContext: row.additionalContext,
-    runtimeContext: runtimeContextValue,
-    entity: entityValue,
-    source: row.source as ScoringSource,
-    resourceId: row.resourceId as string,
-    threadId: row.threadId as string,
-    createdAt: new Date(row.createdAt),
-    updatedAt: new Date(row.updatedAt),
-  };
+  const transformedRow = transformRow({ row, tableName: TABLE_SCORERS });
+  return transformedRow as ScoreRowData;
 }
 
 export class ScoresStorageMongoDB extends ScoresStorage {
@@ -162,49 +64,44 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const now = new Date();
       const scoreId = `score-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-      const scoreData = {
-        id: scoreId,
-        entityId: validatedScore.entityId,
-        entityType: validatedScore.entityType,
-        scorerId: validatedScore.scorerId,
-        traceId: validatedScore.traceId || '',
-        spanId: validatedScore.spanId || '',
-        runId: validatedScore.runId,
-        scorer:
-          typeof validatedScore.scorer === 'string' ? safelyParseJSON(validatedScore.scorer) : validatedScore.scorer,
-        preprocessStepResult:
-          typeof validatedScore.preprocessStepResult === 'string'
-            ? safelyParseJSON(validatedScore.preprocessStepResult)
-            : validatedScore.preprocessStepResult,
-        analyzeStepResult:
-          typeof validatedScore.analyzeStepResult === 'string'
-            ? safelyParseJSON(validatedScore.analyzeStepResult)
-            : validatedScore.analyzeStepResult,
-        score: validatedScore.score,
-        reason: validatedScore.reason,
-        preprocessPrompt: validatedScore.preprocessPrompt,
-        generateScorePrompt: validatedScore.generateScorePrompt,
-        generateReasonPrompt: validatedScore.generateReasonPrompt,
-        analyzePrompt: validatedScore.analyzePrompt,
-        input: typeof validatedScore.input === 'string' ? safelyParseJSON(validatedScore.input) : validatedScore.input,
-        output:
-          typeof validatedScore.output === 'string' ? safelyParseJSON(validatedScore.output) : validatedScore.output,
-        additionalContext: validatedScore.additionalContext,
-        runtimeContext:
-          typeof validatedScore.runtimeContext === 'string'
-            ? safelyParseJSON(validatedScore.runtimeContext)
-            : validatedScore.runtimeContext,
-        entity:
-          typeof validatedScore.entity === 'string' ? safelyParseJSON(validatedScore.entity) : validatedScore.entity,
-        source: validatedScore.source,
-        resourceId: validatedScore.resourceId || '',
-        threadId: validatedScore.threadId || '',
-        createdAt: now,
-        updatedAt: now,
+      const scorer =
+        typeof validatedScore.scorer === 'string' ? safelyParseJSON(validatedScore.scorer) : validatedScore.scorer;
+      const preprocessStepResult =
+        typeof validatedScore.preprocessStepResult === 'string'
+          ? safelyParseJSON(validatedScore.preprocessStepResult)
+          : validatedScore.preprocessStepResult;
+      const analyzeStepResult =
+        typeof validatedScore.analyzeStepResult === 'string'
+          ? safelyParseJSON(validatedScore.analyzeStepResult)
+          : validatedScore.analyzeStepResult;
+      const input =
+        typeof validatedScore.input === 'string' ? safelyParseJSON(validatedScore.input) : validatedScore.input;
+      const output =
+        typeof validatedScore.output === 'string' ? safelyParseJSON(validatedScore.output) : validatedScore.output;
+      const runtimeContext =
+        typeof validatedScore.runtimeContext === 'string'
+          ? safelyParseJSON(validatedScore.runtimeContext)
+          : validatedScore.runtimeContext;
+      const entity =
+        typeof validatedScore.entity === 'string' ? safelyParseJSON(validatedScore.entity) : validatedScore.entity;
+      const createdAt = now;
+      const updatedAt = now;
+
+      const dataToSave = {
+        ...validatedScore,
+        scorer,
+        preprocessStepResult,
+        analyzeStepResult,
+        input,
+        output,
+        runtimeContext,
+        entity,
+        createdAt,
+        updatedAt,
       };
 
       const collection = await this.operations.getCollection(TABLE_SCORERS);
-      await collection.insertOne(scoreData);
+      await collection.insertOne(dataToSave);
 
       const savedScore: ScoreRowData = {
         ...score,
