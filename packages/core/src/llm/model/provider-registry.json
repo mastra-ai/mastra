@@ -94,7 +94,19 @@
         "qwen3-vl-plus",
         "qwq-plus"
       ],
-      "docUrl": "https://www.alibabacloud.com/help/en/model-studio/models",
+      "docUrl": "https://w ww.alibabacloud.com/help/en/model-studio/models",
+      "gateway": "models.dev"
+    },
+    "bailing": {
+      "url": "https://api.tbox.cn/api/llm/v1",
+      "apiKeyEnvVar": "BAILING_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "百灵AI",
+      "models": [
+        "Ling-1T",
+        "Ring-1T"
+      ],
+      "docUrl": "https://alipaytbox.yuque.com/sxs0ba/ling/api_chat",
       "gateway": "models.dev"
     },
     "xai": {
@@ -1436,6 +1448,10 @@
       "qwen3-vl-30b-a3b",
       "qwen3-vl-plus",
       "qwq-plus"
+    ],
+    "bailing": [
+      "Ling-1T",
+      "Ring-1T"
     ],
     "xai": [
       "grok-2",
