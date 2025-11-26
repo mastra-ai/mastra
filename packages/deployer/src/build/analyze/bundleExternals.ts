@@ -277,6 +277,7 @@ async function buildExternalDependencies(
   if (virtualDependencies.size === 0) {
     return [] as unknown as [OutputChunk, ...(OutputAsset | OutputChunk)[]];
   }
+
   const bundler = await rollup({
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     input: Array.from(virtualDependencies.entries()).reduce(

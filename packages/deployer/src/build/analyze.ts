@@ -11,9 +11,8 @@ import { getWorkspaceInformation, type WorkspacePackageInfo } from '../bundler/w
 import type { DependencyMetadata } from './types';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
-import { getPackageInfo } from 'local-pkg';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { findNativePackageModule } from './utils';
+import { isDependencyPartOfPackage } from './utils';
 import { GLOBAL_EXTERNALS } from './analyze/constants';
 
 type ErrorId =
@@ -270,6 +269,9 @@ If you think your configuration is valid, please open an issue.`);
   let index = 0;
   const depsToOptimize = new Map<string, DependencyMetadata>();
 
+  const { externals: customExternals = [] } = bundlerOptions || {};
+  const allExternals = [...GLOBAL_EXTERNALS, ...customExternals];
+
   logger.info('Analyzing dependencies...');
 
   for (const entry of entries) {
@@ -287,6 +289,11 @@ If you think your configuration is valid, please open an issue.`);
 
     // Merge dependencies from each entry (main, tools, etc.)
     for (const [dep, metadata] of analyzeResult.dependencies.entries()) {
+      const isPartOfExternals = allExternals.some(external => isDependencyPartOfPackage(dep, external));
+      if (isPartOfExternals) {
+        continue;
+      }
+
       if (depsToOptimize.has(dep)) {
         // Merge with existing exports if dependency already exists
         const existingEntry = depsToOptimize.get(dep)!;
@@ -313,16 +320,12 @@ If you think your configuration is valid, please open an issue.`);
 
   const sortedDeps = Array.from(depsToOptimize.keys()).sort();
   logger.info('Optimizing dependencies...');
-  logger.debug(
-    `${sortedDeps
-      .filter(key => !GLOBAL_EXTERNALS.includes(key))
-      .map(key => `- ${key}`)
-      .join('\n')}`,
-  );
+  logger.debug(`${sortedDeps.map(key => `- ${key}`).join('\n')}`);
 
   const { output, fileNameToDependencyMap, usedExternals } = await bundleExternals(depsToOptimize, outputDir, {
     bundlerOptions: {
       ...bundlerOptions,
+      externals: allExternals,
       enableEsmShim,
       isDev,
     },
