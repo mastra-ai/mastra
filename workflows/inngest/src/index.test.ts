@@ -6061,6 +6061,7 @@ describe('MastraInngestWorkflow', () => {
         id: 'test-parallel-workflow',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ result: z.string() }),
+        options: { validateInputs: false },
       })
         .then(initialStep)
         .then(nextStep)
