@@ -213,14 +213,22 @@ https://mastra.ai/en/docs/memory/overview`,
     return {};
   }
 
+  /**
+   * Get the index name for semantic recall embeddings.
+   * This is used to ensure consistency between the Memory class and SemanticRecall processor.
+   */
+  protected getEmbeddingIndexName(dimensions?: number): string {
+    const defaultDimensions = 1536;
+    const usedDimensions = dimensions ?? defaultDimensions;
+    const isDefault = usedDimensions === defaultDimensions;
+    const separator = this.vector?.indexSeparator ?? '_';
+    return isDefault ? `memory${separator}messages` : `memory${separator}messages${separator}${usedDimensions}`;
+  }
+
   protected async createEmbeddingIndex(dimensions?: number, config?: MemoryConfig): Promise<{ indexName: string }> {
     const defaultDimensions = 1536;
-    const isDefault = dimensions === defaultDimensions;
     const usedDimensions = dimensions ?? defaultDimensions;
-    const separator = this.vector?.indexSeparator ?? '_';
-    const indexName = isDefault
-      ? `memory${separator}messages`
-      : `memory${separator}messages${separator}${usedDimensions}`;
+    const indexName = this.getEmbeddingIndexName(dimensions);
 
     if (typeof this.vector === `undefined`) {
       throw new Error(`Tried to create embedding index but no vector db is attached to this Memory instance.`);
@@ -579,11 +587,15 @@ https://mastra.ai/en/docs/memory/overview`,
       if (!hasSemanticRecall) {
         const semanticConfig = typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
 
+        // Use the Memory class's index name for consistency with memory.recall()
+        const indexName = this.getEmbeddingIndexName();
+
         processors.push(
           new SemanticRecall({
             storage: this.storage.stores.memory,
             vector: this.vector,
             embedder: this.embedder,
+            indexName,
             ...semanticConfig,
           }),
         );
@@ -645,11 +657,16 @@ https://mastra.ai/en/docs/memory/overview`,
       if (!hasSemanticRecall) {
         const semanticRecallConfig =
           typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
+
+        // Use the Memory class's index name for consistency with memory.recall()
+        const indexName = this.getEmbeddingIndexName();
+
         processors.push(
           new SemanticRecall({
             storage: this.storage.stores.memory,
             vector: this.vector,
             embedder: this.embedder,
+            indexName,
             ...semanticRecallConfig,
           }),
         );
