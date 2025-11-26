@@ -5,9 +5,9 @@ A Netlify deployer for Mastra applications.
 ## Features
 
 - Deploy Mastra applications to Netlify Functions
-- Automatic site creation and configuration
-- Serverless function support with Edge Functions
-- Zero-configuration deployments
+- Uses Netlify Frameworks API for zero-configuration deployments
+- Automatic function bundling with pre-optimized settings
+- Built-in request routing and redirects
 
 ## Installation
 
@@ -31,126 +31,75 @@ const mastra = new Mastra({
 });
 ```
 
-## Configuration
-
-### Constructor Options
-
-The NetlifyDeployer accepts an optional configuration object:
-
-```typescript
-const deployer = new NetlifyDeployer({
-  build: {
-    command: 'npm run build',
-    publish: '.netlify/v1/functions',
-    environment: {
-      NODE_VERSION: '20',
-      NPM_FLAGS: '--legacy-peer-deps',
-    },
-  },
-});
-```
-
-#### Build Configuration
-
-- `build.command` (optional): Build command to execute during deployment. Defaults to `"npm run build"`.
-- `build.publish` (optional): Directory to publish. Defaults to `".netlify/v1/functions"`.
-- `build.environment` (optional): Environment variables to set during the build process. These are added to the `[build.environment]` section in netlify.toml.
-
-#### Examples
-
-Using a different package manager:
-
-```typescript
-const deployer = new NetlifyDeployer({
-  build: {
-    command: 'pnpm run build',
-  },
-});
-```
-
-Using Bun:
-
-```typescript
-const deployer = new NetlifyDeployer({
-  build: {
-    command: 'bun run build',
-  },
-});
-```
-
-With custom build environment:
-
-```typescript
-const deployer = new NetlifyDeployer({
-  build: {
-    command: 'npm run build',
-    environment: {
-      NODE_VERSION: '20.11.0',
-      NODE_ENV: 'production',
-      ENABLE_EXPERIMENTAL_FEATURES: 'true',
-    },
-  },
-});
-```
-
 ## Project Structure
 
 The deployer automatically creates the following structure:
 
 ```
 your-project/
-├── netlify/
-│   └── functions/
-│       └── api/
-└── netlify.toml
+└── .netlify/
+    └── v1/
+        ├── config.json
+        └── functions/
+            └── api/
+                ├── index.js
+                ├── package.json
+                └── node_modules/
 ```
 
-### netlify.toml Configuration
+### Netlify Frameworks API Configuration
 
-The deployer automatically creates a `netlify.toml` file with configuration based on your settings. If a `netlify.toml` file already exists, it will be preserved.
+The deployer uses Netlify's [Frameworks API](https://docs.netlify.com/build/frameworks/frameworks-api/) with a `.netlify/v1/config.json` file for zero-configuration deployments.
 
-Default configuration:
+Generated configuration:
 
-```toml
-[build]
-  command = "npm run build"
-  publish = ".netlify/v1/functions"
-
-[[redirects]]
-  from = "/*"
-  to = "/.netlify/functions/api/:splat"
-  status = 200
+```json
+{
+  "functions": {
+    "directory": ".netlify/v1/functions",
+    "node_bundler": "none",
+    "included_files": [".netlify/v1/functions/**"]
+  },
+  "redirects": [
+    {
+      "force": true,
+      "from": "/*",
+      "to": "/.netlify/functions/api/:splat",
+      "status": 200
+    }
+  ]
+}
 ```
 
-With custom build environment variables:
+This configuration:
 
-```toml
-[build]
-  command = "npm run build"
-  publish = ".netlify/v1/functions"
+- Tells Netlify where to find your functions
+- Disables Netlify's bundling (Mastra pre-bundles for optimization)
+- Routes all requests to your Mastra API function
 
-[build.environment]
-  NODE_VERSION = "20.11.0"
-  NODE_ENV = "production"
+## How It Works
 
-[[redirects]]
-  from = "/*"
-  to = "/.netlify/functions/api/:splat"
-  status = 200
-```
+The Netlify deployer:
+
+1. **Bundles your Mastra application** into optimized serverless functions
+2. **Creates the Frameworks API configuration** automatically
+3. **Handles all routing** through a single API endpoint
+4. **Pre-optimizes dependencies** for serverless environments
 
 ## Environment Variables
 
-Environment variables are handled automatically through:
+Environment variables are handled through:
 
 - `.env` files in your project
-- Environment variables passed through the Mastra configuration
-- Netlify's environment variable UI
+- Netlify's environment variable dashboard
+- Runtime environment variable access in your Mastra app
 
-## Deployment Process
+## Deployment
 
-The deployer will:
+Deploy your Mastra application to Netlify by:
 
-1. Create a new site if it doesn't exist
-2. Configure the site with your environment variables
-3. Deploy your application to Netlify Functions
+1. **Building locally**: Run your build command (the deployer handles bundling)
+2. **Using Netlify CLI**: `netlify deploy --prod`
+3. **Via Git integration**: Connect your repository to Netlify for automatic deployments
+
+The deployer automatically configures everything needed for Netlify Functions.
