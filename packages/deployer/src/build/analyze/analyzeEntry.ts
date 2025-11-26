@@ -82,8 +82,10 @@ async function captureDependenciesToOptimize(
   initialDepsToOptimize: Map<string, DependencyMetadata>,
   {
     logger,
+    shouldCheckTransitiveDependencies,
   }: {
     logger: IMastraLogger;
+    shouldCheckTransitiveDependencies: boolean;
   },
 ): Promise<Map<string, DependencyMetadata>> {
   const depsToOptimize = new Map<string, DependencyMetadata>();
@@ -116,7 +118,18 @@ async function captureDependenciesToOptimize(
 
     const normalizedRootPath = rootPath ? slash(rootPath) : null;
 
-    depsToOptimize.set(dependency, { exports: bindings, rootPath: normalizedRootPath, isWorkspace });
+    // let version = isWorkspace ? 'workspace' : 'unknown';
+    // if (normalizedRootPath) {
+    //   const packageJsonString = await readFile(join(normalizedRootPath, 'package.json'));
+    //   version = JSON.parse(packageJsonString).version || 'unknown';
+    // }
+
+    depsToOptimize.set(dependency, {
+      exports: bindings,
+      rootPath: normalizedRootPath,
+      isWorkspace,
+      importLocation: output.moduleIds[0]!,
+    });
   }
 
   /**
@@ -173,6 +186,7 @@ async function captureDependenciesToOptimize(
           if (innerMeta.isWorkspace && !internalMap.has(innerDep) && !depsToOptimize.has(innerDep)) {
             depsToOptimize.set(innerDep, innerMeta);
             internalMap.set(innerDep, innerMeta);
+            console.log('added dep', innerDep);
             hasAddedDeps = true;
           }
         }
@@ -187,14 +201,21 @@ async function captureDependenciesToOptimize(
     }
   }
 
-  await checkTransitiveDependencies(initialDepsToOptimize);
+  if (shouldCheckTransitiveDependencies) {
+    await checkTransitiveDependencies(initialDepsToOptimize);
+  }
 
   // #tools is a generated dependency, we don't want our analyzer to handle it
   const dynamicImports = output.dynamicImports.filter(d => !DEPS_TO_IGNORE.includes(d));
   if (dynamicImports.length) {
     for (const dynamicImport of dynamicImports) {
       if (!depsToOptimize.has(dynamicImport) && !isNodeBuiltin(dynamicImport)) {
-        depsToOptimize.set(dynamicImport, { exports: ['*'], rootPath: null, isWorkspace: false });
+        depsToOptimize.set(dynamicImport, {
+          exports: ['*'],
+          rootPath: null,
+          isWorkspace: false,
+          importLocation: output.moduleIds[0]!,
+        });
       }
     }
   }
@@ -230,12 +251,14 @@ export async function analyzeEntry(
     workspaceMap,
     projectRoot,
     initialDepsToOptimize = new Map(), // used to avoid infinite recursion
+    shouldCheckTransitiveDependencies = false,
   }: {
     logger: IMastraLogger;
     sourcemapEnabled: boolean;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     projectRoot: string;
     initialDepsToOptimize?: Map<string, DependencyMetadata>;
+    shouldCheckTransitiveDependencies?: boolean;
   },
 ): Promise<{
   dependencies: Map<string, DependencyMetadata>;
@@ -267,6 +290,7 @@ export async function analyzeEntry(
     initialDepsToOptimize,
     {
       logger,
+      shouldCheckTransitiveDependencies,
     },
   );
 

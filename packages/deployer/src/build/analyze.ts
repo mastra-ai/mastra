@@ -14,6 +14,7 @@ import { bundleExternals } from './analyze/bundleExternals';
 import { getPackageInfo } from 'local-pkg';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { findNativePackageModule } from './utils';
+import { GLOBAL_EXTERNALS } from './analyze/constants';
 
 type ErrorId =
   | 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND'
@@ -49,6 +50,20 @@ export const mastra = new Mastra({
   });
 }
 
+function getPackageName(moduleName: string) {
+  const chunks = moduleName.split('-');
+
+  if (!chunks.length) {
+    return moduleName;
+  }
+
+  if (chunks[0]?.startsWith('@')) {
+    return chunks.slice(0, 2).join('/');
+  }
+
+  return chunks[0];
+}
+
 function validateError(err: ValidationError | Error, file: OutputChunk, logger: IMastraLogger) {
   let moduleName: string | undefined | null = null;
   let errorConfig: {
@@ -64,13 +79,17 @@ function validateError(err: ValidationError | Error, file: OutputChunk, logger: 
         messagePrefix: `Mastra wasn't able to bundle ${moduleName}, might be an older commonJS module. Please add`,
       };
     } else if (err.type === 'ModuleNotFoundError') {
-      moduleName = basename(file.name);
+      moduleName = getPackageName(basename(file.name));
       const missingModule = err.info.moduleName as string;
 
       errorConfig = {
         id: 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND',
         messagePrefix: `Mastra wasn't able to build your project, We couldn't load "${missingModule}" from "${moduleName}". Please add`,
       };
+
+      // if (moduleName === missingModule) {
+      //   return;
+      // }
     }
   }
 
@@ -260,6 +279,7 @@ If you think your configuration is valid, please open an issue.`);
       sourcemapEnabled: bundlerOptions?.sourcemap ?? false,
       workspaceMap,
       projectRoot,
+      shouldCheckTransitiveDependencies: isDev,
     });
 
     // Write the entry file to the output dir so that we can use it for workspace resolution stuff
@@ -291,11 +311,11 @@ If you think your configuration is valid, please open an issue.`);
     }
   }
 
-  logger.debug(`Analyzed dependencies: ${Array.from(depsToOptimize.keys()).join(', ')}`);
-
+  const sortedDeps = Array.from(depsToOptimize.keys()).sort();
   logger.info('Optimizing dependencies...');
   logger.debug(
-    `${Array.from(depsToOptimize.keys())
+    `${sortedDeps
+      .filter(key => !GLOBAL_EXTERNALS.includes(key))
       .map(key => `- ${key}`)
       .join('\n')}`,
   );
