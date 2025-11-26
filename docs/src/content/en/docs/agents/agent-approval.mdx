@@ -34,7 +34,7 @@ export const mastra = new Mastra({
 When calling an agent using `.stream()` set `requireToolApproval` to `true` which will prevent the agent from calling any of the tools defined in it's configuration.
 
 ```typescript showLineNumbers
-const stream = await agent.stream("Plan my trip to London", {
+const stream = await agent.stream("What's the weather in London?", {
   requireToolApproval: true
 });
 ```
@@ -70,7 +70,7 @@ const handleDecline = async () => {
 ```
 
 
-## Tool level approval
+## Tool level approval - TODO
 
 ```typescript
 
