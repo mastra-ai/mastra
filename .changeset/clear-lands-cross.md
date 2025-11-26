@@ -12,4 +12,6 @@ MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 SIGT
 
 The fix stores references to the exit hook unsubscribe function and SIGTERM handler, then properly cleans them up in `disconnect()`.
 
-Fixes #10499
+Additionally, users can now disable session management by passing `sessionIdGenerator: undefined` in `startHTTP()` options. This enables stateless MCP server deployments, which is useful for serverless environments.
+
+Fixes #10499, #8526
