@@ -1,7 +1,7 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { MockMemory } from '../../memory/mock';
+import { MockMemory } from '../test-utils';
 import { createTool } from '../../tools';
 import { delay } from '../../utils';
 import { Agent } from '../agent';
@@ -109,10 +109,7 @@ describe('Tool suspension memory persistence', () => {
     expect(threadAfterSuspension?.resourceId).toBe(resourceId);
 
     // Assert 2: User message should be saved
-    const messagesAfterSuspension = await mockMemory.recall({
-      threadId,
-      resourceId,
-    });
+    const messagesAfterSuspension = await mockMemory.query();
 
     const userMessages = messagesAfterSuspension.messages.filter(m => m.role === 'user');
     expect(userMessages.length).toBeGreaterThan(0);
