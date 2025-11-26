@@ -5,7 +5,8 @@ import { testRoute } from '@/api/route/test';
 import { allRoute } from '@/api/route/all';
 import { streamingRoute } from '@/api/route/streaming';
 import { myAgent } from '@inner/hello-world/agent';
-import { registerCopilotKit } from '@ag-ui/mastra/copilotkit';
+// wait until copilotkit works with beta
+// import { registerCopilotKit } from '@ag-ui/mastra/copilotkit';
 
 export const mastra = new Mastra({
   agents: { innerAgent, myAgent },
@@ -15,13 +16,13 @@ export const mastra = new Mastra({
       testRoute,
       allRoute,
       streamingRoute,
-      registerCopilotKit({
-        path: '/copilotkit',
-      }),
+      // registerCopilotKit({
+      //   path: '/copilotkit',
+      // }),
     ],
   },
   bundler: {
-    externals: ['bcrypt', '@ag-ui/langgraph', '@ag-ui/client', '@ag-ui/core', '@ag-ui/mastra', '@copilotkit/runtime'],
+    externals: ['bcrypt'],
   },
   logger: new ConsoleLogger({ level: 'info' }),
 });
