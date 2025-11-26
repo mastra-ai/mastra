@@ -60,7 +60,7 @@ const sidebars = {
         {
           type: "doc",
           id: "agents/human-in-the-loop-with-tools",
-          label: "Human in the Loop with Tools",
+          label: "Human-in-the-loop with Tools",
         },
         {
           type: "doc",
@@ -158,7 +158,7 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Tools & MCP",
+      label: "MCP",
       collapsed: true,
       items: [
         {

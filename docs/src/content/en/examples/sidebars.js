@@ -22,13 +22,7 @@ const sidebars = {
           id: "agents/supervisor-agent",
           label: "Supervisor Agent",
         },
-        { type: "doc", id: "agents/image-analysis", label: "Image Analysis" },
         { type: "doc", id: "agents/request-context", label: "Request Context" },
-        {
-          type: "doc",
-          id: "agents/whatsapp-chat-bot",
-          label: "WhatsApp Chat Bot",
-        },
       ],
     },
     {
@@ -40,28 +34,6 @@ const sidebars = {
           type: "doc",
           id: "workflows/inngest-workflow",
           label: "Inngest Workflow",
-        },
-      ],
-    },
-    {
-      type: "category",
-      label: "Processors",
-      collapsed: true,
-      items: [
-        {
-          type: "doc",
-          id: "processors/message-length-limiter",
-          label: "Message Length Limiter",
-        },
-        {
-          type: "doc",
-          id: "processors/response-length-limiter",
-          label: "Response Length Limiter",
-        },
-        {
-          type: "doc",
-          id: "processors/response-validator",
-          label: "Response Validator",
         },
       ],
     },
@@ -222,14 +194,6 @@ const sidebars = {
             },
           ],
         },
-      ],
-    },
-    {
-      type: "category",
-      label: "Evals",
-      collapsed: true,
-      items: [
-        { type: "doc", id: "evals/running-in-ci", label: "Running in CI" },
       ],
     },
     {
