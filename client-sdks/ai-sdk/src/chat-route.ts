@@ -203,7 +203,7 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
         throw new Error('Agent ID is required');
       }
 
-      const agentObj = mastra.getAgent(agentToUse);
+      const agentObj = mastra.getAgentById(agentToUse);
       if (!agentObj) {
         throw new Error(`Agent ${agentToUse} not found`);
       }
