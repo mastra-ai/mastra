@@ -764,7 +764,15 @@ export class MCPServer extends MCPServerBase {
             `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${inputData.message}"`,
           );
           try {
-            const response = await agent.generate(inputData.message, context);
+            const proxiedContext = context?.requestContext || new RequestContext();
+            if (context?.mcp?.extra) {
+              proxiedContext.set('mcp.extra', context.mcp.extra);
+            }
+
+            const response = await agent.generate(inputData.message, {
+              ...(context ?? {}),
+              requestContext: proxiedContext,
+            });
             return response;
           } catch (error) {
             this.logger.error(`Error executing agent tool '${agentToolName}' for agent '${agent.name}':`, error);
@@ -1222,13 +1230,13 @@ export class MCPServer extends MCPServerBase {
     httpPath,
     req,
     res,
-    options = { sessionIdGenerator: () => randomUUID() },
+    options,
   }: {
     url: URL;
     httpPath: string;
     req: http.IncomingMessage;
     res: http.ServerResponse<http.IncomingMessage>;
-    options?: StreamableHTTPServerTransportOptions & { serverless?: boolean };
+    options?: Partial<StreamableHTTPServerTransportOptions> & { serverless?: boolean };
   }) {
     this.logger.debug(`startHTTP: Received ${req.method} request to ${url.pathname}`);
 
@@ -1238,13 +1246,21 @@ export class MCPServer extends MCPServerBase {
       res.end();
       return;
     }
+    // Serverless/stateless mode: single request/response without session management
+    // Triggered by either: serverless: true OR sessionIdGenerator: undefined
+    const isStatelessMode =
+      options?.serverless || (options && 'sessionIdGenerator' in options && options.sessionIdGenerator === undefined);
 
-    // Serverless mode: stateless, single request/response
-    if (options?.serverless) {
-      this.logger.debug('startHTTP: Running in serverless (stateless) mode');
+    if (isStatelessMode) {
+      this.logger.debug('startHTTP: Running in stateless mode (serverless or sessionIdGenerator: undefined)');
       await this.handleServerlessRequest(req, res);
       return;
     }
+
+    const mergedOptions = {
+      sessionIdGenerator: () => randomUUID(), // default: enabled
+      ...options, // user-provided overrides default
+    };
 
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     let transport: StreamableHTTPServerTransport | undefined;
@@ -1311,8 +1327,8 @@ export class MCPServer extends MCPServerBase {
 
             // Create a new transport for the new session
             transport = new StreamableHTTPServerTransport({
-              ...options,
-              sessionIdGenerator: () => randomUUID(),
+              ...mergedOptions,
+              sessionIdGenerator: mergedOptions.sessionIdGenerator,
               onsessioninitialized: id => {
                 this.streamableHTTPTransports.set(id, transport!);
               },

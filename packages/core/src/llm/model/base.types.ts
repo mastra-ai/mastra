@@ -1,5 +1,6 @@
-import type { UIMessage, CoreMessage } from '@internal/ai-sdk-v4/message';
 import type {
+  UIMessage,
+  CoreMessage,
   GenerateTextResult as OriginalGenerateTextResult,
   GenerateObjectResult as OriginalGenerateObjectResult,
   StreamTextResult as OriginalStreamTextResult,
@@ -12,9 +13,10 @@ import type {
   StreamTextOnFinishCallback as OriginalStreamTextOnFinishCallback,
   StreamTextOnStepFinishCallback as OriginalStreamTextOnStepFinishCallback,
   GenerateTextOnStepFinishCallback as OriginalGenerateTextOnStepFinishCallback,
-} from '@internal/ai-sdk-v4/model';
-import type { Tool, ToolSet } from '@internal/ai-sdk-v4/tool';
-import type { DeepPartial } from '@internal/ai-sdk-v4/util';
+  Tool,
+  ToolSet,
+  DeepPartial,
+} from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MessageList } from '../../agent/types';
@@ -24,7 +26,7 @@ import type { OutputProcessor } from '../../processors';
 import type { RequestContext } from '../../request-context';
 import type { inferOutput, ScoringProperties, TripwireProperties } from './shared.types';
 
-export type { ToolSet } from '@internal/ai-sdk-v4/tool';
+export type { ToolSet } from '@internal/ai-sdk-v4';
 
 type MastraCustomLLMOptions = {
   tools?: Record<string, Tool>;

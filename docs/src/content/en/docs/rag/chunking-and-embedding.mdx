@@ -69,7 +69,7 @@ const chunks = await doc.chunk({
 
 **Note:** Metadata extraction may use LLM calls, so ensure your API key is set.
 
-We go deeper into chunking strategies in our [chunk documentation](/reference/rag/chunk).
+We go deeper into chunking strategies in our [chunk documentation](/reference/v1/rag/chunk).
 
 ## Step 2: Embedding Generation
 
@@ -83,12 +83,8 @@ The simplest way is to use Mastra's model router with `provider/model` strings:
 import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { embedMany } from "ai";
 
-const embeddingModel = new ModelRouterEmbeddingModel(
-  "openai/text-embedding-3-small",
-);
-
 const { embeddings } = await embedMany({
-  model: embeddingModel,
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   values: chunks.map((chunk) => chunk.text),
 });
 ```
@@ -105,11 +101,11 @@ The model router automatically handles API key detection from environment variab
 You can also use AI SDK embedding models directly:
 
 ```ts showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { embedMany } from "ai";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
 const { embeddings } = await embedMany({
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   values: chunks.map((chunk) => chunk.text),
 });
 ```
@@ -129,19 +125,22 @@ Here are some supported models:
 OpenAI (text-embedding-3 models):
 
 ```ts
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
 const { embeddings } = await embedMany({
-  model: openai.embedding("text-embedding-3-small", {
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  options: {
     dimensions: 256, // Only supported in text-embedding-3 and later
-  }),
+  },
   values: chunks.map((chunk) => chunk.text),
 });
 ```
 
-Google (text-embedding-004):
+Google (text-embedding-001):
 
 ```ts
 const { embeddings } = await embedMany({
-  model: google.textEmbeddingModel("text-embedding-004", {
+  model: "google/gemini-embedding-001", {
     outputDimensionality: 256, // Truncates excessive values from the end
   }),
   values: chunks.map((chunk) => chunk.text),
@@ -158,8 +157,6 @@ Here's an example showing document processing and embedding generation with both
 
 ```ts showLineNumbers copy
 import { embedMany } from "ai";
-import { openai } from "@ai-sdk/openai";
-import { cohere } from "@ai-sdk/cohere";
 
 import { MDocument } from "@mastra/rag";
 
@@ -177,16 +174,18 @@ const chunks = await doc.chunk({
 });
 
 // Generate embeddings with OpenAI
-const { embeddings: openAIEmbeddings } = await embedMany({
-  model: openai.embedding("text-embedding-3-small"),
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
+const { embeddings } = await embedMany({
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   values: chunks.map((chunk) => chunk.text),
 });
 
 // OR
 
 // Generate embeddings with Cohere
-const { embeddings: cohereEmbeddings } = await embedMany({
-  model: cohere.embedding("embed-english-v3.0"),
+const { embeddings } = await embedMany({
+  model: "cohere/embed-english-v3.0",
   values: chunks.map((chunk) => chunk.text),
 });
 
@@ -201,10 +200,10 @@ await vectorStore.upsert({
 
 For more examples of different chunking strategies and embedding configurations, see:
 
-- [Chunk Reference](/reference/rag/chunk)
-- [Embeddings Reference](/reference/rag/embeddings)
+- [Chunk Reference](/reference/v1/rag/chunk)
+- [Embeddings Reference](/reference/v1/rag/embeddings)
 
 For more details on vector databases and embeddings, see:
 
 - [Vector Databases](./vector-databases)
-- [Embedding API Reference](/reference/rag/embeddings)
+- [Embedding API Reference](/reference/v1/rag/embeddings)

@@ -1,5 +1,51 @@
 # create-mastra
 
+## 1.0.0-beta.4
+
+### Patch Changes
+
+- Add timeTravel APIs and add timeTravel feature to studio ([#10361](https://github.com/mastra-ai/mastra/pull/10361))
+
+## 1.0.0-beta.3
+
+### Patch Changes
+
+- fix: detect bun runtime and cleanup on failure ([#10242](https://github.com/mastra-ai/mastra/pull/10242))
+
+## 1.0.0-beta.2
+
+### Patch Changes
+
+- dependencies updates: ([#10111](https://github.com/mastra-ai/mastra/pull/10111))
+  - Updated dependency [`pino@^10.1.0` ↗︎](https://www.npmjs.com/package/pino/v/10.1.0) (from `^9.7.0`, in `dependencies`)
+
+- dependencies updates: ([#9781](https://github.com/mastra-ai/mastra/pull/9781))
+  - Updated dependency [`posthog-node@^5.11.2` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.11.2) (from `^4.18.0`, in `dependencies`)
+
+- Fix scorer filtering for SpanScoring, add error and info message for user ([#10160](https://github.com/mastra-ai/mastra/pull/10160))
+
+- Fix double scroll on agent chat container ([#10253](https://github.com/mastra-ai/mastra/pull/10253))
+
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- Make MainSidebar toggle button sticky to bottom, always visible ([#9682](https://github.com/mastra-ai/mastra/pull/9682))
+
+## 1.0.0-beta.0
+
+### Major Changes
+
+- Bump minimum required Node.js version to 22.13.0 ([#9706](https://github.com/mastra-ai/mastra/pull/9706))
+
+- Removed old tracing code based on OpenTelemetry ([#9237](https://github.com/mastra-ai/mastra/pull/9237))
+
+- Mark as stable ([`83d5942`](https://github.com/mastra-ai/mastra/commit/83d5942669ce7bba4a6ca4fd4da697a10eb5ebdc))
+
+### Patch Changes
+
+- Update MainSidebar component to fit required changes in Cloud CTA link ([#9318](https://github.com/mastra-ai/mastra/pull/9318))
+
 ## 0.17.3
 
 ## 0.17.3-alpha.0

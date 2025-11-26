@@ -5,28 +5,34 @@ import { OtelExporter } from './tracing';
 
 // Mock the OpenTelemetry modules
 vi.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
-  OTLPTraceExporter: vi.fn().mockImplementation(() => ({
-    export: vi.fn().mockResolvedValue(undefined),
-    shutdown: vi.fn().mockResolvedValue(undefined),
-  })),
+  OTLPTraceExporter: vi.fn().mockImplementation(function () {
+    return {
+      export: vi.fn().mockResolvedValue(undefined),
+      shutdown: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 vi.mock('@opentelemetry/sdk-trace-base', () => ({
   SimpleSpanProcessor: vi.fn(),
-  BatchSpanProcessor: vi.fn().mockImplementation(() => ({
-    onEnd: vi.fn(),
-    onStart: vi.fn(),
-    shutdown: vi.fn().mockResolvedValue(undefined),
-    forceFlush: vi.fn().mockResolvedValue(undefined),
-  })),
+  BatchSpanProcessor: vi.fn().mockImplementation(function () {
+    return {
+      onEnd: vi.fn(),
+      onStart: vi.fn(),
+      shutdown: vi.fn().mockResolvedValue(undefined),
+      forceFlush: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 vi.mock('@opentelemetry/sdk-trace-node', () => ({
-  NodeTracerProvider: vi.fn().mockImplementation(() => ({
-    addSpanProcessor: vi.fn(),
-    register: vi.fn(),
-    shutdown: vi.fn().mockResolvedValue(undefined),
-  })),
+  NodeTracerProvider: vi.fn().mockImplementation(function () {
+    return {
+      addSpanProcessor: vi.fn(),
+      register: vi.fn(),
+      shutdown: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 vi.mock('@opentelemetry/resources', () => ({

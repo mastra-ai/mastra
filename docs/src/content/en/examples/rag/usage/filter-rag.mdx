@@ -1,5 +1,5 @@
 ---
-title: "Example: Agent-Driven Metadata Filtering | RAG | Mastra Docs"
+title: "Example: Agent-Driven Metadata Filtering | RAG"
 description: Example of using a Mastra agent in a RAG system to construct and apply metadata filters for document retrieval.
 ---
 
@@ -14,7 +14,7 @@ This system uses an agent to construct metadata filters from a user's query to s
 
 The system implements metadata filtering using Mastra and OpenAI. Here's what it does:
 
-1. Sets up a Mastra agent with gpt-4o-mini to understand queries and identify filter requirements
+1. Sets up a Mastra agent with gpt-5.1 to understand queries and identify filter requirements
 2. Creates a vector query tool to handle metadata filtering and semantic search
 3. Processes documents into chunks with metadata and embeddings
 4. Stores both vectors and metadata in PGVector for efficient retrieval
@@ -43,9 +43,9 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers title="index.ts"
-import { openai } from "@ai-sdk/openai";
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { PgVector, PGVECTOR_PROMPT } from "@mastra/pg";
 import { createVectorQueryTool, MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
@@ -60,7 +60,7 @@ const vectorQueryTool = createVectorQueryTool({
   id: "vectorQueryTool",
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   enableFilter: true,
 });
 ```
@@ -123,12 +123,12 @@ The agent requires both the vector query tool and a system prompt containing:
 export const ragAgent = new Agent({
   id: "rag-agent",
   name: "RAG Agent",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-5.1",
   instructions: `
   You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
 
   Filter the context by searching the metadata.
-  
+
   The metadata is structured as follows:
 
   {
@@ -142,7 +142,7 @@ export const ragAgent = new Agent({
 
   ${PGVECTOR_PROMPT}
 
-  Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
+  Important: When asked to answer a question, please base your answer only on the context provided in the tool.
   If the context doesn't contain enough information to fully answer the question, please state that explicitly.
   `,
   tools: { vectorQueryTool },
@@ -156,7 +156,7 @@ The agent's instructions are designed to:
 - Apply appropriate filters through the vectorQueryTool and the provided vector store prompt
 - Generate responses based on the filtered context
 
-> Note: Different vector stores have specific prompts available. See [Vector Store Prompts](/docs/rag/retrieval#vector-store-prompts) for details.
+> Note: Different vector stores have specific prompts available. See [Vector Store Prompts](/docs/v1/rag/retrieval#vector-store-prompts) for details.
 
 ## Instantiate PgVector and Mastra
 
@@ -181,7 +181,7 @@ Generate embeddings and store them with metadata:
 
 ```typescript copy showLineNumbers{78} title="index.ts"
 const { embeddings } = await embedMany({
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   values: chunks.map((chunk) => chunk.text),
 });
 

@@ -1,4 +1,5 @@
-import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { openai } from '@ai-sdk/openai-v5';
+import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -67,15 +68,15 @@ function toolsTest(version: 'v1' | 'v2') {
       mockModel = new MockLanguageModelV2({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'tool-calls',
+          finishReason: 'stop',
           usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          content: [],
-          toolCalls: [
+          content: [
             {
+              type: 'tool-call',
               toolCallType: 'function',
               toolCallId: 'call-test-1',
               toolName: 'testTool',
-              args: {},
+              input: '{}',
             },
           ],
           warnings: [],
@@ -186,15 +187,15 @@ function toolsTest(version: 'v1' | 'v2') {
         findUserToolModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'tool-calls',
+            finishReason: 'stop',
             usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            content: [],
-            toolCalls: [
+            content: [
               {
+                type: 'tool-call',
                 toolCallType: 'function',
                 toolCallId: 'call-finduser-1',
                 toolName: 'findUserTool',
-                args: { name: 'Dero Israel' },
+                input: '{"name":"Dero Israel"}',
               },
             ],
             warnings: [],
@@ -212,7 +213,7 @@ function toolsTest(version: 'v1' | 'v2') {
               },
               {
                 type: 'finish',
-                finishReason: 'tool-calls',
+                finishReason: 'stop',
                 usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
               },
             ]),
@@ -314,13 +315,13 @@ function toolsTest(version: 'v1' | 'v2') {
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'tool-calls',
             usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            content: [],
-            toolCalls: [
+            content: [
               {
+                type: 'tool-call',
                 toolCallType: 'function',
                 toolCallId: 'call-color-1',
                 toolName: 'changeColor',
-                args: { color: 'green' },
+                input: '{"color":"green"}',
               },
             ],
             warnings: [],
@@ -338,7 +339,7 @@ function toolsTest(version: 'v1' | 'v2') {
               },
               {
                 type: 'finish',
-                finishReason: 'tool-calls',
+                finishReason: 'stop',
                 usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
               },
             ]),
@@ -561,13 +562,13 @@ function toolsTest(version: 'v1' | 'v2') {
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'tool-calls',
             usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            content: [],
-            toolCalls: [
+            content: [
               {
+                type: 'tool-call',
                 toolCallType: 'function',
                 toolCallId: 'call-runtime-1',
                 toolName: 'testTool',
-                args: { query: 'test' },
+                input: '{"query":"test"}',
               },
             ],
             warnings: [],
@@ -585,7 +586,7 @@ function toolsTest(version: 'v1' | 'v2') {
               },
               {
                 type: 'finish',
-                finishReason: 'tool-calls',
+                finishReason: 'stop',
                 usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
               },
             ]),
@@ -722,7 +723,7 @@ function toolsTest(version: 'v1' | 'v2') {
               },
               {
                 type: 'finish',
-                finishReason: 'tool-calls',
+                finishReason: 'stop',
                 usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
               },
             ]),
@@ -798,3 +799,188 @@ function toolsTest(version: 'v1' | 'v2') {
 
 toolsTest('v1');
 toolsTest('v2');
+
+describe('requireApproval property preservation', () => {
+  it('should preserve requireApproval property from tools passed via toolsets', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        text: 'ok',
+        content: [
+          {
+            type: 'text',
+            text: 'ok',
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    // Create a tool with requireApproval: true
+    const deleteUserTool = createTool({
+      id: 'delete-user',
+      description: 'Delete a user from the system',
+      inputSchema: z.object({ userId: z.string() }),
+      requireApproval: true,
+      execute: async ({ userId }) => {
+        return { success: true, userId };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for requireApproval',
+      model: mockModel,
+    });
+
+    // Convert tools with toolsets parameter
+    const tools = await agent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'generate',
+      toolsets: {
+        admin: {
+          deleteUser: deleteUserTool,
+        },
+      },
+    });
+
+    // Check that the converted tool has requireApproval property set
+    expect(tools.deleteUser).toBeDefined();
+    expect((tools.deleteUser as any).requireApproval).toBe(true);
+  });
+
+  it('should preserve requireApproval property from tools passed via clientTools', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        text: 'ok',
+        content: [
+          {
+            type: 'text',
+            text: 'ok',
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    // Create a tool with requireApproval: true
+    const sensitiveActionTool = createTool({
+      id: 'sensitive-action',
+      description: 'Perform a sensitive action',
+      inputSchema: z.object({ action: z.string() }),
+      requireApproval: true,
+      execute: async ({ action }) => {
+        return { success: true, action };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for requireApproval',
+      model: mockModel,
+    });
+
+    // Convert tools with clientTools parameter
+    const tools = await agent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'generate',
+      clientTools: {
+        sensitiveAction: sensitiveActionTool,
+      },
+    });
+
+    // Check that the converted tool has requireApproval property set
+    expect(tools.sensitiveAction).toBeDefined();
+    expect((tools.sensitiveAction as any).requireApproval).toBe(true);
+  });
+
+  it('should preserve requireApproval property from assigned tools', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        text: 'ok',
+        content: [
+          {
+            type: 'text',
+            text: 'ok',
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    // Create a tool with requireApproval: true
+    const criticalTool = createTool({
+      id: 'critical-action',
+      description: 'Perform a critical action',
+      inputSchema: z.object({ data: z.string() }),
+      requireApproval: true,
+      execute: async ({ data }) => {
+        return { success: true, data };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for requireApproval',
+      model: mockModel,
+      tools: {
+        criticalAction: criticalTool,
+      },
+    });
+
+    // Convert tools
+    const tools = await agent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'generate',
+    });
+
+    // Check that the converted tool has requireApproval property set
+    expect(tools.criticalAction).toBeDefined();
+    expect((tools.criticalAction as any).requireApproval).toBe(true);
+  });
+
+  it('should suspend when requireApproval is true', async () => {
+    // Create a tool with requireApproval: true
+    const criticalTool = createTool({
+      id: 'critical-action',
+      description: 'Perform a critical action',
+      inputSchema: z.object({ data: z.string() }),
+      requireApproval: true,
+      execute: async ({ data }) => {
+        return { success: true, data };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for requireApproval',
+      model: openai('gpt-4.1'),
+    });
+
+    const result = await agent.stream('Use the critical-action tool with data "test"', {
+      toolsets: {
+        actions: {
+          criticalAction: criticalTool,
+        },
+      },
+    });
+
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'tool-call-approval') {
+        expect(chunk.payload.toolName).toBe('criticalAction');
+      }
+    }
+  });
+});

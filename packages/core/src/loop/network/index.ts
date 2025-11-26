@@ -273,11 +273,13 @@ export async function createNetworkLoop({
       // to avoid treating 0 as falsy. Initial value is -1, so first iteration becomes 0.
       const iterationCount = (inputData.iteration ?? -1) + 1;
 
+      const stepId = generateId();
       await writer.write({
         type: 'routing-agent-start',
         payload: {
+          networkId: agent.id,
           agentId: routingAgent.id,
-          runId: runId,
+          runId: stepId,
           inputData: {
             ...inputData,
             iteration: iterationCount,
@@ -328,7 +330,7 @@ export async function createNetworkLoop({
         await writer.write({
           type: 'routing-agent-text-start',
           payload: {
-            runId: runId,
+            runId: stepId,
           },
           from: ChunkFrom.NETWORK,
           runId,
@@ -345,6 +347,7 @@ export async function createNetworkLoop({
             await writer.write({
               type: 'routing-agent-text-delta',
               payload: {
+                runId: stepId,
                 text: currentSlice,
               },
               from: ChunkFrom.NETWORK,
@@ -383,6 +386,7 @@ export async function createNetworkLoop({
               await writer.write({
                 type: 'routing-agent-text-delta',
                 payload: {
+                  runId: stepId,
                   text: currentSlice,
                 },
                 from: ChunkFrom.NETWORK,
@@ -405,7 +409,7 @@ export async function createNetworkLoop({
             isComplete: true,
             selectionReason: completionResult.object.completionReason || '',
             iteration: iterationCount,
-            runId: runId,
+            runId: stepId,
           };
 
           await writer.write({
@@ -513,7 +517,7 @@ export async function createNetworkLoop({
         isComplete: object.primitiveId === 'none' && object.primitiveType === 'none',
         selectionReason: object.selectionReason,
         iteration: iterationCount,
-        runId: runId,
+        runId: stepId,
       };
 
       await writer.write({
@@ -553,16 +557,14 @@ export async function createNetworkLoop({
     execute: async ({ inputData, writer, getInitData }) => {
       const agentsMap = await agent.listAgents({ requestContext });
 
-      const agentId = inputData.primitiveId;
-
-      const agentForStep = agentsMap[agentId];
+      const agentForStep = agentsMap[inputData.primitiveId];
 
       if (!agentForStep) {
         const mastraError = new MastraError({
           id: 'AGENT_NETWORK_AGENT_EXECUTION_STEP_INVALID_TASK_INPUT',
           domain: ErrorDomain.AGENT_NETWORK,
           category: ErrorCategory.USER,
-          text: `Agent ${agentId} not found`,
+          text: `Agent ${inputData.primitiveId} not found`,
         });
         // TODO pass agent logger in here
         // logger.trackException(mastraError);
@@ -570,12 +572,14 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
+      const agentId = agentForStep.id;
+      const stepId = generateId();
       await writer.write({
         type: 'agent-execution-start',
         payload: {
-          agentId: inputData.primitiveId,
+          agentId,
           args: inputData,
-          runId,
+          runId: stepId,
         },
         from: ChunkFrom.NETWORK,
         runId,
@@ -589,9 +593,12 @@ export async function createNetworkLoop({
       for await (const chunk of result.fullStream) {
         await writer.write({
           type: `agent-execution-event-${chunk.type}`,
-          payload: chunk,
-          runId: chunk.runId,
+          payload: {
+            ...chunk,
+            runId: stepId,
+          },
           from: ChunkFrom.NETWORK,
+          runId,
         });
       }
 
@@ -631,10 +638,11 @@ export async function createNetworkLoop({
 
       const endPayload = {
         task: inputData.task,
-        agentId: inputData.primitiveId,
+        agentId,
         result: await result.text,
         isComplete: false,
         iteration: inputData.iteration,
+        runId: stepId,
       };
 
       await writer.write({
@@ -716,11 +724,12 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
+      const stepId = generateId();
       const run = await wf.createRun({ runId });
       const toolData = {
-        name: wf.name,
+        workflowId: wf.id,
         args: inputData,
-        runId: runId,
+        runId: stepId,
       };
 
       await writer?.write({
@@ -738,13 +747,16 @@ export async function createNetworkLoop({
       // let result: any;
       // let stepResults: Record<string, any> = {};
       let chunks: ChunkType[] = [];
-      for await (const chunk of stream) {
+      for await (const chunk of stream.fullStream) {
         chunks.push(chunk);
         await writer?.write({
           type: `workflow-execution-event-${chunk.type}`,
-          payload: chunk,
-          runId: chunk.runId,
+          payload: {
+            ...chunk,
+            runId: stepId,
+          },
           from: ChunkFrom.NETWORK,
+          runId,
         });
       }
 
@@ -793,13 +805,15 @@ export async function createNetworkLoop({
         result: finalResult,
         isComplete: false,
         iteration: inputData.iteration,
-        name: wf.name,
       };
 
       await writer?.write({
         type: 'workflow-execution-end',
         payload: {
           ...endPayload,
+          result: workflowState,
+          name: wf.name,
+          runId: stepId,
           usage: await stream.usage,
         },
         from: ChunkFrom.NETWORK,
@@ -838,15 +852,14 @@ export async function createNetworkLoop({
       const memoryTools = await memory?.listTools?.();
       const toolsMap = { ...agentTools, ...memoryTools };
 
-      const toolId = inputData.primitiveId;
-      let tool = toolsMap[toolId];
+      let tool = toolsMap[inputData.primitiveId];
 
       if (!tool) {
         const mastraError = new MastraError({
           id: 'AGENT_NETWORK_TOOL_EXECUTION_STEP_INVALID_TASK_INPUT',
           domain: ErrorDomain.AGENT_NETWORK,
           category: ErrorCategory.USER,
-          text: `Tool ${toolId} not found`,
+          text: `Tool ${inputData.primitiveId} not found`,
         });
 
         // TODO pass agent logger in here
@@ -860,11 +873,13 @@ export async function createNetworkLoop({
           id: 'AGENT_NETWORK_TOOL_EXECUTION_STEP_INVALID_TASK_INPUT',
           domain: ErrorDomain.AGENT_NETWORK,
           category: ErrorCategory.USER,
-          text: `Tool ${toolId} does not have an execute function`,
+          text: `Tool ${inputData.primitiveId} does not have an execute function`,
         });
         throw mastraError;
       }
 
+      // @ts-expect-error - bad type
+      const toolId = tool.id;
       let inputDataToUse: any;
       try {
         inputDataToUse = JSON.parse(inputData.prompt);
@@ -1043,6 +1058,7 @@ export async function createNetworkLoop({
     }),
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      validateInputs: false,
     },
   });
 
@@ -1200,6 +1216,7 @@ export async function networkLoop<
     }),
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      validateInputs: false,
     },
   })
     .dountil(networkWorkflow, async ({ inputData }) => {

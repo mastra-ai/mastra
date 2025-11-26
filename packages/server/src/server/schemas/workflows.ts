@@ -1,0 +1,190 @@
+import z from 'zod';
+import { createOffsetPaginationSchema, tracingOptionsSchema, messageResponseSchema } from './common';
+
+export const workflowRunStatusSchema = z.enum([
+  'running',
+  'waiting',
+  'suspended',
+  'success',
+  'failed',
+  'canceled',
+  'pending',
+  'bailed',
+]);
+
+// Path parameter schemas
+export const workflowIdPathParams = z.object({
+  workflowId: z.string().describe('Unique identifier for the workflow'),
+});
+
+export const workflowRunPathParams = workflowIdPathParams.extend({
+  runId: z.string().describe('Unique identifier for the workflow run'),
+});
+
+/**
+ * Schema for serialized step
+ * Uses passthrough() to allow step-specific fields
+ */
+const serializedStepSchema = z.object({
+  id: z.string(),
+  description: z.string().optional(),
+});
+
+/**
+ * Schema for serialized step flow entry
+ * Represents different step flow types in the workflow graph
+ */
+const serializedStepFlowEntrySchema = z.object({
+  type: z.enum(['step', 'sleep', 'sleepUntil', 'waitForEvent', 'parallel', 'conditional', 'loop', 'foreach']),
+});
+
+/**
+ * Schema for workflow information
+ * Returned by getWorkflowByIdHandler and listWorkflowsHandler
+ */
+export const workflowInfoSchema = z.object({
+  steps: z.record(z.string(), serializedStepSchema),
+  allSteps: z.record(z.string(), serializedStepSchema),
+  name: z.string().optional(),
+  description: z.string().optional(),
+  stepGraph: z.array(serializedStepFlowEntrySchema),
+  inputSchema: z.string().optional(),
+  outputSchema: z.string().optional(),
+  options: z.object({}).optional(),
+});
+
+/**
+ * Schema for list workflows endpoint response
+ * Returns a record of workflow ID to workflow info
+ */
+export const listWorkflowsResponseSchema = z.record(z.string(), workflowInfoSchema);
+
+/**
+ * Schema for workflow run object
+ */
+const workflowRunSchema = z.object({
+  workflowName: z.string(),
+  runId: z.string(),
+  snapshot: z.union([z.object({}), z.string()]),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+  resourceId: z.string().optional(),
+});
+
+/**
+ * Schema for workflow runs response (paginated)
+ * Includes runs array and total count
+ */
+export const workflowRunsResponseSchema = z.object({
+  runs: z.array(workflowRunSchema),
+  total: z.number(),
+});
+
+/**
+ * Schema for single workflow run response
+ */
+export const workflowRunResponseSchema = workflowRunSchema;
+
+/**
+ * Schema for query parameters when listing workflow runs
+ * All query params come as strings from URL
+ */
+export const listWorkflowRunsQuerySchema = createOffsetPaginationSchema().extend({
+  fromDate: z.coerce.date().optional(),
+  toDate: z.coerce.date().optional(),
+  resourceId: z.string().optional(),
+  status: workflowRunStatusSchema.optional(),
+});
+
+/**
+ * Base schema for workflow execution with input data and tracing
+ */
+const workflowExecutionBodySchema = z.object({
+  inputData: z.unknown().optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
+  tracingOptions: tracingOptionsSchema.optional(),
+});
+
+/**
+ * Schema for legacy stream workflow body (no closeOnSuspend support)
+ * Used by /stream-legacy endpoints
+ */
+export const streamLegacyWorkflowBodySchema = workflowExecutionBodySchema;
+
+/**
+ * Schema for stream workflow body
+ * Used by both /stream and /streamVNext endpoints
+ */
+export const streamWorkflowBodySchema = workflowExecutionBodySchema.extend({
+  closeOnSuspend: z.boolean().optional(),
+});
+
+/**
+ * Schema for resume workflow body
+ * Used by resume-stream, resume-async and resume endpoints
+ */
+export const resumeBodySchema = z.object({
+  step: z.union([z.string(), z.array(z.string())]).optional(), // Optional - workflow can auto-resume all suspended steps
+  resumeData: z.unknown().optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
+  tracingOptions: tracingOptionsSchema.optional(),
+});
+
+/**
+ * Schema for restart workflow body
+ * Used by restart-async and restart endpoints
+ */
+export const restartBodySchema = z.object({
+  requestContext: z.record(z.string(), z.unknown()).optional(),
+  tracingOptions: tracingOptionsSchema.optional(),
+});
+
+/**
+ * Schema for time travel workflow body
+ * Used by time-travel-stream, time-travel-async and time-travel endpoints
+ */
+export const timeTravelBodySchema = z.object({
+  inputData: z.unknown().optional(),
+  resumeData: z.unknown().optional(),
+  initialState: z.unknown().optional(),
+  step: z.union([z.string(), z.array(z.string())]),
+  context: z.record(z.string(), z.any()).optional(),
+  nestedStepsContext: z.record(z.string(), z.record(z.string(), z.any())).optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
+  tracingOptions: tracingOptionsSchema.optional(),
+});
+
+/**
+ * Schema for start async workflow body
+ */
+export const startAsyncWorkflowBodySchema = workflowExecutionBodySchema;
+
+/**
+ * Schema for send workflow run event body
+ */
+export const sendWorkflowRunEventBodySchema = z.object({
+  event: z.string(),
+  data: z.unknown(),
+});
+
+/**
+ * Schema for workflow execution result
+ */
+export const workflowExecutionResultSchema = z.object({
+  status: workflowRunStatusSchema,
+  result: z.unknown().optional(),
+  error: z.unknown().optional(),
+});
+
+/**
+ * Response schema for workflow control operations
+ */
+export const workflowControlResponseSchema = messageResponseSchema;
+
+/**
+ * Response schema for create workflow run operation
+ * Returns only the runId after creating a run
+ */
+export const createWorkflowRunResponseSchema = z.object({
+  runId: z.string(),
+});

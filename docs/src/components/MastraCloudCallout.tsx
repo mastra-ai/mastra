@@ -8,7 +8,8 @@ export function MastraCloudCallout() {
       <p>
         Deploy and monitor your Mastra applications with{" "}
         <Link to="https://mastra.ai/cloud">Mastra Cloud</Link>. Get automated
-        deployments, detailed observability, and built-in playground for testing
+        deployments, detailed observability, and a built-in{" "}
+        <Link to="/docs/v1/getting-started/studio">Studio</Link> for testing
         agents and workflows.
       </p>
     </Admonition>

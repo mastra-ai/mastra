@@ -1,6 +1,4 @@
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { OpenAIVoice } from '@mastra/voice-openai';
 import { summarizePdfTool } from '../tools/summarize-pdf-tool';
 import { textToSpeechTool } from '../tools/text-to-speech-tool';
 import { LibSQLStore } from '@mastra/libsql';
@@ -66,7 +64,7 @@ When successful, provide:
 
 Always be helpful and provide clear feedback about the process and results.
   `,
-  model: openai('gpt-4o'),
+  model: process.env.MODEL || 'openai/gpt-4o',
   tools: {
     summarizePdfTool,
     textToSpeechTool,

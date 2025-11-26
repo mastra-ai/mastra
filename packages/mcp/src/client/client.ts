@@ -109,6 +109,7 @@ type StdioServerDefinition = BaseServerOptions & {
   authProvider?: never;
   reconnectionOptions?: never;
   sessionId?: never;
+  connectTimeout?: never;
 };
 
 /**
@@ -135,7 +136,14 @@ type HttpServerDefinition = BaseServerOptions & {
   reconnectionOptions?: StreamableHTTPClientTransportOptions['reconnectionOptions'];
   /** Optional session ID for Streamable HTTP */
   sessionId?: StreamableHTTPClientTransportOptions['sessionId'];
+  /** Optional timeout in milliseconds for the connection phase (default: 3000ms).
+   * This timeout allows the system to switch MCP streaming protocols during the setup phase.
+   * The default is set to 3s because the long default timeout would be extremely slow for SSE backwards compat (60s).
+   */
+  connectTimeout?: number;
 };
+
+const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
 
 /**
  * Configuration for connecting to an MCP server.
@@ -221,6 +229,8 @@ export class InternalMastraMCPClient extends MastraBase {
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
   private currentOperationContext: RequestContext | null = null;
+  private exitHookUnsubscribe?: () => void;
+  private sigTermHandler?: () => void;
 
   /** Provides access to resource operations (list, read, subscribe, etc.) */
   public readonly resources: ResourceClientActions;
@@ -330,7 +340,7 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private async connectHttp(url: URL) {
-    const { requestInit, eventSourceInit, authProvider } = this.serverConfig;
+    const { requestInit, eventSourceInit, authProvider, connectTimeout } = this.serverConfig;
 
     this.log('debug', `Attempting to connect to URL: ${url}`);
 
@@ -348,8 +358,7 @@ export class InternalMastraMCPClient extends MastraBase {
         });
         await this.client.connect(streamableTransport, {
           timeout:
-            // this is hardcoded to 3s because the long default timeout would be extremely slow for sse backwards compat (60s)
-            3000,
+            connectTimeout ?? DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC,
         });
         this.transport = streamableTransport;
         this.log('debug', 'Successfully connected using Streamable HTTP transport.');
@@ -426,15 +435,22 @@ export class InternalMastraMCPClient extends MastraBase {
       }
     });
 
-    asyncExitHook(
-      async () => {
-        this.log('debug', `Disconnecting MCP server during exit`);
-        await this.disconnect();
-      },
-      { wait: 5000 },
-    );
+    // Only register exit hooks if not already registered
+    if (!this.exitHookUnsubscribe) {
+      this.exitHookUnsubscribe = asyncExitHook(
+        async () => {
+          this.log('debug', `Disconnecting MCP server during exit`);
+          await this.disconnect();
+        },
+        { wait: 5000 },
+      );
+    }
 
-    process.on('SIGTERM', () => gracefulExit());
+    if (!this.sigTermHandler) {
+      this.sigTermHandler = () => gracefulExit();
+      process.on('SIGTERM', this.sigTermHandler);
+    }
+
     this.log('debug', `Successfully connected to MCP server`);
     return this.isConnected;
   }
@@ -472,6 +488,16 @@ export class InternalMastraMCPClient extends MastraBase {
     } finally {
       this.transport = undefined;
       this.isConnected = Promise.resolve(false);
+
+      // Clean up exit hooks to prevent memory leaks
+      if (this.exitHookUnsubscribe) {
+        this.exitHookUnsubscribe();
+        this.exitHookUnsubscribe = undefined;
+      }
+      if (this.sigTermHandler) {
+        process.off('SIGTERM', this.sigTermHandler);
+        this.sigTermHandler = undefined;
+      }
     }
   }
 
@@ -692,6 +718,13 @@ export class InternalMastraMCPClient extends MastraBase {
               );
 
               this.log('debug', `Tool executed successfully: ${tool.name}`);
+
+              // When a tool has an outputSchema, return the structuredContent directly
+              // so that output validation works correctly
+              if (res.structuredContent !== undefined) {
+                return res.structuredContent;
+              }
+
               return res;
             } catch (e) {
               this.log('error', `Error calling tool: ${tool.name}`, {

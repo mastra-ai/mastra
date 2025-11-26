@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('verifies a tool s behaviour', async ({ page }) => {
-  await page.goto('http://localhost:4111/tools/all/simpleMcpTool');
+  await page.goto('http://localhost:4111/tools/simpleMcpTool');
 
   await expect(page.locator('h2')).toHaveText('simpleMcpTool');
   await expect(page.locator('[data-language="json"]')).toHaveText('{}');

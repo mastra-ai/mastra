@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import type { WritableStream } from 'stream/web';
 import type { RequestContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { IErrorDefinition } from '../error';
@@ -19,24 +20,29 @@ import { getStepResult } from './step';
 import type {
   DefaultEngineType,
   Emitter,
+  RestartExecutionParams,
   SerializedStepFlowEntry,
   StepFailure,
   StepFlowEntry,
   StepResult,
   StepSuccess,
   StepSuspended,
+  TimeTravelExecutionParams,
 } from './types';
 import {
   getResumeLabelsByStepId,
   validateStepInput,
   createDeprecationProxy,
   runCountDeprecationMessage,
+  validateStepResumeData,
+  validateStepSuspendData,
 } from './utils';
 
 export type ExecutionContext = {
   workflowId: string;
   runId: string;
   executionPath: number[];
+  activeStepsPath: Record<string, number[]>;
   foreachIndex?: number;
   suspendedPaths: Record<string, number[]>;
   resumeLabels: Record<
@@ -56,7 +62,7 @@ export type ExecutionContext = {
 };
 
 /**
- * Default implementation of the ExecutionEngine using XState
+ * Default implementation of the ExecutionEngine
  */
 export class DefaultExecutionEngine extends ExecutionEngine {
   /**
@@ -164,6 +170,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
     initialState?: TState;
+    restart?: RestartExecutionParams;
+    timeTravel?: TimeTravelExecutionParams;
     resume?: {
       // TODO: add execute path
       steps: string[];
@@ -199,6 +207,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       retryConfig,
       workflowSpan,
       disableScorers,
+      restart,
+      timeTravel,
     } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
@@ -219,14 +229,22 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     let startIdx = 0;
-    if (resume?.resumePath) {
+    if (timeTravel) {
+      startIdx = timeTravel.executionPath[0]!;
+      timeTravel.executionPath.shift();
+    } else if (restart) {
+      startIdx = restart.activePaths[0]!;
+      restart.activePaths.shift();
+    } else if (resume?.resumePath) {
       startIdx = resume.resumePath[0]!;
       resume.resumePath.shift();
     }
 
-    const stepResults: Record<string, any> = resume?.stepResults || { input };
+    const stepResults: Record<string, any> = timeTravel?.stepResults ||
+      restart?.stepResults ||
+      resume?.stepResults || { input };
     let lastOutput: any;
-    let lastState: Record<string, any> = initialState ?? {};
+    let lastState: Record<string, any> = timeTravel?.state ?? restart?.state ?? initialState ?? {};
     for (let i = startIdx; i < steps.length; i++) {
       const entry = steps[i]!;
 
@@ -234,6 +252,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         workflowId,
         runId,
         executionPath: [i],
+        activeStepsPath: {},
         suspendedPaths: {},
         resumeLabels: {},
         retryConfig: { attempts, delay },
@@ -252,6 +271,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           prevStep: steps[i - 1]!,
           stepResults,
           resume,
+          timeTravel,
+          restart,
           tracingContext: {
             currentSpan: workflowSpan,
           },
@@ -615,7 +636,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     step,
     stepResults,
     executionContext,
+    restart,
     resume,
+    timeTravel,
     prevOutput,
     emitter,
     abortController,
@@ -633,6 +656,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     step: Step<string, any, any>;
     stepResults: Record<string, StepResult<any, any, any, any>>;
     executionContext: ExecutionContext;
+    restart?: RestartExecutionParams;
+    timeTravel?: TimeTravelExecutionParams;
     resume?: {
       steps: string[];
       resumePayload: any;
@@ -650,24 +675,45 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     tracingContext: TracingContext;
     iterationCount?: number;
   }): Promise<StepResult<any, any, any, any>> {
-    const startTime = resume?.steps[0] === step.id ? undefined : Date.now();
-    const resumeTime = resume?.steps[0] === step.id ? Date.now() : undefined;
     const stepCallId = randomUUID();
 
     const { inputData, validationError } = await validateStepInput({
       prevOutput,
       step,
-      validateInputs: this.options?.validateInputs ?? false,
+      validateInputs: this.options?.validateInputs ?? true,
     });
+
+    const { resumeData: timeTravelResumeData, validationError: timeTravelResumeValidationError } =
+      await validateStepResumeData({
+        resumeData: timeTravel?.stepResults[step.id]?.status === 'suspended' ? timeTravel?.resumeData : undefined,
+        step,
+      });
+
+    let resumeDataToUse;
+    if (timeTravelResumeData && !timeTravelResumeValidationError) {
+      resumeDataToUse = timeTravelResumeData;
+    } else if (timeTravelResumeData && timeTravelResumeValidationError) {
+      this.logger.warn('Time travel resume data validation failed', {
+        stepId: step.id,
+        error: timeTravelResumeValidationError.message,
+      });
+    } else if (resume?.steps[0] === step.id) {
+      resumeDataToUse = resume?.resumePayload;
+    }
+
+    const startTime = resumeDataToUse ? undefined : Date.now();
+    const resumeTime = resumeDataToUse ? Date.now() : undefined;
 
     const stepInfo = {
       ...stepResults[step.id],
-      ...(resume?.steps[0] === step.id ? { resumePayload: resume?.resumePayload } : { payload: inputData }),
+      ...(resumeDataToUse ? { resumePayload: resumeDataToUse } : { payload: inputData }),
       ...(startTime ? { startedAt: startTime } : {}),
       ...(resumeTime ? { resumedAt: resumeTime } : {}),
       status: 'running',
       ...(iterationCount ? { metadata: { iterationCount } } : {}),
     };
+
+    executionContext.activeStepsPath[step.id] = executionContext.executionPath;
 
     const stepSpan = tracingContext.currentSpan?.createChildSpan({
       name: `workflow step: '${step.id}'`,
@@ -735,6 +781,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         const retryCount = this.getOrGenerateRetryCount(step.id);
 
+        let timeTravelSteps: string[] = [];
+        if (timeTravel && timeTravel.steps.length > 0) {
+          timeTravelSteps = timeTravel.steps[0] === step.id ? timeTravel.steps.slice(1) : [];
+        }
+
         const result = await runStep({
           runId,
           resourceId,
@@ -747,11 +798,18 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             executionContext.state = state;
           },
           retryCount,
-          resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
+          resumeData: resumeDataToUse,
           tracingContext: { currentSpan: stepSpan },
           getInitData: () => stepResults?.input as any,
           getStepResult: getStepResult.bind(this, stepResults),
-          suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions): Promise<any> => {
+          suspend: async (suspendPayload?: any, suspendOptions?: SuspendOptions): Promise<any> => {
+            const { suspendData, validationError } = await validateStepSuspendData({
+              suspendData: suspendPayload,
+              step,
+            });
+            if (validationError) {
+              throw validationError;
+            }
             executionContext.suspendedPaths[step.id] = executionContext.executionPath;
             if (suspendOptions?.resumeLabel) {
               const resumeLabel = Array.isArray(suspendOptions.resumeLabel)
@@ -765,7 +823,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               }
             }
 
-            suspended = { payload: suspendPayload };
+            suspended = { payload: suspendData };
           },
           bail: (result: any) => {
             bailed = { payload: result };
@@ -784,6 +842,18 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                   runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
                   label: resume?.label,
                   forEachIndex: resume?.forEachIndex,
+                }
+              : undefined,
+          // Only pass restart data if this step is part of activeStepsPath
+          // This prevents pending nested workflows from trying to restart instead of start
+          restart: !!restart?.activeStepsPath?.[step.id],
+          timeTravel:
+            timeTravelSteps.length > 0
+              ? {
+                  inputData: timeTravel?.inputData,
+                  steps: timeTravelSteps,
+                  nestedStepResults: timeTravel?.nestedStepResults,
+                  resumeData: timeTravel?.resumeData,
                 }
               : undefined,
           [EMITTER_SYMBOL]: emitter,
@@ -819,7 +889,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         }
 
         if (suspended) {
-          execResults = { status: 'suspended', suspendPayload: suspended.payload, suspendedAt: Date.now() };
+          execResults = {
+            status: 'suspended',
+            suspendPayload: suspended.payload,
+            ...(result ? { suspendOutput: result } : {}),
+            suspendedAt: Date.now(),
+          };
         } else if (bailed) {
           execResults = { status: 'bailed', output: bailed.payload, endedAt: Date.now() };
         } else {
@@ -857,6 +932,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         };
       }
     }
+
+    delete executionContext.activeStepsPath[step.id];
 
     if (!skipEmits) {
       if (execResults.status === 'suspended') {
@@ -977,6 +1054,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     serializedStepGraph,
     stepResults,
     resume,
+    restart,
+    timeTravel,
     executionContext,
     tracingContext,
     emitter,
@@ -998,6 +1077,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     serializedStepGraph: SerializedStepFlowEntry[];
     prevStep: StepFlowEntry;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    restart?: RestartExecutionParams;
+    timeTravel?: TimeTravelExecutionParams;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -1024,23 +1105,40 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     });
 
     const prevOutput = this.getStepOutput(stepResults, prevStep);
-    for (const step of entry.steps) {
-      if (step.type === 'step') {
-        const startTime = resume?.steps[0] === step.step.id ? undefined : Date.now();
-        const resumeTime = resume?.steps[0] === step.step.id ? Date.now() : undefined;
-        stepResults[step.step.id] = {
-          ...stepResults[step.step.id],
-          status: 'running',
-          ...(resumeTime ? { resumePayload: resume?.resumePayload } : { payload: prevOutput }),
-          ...(startTime ? { startedAt: startTime } : {}),
-          ...(resumeTime ? { resumedAt: resumeTime } : {}),
-        } as StepResult<any, any, any, any>;
+    for (const [stepIndex, step] of entry.steps.entries()) {
+      let makeStepRunning = true;
+      if (restart) {
+        makeStepRunning = !!restart.activeStepsPath[step.step.id];
       }
+      if (timeTravel && timeTravel.executionPath.length > 0) {
+        makeStepRunning = timeTravel.steps[0] === step.step.id;
+      }
+      if (!makeStepRunning) {
+        continue;
+      }
+      const startTime = resume?.steps[0] === step.step.id ? undefined : Date.now();
+      const resumeTime = resume?.steps[0] === step.step.id ? Date.now() : undefined;
+      stepResults[step.step.id] = {
+        ...stepResults[step.step.id],
+        status: 'running',
+        ...(resumeTime ? { resumePayload: resume?.resumePayload } : { payload: prevOutput }),
+        ...(startTime ? { startedAt: startTime } : {}),
+        ...(resumeTime ? { resumedAt: resumeTime } : {}),
+      } as StepResult<any, any, any, any>;
+      executionContext.activeStepsPath[step.step.id] = [...executionContext.executionPath, stepIndex];
+    }
+
+    if (timeTravel && timeTravel.executionPath.length > 0) {
+      timeTravel.executionPath.shift();
     }
 
     let execResults: any;
     const results: StepResult<any, any, any, any>[] = await Promise.all(
       entry.steps.map(async (step, i) => {
+        const currStepResult = stepResults[step.step.id];
+        if (currStepResult && currStepResult.status !== 'running') {
+          return currStepResult;
+        }
         const result = await this.executeStep({
           workflowId,
           runId,
@@ -1049,8 +1147,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           prevOutput,
           stepResults,
           serializedStepGraph,
+          restart,
+          timeTravel,
           resume,
           executionContext: {
+            activeStepsPath: executionContext.activeStepsPath,
             workflowId,
             runId,
             executionPath: [...executionContext.executionPath, i],
@@ -1072,13 +1173,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         return result;
       }),
     );
-    const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any>;
+    const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any, any>;
 
     const hasSuspended = results.find(result => result.status === 'suspended');
     if (hasFailed) {
       execResults = { status: 'failed', error: hasFailed.error };
     } else if (hasSuspended) {
-      execResults = { status: 'suspended', payload: hasSuspended.suspendPayload };
+      execResults = {
+        status: 'suspended',
+        suspendPayload: hasSuspended.suspendPayload,
+        ...(hasSuspended.suspendOutput ? { suspendOutput: hasSuspended.suspendOutput } : {}),
+      };
     } else if (abortController?.signal?.aborted) {
       execResults = { status: 'canceled' };
     } else {
@@ -1117,6 +1222,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     serializedStepGraph,
     stepResults,
     resume,
+    restart,
+    timeTravel,
     executionContext,
     tracingContext,
     emitter,
@@ -1142,6 +1249,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       resumePayload: any;
       resumePath: number[];
     };
+    restart?: RestartExecutionParams;
+    timeTravel?: TimeTravelExecutionParams;
     executionContext: ExecutionContext;
     tracingContext: TracingContext;
     emitter: Emitter;
@@ -1267,7 +1376,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const results: StepResult<any, any, any, any>[] = await Promise.all(
       stepsToRun.map(async (step, index) => {
         const currStepResult = stepResults[step.step.id];
-        if (currStepResult && currStepResult.status === 'success') {
+        const isRestartStep = restart ? !!restart.activeStepsPath[step.step.id] : undefined;
+
+        if (currStepResult && timeTravel && timeTravel.executionPath.length > 0) {
+          if (timeTravel.steps[0] !== step.step.id) {
+            return currStepResult;
+          }
+        }
+
+        if (currStepResult && ['success', 'failed'].includes(currStepResult.status) && isRestartStep === undefined) {
           return currStepResult;
         }
 
@@ -1280,10 +1397,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           stepResults,
           serializedStepGraph,
           resume,
+          restart,
+          timeTravel,
           executionContext: {
             workflowId,
             runId,
             executionPath: [...executionContext.executionPath, index],
+            activeStepsPath: executionContext.activeStepsPath,
             suspendedPaths: executionContext.suspendedPaths,
             resumeLabels: executionContext.resumeLabels,
             retryConfig: executionContext.retryConfig,
@@ -1304,12 +1424,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }),
     );
 
-    const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any>;
+    const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any, any>;
     const hasSuspended = results.find(result => result.status === 'suspended');
     if (hasFailed) {
       execResults = { status: 'failed', error: hasFailed.error };
     } else if (hasSuspended) {
-      execResults = { status: 'suspended', payload: hasSuspended.suspendPayload, suspendedAt: Date.now() };
+      execResults = {
+        status: 'suspended',
+        suspendPayload: hasSuspended.suspendPayload,
+        ...(hasSuspended.suspendOutput ? { suspendOutput: hasSuspended.suspendOutput } : {}),
+        suspendedAt: hasSuspended.suspendedAt,
+      };
     } else if (abortController?.signal?.aborted) {
       execResults = { status: 'canceled' };
     } else {
@@ -1347,6 +1472,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     prevOutput,
     stepResults,
     resume,
+    restart,
+    timeTravel,
     executionContext,
     tracingContext,
     emitter,
@@ -1368,6 +1495,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     prevStep: StepFlowEntry;
     prevOutput: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    restart?: RestartExecutionParams;
+    timeTravel?: TimeTravelExecutionParams;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -1401,6 +1530,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const prevPayload = stepResults[step.id]?.payload;
     let result = { status: 'success', output: prevPayload ?? prevOutput } as unknown as StepResult<any, any, any, any>;
     let currentResume = resume;
+    let currentRestart = restart;
+    let currentTimeTravel = timeTravel;
 
     do {
       result = await this.executeStep({
@@ -1410,7 +1541,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         step,
         stepResults,
         executionContext,
+        restart: currentRestart,
         resume: currentResume,
+        timeTravel: currentTimeTravel,
         prevOutput: (result as { output: any }).output,
         tracingContext: {
           currentSpan: loopSpan,
@@ -1424,6 +1557,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         iterationCount: iteration + 1,
       });
 
+      //Clear restart & time travel for next iteration
+      currentRestart = undefined;
+      currentTimeTravel = undefined;
       // Clear resume for next iteration only if the step has completed resuming
       // This prevents the same resume data from being used multiple times
       if (currentResume && result.status !== 'suspended') {
@@ -1518,7 +1654,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     entry,
     prevOutput,
     stepResults,
+    restart,
     resume,
+    timeTravel,
     executionContext,
     tracingContext,
     emitter,
@@ -1541,6 +1679,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     prevStep: StepFlowEntry;
     prevOutput: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    restart?: RestartExecutionParams;
+    timeTravel?: TimeTravelExecutionParams;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -1632,6 +1772,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             resourceId,
             step,
             stepResults,
+            restart,
+            timeTravel,
             executionContext: { ...executionContext, foreachIndex: k },
             resume: resumeToUse,
             prevOutput: item,
@@ -1705,6 +1847,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           ...stepInfo,
           suspendedAt: Date.now(),
           status: 'suspended',
+          ...(foreachIndexObj[foreachIndex].suspendOutput
+            ? { suspendOutput: foreachIndexObj[foreachIndex].suspendOutput }
+            : {}),
           suspendPayload: {
             ...foreachIndexObj[foreachIndex].suspendPayload,
             __workflow_meta: {
@@ -1714,7 +1859,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               resumeLabels: executionContext.resumeLabels,
             },
           },
-        } as StepSuspended<any, any>;
+        } as StepSuspended<any, any, any>;
       }
     }
 
@@ -1792,7 +1937,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         status: workflowStatus,
         value: executionContext.state,
         context: stepResults as any,
-        activePaths: [],
+        activePaths: executionContext.executionPath,
+        activeStepsPath: executionContext.activeStepsPath,
         serializedStepGraph,
         suspendedPaths: executionContext.suspendedPaths,
         waitingPaths: {},
@@ -1814,6 +1960,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     prevStep,
     serializedStepGraph,
     stepResults,
+    restart,
+    timeTravel,
     resume,
     executionContext,
     tracingContext,
@@ -1830,6 +1978,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     prevStep: StepFlowEntry;
     serializedStepGraph: SerializedStepFlowEntry[];
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    restart?: RestartExecutionParams;
+    timeTravel?: TimeTravelExecutionParams;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -1860,6 +2010,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         step,
         stepResults,
         executionContext,
+        timeTravel,
+        restart,
         resume,
         prevOutput,
         tracingContext,
@@ -1888,7 +2040,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           suspendedPaths: executionContext.suspendedPaths,
           resumeLabels: executionContext.resumeLabels,
           retryConfig: executionContext.retryConfig,
-
+          activeStepsPath: executionContext.activeStepsPath,
           state: executionContext.state,
         },
         tracingContext,
@@ -1983,6 +2135,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         prevStep,
         stepResults,
         serializedStepGraph,
+        timeTravel,
+        restart,
         resume,
         executionContext,
         tracingContext,
@@ -2000,6 +2154,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         prevOutput,
         stepResults,
         serializedStepGraph,
+        timeTravel,
+        restart,
         resume,
         executionContext,
         tracingContext,
@@ -2017,6 +2173,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         prevStep,
         prevOutput,
         stepResults,
+        timeTravel,
+        restart,
         resume,
         executionContext,
         tracingContext,
@@ -2035,6 +2193,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         prevStep,
         prevOutput,
         stepResults,
+        timeTravel,
+        restart,
         resume,
         executionContext,
         tracingContext,
@@ -2056,6 +2216,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           status: 'waiting',
         },
       });
+      stepResults[entry.id] = {
+        status: 'waiting',
+        payload: prevOutput,
+        startedAt,
+      };
+      executionContext.activeStepsPath[entry.id] = executionContext.executionPath;
       await this.persistStepUpdate({
         workflowId,
         runId,
@@ -2083,6 +2249,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         requestContext,
         writableStream,
       });
+
+      delete executionContext.activeStepsPath[entry.id];
 
       await this.persistStepUpdate({
         workflowId,
@@ -2133,6 +2301,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         },
       });
 
+      stepResults[entry.id] = {
+        status: 'waiting',
+        payload: prevOutput,
+        startedAt,
+      };
+      executionContext.activeStepsPath[entry.id] = executionContext.executionPath;
+
       await this.persistStepUpdate({
         workflowId,
         runId,
@@ -2160,6 +2335,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         requestContext,
         writableStream,
       });
+
+      delete executionContext.activeStepsPath[entry.id];
 
       await this.persistStepUpdate({
         workflowId,

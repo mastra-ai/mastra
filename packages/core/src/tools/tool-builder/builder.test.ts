@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { LanguageModelV1 as LanguageModel } from '@internal/ai-sdk-v4/model';
+import type { LanguageModelV1 as LanguageModel } from '@internal/ai-sdk-v4';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
 import { describe, expect, it, vi } from 'vitest';
@@ -947,5 +947,51 @@ describe('Tool Input Validation', () => {
     expect(result.message).toContain('"age": 200');
     expect(result.message).toContain('"email": "bad-email"');
     expect(result.message).toContain('"tags": []');
+  });
+});
+
+describe('CoreToolBuilder Output Schema', () => {
+  it('should allow ZodTuple in outputSchema', () => {
+    const mockModel = {
+      modelId: 'openai/gpt-4.1-mini',
+      provider: 'openrouter',
+      specificationVersion: 'v1',
+      supportsStructuredOutputs: false,
+    } as any;
+
+    const toolWithTupleOutput = createTool({
+      id: 'weather-tool',
+      description: 'Get weather information',
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      outputSchema: z.object({
+        temperature: z.number(),
+        conditions: z.string(),
+        test: z.tuple([z.string(), z.string()]),
+      }),
+      execute: async () => ({
+        temperature: 72,
+        conditions: 'sunny',
+        test: ['value1', 'value2'] as [string, string],
+      }),
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: toolWithTupleOutput,
+      options: {
+        name: 'weather-tool',
+        logger: console as any,
+        description: 'Get weather information',
+        requestContext: new RequestContext(),
+        tracingContext: {},
+        model: mockModel,
+      },
+    });
+
+    expect(() => builder.build()).not.toThrow();
+
+    const builtTool = builder.build();
+    expect(builtTool.outputSchema).toBeDefined();
   });
 });

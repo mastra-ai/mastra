@@ -7,6 +7,7 @@ import type { ApiRoute, MastraAuthConfig, Methods } from './types';
 export type { MastraAuthConfig, ContextWithMastra, ApiRoute } from './types';
 export { MastraAuthProvider } from './auth';
 export type { MastraAuthProviderOptions } from './auth';
+export { CompositeAuth } from './composite-auth';
 
 // Helper type for inferring parameters from a path
 // Thank you Claude!
@@ -41,6 +42,10 @@ type RegisterApiRouteOptions<P extends string> = {
     >
   >;
   middleware?: MiddlewareHandler | MiddlewareHandler[];
+  /**
+   * When false, skips Mastra auth for this route (defaults to true)
+   */
+  requiresAuth?: boolean;
 };
 
 function validateOptions<P extends string>(
@@ -99,6 +104,7 @@ export function registerApiRoute<P extends string>(
     createHandler: options.createHandler,
     openapi: options.openapi,
     middleware: options.middleware,
+    requiresAuth: options.requiresAuth,
   } as unknown as ValidatePath<P, ApiRoute>;
 }
 

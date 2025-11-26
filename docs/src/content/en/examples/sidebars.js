@@ -17,12 +17,6 @@ const sidebars = {
       label: "Agents",
       collapsed: true,
       items: [
-        { type: "doc", id: "agents/calling-agents", label: "Calling Agents" },
-        {
-          type: "doc",
-          id: "agents/system-prompt",
-          label: "Changing the System Prompt",
-        },
         {
           type: "doc",
           id: "agents/supervisor-agent",
@@ -30,16 +24,6 @@ const sidebars = {
         },
         { type: "doc", id: "agents/image-analysis", label: "Image Analysis" },
         { type: "doc", id: "agents/request-context", label: "Request Context" },
-        {
-          type: "doc",
-          id: "agents/deploying-mcp-server",
-          label: "Deploying an MCPServer",
-        },
-        {
-          type: "doc",
-          id: "agents/ai-sdk-v5-integration",
-          label: "AI SDK v5 Integration",
-        },
         {
           type: "doc",
           id: "agents/whatsapp-chat-bot",
@@ -78,28 +62,6 @@ const sidebars = {
           type: "doc",
           id: "processors/response-validator",
           label: "Response Validator",
-        },
-      ],
-    },
-    {
-      type: "category",
-      label: "Memory",
-      collapsed: true,
-      items: [
-        {
-          type: "doc",
-          id: "memory/working-memory-template",
-          label: "Memory with Template",
-        },
-        {
-          type: "doc",
-          id: "memory/working-memory-schema",
-          label: "Memory with Schema",
-        },
-        {
-          type: "doc",
-          id: "memory/memory-with-mongodb",
-          label: "Memory with MongoDB",
         },
       ],
     },
@@ -292,8 +254,8 @@ const sidebars = {
       items: [
         {
           type: "doc",
-          id: "observability/basic-tracing",
-          label: "Basic Tracing",
+          id: "observability/basic-ai-tracing",
+          label: "Basic AI Tracing",
         },
       ],
     },

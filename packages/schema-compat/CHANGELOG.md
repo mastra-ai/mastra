@@ -1,5 +1,59 @@
 # @mastra/schema-compat
 
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- Fixed OpenAI schema compatibility when using `agent.generate()` or `agent.stream()` with `structuredOutput`. ([#10366](https://github.com/mastra-ai/mastra/pull/10366))
+
+  ## Changes
+  - **Automatic transformation**: Zod schemas are now automatically transformed for OpenAI strict mode compatibility when using OpenAI models (including reasoning models like o1, o3, o4)
+  - **Optional field handling**: `.optional()` fields are converted to `.nullable()` with a transform that converts `null` → `undefined`, preserving optional semantics while satisfying OpenAI's strict mode requirements
+  - **Preserves nullable fields**: Intentionally `.nullable()` fields remain unchanged
+  - **Deep transformation**: Handles `.optional()` fields at any nesting level (objects, arrays, unions, etc.)
+  - **JSON Schema objects**: Not transformed, only Zod schemas
+
+  ## Example
+
+  ```typescript
+  const agent = new Agent({
+    name: 'data-extractor',
+    model: { provider: 'openai', modelId: 'gpt-4o' },
+    instructions: 'Extract user information',
+  });
+
+  const schema = z.object({
+    name: z.string(),
+    age: z.number().optional(),
+    deletedAt: z.date().nullable(),
+  });
+
+  // Schema is automatically transformed for OpenAI compatibility
+  const result = await agent.generate('Extract: John, deleted yesterday', {
+    structuredOutput: { schema },
+  });
+
+  // Result: { name: 'John', age: undefined, deletedAt: null }
+  ```
+
+## 1.0.0-beta.0
+
+### Major Changes
+
+- Bump minimum required Node.js version to 22.13.0 ([#9706](https://github.com/mastra-ai/mastra/pull/9706))
+
+- Mark as stable ([`83d5942`](https://github.com/mastra-ai/mastra/commit/83d5942669ce7bba4a6ca4fd4da697a10eb5ebdc))
+
+### Patch Changes
+
+- Fix Zod v4 toJSONSchema bug with z.record() single-argument form ([#9265](https://github.com/mastra-ai/mastra/pull/9265))
+
+  Zod v4 has a bug in the single-argument form of `z.record(valueSchema)` where it incorrectly assigns the value schema to `keyType` instead of `valueType`, leaving `valueType` undefined. This causes `toJSONSchema()` to throw "Cannot read properties of undefined (reading '\_zod')" when processing schemas containing `z.record()` fields.
+
+  This fix patches affected schemas before conversion by detecting records with missing `valueType` and correctly assigning the schema to `valueType` while setting `keyType` to `z.string()` (the default). The patch recursively handles nested schemas including those wrapped in `.optional()`, `.nullable()`, arrays, unions, and objects.
+
+- Improved reliability of string field types in tool schema compatibility ([#9266](https://github.com/mastra-ai/mastra/pull/9266))
+
 ## 0.11.4
 
 ### Patch Changes

@@ -81,8 +81,8 @@ Only support **AI SDK v5** models (`specificationVersion: 'v2'`)
 
 See the following API references for more information:
 
-- [Agent.generateLegacy()](/reference/agents/generateLegacy)
-- [Agent.streamLegacy()](/reference/streaming/agents/streamLegacy)
+- [Agent.generateLegacy()](/reference/v1/agents/generateLegacy)
+- [Agent.streamLegacy()](/reference/v1/streaming/agents/streamLegacy)
 
 **Standard APIs**
 
@@ -97,8 +97,8 @@ See the following API references for more information:
 
 See the following API references for more information:
 
-- [Agent.generate()](/reference/agents/generate)
-- [Agent.stream()](/reference/streaming/agents/stream)
+- [Agent.generate()](/reference/v1/agents/generate)
+- [Agent.stream()](/reference/v1/streaming/agents/stream)
 
 ### Format control
 
@@ -160,7 +160,7 @@ The following options are available in the standard `.stream()` and `generate()`
           name: z.string(),
           age: z.number(),
         }),
-        model: "openai/gpt-4o-mini", // Optional model override for structuring
+        model: "openai/gpt-5.1", // Optional model override for structuring
         errorStrategy: "fallback",
         fallbackValue: { name: "unknown", age: 0 },
         instructions: "Extract user information", // Override default structuring instructions
@@ -300,7 +300,7 @@ The following options are available in the standard `.stream()` and `generate()`
       schema: z.object({
         summary: z.string(),
       }),
-      model: "openai/gpt-4o",
+      model: "openai/gpt-5.1",
     },
   });
   ```
@@ -341,8 +341,8 @@ The following options are available in the standard `.stream()` and `generate()`
 
 See the following API references for more information:
 
-- [Agent.generateLegacy()](/reference/agents/generateLegacy)
-- [Agent.streamLegacy()](/reference/streaming/agents/streamLegacy)
+- [Agent.generateLegacy()](/reference/v1/agents/generateLegacy)
+- [Agent.streamLegacy()](/reference/v1/streaming/agents/streamLegacy)
 
 **Standard APIs**
 
@@ -363,5 +363,5 @@ See the following API references for more information:
 
 See the following API references for more information:
 
-- [Agent.generate()](/reference/agents/generate)
-- [Agent.stream()](/reference/streaming/agents/stream)
+- [Agent.generate()](/reference/v1/agents/generate)
+- [Agent.stream()](/reference/v1/streaming/agents/stream)

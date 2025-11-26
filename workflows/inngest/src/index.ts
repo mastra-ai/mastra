@@ -1,10 +1,10 @@
 import { randomUUID } from 'crypto';
-import { ReadableStream } from 'node:stream/web';
+import { ReadableStream, WritableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
-import { SpanType, wrapMastra } from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
 import type { TracingContext, TracingOptions } from '@mastra/core/observability';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import { ChunkFrom, WorkflowRunOutput } from '@mastra/core/stream';
@@ -18,6 +18,9 @@ import {
   validateStepInput,
   createDeprecationProxy,
   runCountDeprecationMessage,
+  validateStepResumeData,
+  createTimeTravelExecutionParams,
+  validateStepSuspendData,
 } from '@mastra/core/workflows';
 import type {
   ExecuteFunction,
@@ -39,6 +42,11 @@ import type {
   SuspendOptions,
   WorkflowStreamEvent,
   AgentStepOptions,
+  WorkflowEngineType,
+  TimeTravelExecutionParams,
+  TimeTravelContext,
+  StepParams,
+  ToolStep,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import { NonRetriableError, RetryAfterError } from 'inngest';
@@ -135,6 +143,8 @@ export class InngestRun<
       };
       cleanup?: () => void;
       workflowSteps: Record<string, StepWithComponent>;
+      workflowEngineType: WorkflowEngineType;
+      validateInputs?: boolean;
     },
     inngest: Inngest,
   ) {
@@ -205,6 +215,7 @@ export class InngestRun<
         snapshot: {
           ...snapshot,
           status: 'canceled' as any,
+          value: snapshot.value,
         },
       });
     }
@@ -247,14 +258,15 @@ export class InngestRun<
       snapshot: {
         runId: this.runId,
         serializedStepGraph: this.serializedStepGraph,
+        status: 'running',
         value: {},
         context: {} as any,
         activePaths: [],
         suspendedPaths: {},
+        activeStepsPath: {},
         resumeLabels: {},
         waitingPaths: {},
         timestamp: Date.now(),
-        status: 'running',
       },
     });
 
@@ -322,9 +334,14 @@ export class InngestRun<
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const storage = this.#mastra?.getStorage();
 
-    const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
-      typeof step === 'string' ? step : step?.id,
-    );
+    let steps: string[] = [];
+    if (typeof params.step === 'string') {
+      steps = params.step.split('.');
+    } else {
+      steps = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
+        typeof step === 'string' ? step : step?.id,
+      );
+    }
     const snapshot = await storage?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
@@ -346,9 +363,147 @@ export class InngestRun<
           steps,
           stepResults: snapshot?.context as any,
           resumePayload: resumeDataToUse,
-          // @ts-ignore
-          resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
+          resumePath: steps?.[0] ? (snapshot?.suspendedPaths?.[steps?.[0]] as any) : undefined,
         },
+      },
+    });
+
+    const eventId = eventOutput.ids[0];
+    if (!eventId) {
+      throw new Error('Event ID is not set');
+    }
+    const runOutput = await this.getRunOutput(eventId);
+    const result = runOutput?.output?.result;
+    if (result.status === 'failed') {
+      result.error = new Error(result.error);
+    }
+    return result;
+  }
+
+  async timeTravel<TInputSchema extends z.ZodType<any>>(params: {
+    inputData?: z.infer<TInputSchema>;
+    resumeData?: any;
+    initialState?: z.infer<TState>;
+    step:
+      | Step<string, any, TInputSchema, any, any>
+      | [...Step<string, any, any, any, any>[], Step<string, any, TInputSchema, any, any>]
+      | string
+      | string[];
+    context?: TimeTravelContext<any, any, any, any>;
+    nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+    requestContext?: RequestContext;
+    tracingOptions?: TracingOptions;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
+  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    const p = this._timeTravel(params).then(result => {
+      if (result.status !== 'suspended') {
+        this.closeStreamAction?.().catch(() => {});
+      }
+
+      return result;
+    });
+
+    this.executionResults = p;
+    return p;
+  }
+
+  async _timeTravel<TInputSchema extends z.ZodType<any>>(params: {
+    inputData?: z.infer<TInputSchema>;
+    resumeData?: any;
+    initialState?: z.infer<TState>;
+    step:
+      | Step<string, any, TInputSchema, any, any>
+      | [...Step<string, any, any, any, any>[], Step<string, any, TInputSchema, any, any>]
+      | string
+      | string[];
+    context?: TimeTravelContext<any, any, any, any>;
+    nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+    requestContext?: RequestContext;
+    tracingOptions?: TracingOptions;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
+  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    if (!params.step || (Array.isArray(params.step) && params.step?.length === 0)) {
+      throw new Error('Step is required and must be a valid step or array of steps');
+    }
+
+    let steps: string[] = [];
+    if (typeof params.step === 'string') {
+      steps = params.step.split('.');
+    } else {
+      steps = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
+        typeof step === 'string' ? step : step?.id,
+      );
+    }
+
+    if (steps.length === 0) {
+      throw new Error('No steps provided to timeTravel');
+    }
+
+    const storage = this.#mastra?.getStorage();
+
+    const snapshot = await storage?.loadWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+    });
+
+    if (!snapshot) {
+      await storage?.persistWorkflowSnapshot({
+        workflowName: this.workflowId,
+        runId: this.runId,
+        resourceId: this.resourceId,
+        snapshot: {
+          runId: this.runId,
+          serializedStepGraph: this.serializedStepGraph,
+          status: 'pending',
+          value: {},
+          context: {} as any,
+          activePaths: [],
+          suspendedPaths: {},
+          activeStepsPath: {},
+          resumeLabels: {},
+          waitingPaths: {},
+          timestamp: Date.now(),
+        },
+      });
+    }
+
+    if (snapshot?.status === 'running') {
+      throw new Error('This workflow run is still running, cannot time travel');
+    }
+
+    let inputDataToUse = params.inputData;
+
+    if (inputDataToUse && steps.length === 1) {
+      inputDataToUse = await this._validateTimetravelInputData(params.inputData, this.workflowSteps[steps[0]!]!);
+    }
+
+    const timeTravelData = createTimeTravelExecutionParams({
+      steps,
+      inputData: inputDataToUse,
+      resumeData: params.resumeData,
+      context: params.context,
+      nestedStepsContext: params.nestedStepsContext,
+      snapshot: (snapshot ?? { context: {} }) as any,
+      graph: this.executionGraph,
+      initialState: params.initialState,
+    });
+
+    const eventOutput = await this.inngest.send({
+      name: `workflow.${this.workflowId}`,
+      data: {
+        initialState: timeTravelData.state,
+        runId: this.runId,
+        workflowId: this.workflowId,
+        stepResults: timeTravelData.stepResults,
+        timeTravel: timeTravelData,
+        tracingOptions: params.tracingOptions,
+        outputOptions: params.outputOptions,
       },
     });
 
@@ -561,6 +716,103 @@ export class InngestRun<
   ): ReturnType<Run<InngestEngineType, TSteps, TState, TInput, TOutput>['stream']> {
     return this.stream(args);
   }
+
+  timeTravelStream<TInputSchema extends z.ZodType<any>>({
+    inputData,
+    resumeData,
+    initialState,
+    step,
+    context,
+    nestedStepsContext,
+    requestContext,
+    tracingOptions,
+    outputOptions,
+  }: {
+    inputData?: z.input<TInputSchema>;
+    initialState?: z.input<TState>;
+    resumeData?: any;
+    step:
+      | Step<string, any, TInputSchema, any, any, any, TEngineType>
+      | [
+          ...Step<string, any, any, any, any, any, TEngineType>[],
+          Step<string, any, TInputSchema, any, any, any, TEngineType>,
+        ]
+      | string
+      | string[];
+    context?: TimeTravelContext<any, any, any, any>;
+    nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+    requestContext?: RequestContext;
+    tracingOptions?: TracingOptions;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
+  }) {
+    this.closeStreamAction = async () => {};
+
+    const self = this;
+    const stream = new ReadableStream<WorkflowStreamEvent>({
+      async start(controller) {
+        // TODO: fix this, watch doesn't have a type
+        // @ts-ignore
+        const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
+          controller.enqueue({
+            type,
+            runId: self.runId,
+            from,
+            payload: {
+              stepName: (payload as unknown as { id: string })?.id,
+              ...payload,
+            },
+          } as WorkflowStreamEvent);
+        });
+
+        self.closeStreamAction = async () => {
+          unwatch();
+
+          try {
+            await controller.close();
+          } catch (err) {
+            console.error('Error closing stream:', err);
+          }
+        };
+        const executionResultsPromise = self._timeTravel({
+          inputData,
+          step,
+          context,
+          nestedStepsContext,
+          resumeData,
+          initialState,
+          requestContext,
+          tracingOptions,
+          outputOptions,
+        });
+
+        self.executionResults = executionResultsPromise;
+
+        let executionResults;
+        try {
+          executionResults = await executionResultsPromise;
+          self.closeStreamAction?.().catch(() => {});
+
+          if (self.streamOutput) {
+            self.streamOutput.updateResults(executionResults);
+          }
+        } catch (err) {
+          self.streamOutput?.rejectResults(err as unknown as Error);
+          self.closeStreamAction?.().catch(() => {});
+        }
+      },
+    });
+
+    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      runId: this.runId,
+      workflowId: this.workflowId,
+      stream,
+    });
+
+    return this.streamOutput;
+  }
 }
 
 export class InngestWorkflow<
@@ -582,6 +834,8 @@ export class InngestWorkflow<
     const { concurrency, rateLimit, throttle, debounce, priority, ...workflowParams } = params;
 
     super(workflowParams as WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>);
+
+    this.engineType = 'inngest';
 
     const flowControlEntries = Object.entries({ concurrency, rateLimit, throttle, debounce, priority }).filter(
       ([_, value]) => value !== undefined,
@@ -670,6 +924,8 @@ export class InngestWorkflow<
           retryConfig: this.retryConfig,
           cleanup: () => this.runs.delete(runIdToUse),
           workflowSteps: this.steps,
+          workflowEngineType: this.engineType,
+          validateInputs: this.options.validateInputs,
         },
         this.inngest,
       );
@@ -694,13 +950,13 @@ export class InngestWorkflow<
           value: {},
           context: {},
           activePaths: [],
+          activeStepsPath: {},
           waitingPaths: {},
           serializedStepGraph: this.serializedStepGraph,
           suspendedPaths: {},
           resumeLabels: {},
           result: undefined,
           error: undefined,
-          // @ts-ignore
           timestamp: Date.now(),
         },
       });
@@ -716,15 +972,35 @@ export class InngestWorkflow<
     this.function = this.inngest.createFunction(
       {
         id: `workflow.${this.id}`,
-        // @ts-ignore
-        retries: this.retryConfig?.attempts ?? 0,
+        retries: Math.min(this.retryConfig?.attempts ?? 0, 20) as
+          | 0
+          | 1
+          | 2
+          | 3
+          | 4
+          | 5
+          | 6
+          | 7
+          | 8
+          | 9
+          | 10
+          | 11
+          | 12
+          | 13
+          | 14
+          | 15
+          | 16
+          | 17
+          | 18
+          | 19
+          | 20,
         cancelOn: [{ event: `cancel.workflow.${this.id}` }],
         // Spread flow control configuration
         ...this.flowControlConfig,
       },
       { event: `workflow.${this.id}` },
       async ({ event, step, attempt, publish }) => {
-        let { inputData, initialState, runId, resourceId, resume, outputOptions, format } = event.data;
+        let { inputData, initialState, runId, resourceId, resume, outputOptions, format, timeTravel } = event.data;
 
         if (!runId) {
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
@@ -776,6 +1052,7 @@ export class InngestWorkflow<
           retryConfig: this.retryConfig,
           requestContext: new RequestContext(), // TODO
           resume,
+          timeTravel,
           format,
           abortController: new AbortController(),
           // currentSpan: undefined, // TODO: Pass actual parent Span from workflow execution context
@@ -839,23 +1116,9 @@ export function createStep<
   TStepOutput extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
   TSuspendSchema extends z.ZodType<any>,
->(params: {
-  id: TStepId;
-  description?: string;
-  inputSchema: TStepInput;
-  outputSchema: TStepOutput;
-  resumeSchema?: TResumeSchema;
-  suspendSchema?: TSuspendSchema;
-  stateSchema?: TState;
-  execute: ExecuteFunction<
-    z.infer<TState>,
-    z.infer<TStepInput>,
-    z.infer<TStepOutput>,
-    z.infer<TResumeSchema>,
-    z.infer<TSuspendSchema>,
-    InngestEngineType
-  >;
-}): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>;
+>(
+  params: StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>,
+): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>;
 
 export function createStep<
   TStepId extends string,
@@ -875,11 +1138,7 @@ export function createStep<
   TSchemaOut extends z.ZodType<any>,
   TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
 >(
-  tool: Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
-    inputSchema: TSchemaIn;
-    outputSchema: TSchemaOut;
-    execute: (input: z.infer<TSchemaIn>, context: TContext) => Promise<z.infer<TSchemaOut>>;
-  },
+  tool: ToolStep<TSchemaIn, TSuspendSchema, TResumeSchema, TSchemaOut, TContext>,
 ): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, InngestEngineType>;
 export function createStep<
   TStepId extends string,
@@ -890,44 +1149,23 @@ export function createStep<
   TSuspendSchema extends z.ZodType<any>,
 >(
   params:
-    | {
-        id: TStepId;
-        description?: string;
-        inputSchema: TStepInput;
-        outputSchema: TStepOutput;
-        resumeSchema?: TResumeSchema;
-        suspendSchema?: TSuspendSchema;
-        execute: ExecuteFunction<
-          z.infer<TState>,
-          z.infer<TStepInput>,
-          z.infer<TStepOutput>,
-          z.infer<TResumeSchema>,
-          z.infer<TSuspendSchema>,
-          InngestEngineType
-        >;
-      }
+    | StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>
     | Agent<any, any>
-    | (Tool<TStepInput, TStepOutput, any> & {
-        inputSchema: TStepInput;
-        outputSchema: TStepOutput;
-        execute: (context: ToolExecutionContext<TStepInput>) => Promise<any>;
-      }),
+    | ToolStep<TStepInput, TSuspendSchema, TResumeSchema, TStepOutput, any>,
   agentOptions?: AgentStepOptions,
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType> {
   if (isAgent(params)) {
     return {
-      id: params.name,
+      id: params.name as TStepId,
       description: params.getDescription(),
-      // @ts-ignore
       inputSchema: z.object({
         prompt: z.string(),
         // resourceId: z.string().optional(),
         // threadId: z.string().optional(),
-      }),
-      // @ts-ignore
+      }) as unknown as TStepInput,
       outputSchema: z.object({
         text: z.string(),
-      }),
+      }) as unknown as TStepOutput,
       execute: async ({
         inputData,
         [EMITTER_SYMBOL]: emitter,
@@ -1027,20 +1265,39 @@ export function createStep<
 
     return {
       // TODO: tool probably should have strong id type
-      // @ts-ignore
-      id: params.id,
+      id: params.id as unknown as TStepId,
       description: params.description,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
-      execute: async ({ inputData, mastra, requestContext, tracingContext, suspend, resumeData }) => {
-        return params.execute({
-          context: inputData,
-          mastra: wrapMastra(mastra, tracingContext),
+      suspendSchema: params.suspendSchema,
+      resumeSchema: params.resumeSchema,
+      execute: async ({
+        inputData,
+        mastra,
+        requestContext,
+        tracingContext,
+        suspend,
+        resumeData,
+        runId,
+        workflowId,
+        state,
+        setState,
+      }) => {
+        // BREAKING CHANGE v1.0: Pass raw input as first arg, context as second
+        const toolContext = {
+          mastra,
           requestContext,
           tracingContext,
-          suspend,
-          resumeData,
-        });
+          workflow: {
+            runId,
+            resumeData,
+            suspend,
+            workflowId,
+            state,
+            setState,
+          },
+        };
+        return params.execute(inputData, toolContext);
       },
       component: 'TOOL',
     };
@@ -1093,6 +1350,8 @@ export function init(inngest: Inngest) {
         suspendSchema: step.suspendSchema,
         stateSchema: step.stateSchema,
         execute: step.execute,
+        retries: step.retries,
+        scorers: step.scorers,
         component: step.component,
       };
     },
@@ -1433,6 +1692,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     stepResults,
     executionContext,
     resume,
+    timeTravel,
     prevOutput,
     emitter,
     abortController,
@@ -1449,6 +1709,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       resumePayload: any;
       runId?: string;
     };
+    timeTravel?: TimeTravelExecutionParams;
     prevOutput: any;
     emitter: Emitter;
     abortController: AbortController;
@@ -1470,7 +1731,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     const { inputData, validationError } = await validateStepInput({
       prevOutput,
       step,
-      validateInputs: this.options?.validateInputs ?? false,
+      validateInputs: this.options?.validateInputs ?? true,
     });
 
     const startedAt = await this.inngestStep.run(
@@ -1496,11 +1757,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       let result: WorkflowResult<any, any, any, any>;
       let runId: string;
 
+      const isTimeTravel = !!(timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === step.id);
+
       try {
         if (isResume) {
-          // @ts-ignore
-          runId = stepResults[resume?.steps?.[0]]?.suspendPayload?.__workflow_meta?.runId ?? randomUUID();
-
+          runId = stepResults[resume?.steps?.[0] ?? '']?.suspendPayload?.__workflow_meta?.runId ?? randomUUID();
           const snapshot: any = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
             workflowName: step.id,
             runId: runId,
@@ -1517,9 +1778,34 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 steps: resume.steps.slice(1),
                 stepResults: snapshot?.context as any,
                 resumePayload: resume.resumePayload,
-                // @ts-ignore
-                resumePath: snapshot?.suspendedPaths?.[resume.steps?.[1]] as any,
+                resumePath: resume.steps?.[1] ? (snapshot?.suspendedPaths?.[resume.steps?.[1]] as any) : undefined,
               },
+              outputOptions: { includeState: true },
+            },
+          })) as any;
+          result = invokeResp.result;
+          runId = invokeResp.runId;
+          executionContext.state = invokeResp.result.state;
+        } else if (isTimeTravel) {
+          const snapshot: any = (await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+            workflowName: step.id,
+            runId: executionContext.runId,
+          })) ?? { context: {} };
+          const timeTravelParams = createTimeTravelExecutionParams({
+            steps: timeTravel.steps.slice(1),
+            inputData: timeTravel.inputData,
+            resumeData: timeTravel.resumeData,
+            context: (timeTravel.nestedStepResults?.[step.id] ?? {}) as any,
+            nestedStepsContext: (timeTravel.nestedStepResults ?? {}) as any,
+            snapshot,
+            graph: step.buildExecutionGraph(),
+          });
+          const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
+            function: step.getFunction(),
+            data: {
+              timeTravel: timeTravelParams,
+              initialState: executionContext.state ?? {},
+              runId: executionContext.runId,
               outputOptions: { includeState: true },
             },
           })) as any;
@@ -1583,7 +1869,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             });
 
             for (const [stepName, stepResult] of suspendedSteps) {
-              // @ts-ignore
               const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
               executionContext.suspendedPaths[step.id] = executionContext.executionPath;
 
@@ -1665,7 +1950,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       };
       stepResults: Record<
         string,
-        StepResult<any, any, any, any> | (Omit<StepFailure<any, any, any>, 'error'> & { error?: string })
+        StepResult<any, any, any, any> | (Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string })
       >;
       executionContext: ExecutionContext;
     };
@@ -1687,15 +1972,37 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         let suspended: { payload: any } | undefined;
         let bailed: { payload: any } | undefined;
 
+        const { resumeData: timeTravelResumeData, validationError: timeTravelResumeValidationError } =
+          await validateStepResumeData({
+            resumeData: timeTravel?.stepResults[step.id]?.status === 'suspended' ? timeTravel?.resumeData : undefined,
+            step,
+          });
+
+        let resumeDataToUse;
+        if (timeTravelResumeData && !timeTravelResumeValidationError) {
+          resumeDataToUse = timeTravelResumeData;
+        } else if (timeTravelResumeData && timeTravelResumeValidationError) {
+          this.logger.warn('Time travel resume data validation failed', {
+            stepId: step.id,
+            error: timeTravelResumeValidationError.message,
+          });
+        } else if (resume?.steps[0] === step.id) {
+          resumeDataToUse = resume?.resumePayload;
+        }
+
         try {
           if (validationError) {
             throw validationError;
           }
 
+          const retryCount = this.getOrGenerateRetryCount(step.id);
+
           const result = await step.execute({
             runId: executionContext.runId,
+            workflowId: executionContext.workflowId,
             mastra: this.mastra!,
             requestContext,
+            retryCount,
             writer: new ToolStream(
               {
                 prefix: 'workflow-step',
@@ -1710,13 +2017,20 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               executionContext.state = state;
             },
             inputData,
-            resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
+            resumeData: resumeDataToUse,
             tracingContext: {
               currentSpan: stepSpan,
             },
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(this, stepResults),
             suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions) => {
+              const { suspendData, validationError } = await validateStepSuspendData({
+                suspendData: suspendPayload,
+                step,
+              });
+              if (validationError) {
+                throw validationError;
+              }
               executionContext.suspendedPaths[step.id] = executionContext.executionPath;
               if (suspendOptions?.resumeLabel) {
                 const resumeLabel = Array.isArray(suspendOptions.resumeLabel)
@@ -1729,16 +2043,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                   };
                 }
               }
-              suspended = { payload: suspendPayload };
+              suspended = { payload: suspendData };
             },
             bail: (result: any) => {
               bailed = { payload: result };
             },
-            resume: {
-              steps: resume?.steps?.slice(1) || [],
-              resumePayload: resume?.resumePayload,
-              // @ts-ignore
-              runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
+            abort: () => {
+              abortController?.abort();
             },
             [EMITTER_SYMBOL]: emitter,
             [STREAM_FORMAT_SYMBOL]: executionContext.format,
@@ -1755,18 +2066,18 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             startedAt,
             endedAt,
             payload: inputData,
-            resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
-            resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
+            resumedAt: resumeDataToUse ? startedAt : undefined,
+            resumePayload: resumeDataToUse,
           };
         } catch (e) {
-          const stepFailure: Omit<StepFailure<any, any, any>, 'error'> & { error?: string } = {
+          const stepFailure: Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string } = {
             status: 'failed',
             payload: inputData,
             error: e instanceof Error ? e.message : String(e),
             endedAt: Date.now(),
             startedAt,
-            resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
-            resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
+            resumedAt: resumeDataToUse ? startedAt : undefined,
+            resumePayload: resumeDataToUse,
           };
 
           execResults = stepFailure;
@@ -1782,11 +2093,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           execResults = {
             status: 'suspended',
             suspendPayload: suspended.payload,
+            ...(execResults.output ? { suspendOutput: execResults.output } : {}),
             payload: inputData,
             suspendedAt: Date.now(),
             startedAt,
-            resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
-            resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
+            resumedAt: resumeDataToUse ? startedAt : undefined,
+            resumePayload: resumeDataToUse,
           };
         } else if (bailed) {
           execResults = {
@@ -1829,9 +2141,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         return { result: execResults, executionContext, stepResults };
       });
     } catch (e) {
-      const stepFailure: Omit<StepFailure<any, any, any>, 'error'> & { error?: string } =
+      const stepFailure: Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string } =
         e instanceof Error
-          ? (e?.cause as unknown as Omit<StepFailure<any, any, any>, 'error'> & { error?: string })
+          ? (e?.cause as unknown as Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string })
           : {
               status: 'failed' as const,
               error: e instanceof Error ? e.message : String(e),
@@ -1868,14 +2180,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       });
     }
 
-    // @ts-ignore
     Object.assign(executionContext.suspendedPaths, stepRes.executionContext.suspendedPaths);
-    // @ts-ignore
-    Object.assign(stepResults, stepRes.stepResults);
     executionContext.state = stepRes.executionContext.state;
 
-    // @ts-ignore
-    return stepRes.result;
+    return stepRes.result as StepResult<any, any, any, any>;
   }
 
   async persistStepUpdate({
@@ -1915,17 +2223,17 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           resourceId,
           snapshot: {
             runId,
+            status: workflowStatus,
             value: executionContext.state,
             context: stepResults as any,
-            activePaths: [],
+            activePaths: executionContext.executionPath,
+            activeStepsPath: executionContext.activeStepsPath,
             suspendedPaths: executionContext.suspendedPaths,
             resumeLabels: executionContext.resumeLabels,
             waitingPaths: {},
             serializedStepGraph,
-            status: workflowStatus,
             result,
             error,
-            // @ts-ignore
             timestamp: Date.now(),
           },
         });
@@ -1939,6 +2247,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     entry,
     prevOutput,
     stepResults,
+    timeTravel,
     resume,
     executionContext,
     emitter,
@@ -1958,6 +2267,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     serializedStepGraph: SerializedStepFlowEntry[];
     prevOutput: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    timeTravel?: TimeTravelExecutionParams;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -2090,10 +2400,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           prevOutput,
           stepResults,
           resume,
+          timeTravel,
           executionContext: {
             workflowId,
             runId,
             executionPath: [...executionContext.executionPath, index],
+            activeStepsPath: executionContext.activeStepsPath,
             suspendedPaths: executionContext.suspendedPaths,
             resumeLabels: executionContext.resumeLabels,
             retryConfig: executionContext.retryConfig,
@@ -2113,19 +2425,24 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         return result;
       }),
     );
-    const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any>;
+    const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any, any>;
     const hasSuspended = results.find(result => result.status === 'suspended');
     if (hasFailed) {
       execResults = { status: 'failed', error: hasFailed.error };
     } else if (hasSuspended) {
-      execResults = { status: 'suspended', suspendPayload: hasSuspended.suspendPayload };
+      execResults = {
+        status: 'suspended',
+        suspendPayload: hasSuspended.suspendPayload,
+        ...(hasSuspended.suspendOutput ? { suspendOutput: hasSuspended.suspendOutput } : {}),
+      };
     } else {
       execResults = {
         status: 'success',
         output: results.reduce((acc: Record<string, any>, result, index) => {
           if (result.status === 'success') {
-            // @ts-ignore
-            acc[stepsToRun[index]!.step.id] = result.output;
+            if ('step' in stepsToRun[index]!) {
+              acc[stepsToRun[index]!.step.id] = result.output;
+            }
           }
 
           return acc;

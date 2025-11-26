@@ -1,5 +1,5 @@
 ---
-title: "Example: Embed Text with Cohere | RAG | Mastra Docs"
+title: "Example: Embed Text with Cohere | RAG"
 description: Example of using Mastra to generate embeddings using Cohere's embedding model.
 ---
 
@@ -10,7 +10,6 @@ import GithubLink from "@site/src/components/GithubLink";
 When working with alternative embedding providers, you need a way to generate vectors that match your chosen model's specifications. The `embed` method supports multiple providers, allowing you to switch between different embedding services. This example shows how to generate embeddings using Cohere's embedding model.
 
 ```tsx copy
-import { cohere } from "@ai-sdk/cohere";
 import { MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
 
@@ -19,7 +18,7 @@ const doc = MDocument.fromText("Your text content...");
 const chunks = await doc.chunk();
 
 const { embeddings } = await embedMany({
-  model: cohere.embedding("embed-english-v3.0"),
+  model: "cohere/embed-english-v3.0",
   values: chunks.map((chunk) => chunk.text),
 });
 ```

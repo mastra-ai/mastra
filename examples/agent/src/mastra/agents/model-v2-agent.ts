@@ -1,4 +1,3 @@
-import { MockLanguageModelV2 } from 'ai-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { openai, openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { createTool } from '@mastra/core/tools';
@@ -37,24 +36,28 @@ const memory = new Memory({
   },
 });
 
-const testAPICallError = new APICallError({
-  message: 'Test API error',
-  url: 'https://test.api.com',
-  requestBodyValues: { test: 'test' },
-  statusCode: 401,
-  isRetryable: false,
-  responseBody: 'Test API error response',
-});
+// const testAPICallError = new APICallError({
+//   message: 'Test API error',
+//   url: 'https://test.api.com',
+//   requestBodyValues: { test: 'test' },
+//   statusCode: 401,
+//   isRetryable: false,
+//   responseBody: 'Test API error response',
+// });
 
 export const errorAgent = new Agent({
   id: 'error-agent',
   name: 'Error Agent',
   instructions: 'You are an error agent that always errors',
-  model: new MockLanguageModelV2({
-    doStream: async () => {
-      throw testAPICallError;
-    },
-  }),
+  model: openai_v5('gpt-4o-mini'),
+});
+
+export const moderationProcessor = new ModerationProcessor({
+  model: openai('gpt-4.1-nano'),
+  categories: ['hate', 'harassment', 'violence'],
+  threshold: 0.7,
+  strategy: 'block',
+  instructions: 'Detect and flag inappropriate content in user messages',
 });
 
 export const chefModelV2Agent = new Agent({
@@ -73,7 +76,6 @@ export const chefModelV2Agent = new Agent({
     model: openai_v5('gpt-4o-mini'),
     middleware: logDataMiddleware,
   }),
-
   tools: {
     weatherInfo,
     cookingTool,
@@ -93,15 +95,7 @@ export const chefModelV2Agent = new Agent({
     };
   },
   memory,
-  inputProcessors: [
-    new ModerationProcessor({
-      model: openai('gpt-4.1-nano'),
-      categories: ['hate', 'harassment', 'violence'],
-      threshold: 0.7,
-      strategy: 'block',
-      instructions: 'Detect and flag inappropriate content in user messages',
-    }),
-  ],
+  inputProcessors: [moderationProcessor],
 });
 
 const weatherAgent = new Agent({

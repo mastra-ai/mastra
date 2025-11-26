@@ -1,5 +1,5 @@
 ---
-title: "Sensitive Data Filter | Processors | Observability | Mastra Docs"
+title: "Sensitive Data Filter | Processors | Observability"
 description: "Protect sensitive information in your traces with automatic data redaction"
 ---
 
@@ -17,7 +17,7 @@ export const mastra = new Mastra({
     default: { enabled: true }, // Automatically includes SensitiveDataFilter
   }),
   storage: new LibSQLStore({
-  id: 'mastra-storage',
+    id: 'mastra-storage',
     url: "file:./mastra.db",
   }),
 });
@@ -292,5 +292,5 @@ This ensures that processing errors don't prevent traces from being exported or 
 
 ## Related
 
-- [SensitiveDataFilter API](/reference/observability/tracing/processors/sensitive-data-filter)
-- [Basic Tracing Example](/examples/observability/basic-tracing)
+- [SensitiveDataFilter API](/reference/v1/observability/tracing/processors/sensitive-data-filter)
+- [Basic Tracing Example](/examples/v1/observability/basic-ai-tracing)

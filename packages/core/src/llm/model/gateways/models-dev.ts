@@ -1,5 +1,6 @@
 import { createAnthropic } from '@ai-sdk/anthropic-v5';
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
+import { createMistral } from '@ai-sdk/mistral-v5';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
@@ -56,8 +57,8 @@ const OPENAI_COMPATIBLE_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
 };
 
 export class ModelsDevGateway extends MastraModelGateway {
+  readonly id = 'models.dev';
   readonly name = 'models.dev';
-  readonly prefix = undefined; // No prefix for registry gateway
 
   private providerConfigs: Record<string, ProviderConfig> = {};
 
@@ -176,10 +177,12 @@ export class ModelsDevGateway extends MastraModelGateway {
     modelId,
     providerId,
     apiKey,
+    headers,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
+    headers?: Record<string, string>;
   }): Promise<LanguageModelV2> {
     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
 
@@ -193,8 +196,10 @@ export class ModelsDevGateway extends MastraModelGateway {
         }).chat(modelId);
       case 'anthropic':
         return createAnthropic({ apiKey })(modelId);
+      case 'mistral':
+        return createMistral({ apiKey })(modelId);
       case 'openrouter':
-        return createOpenRouter({ apiKey })(modelId);
+        return createOpenRouter({ apiKey, headers })(modelId);
       case 'xai':
         return createXai({
           apiKey,

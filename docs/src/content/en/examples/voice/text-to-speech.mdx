@@ -1,5 +1,5 @@
 ---
-title: "Example: Interactive Story Generator | Voice | Mastra Docs"
+title: "Example: Interactive Story Generator | Voice"
 description: Example of using Mastra to create a text to speech application.
 ---
 
@@ -7,14 +7,13 @@ import GithubLink from "@site/src/components/GithubLink";
 
 # Interactive Story Generator
 
-The following code snippets provide example implementations of Text-to-Speech (TTS) functionality in an interactive story generator application using Next.js with Mastra as a separate backend integration. This example demonstrates how to use the Mastra client-js SDK to connect to your Mastra backend. For more details on integrating Mastra with Next.js, please refer to our [Integrate with Next.js](/docs/frameworks/web-frameworks/next-js) documentation.
+The following code snippets provide example implementations of Text-to-Speech (TTS) functionality in an interactive story generator application using Next.js with Mastra as a separate backend integration. This example demonstrates how to use the Mastra client-js SDK to connect to your Mastra backend. For more details on integrating Mastra with Next.js, please refer to our [Integrate with Next.js](/guides/v1/getting-started/next-js) documentation.
 
 ## Creating an Agent with TTS Capabilities
 
 The following example shows how to set up a story generator agent with TTS capabilities on the backend:
 
 ```typescript title="src/mastra/agents/index.ts"
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { OpenAIVoice } from "@mastra/voice-openai";
 import { Memory } from "@mastra/memory";
@@ -28,7 +27,7 @@ export const storyTellerAgent = new Agent({
   id: "story-teller-agent",
   name: "Story Teller Agent",
   instructions: instructions,
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new OpenAIVoice(),
 });
 ```
@@ -53,7 +52,7 @@ export const mastra = new Mastra({
 
 ## Connecting to Mastra from the Frontend
 
-Here we use the Mastra Client SDK to interact with our Mastra server. For more information about the Mastra Client SDK, check out the [documentation](/docs/server-db/mastra-client).
+Here we use the Mastra Client SDK to interact with our Mastra server. For more information about the Mastra Client SDK, check out the [documentation](/docs/v1/server-db/mastra-client).
 
 ```typescript title="src/app/page.tsx"
 import { MastraClient } from "@mastra/client-js";

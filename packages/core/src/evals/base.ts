@@ -490,6 +490,7 @@ class MastraScorer<
         tracingPolicy: {
           internal: InternalSpans.ALL,
         },
+        validateInputs: false,
       },
     });
 
@@ -641,9 +642,9 @@ export function createScorer<TID extends string, TInputSchema extends z.ZodTypeA
 ): MastraScorer<TID, z.infer<TInputSchema>, z.infer<TOutputSchema>, {}>;
 
 // Overload: explicit generics (backwards compatible)
-export function createScorer<TInput = any, TRunOutput = any>(
-  config: ScorerConfig<string, TInput, TRunOutput>,
-): MastraScorer<string, TInput, TRunOutput, {}>;
+export function createScorer<TInput = any, TRunOutput = any, TID extends string = string>(
+  config: ScorerConfig<TID, TInput, TRunOutput>,
+): MastraScorer<TID, TInput, TRunOutput, {}>;
 
 // Implementation
 export function createScorer(config: any): any {

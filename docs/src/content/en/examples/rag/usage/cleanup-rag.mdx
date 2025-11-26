@@ -1,5 +1,5 @@
 ---
-title: "Example: Optimizing Information Density | RAG | Mastra Docs"
+title: "Example: Optimizing Information Density | RAG"
 description: Example of implementing a RAG system in Mastra to optimize information density and deduplicate data using LLM-based processing.
 ---
 
@@ -14,7 +14,7 @@ The system uses an agent to clean the initial chunks to optimize information den
 
 The system implements RAG using Mastra and OpenAI, this time optimizing information density through LLM-based processing. Here's what it does:
 
-1. Sets up a Mastra agent with gpt-4o-mini that can handle both querying and cleaning documents
+1. Sets up a Mastra agent with gpt-5.1 that can handle both querying and cleaning documents
 2. Creates vector query and document chunking tools for the agent to use
 3. Processes the initial document:
    - Chunks text documents into smaller segments
@@ -43,9 +43,9 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers title="index.ts"
-import { openai } from "@ai-sdk/openai";
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { PgVector } from "@mastra/pg";
 import {
   MDocument,
@@ -61,11 +61,11 @@ import { embedMany } from "ai";
 
 Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database.
 
-```typescript copy showLineNumbers{8} title="index.ts"
+```typescript copy showLineNumbers{4} title="index.ts"
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
 });
 ```
 
@@ -98,10 +98,10 @@ const ragAgent = new Agent({
   instructions: `You are a helpful assistant that handles both querying and cleaning documents.
     When cleaning: Process, clean, and label data, remove irrelevant information and deduplicate content while preserving key facts.
     When querying: Provide answers based on the available context. Keep your answers concise and relevant.
-    
+
     Important: When asked to answer a question, please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
     `,
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-5.1",
   tools: {
     vectorQueryTool,
     documentChunkerTool,
@@ -139,7 +139,7 @@ const chunks = await doc.chunk({
 });
 
 const { embeddings } = await embedMany({
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   values: chunks.map((chunk) => chunk.text),
 });
 
@@ -186,7 +186,7 @@ const updatedChunks = await updatedDoc.chunk({
 });
 
 const { embeddings: cleanedEmbeddings } = await embedMany({
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   values: updatedChunks.map((chunk) => chunk.text),
 });
 

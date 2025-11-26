@@ -1,5 +1,5 @@
 ---
-title: "Reference: System Prompt Scrubber | Processors | Mastra Docs"
+title: "Reference: System Prompt Scrubber | Processors"
 description: "Documentation for the SystemPromptScrubber in Mastra, which detects and redacts system prompts from AI responses."
 ---
 
@@ -10,11 +10,10 @@ The `SystemPromptScrubber` is an **output processor** that detects and handles s
 ## Usage example
 
 ```typescript copy
-import { openai } from "@ai-sdk/openai";
 import { SystemPromptScrubber } from "@mastra/core/processors";
 
 const processor = new SystemPromptScrubber({
-  model: openai("gpt-4.1-nano"),
+  model: "openai/gpt-4.1-nano",
   strategy: "redact",
   redactionMethod: "mask",
   includeDetections: true
@@ -94,10 +93,16 @@ const processor = new SystemPromptScrubber({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'system-prompt-scrubber'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'system-prompt-scrubber'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processOutputStream",
@@ -125,7 +130,7 @@ import { BatchPartsProcessor, SystemPromptScrubber } from "@mastra/core/processo
 export const agent = new Agent({
   name: "scrubbed-agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   outputProcessors: [
     // Batch stream parts first to reduce LLM calls
     new BatchPartsProcessor({
@@ -146,4 +151,4 @@ export const agent = new Agent({
 
 ## Related
 
-- [Guardrails](/docs/agents/guardrails)
+- [Guardrails](/docs/v1/agents/guardrails)

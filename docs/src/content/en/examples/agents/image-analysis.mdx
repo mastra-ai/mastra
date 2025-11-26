@@ -1,5 +1,5 @@
 ---
-title: "Example: Image Analysis | Agents | Mastra Docs"
+title: "Example: Image Analysis | Agents"
 description: Example of using a Mastra AI Agent to analyze images from Unsplash to identify objects, determine species, and describe locations.
 ---
 
@@ -26,7 +26,6 @@ UNSPLASH_ACCESS_KEY=<your-unsplash-access-key>
 Create a simple agent that analyzes images to identify objects, describe scenes, and answer questions about visual content.
 
 ```typescript title="src/mastra/agents/example-image-analysis-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const imageAnalysisAgent = new Agent({
@@ -37,11 +36,11 @@ export const imageAnalysisAgent = new Agent({
     You can view an image and identify objects, describe scenes, and answer questions about the content.
     You can also determine species of animals and describe locations in the image.
    `,
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
 });
 ```
 
-> See [Agent](/reference/agents/agent) for a full list of configuration options.
+> See [Agent](/reference/v1/agents/agent) for a full list of configuration options.
 
 ## Registering an agent
 
@@ -124,6 +123,3 @@ console.log(response.text);
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/bird-checker"
 />
 
-## Related
-
-- [Calling Agents](./calling-agents)

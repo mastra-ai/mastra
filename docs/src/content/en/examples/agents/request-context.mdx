@@ -1,5 +1,5 @@
 ---
-title: "Example: Request Context | Agents | Mastra Docs"
+title: "Example: Request Context | Agents"
 description: Learn how to create and configure dynamic agents using request context to adapt behavior based on user subscription tiers.
 ---
 
@@ -72,9 +72,9 @@ export const supportAgent = new Agent({
   }) => {
     const userTier = requestContext.get("user-tier");
 
-    if (userTier === "enterprise") return "openai/gpt-5";
-    if (userTier === "pro") return "openai/gpt-4o";
-    return "openai/gpt-4o-mini";
+    if (userTier === "enterprise") return "openai/gpt-5.1";
+    if (userTier === "pro") return "openai/gpt-4.1";
+    return "openai/gpt-4.1-nano";
   },
 
   tools: ({
@@ -190,7 +190,7 @@ export const supportAgent = new Agent({
 });
 ```
 
-> See [Agent](/reference/agents/agent) for a full list of configuration options.
+> See [Agent](/reference/v1/agents/agent) for a full list of configuration options.
 
 ## Registering the Agent
 
@@ -285,8 +285,8 @@ This request context approach provides:
 
 ## Related
 
-- [Request Context Documentation](/docs/server-db/request-context)
-- [Agent Reference](/reference/agents/agent)
-- [Input Processors](/docs/agents/guardrails)
-- [Output Processors](/docs/agents/guardrails)
-- [Scorers](/docs/evals/overview)
+- [Request Context Documentation](/docs/v1/server-db/request-context)
+- [Agent Reference](/reference/v1/agents/agent)
+- [Input Processors](/docs/v1/agents/guardrails)
+- [Output Processors](/docs/v1/agents/guardrails)
+- [Scorers](/docs/v1/evals/overview)

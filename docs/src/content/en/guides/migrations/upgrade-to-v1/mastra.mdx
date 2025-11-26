@@ -28,7 +28,7 @@ To migrate, update all imports from `@mastra/core` to use the appropriate subpat
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod v1/mastra-core-imports .
+npx @mastra/codemod@beta v1/mastra-core-imports .
 ```
 
 :::
@@ -53,16 +53,16 @@ To migrate, rename the `experimental_auth` key to `auth` in your Mastra configur
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod v1/experimental-auth .
+npx @mastra/codemod@beta v1/experimental-auth .
 ```
 
 :::
 
 ### Required `id` parameter for all mastra primitives
 
-All storage, vector stores, agents, workflows, mcpServers, processors, scorers, tools now require an `id` parameter during initialization. This enables the standardized Mastra API and prevents ID conflicts.
+All storages, vector stores, agents, workflows, mcpServers, processors, scorers, and tools now require an `id` parameter during initialization. This enables the standardized Mastra API and prevents ID conflicts.
 
-All these primitives also now have a `get`, `list`, and `add` functions.
+All these primitives also now have `get`, `list`, and `add` functions.
 
 To migrate, add an `id` parameter to all storage and vector store instantiations. When using the same storage/vector class multiple times, ensure each instance has a unique ID.
 
@@ -105,12 +105,36 @@ When using separate instances for different purposes, use descriptive unique IDs
 
 ### Primitive plural APIs changes from `get<primitives>` to `list<primitive>`
 
+`get*` functions that returned all instances of a primitive have been renamed to `list*` to better reflect their purpose.
+
 ```diff
+- const agents = mastra.getAgents();
++ const agents = mastra.listAgents();
+- const vectors = mastra.getVectors();
++ const vectors = mastra.listVectors();
+- const workflows = mastra.getWorkflows();
++ const workflows = mastra.listWorkflows();
+- const scorers = mastra.getScorers();
++ const scorers = mastra.listScorers();
 - const mcpServers = mastra.getMCPServers();
 + const mcpServers = mastra.listMCPServers();
+- const logsByRunId = await mastra.getLogsByRunId({ runId: 'id', transportId: 'id' });
++ const logsByRunId = await mastra.listLogsByRunId({ runId: 'id', transportId: 'id' });
+- const logs = await mastra.getLogs('transportId');
++ const logs = await mastra.listLogs('transportId');
 ```
 
-### Each primtive has a `getById` and a `get` function
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/mastra-plural-apis .
+```
+
+:::
+
+### Each primitive has a `getById` and a `get` function
 
 ```typescript
 mastra.getMCPServer('myServer');          // Works (registry key)

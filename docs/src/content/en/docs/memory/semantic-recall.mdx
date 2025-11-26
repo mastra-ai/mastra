@@ -1,5 +1,5 @@
 ---
-title: "Semantic Recall | Memory | Mastra Docs"
+title: "Semantic Recall | Memory"
 description: "Learn how to use semantic recall in Mastra to retrieve relevant messages from past conversations using vector search and embeddings."
 ---
 
@@ -30,16 +30,15 @@ After getting a response from the LLM, all new messages (user, assistant, and to
 
 Semantic recall is enabled by default, so if you give your agent memory it will be included:
 
-```typescript {9}
+```typescript {8}
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
   id: "support-agent",
   name: "SupportAgent",
   instructions: "You are a helpful support agent.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   memory: new Memory(),
 });
 ```
@@ -68,7 +67,7 @@ const agent = new Agent({
 
 ### Storage configuration
 
-Semantic recall relies on a [storage and vector db](/reference/memory/memory-class) to store messages and their embeddings.
+Semantic recall relies on a [storage and vector db](/reference/v1/memory/memory-class) to store messages and their embeddings.
 
 ```ts {8-17}
 import { Memory } from "@mastra/memory";
@@ -93,14 +92,14 @@ const agent = new Agent({
 
 **Storage/vector code Examples**:
 
-- [LibSQL](/docs/memory/storage/memory-with-libsql)
-- [MongoDB](/examples/memory/memory-with-mongodb)
-- [Postgres](/docs/memory/storage/memory-with-pg)
-- [Upstash](/docs/memory/storage/memory-with-upstash)
+- [LibSQL](/docs/v1/memory/storage/memory-with-libsql)
+- [MongoDB](/docs/v1/memory/storage/memory-with-mongodb)
+- [Postgres](/docs/v1/memory/storage/memory-with-pg)
+- [Upstash](/docs/v1/memory/storage/memory-with-upstash)
 
 ### Embedder configuration
 
-Semantic recall relies on an [embedding model](/reference/memory/memory-class) to convert messages into embeddings. Mastra supports embedding models through the model router using `provider/model` strings, or you can use any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
+Semantic recall relies on an [embedding model](/reference/v1/memory/memory-class) to convert messages into embeddings. Mastra supports embedding models through the model router using `provider/model` strings, or you can use any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
 
 #### Using the Model Router (Recommended)
 
@@ -109,11 +108,12 @@ The simplest way is to use a `provider/model` string with autocomplete support:
 ```ts {7}
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
 const agent = new Agent({
   memory: new Memory({
     // ... other memory options
-    embedder: "openai/text-embedding-3-small", // TypeScript autocomplete supported
+    embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   }),
 });
 ```
@@ -129,15 +129,15 @@ The model router automatically handles API key detection from environment variab
 
 You can also use AI SDK embedding models directly:
 
-```ts {3,8}
+```ts {2,7}
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
 const agent = new Agent({
   memory: new Memory({
     // ... other memory options
-    embedder: openai.embedding("text-embedding-3-small"),
+    embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   }),
 });
 ```
@@ -147,7 +147,7 @@ const agent = new Agent({
 To use FastEmbed (a local embedding model), install `@mastra/fastembed`:
 
 ```bash npm2yarn copy
-npm install @mastra/fastembed
+npm install @mastra/fastembed@beta
 ```
 
 Then configure it in your memory:
@@ -201,7 +201,7 @@ const agent = new Agent({
 });
 ```
 
-For detailed information about index configuration options and performance tuning, see the [PgVector configuration guide](/reference/vectors/pg#index-configuration-guide).
+For detailed information about index configuration options and performance tuning, see the [PgVector configuration guide](/reference/v1/vectors/pg#index-configuration-guide).
 
 ### Disabling
 

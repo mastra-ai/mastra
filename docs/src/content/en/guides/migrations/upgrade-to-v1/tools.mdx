@@ -83,8 +83,13 @@ For tools that are executed inside a workflow, access workflow-specific properti
   });
 ```
 
+The `suspendPayload` gets validated against the `suspendSchema` when the tool is executed. If the suspendPayload doesn't match the `suspendSchema`, a warning is logged and the error is returned as tool output, but suspension continues.
+Also, when the tool is resumed, the `resumeData` gets validated against the `resumeSchema`. If the resumeData doesn't match the `resumeSchema`, the tool will return a `ValidationError`, preventing the tool resumption.
+
+To skip the `suspendSchema` or `resumeSchema` validation, do not define `suspendSchema` or `resumeSchema` in the tool creation.
+
 :::note
-For MCP-specific tool context changes, see the [MCP migration guide](/guides/migrations/upgrade-to-v1/mcp).
+For MCP-specific tool context changes, see the [MCP migration guide](/guides/v1/migrations/upgrade-to-v1/mcp).
 :::
 
 ### `RuntimeContext` to `RequestContext`
@@ -109,7 +114,67 @@ To migrate, update references from `runtimeContext` to `requestContext` in tool 
 You can use Mastra's codemod CLI to update your imports automatically:
 
 ```shell
-npx @mastra/codemod v1/runtime-context .
+npx @mastra/codemod@beta v1/runtime-context .
 ```
 
 :::
+
+This applies to all tool executions, whether called directly or through agents and workflows. The type narrowing ensures you handle validation errors appropriately and prevents runtime errors when accessing output properties.
+
+### Tool output validation with `outputSchema`
+
+Tools with an `outputSchema` now validate their return values at runtime. Previously, `outputSchema` was only used for type inference - the output was never validated.
+
+If your tool returns data that doesn't match its `outputSchema`, it will now return a `ValidationError` instead of the invalid data.
+
+To fix validation errors, ensure the tool's output matches the schema definition:
+
+```diff
+  const getUserTool = createTool({
+    id: "get-user",
+    outputSchema: z.object({
+      id: z.string(),
+      name: z.string(),
+      email: z.string().email(),
+    }),
+    execute: async (inputData) => {
+-     return { id: "123", name: "John" }; // Missing email
++     return { id: "123", name: "John", email: "john@example.com" };
+    },
+  });
+```
+
+When validation fails, the tool returns a `ValidationError`:
+
+```diff
++ // Before v1 - invalid output would silently pass through
+  await getUserTool.execute({});
+- // { id: "123", name: "John" } - missing email
++ // {
++ //   error: true,
++ //   message: "Tool output validation failed for get-user. The tool returned invalid output:\n- email: Required\n\nReturned output: {...}",
++ //   validationErrors: { ... }
++ // }
+```
+
+### `tool.execute` return type includes `ValidationError`
+
+The return type of `tool.execute` now includes `ValidationError` to handle validation failures. You must narrow the result type before accessing output schema properties to satisfy TypeScript's type checking.
+
+When calling `tool.execute`, check if the result contains an error before accessing output properties:
+
+```typescript
+const result = await getUserTool.execute({});
+
+// Type-safe check for validation errors
+if ('error' in result && result.error) {
+  console.error('Validation failed:', result.message);
+  console.error('Details:', result.validationErrors);
+  return;
+}
+
+// TypeScript knows result is valid here
+console.log(result.id, result.name, result.email);
+```
+
+Alternatively, update the `outputSchema` to match your actual output, or remove `outputSchema` entirely if you don't need validation.

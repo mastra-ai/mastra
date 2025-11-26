@@ -21,7 +21,7 @@ export const mastra = new Mastra({
     ],
   },
   bundler: {
-    externals: ['bcrypt'],
+    externals: ['bcrypt', '@ag-ui/langgraph', '@ag-ui/client', '@ag-ui/core', '@ag-ui/mastra', '@copilotkit/runtime'],
   },
   logger: new ConsoleLogger({ level: 'info' }),
 });

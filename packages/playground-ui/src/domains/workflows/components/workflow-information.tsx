@@ -1,16 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { CopyIcon } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { useWorkflow } from '@/hooks/use-workflows';
-import { useCancelWorkflowRun, useExecuteWorkflow, useStreamWorkflow } from '../hooks/use-workflows-actions';
 import { EntityHeader } from '@/components/ui/entity-header';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { Badge } from '@/ds/components/Badge';
 import { WorkflowRunDetail } from '../runs/workflow-run-details';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
+import { toast } from '@/lib/toast';
+import { WorkflowRunContext } from '../context/workflow-run-context';
 
 export interface WorkflowInformationProps {
   workflowId: string;
@@ -18,18 +19,19 @@ export interface WorkflowInformationProps {
 }
 
 export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInformationProps) {
-  const { data: workflow, isLoading } = useWorkflow(workflowId);
+  const { data: workflow, isLoading, error } = useWorkflow(workflowId);
 
-  const { createWorkflowRun } = useExecuteWorkflow();
   const {
+    createWorkflowRun,
     streamWorkflow,
     streamResult,
-    isStreaming,
+    isStreamingWorkflow,
     observeWorkflowStream,
     closeStreamsAndReset,
-    resumeWorkflowStream,
-  } = useStreamWorkflow();
-  const { mutateAsync: cancelWorkflowRun, isPending: isCancellingWorkflowRun } = useCancelWorkflowRun();
+    resumeWorkflow,
+    cancelWorkflowRun,
+    isCancellingWorkflowRun,
+  } = useContext(WorkflowRunContext);
 
   const [runId, setRunId] = useState<string>('');
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
@@ -41,6 +43,17 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
       closeStreamsAndReset();
     }
   }, [runId, initialRunId]);
+
+  useEffect(() => {
+    if (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load workflow';
+      toast.error(`Error loading workflow: ${errorMessage}`);
+    }
+  }, [error]);
+
+  if (error) {
+    return null;
+  }
 
   return (
     <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto border-l-sm border-border1">
@@ -72,14 +85,14 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
               setRunId={setRunId}
               workflow={workflow ?? undefined}
               isLoading={isLoading}
-              createWorkflowRun={createWorkflowRun.mutateAsync}
-              streamWorkflow={streamWorkflow.mutateAsync}
-              resumeWorkflow={resumeWorkflowStream.mutateAsync}
+              createWorkflowRun={createWorkflowRun}
+              streamWorkflow={streamWorkflow}
+              resumeWorkflow={resumeWorkflow}
               streamResult={streamResult}
-              isStreamingWorkflow={isStreaming}
+              isStreamingWorkflow={isStreamingWorkflow}
               isCancellingWorkflowRun={isCancellingWorkflowRun}
               cancelWorkflowRun={cancelWorkflowRun}
-              observeWorkflowStream={observeWorkflowStream.mutate}
+              observeWorkflowStream={observeWorkflowStream}
             />
           ) : (
             <WorkflowTrigger
@@ -87,11 +100,11 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
               setRunId={setRunId}
               workflow={workflow ?? undefined}
               isLoading={isLoading}
-              createWorkflowRun={createWorkflowRun.mutateAsync}
-              streamWorkflow={streamWorkflow.mutateAsync}
-              resumeWorkflow={resumeWorkflowStream.mutateAsync}
+              createWorkflowRun={createWorkflowRun}
+              streamWorkflow={streamWorkflow}
+              resumeWorkflow={resumeWorkflow}
               streamResult={streamResult}
-              isStreamingWorkflow={isStreaming}
+              isStreamingWorkflow={isStreamingWorkflow}
               isCancellingWorkflowRun={isCancellingWorkflowRun}
               cancelWorkflowRun={cancelWorkflowRun}
             />

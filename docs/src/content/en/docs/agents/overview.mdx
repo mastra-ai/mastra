@@ -1,5 +1,5 @@
 ---
-title: "Using Agents | Agents | Mastra Docs"
+title: "Using Agents | Agents"
 description: Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
 ---
 
@@ -31,7 +31,7 @@ An introduction to agents, and how they compare to workflows on [YouTube (7 minu
 Add the Mastra core package to your project:
 
 ```bash
-npm install @mastra/core
+npm install @mastra/core@beta
 ```
 
 </StepItem>
@@ -46,7 +46,7 @@ OPENAI_API_KEY=<your-api-key>
 
 :::note
 
-Mastra supports more than 600 models. Choose from the [full list](/models).
+Mastra supports more than 600 models. Choose from the [full list](/models/v1).
 
 :::
 
@@ -63,7 +63,7 @@ export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
   instructions: "You are a helpful assistant.",
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
 });
 ```
 
@@ -79,7 +79,7 @@ export const testAgent = new Agent({
 Include the Mastra core package alongside the Vercel AI SDK provider you want to use:
 
 ```bash
-npm install @mastra/core @ai-sdk/openai
+npm install @mastra/core@beta @ai-sdk/openai
 ```
 
 </StepItem>
@@ -112,7 +112,7 @@ export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
   instructions: "You are a helpful assistant.",
-  model: openai("gpt-4o-mini"),
+  model: openai("gpt-5.1"),
 });
 ```
 
@@ -163,7 +163,7 @@ instructions: {
 }
 ```
 
-> See the [Agent reference doc](/reference/agents/agent) for more information.
+> See the [Agent reference doc](/reference/v1/agents/agent) for more information.
 
 ### Registering an agent
 
@@ -187,13 +187,11 @@ You can call agents from workflow steps, tools, the Mastra Client, or the comman
 const testAgent = mastra.getAgent("testAgent");
 ```
 
-:::info
+::::info
 
 `mastra.getAgent()` is preferred over a direct import, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
 
-See [Calling agents](/examples/agents/calling-agents) for more information.
-
-:::
+::::
 
 ## Generating responses
 
@@ -261,7 +259,7 @@ for await (const chunk of stream.textStream) {
   </TabItem>
 </Tabs>
 
-> See [.generate()](/reference/agents/generate) or [.stream()](/reference/streaming/agents/stream) for more information.
+> See [.generate()](/reference/v1/agents/generate) or [.stream()](/reference/v1/streaming/agents/stream) for more information.
 
 ## Structured output
 
@@ -322,7 +320,7 @@ const response = await testAgentWithTools.generate(
         summary: z.string(),
         keywords: z.array(z.string()),
       }),
-      model: "openai/gpt-4o",
+      model: "openai/gpt-5.1",
     },
   },
 );
@@ -388,15 +386,13 @@ const response = await testAgent.generate([
 console.log(response.text);
 ```
 
-For a detailed guide to creating and configuring tools, see the [Tools Overview](../tools-mcp/overview) page.
-
 ### Using `maxSteps`
 
 The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 1, but can be increased:
 
 ```typescript showLineNumbers copy
 const response = await testAgent.generate("Help me organize my day", {
-  maxSteps: 5,
+  maxSteps: 10,
 });
 
 console.log(response.text);
@@ -429,7 +425,7 @@ export const testAgent = new Agent({
 });
 ```
 
-> See [Using Tools](./using-tools) for more information.
+> See [Using Tools](/docs/v1/agents/using-tools) for more information.
 
 ## Using `RequestContext`
 
@@ -448,21 +444,20 @@ export const testAgent = new Agent({
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
     return userTier === "enterprise"
-      ? openai("gpt-4o-mini")
-      : openai("gpt-4.1-nano");
+      ? "openai/gpt-5"
+      : "openai/gpt-4.1-nano";
   },
 });
 ```
 
-> See [Request Context](/docs/server-db/request-context) for more information.
+> See [Request Context](/docs/v1/server-db/request-context) for more information.
 
 ## Testing with Studio
 
-Use [Studio](/docs/getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
+Use [Studio](/docs/v1/getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
 
 ## Related
 
-- [Using Tools](./using-tools)
-- [Agent Memory](./agent-memory)
-- [Request Context](/examples/agents/request-context)
-- [Calling Agents](/examples/agents/calling-agents)
+- [Using Tools](/docs/v1/agents/using-tools)
+- [Agent Memory](/docs/v1/agents/agent-memory)
+- [Request Context](/docs/v1/server-db/request-context)

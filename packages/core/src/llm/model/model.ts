@@ -1,11 +1,11 @@
-import type { CoreMessage } from '@internal/ai-sdk-v4/message';
+import { generateObject, generateText, Output, streamObject, streamText } from '@internal/ai-sdk-v4';
 import type {
+  CoreMessage,
   LanguageModelV1 as LanguageModel,
   StreamObjectOnFinishCallback,
   StreamTextOnFinishCallback,
-} from '@internal/ai-sdk-v4/model';
-import { generateObject, generateText, Output, streamObject, streamText } from '@internal/ai-sdk-v4/model';
-import type { Schema } from '@internal/ai-sdk-v4/schema';
+  Schema,
+} from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from '@mastra/schema-compat';
 import {
   AnthropicSchemaCompatLayer,
@@ -235,10 +235,8 @@ export class MastraLLMV1 extends MastraBase {
           runId,
         });
 
-        if (
-          props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
-          parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
-        ) {
+        const remainingTokens = parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'] ?? '', 10);
+        if (!isNaN(remainingTokens) && remainingTokens > 0 && remainingTokens < 2000) {
           this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
           await delay(10 * 1000);
         }
@@ -531,10 +529,8 @@ export class MastraLLMV1 extends MastraBase {
           runId,
         });
 
-        if (
-          props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
-          parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
-        ) {
+        const remainingTokens = parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'] ?? '', 10);
+        if (!isNaN(remainingTokens) && remainingTokens > 0 && remainingTokens < 2000) {
           this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
           await delay(10 * 1000);
         }

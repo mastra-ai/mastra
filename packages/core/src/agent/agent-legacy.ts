@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
-import type { CoreMessage, UIMessage } from '@internal/ai-sdk-v4/message';
-import type { Tool } from '@internal/ai-sdk-v4/tool';
+import type { CoreMessage, UIMessage, Tool } from '@internal/ai-sdk-v4';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
@@ -32,7 +31,14 @@ import type { DynamicArgument } from '../types';
 import type { MessageListInput, MastraDBMessage, UIMessageWithMetadata } from './message-list';
 import { MessageList } from './message-list';
 import { SaveQueueManager } from './save-queue';
-import type { AgentGenerateOptions, AgentStreamOptions, AgentInstructions, ToolsetsInput, ToolsInput } from './types';
+import type {
+  AgentGenerateOptions,
+  AgentStreamOptions,
+  AgentInstructions,
+  ToolsetsInput,
+  ToolsInput,
+  AgentMethodType,
+} from './types';
 import { resolveThreadIdFromArgs } from './utils';
 
 /**
@@ -80,7 +86,7 @@ export interface AgentLegacyCapabilities {
     requestContext: RequestContext;
     tracingContext?: TracingContext;
     writableStream?: WritableStream<ChunkType>;
-    methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+    methodType: AgentMethodType;
   }): Promise<Record<string, CoreTool>>;
   /** Get memory messages */
   getMemoryMessages(args: {

@@ -15,6 +15,7 @@ import type {
   WorkflowResult,
   StepWithComponent,
   WorkflowStreamEvent,
+  WorkflowEngineType,
 } from '../../workflows/types';
 import { EMITTER_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
@@ -47,6 +48,7 @@ export function cloneWorkflow<
     outputSchema: workflow.outputSchema,
     steps: workflow.stepDefs,
     mastra: workflow.mastra,
+    options: workflow.options,
   });
 
   wf.setStepFlow(workflow.stepGraph);
@@ -63,7 +65,12 @@ export function cloneStep<TStepId extends string>(
     description: step.description,
     inputSchema: step.inputSchema,
     outputSchema: step.outputSchema,
+    suspendSchema: step.suspendSchema,
+    resumeSchema: step.resumeSchema,
+    stateSchema: step.stateSchema,
     execute: step.execute,
+    retries: step.retries,
+    scorers: step.scorers,
     component: step.component,
   };
 }
@@ -162,7 +169,7 @@ export function createStep<
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType> {
   if (isAgent(params)) {
     return {
-      id: params.name,
+      id: params.id,
       description: params.getDescription(),
       // @ts-ignore
       inputSchema: z.object({
@@ -313,7 +320,7 @@ export function createWorkflow<
     mastra: params.mastra!,
     eventProcessor,
     options: {
-      validateInputs: params.options?.validateInputs ?? false,
+      validateInputs: params.options?.validateInputs ?? true,
       shouldPersistSnapshot: params.options?.shouldPersistSnapshot ?? (() => true),
       tracingPolicy: params.options?.tracingPolicy,
     },
@@ -335,6 +342,7 @@ export class EventedWorkflow<
 > extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
   constructor(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
     super(params);
+    this.engineType = 'evented';
   }
 
   __registerMastra(mastra: Mastra) {
@@ -358,6 +366,8 @@ export class EventedWorkflow<
         retryConfig: this.retryConfig,
         cleanup: () => this.runs.delete(runIdToUse),
         workflowSteps: this.steps,
+        validateInputs: this.options?.validateInputs,
+        workflowEngineType: this.engineType,
       });
 
     this.runs.set(runIdToUse, run);
@@ -380,6 +390,7 @@ export class EventedWorkflow<
           context: {},
           activePaths: [],
           serializedStepGraph: this.serializedStepGraph,
+          activeStepsPath: {},
           suspendedPaths: {},
           resumeLabels: {},
           waitingPaths: {},
@@ -416,6 +427,7 @@ export class EventedRun<
     cleanup?: () => void;
     workflowSteps: Record<string, StepWithComponent>;
     validateInputs?: boolean;
+    workflowEngineType: WorkflowEngineType;
   }) {
     super(params);
     this.serializedStepGraph = params.serializedStepGraph;
@@ -448,15 +460,16 @@ export class EventedRun<
       snapshot: {
         runId: this.runId,
         serializedStepGraph: this.serializedStepGraph,
+        status: 'running',
         value: {},
         context: {} as any,
         requestContext: Object.fromEntries(requestContext.entries()),
         activePaths: [],
+        activeStepsPath: {},
         suspendedPaths: {},
         resumeLabels: {},
         waitingPaths: {},
         timestamp: Date.now(),
-        status: 'running',
       },
     });
 
@@ -493,7 +506,7 @@ export class EventedRun<
       abortController: this.abortController,
     });
 
-    console.dir({ startResult: result }, { depth: null });
+    // console.dir({ startResult: result }, { depth: null });
 
     if (result.status !== 'suspended') {
       this.cleanup?.();
@@ -516,9 +529,14 @@ export class EventedRun<
       | string[];
     requestContext?: RequestContext;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
-      typeof step === 'string' ? step : step?.id,
-    );
+    let steps: string[] = [];
+    if (typeof params.step === 'string') {
+      steps = params.step.split('.');
+    } else {
+      steps = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
+        typeof step === 'string' ? step : step?.id,
+      );
+    }
 
     if (steps.length === 0) {
       throw new Error('No steps provided to resume');

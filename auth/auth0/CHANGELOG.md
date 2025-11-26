@@ -1,5 +1,28 @@
 # @mastra/auth-auth0
 
+## 1.0.0-beta.2
+
+### Patch Changes
+
+- Allow provider to pass through options to the auth config ([#10284](https://github.com/mastra-ai/mastra/pull/10284))
+
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- dependencies updates: ([#10132](https://github.com/mastra-ai/mastra/pull/10132))
+  - Updated dependency [`jose@^6.1.1` ↗︎](https://www.npmjs.com/package/jose/v/6.1.1) (from `^6.0.12`, in `dependencies`)
+
+## 1.0.0-beta.0
+
+### Major Changes
+
+- Bump minimum required Node.js version to 22.13.0 ([#9706](https://github.com/mastra-ai/mastra/pull/9706))
+
+- Experimental auth -> auth ([#9660](https://github.com/mastra-ai/mastra/pull/9660))
+
+- Mark as stable ([`83d5942`](https://github.com/mastra-ai/mastra/commit/83d5942669ce7bba4a6ca4fd4da697a10eb5ebdc))
+
 ## 0.10.5
 
 ### Patch Changes

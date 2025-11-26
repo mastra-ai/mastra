@@ -21,6 +21,16 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "gateways/custom-gateways",
+          label: "Custom Gateways",
+        },
+        {
+          type: "doc",
+          id: "gateways/azure-openai",
+          label: "Azure-openai",
+        },
+        {
+          type: "doc",
           id: "gateways/netlify",
           label: "Netlify",
         },
@@ -128,6 +138,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/cohere",
+          label: "Cohere",
+        },
+        {
+          type: "doc",
           id: "providers/cortecs",
           label: "Cortecs",
         },
@@ -193,6 +208,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/minimax",
+          label: "Minimax",
+        },
+        {
+          type: "doc",
           id: "providers/modelscope",
           label: "ModelScope",
         },
@@ -214,7 +234,7 @@ const sidebars = {
         {
           type: "doc",
           id: "providers/nebius",
-          label: "Nebius AI Studio",
+          label: "Nebius Token Factory",
         },
         {
           type: "doc",
@@ -233,8 +253,18 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/ovhcloud",
+          label: "OVHcloud AI Endpoints",
+        },
+        {
+          type: "doc",
           id: "providers/perplexity",
           label: "Perplexity",
+        },
+        {
+          type: "doc",
+          id: "providers/poe",
+          label: "Poe",
         },
         {
           type: "doc",
@@ -245,6 +275,11 @@ const sidebars = {
           type: "doc",
           id: "providers/scaleway",
           label: "Scaleway",
+        },
+        {
+          type: "doc",
+          id: "providers/siliconflow",
+          label: "SiliconFlow",
         },
         {
           type: "doc",

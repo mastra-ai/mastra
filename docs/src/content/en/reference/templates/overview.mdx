@@ -1,5 +1,5 @@
 ---
-title: "Reference: LLM provider API keys (choose one or more) | Templates | Mastra Docs"
+title: "Reference: LLM provider API keys (choose one or more) | Templates"
 description: "Complete guide to creating, using, and contributing Mastra templates"
 ---
 
@@ -21,7 +21,7 @@ Mastra templates are pre-built project structures that demonstrate specific use 
 Install a template using the `create-mastra` command:
 
 ```bash copy
-npx create-mastra@latest --template template-name
+npx create-mastra@beta --template template-name
 ```
 
 This creates a complete project with all necessary code and configuration.
@@ -118,13 +118,10 @@ We recommend using OpenAI, Anthropic, or Google model providers for templates. C
 
 ```typescript title="src/mastra/agents/example-agent.ts"
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-// Or use: import { anthropic } from '@ai-sdk/anthropic';
-// Or use: import { google } from '@ai-sdk/google';
 
 const agent = new Agent({
   name: "example-agent",
-  model: openai("gpt-4"), // or anthropic('') or google('')
+  model: "openai/gpt-5.1", // or other provider strings
   instructions: "Your agent instructions here",
   // ... other configuration
 });
@@ -196,7 +193,7 @@ Templates must demonstrate:
 - **Type safety** - Full TypeScript typing with Zod validation
 - **Testing** - Verified functionality with fresh installations
 
-For information on contributing your own templates to the Mastra ecosystem, see the [Contributing Templates](/docs/community/contributing-templates) guide in the community section.
+For information on contributing your own templates to the Mastra ecosystem, see the [Contributing Templates](/docs/v1/community/contributing-templates) guide in the community section.
 
 :::info
 

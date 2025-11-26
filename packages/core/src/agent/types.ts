@@ -1,5 +1,4 @@
-import type { GenerateTextOnStepFinishCallback } from '@internal/ai-sdk-v4/model';
-import type { ToolSet } from '@internal/ai-sdk-v4/tool';
+import type { GenerateTextOnStepFinishCallback, ToolSet } from '@internal/ai-sdk-v4';
 import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
@@ -41,7 +40,7 @@ import type { MessageList } from './message-list/index';
 import type { SaveQueueManager } from './save-queue';
 
 export type { MastraDBMessage, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
-export type { Message as AiMessageType } from '@internal/ai-sdk-v4/message';
+export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { LLMStepResult } from '../stream/types';
 
 /**
@@ -110,13 +109,12 @@ type ModelWithRetries = {
 export interface AgentConfig<TAgentId extends string = string, TTools extends ToolsInput = ToolsInput> {
   /**
    * Identifier for the agent.
-   * @defaultValue Uses `name` if not provided.
    */
-  id?: TAgentId;
+  id: TAgentId;
   /**
    * Unique identifier for the agent.
    */
-  name: TAgentId;
+  name: string;
   /**
    * Description of the agent's purpose and capabilities.
    */
@@ -370,3 +368,5 @@ export type AgentExecuteOnFinishOptions = {
   saveQueueManager: SaveQueueManager;
   overrideScorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
 };
+
+export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';

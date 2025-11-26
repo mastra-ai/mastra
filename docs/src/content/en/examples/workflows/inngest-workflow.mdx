@@ -1,5 +1,5 @@
 ---
-title: "Example: Inngest Workflow | Workflows | Mastra Docs"
+title: "Example: Inngest Workflow | Workflows"
 description: Example of building an inngest workflow with Mastra
 ---
 
@@ -10,7 +10,7 @@ This example demonstrates how to build an Inngest workflow with Mastra.
 ## Setup
 
 ```sh copy
-npm install @mastra/inngest inngest @mastra/core @mastra/deployer @hono/node-server @ai-sdk/openai
+npm install @mastra/inngest@beta inngest @mastra/core@beta @mastra/deployer@beta @hono/node-server
 
 docker run --rm -p 8288:8288 \
   inngest/inngest \
@@ -25,13 +25,12 @@ Define a planning agent which leverages an LLM call to plan activities given a l
 
 ```ts showLineNumbers copy title="agents/planning-agent.ts"
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 
 // Create a new planning agent that uses the OpenAI model
 const planningAgent = new Agent({
   id: "planning-agent",
   name: "planningAgent",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   instructions: `
         You are a local activities and travel expert who excels at weather-based planning. Analyze the weather data and provide practical activity recommendations.
 

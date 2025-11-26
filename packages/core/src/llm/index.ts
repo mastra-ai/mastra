@@ -1,20 +1,19 @@
-import type { EmbedManyResult as AiEmbedManyResult, EmbedResult as AiEmbedResult } from '@internal/ai-sdk-v4/embed';
 import type {
+  EmbedManyResult as AiEmbedManyResult,
+  EmbedResult as AiEmbedResult,
   CoreAssistantMessage as AiCoreAssistantMessage,
   CoreMessage as AiCoreMessage,
   CoreSystemMessage as AiCoreSystemMessage,
   CoreToolMessage as AiCoreToolMessage,
   CoreUserMessage as AiCoreUserMessage,
   UIMessage,
-} from '@internal/ai-sdk-v4/message';
-import type {
   streamText,
   streamObject,
   generateText,
   generateObject,
   StreamTextOnFinishCallback,
   StreamObjectOnFinishCallback,
-} from '@internal/ai-sdk-v4/model';
+} from '@internal/ai-sdk-v4';
 import type { SystemModelMessage } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
@@ -150,5 +149,7 @@ export type LLMStreamObjectOptions<Z extends ZodSchema | JSONSchema7 | undefined
   DefaultLLMStreamObjectOptions;
 
 export type { ProviderConfig } from './model/gateways/base';
+export { MastraModelGateway, NetlifyGateway, ModelsDevGateway, AzureOpenAIGateway } from './model/gateways';
+export type { AzureOpenAIGatewayConfig } from './model/gateways';
 
 export { ModelRouterEmbeddingModel, type EmbeddingModelId } from './model';

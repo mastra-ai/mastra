@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import type { WritableStream } from 'stream/web';
-import type { CoreMessage } from '@internal/ai-sdk-v4/message';
+import type { CoreMessage } from '@internal/ai-sdk-v4';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
@@ -642,3 +642,7 @@ export function setNestedValue(obj: any, path: string, value: any): void {
 
   target[lastKey] = value;
 }
+
+export const removeUndefinedValues = (obj: Record<string, any>) => {
+  return Object.fromEntries(Object.entries(obj).filter(([_, value]) => value !== undefined));
+};

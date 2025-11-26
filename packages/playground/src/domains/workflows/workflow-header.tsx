@@ -11,6 +11,9 @@ import {
   ApiIcon,
   WorkflowIcon,
   DocsIcon,
+  DividerIcon,
+  WorkflowCombobox,
+  Badge,
 } from '@mastra/playground-ui';
 
 export function WorkflowHeader({
@@ -26,27 +29,34 @@ export function WorkflowHeader({
     <div className="shrink-0">
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to={`/workflows`}>
+          <Crumb as={Link} to={`/workflows`} isCurrent>
             <Icon>
               <WorkflowIcon />
             </Icon>
             Workflows
           </Crumb>
-          <Crumb as={Link} to={`/workflows/${workflowId}`} isCurrent={!runId}>
-            {workflowName}
-          </Crumb>
-
-          {runId && (
-            <Crumb as={Link} to={`/workflows/${workflowId}/graph/${runId}`} isCurrent>
-              {runId}
-            </Crumb>
-          )}
         </Breadcrumb>
 
         <HeaderGroup>
+          <div className="w-[240px]">
+            <WorkflowCombobox value={workflowId} />
+          </div>
+
+          {runId && (
+            <>
+              <DividerIcon />
+              <Badge variant="default">Run: {runId}</Badge>
+            </>
+          )}
+
+          <DividerIcon />
+
           <Button as={Link} to={`/workflows/${workflowId}/graph`}>
             Graph
           </Button>
+
+          <DividerIcon />
+
           <Button as={Link} to={`/observability?entity=${workflowName}`}>
             Traces
           </Button>
