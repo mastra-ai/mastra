@@ -272,7 +272,6 @@ export class StoreScoresLance extends ScoresStorage {
       const table = await this.client.openTable(TABLE_SCORERS);
       const { page = 0, perPage = 10 } = pagination || {};
       const offset = page * perPage;
-
       // Query for scores with the given traceId and spanId
       const query = table.query().where(`\`traceId\` = '${traceId}' AND \`spanId\` = '${spanId}'`).limit(perPage);
       if (offset > 0) query.offset(offset);
@@ -280,12 +279,15 @@ export class StoreScoresLance extends ScoresStorage {
       const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
       const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
 
+      const allRecords = await table.query().where(`\`traceId\` = '${traceId}' AND \`spanId\` = '${spanId}'`).toArray();
+      const total = allRecords.length;
+
       return {
         pagination: {
           page,
           perPage,
-          total: scores.length,
-          hasMore: offset + scores.length < scores.length,
+          total,
+          hasMore: offset + scores.length < total,
         },
         scores,
       };
