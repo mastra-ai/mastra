@@ -69,7 +69,7 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
       expect(nonExistentScores?.scores).toHaveLength(0);
     });
 
-    it.only('should return score payload matching the saved score', async () => {
+    it('should return score payload matching the saved score', async () => {
       const scorerId = `scorer-${randomUUID()}`;
       const score = createSampleScore({ scorerId });
 
