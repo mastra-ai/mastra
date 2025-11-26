@@ -75,9 +75,10 @@ export class ConvexAdminClient {
 
     const storageResponse = result.value as StorageResponse;
     if (!storageResponse?.ok) {
-      const error = new Error(storageResponse?.error || 'Unknown Convex storage error');
-      (error as any).code = storageResponse?.code;
-      (error as any).details = storageResponse?.details;
+      const errResponse = storageResponse as { ok: false; error: string; code?: string; details?: Record<string, any> };
+      const error = new Error(errResponse?.error || 'Unknown Convex storage error');
+      (error as any).code = errResponse?.code;
+      (error as any).details = errResponse?.details;
       throw error;
     }
 

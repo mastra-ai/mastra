@@ -27,12 +27,12 @@ export class ScoresConvex extends ScoresStorage {
 
   async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
     const now = new Date();
-    const record: StoredScore = {
-      ...(score as ScoreRowData),
+    const record = {
+      ...score,
       id: crypto.randomUUID(),
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
-    };
+    } as StoredScore;
 
     await this.operations.insert({
       tableName: TABLE_SCORERS,
