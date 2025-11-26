@@ -36,24 +36,20 @@ const memory = new Memory({
   },
 });
 
-const testAPICallError = new APICallError({
-  message: 'Test API error',
-  url: 'https://test.api.com',
-  requestBodyValues: { test: 'test' },
-  statusCode: 401,
-  isRetryable: false,
-  responseBody: 'Test API error response',
-});
+// const testAPICallError = new APICallError({
+//   message: 'Test API error',
+//   url: 'https://test.api.com',
+//   requestBodyValues: { test: 'test' },
+//   statusCode: 401,
+//   isRetryable: false,
+//   responseBody: 'Test API error response',
+// });
 
 export const errorAgent = new Agent({
   id: 'error-agent',
   name: 'Error Agent',
   instructions: 'You are an error agent that always errors',
-  model: new MockLanguageModelV2({
-    doStream: async () => {
-      throw testAPICallError;
-    },
-  }),
+  model: openai_v5('gpt-4o-mini'),
 });
 
 export const moderationProcessor = new ModerationProcessor({

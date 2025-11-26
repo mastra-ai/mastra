@@ -26,6 +26,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "gateways/azure-openai",
+          label: "Azure-openai",
+        },
+        {
+          type: "doc",
           id: "gateways/netlify",
           label: "Netlify",
         },
@@ -270,6 +275,11 @@ const sidebars = {
           type: "doc",
           id: "providers/scaleway",
           label: "Scaleway",
+        },
+        {
+          type: "doc",
+          id: "providers/siliconflow",
+          label: "SiliconFlow",
         },
         {
           type: "doc",

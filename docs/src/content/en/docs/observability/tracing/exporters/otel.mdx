@@ -11,13 +11,13 @@ The OpenTelemetry exporter is currently **experimental**. APIs and configuration
 
 :::
 
-The OpenTelemetry (OTEL) exporter sends your traces to any OTEL-compatible observability platform using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, SigNoz, Dash0, Traceloop, Laminar, and more.
+The OpenTelemetry (OTEL) exporter sends your traces to any OTEL-compatible observability platform using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, SigNoz, MLflow, Dash0, Traceloop, Laminar, and more.
 
 ## Installation
 
 Each provider requires specific protocol packages. Install the base exporter plus the protocol package for your provider:
 
-### For HTTP/Protobuf Providers (SigNoz, New Relic, Laminar)
+### For HTTP/Protobuf Providers (SigNoz, New Relic, Laminar, MLflow)
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter@beta @opentelemetry/exporter-trace-otlp-proto
@@ -36,6 +36,25 @@ npm install @mastra/otel-exporter@beta @opentelemetry/exporter-trace-otlp-http
 ```
 
 ## Provider Configurations
+
+
+### MLflow
+
+[MLflow](https://mlflow.org/docs/latest/genai/tracing/integrations/listing/mastra) supports native Mastra tracing through its OTLP endpoint at `/v1/traces`. Use the `custom` provider with HTTP/Protobuf and include the experiment header so traces land in the correct MLflow experiment:
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    custom: {
+      endpoint: `${process.env.MLFLOW_TRACKING_URI}/v1/traces`,
+      protocol: "http/protobuf",
+      headers: {
+        "x-mlflow-experiment-id": process.env.MLFLOW_EXPERIMENT_ID,
+      },
+    },
+  },
+})
+```
 
 ### Dash0
 
