@@ -920,13 +920,17 @@ describe('MCPServer', () => {
       if (reader) {
         try {
           await reader.cancel();
-        } catch { }
+        } catch {
+          // swallow error
+        }
         reader = undefined;
       }
       if (sseRes && 'body' in sseRes && sseRes.body) {
         try {
           await sseRes.body.cancel();
-        } catch { }
+        } catch {
+          // swallow error
+        }
         sseRes = undefined;
       }
     });
@@ -1411,7 +1415,6 @@ describe('MCPServer', () => {
 
       sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
         const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
-        
 
         await sessionServer.startHTTP({
           url,
