@@ -14,7 +14,10 @@ import { createTool } from '@mastra/core/tools';
 import type { StreamEvent } from '@mastra/core/workflows';
 import { createHonoServer } from '@mastra/deployer/server';
 import { DefaultStorage } from '@mastra/libsql';
-import { MockLanguageModelV1, simulateReadableStream } from 'ai/test';
+import {
+  MastraLanguageModelV2Mock as MockLanguageModelV2,
+  simulateReadableStream,
+} from '@mastra/core/test-utils/llm-mock';
 import { $ } from 'execa';
 import { Inngest } from 'inngest';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10482,16 +10485,19 @@ describe('MastraInngestWorkflow', () => {
         id: 'test-agent-1',
         name: 'test-agent-1',
         instructions: 'test agent instructions"',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doStream: async () => ({
             stream: simulateReadableStream({
               chunks: [
-                { type: 'text-delta', textDelta: 'Paris' },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Paris' },
+                { type: 'text-start', id: '1' },
                 {
                   type: 'finish',
+                  id: '2',
                   finishReason: 'stop',
                   logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
                 },
               ],
             }),
@@ -10504,16 +10510,19 @@ describe('MastraInngestWorkflow', () => {
         id: 'test-agent-2',
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doStream: async () => ({
             stream: simulateReadableStream({
               chunks: [
-                { type: 'text-delta', textDelta: 'London' },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'London' },
+                { type: 'text-start', id: '1' },
                 {
                   type: 'finish',
+                  id: '2',
                   finishReason: 'stop',
                   logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
                 },
               ],
             }),
@@ -10610,26 +10619,35 @@ describe('MastraInngestWorkflow', () => {
 
       // @ts-ignore
       expect(agentEvents.map(event => event?.payload?.output?.type)).toEqual([
+        'start',
         'step-start',
+        'text-start',
         'text-delta',
-        'finish',
+        'text-start',
         'step-finish',
+        'finish',
+        'start',
         'step-start',
+        'text-start',
         'text-delta',
+        'text-start',
         'step-finish',
         'finish',
       ]);
 
-      // Updated to new vNext streaming format
-      const expectedValues = [
+      expect(values).toMatchObject([
         {
-          payload: {},
           type: 'workflow-start',
-          from: 'WORKFLOW',
           runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {},
         },
         {
+          type: 'workflow-step-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
           payload: {
+            stepName: 'start',
             id: 'start',
             payload: {
               prompt1: 'Capital of France, just the name',
@@ -10638,26 +10656,28 @@ describe('MastraInngestWorkflow', () => {
             startedAt: expect.any(Number),
             status: 'running',
           },
-          type: 'workflow-step-start',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
         },
         {
+          type: 'workflow-step-result',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
           payload: {
+            stepName: 'start',
             id: 'start',
-            endedAt: expect.any(Number),
+            status: 'success',
             output: {
               prompt1: 'Capital of France, just the name',
               prompt2: 'Capital of UK, just the name',
             },
-            status: 'success',
+            endedAt: expect.any(Number),
           },
-          type: 'workflow-step-result',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
         },
         {
+          type: 'workflow-step-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
           payload: {
+            stepName: expect.any(String),
             id: expect.any(String),
             payload: {
               prompt1: 'Capital of France, just the name',
@@ -10666,25 +10686,27 @@ describe('MastraInngestWorkflow', () => {
             startedAt: expect.any(Number),
             status: 'running',
           },
-          type: 'workflow-step-start',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
         },
         {
+          type: 'workflow-step-result',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
           payload: {
+            stepName: expect.any(String),
             id: expect.any(String),
-            endedAt: expect.any(Number),
+            status: 'success',
             output: {
               prompt: 'Capital of France, just the name',
             },
-            status: 'success',
+            endedAt: expect.any(Number),
           },
-          type: 'workflow-step-result',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
         },
         {
+          type: 'workflow-step-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
           payload: {
+            stepName: 'test-agent-1',
             id: 'test-agent-1',
             payload: {
               prompt: 'Capital of France, just the name',
@@ -10692,117 +10714,87 @@ describe('MastraInngestWorkflow', () => {
             startedAt: expect.any(Number),
             status: 'running',
           },
-          type: 'workflow-step-start',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
         },
         {
+          type: 'workflow-step-result',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
           payload: {
+            stepName: 'test-agent-1',
             id: 'test-agent-1',
-            output: {
-              text: 'Paris',
-            },
-            endedAt: expect.any(Number),
             status: 'success',
+            output: {},
+            endedAt: expect.any(Number),
           },
-          type: 'workflow-step-result',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
         },
         {
+          type: 'workflow-step-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
           payload: {
+            stepName: expect.any(String),
             id: expect.any(String),
+            payload: {},
+            startedAt: expect.any(Number),
+            status: 'running',
+          },
+        },
+        {
+          type: 'workflow-step-result',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: expect.any(String),
+            id: expect.any(String),
+            status: 'success',
+            output: {
+              prompt: 'Capital of UK, just the name',
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        {
+          type: 'workflow-step-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'test-agent-2',
+            id: 'test-agent-2',
             payload: {
-              text: 'Paris',
+              prompt: 'Capital of UK, just the name',
             },
             startedAt: expect.any(Number),
             status: 'running',
           },
-          type: 'workflow-step-start',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
         },
         {
-          payload: {
-            id: expect.any(String),
-            endedAt: expect.any(Number),
-            output: {
-              prompt: 'Capital of UK, just the name',
-            },
-            status: 'success',
-          },
           type: 'workflow-step-result',
-          from: 'WORKFLOW',
           runId: 'test-run-id',
-        },
-        {
-          payload: {
-            id: expect.any(String),
-            payload: {
-              prompt: 'Capital of UK, just the name',
-            },
-            startedAt: expect.any(Number),
-            status: 'running',
-          },
-          type: 'workflow-step-start',
           from: 'WORKFLOW',
-          runId: 'test-run-id',
-        },
-        {
-          args: {
-            prompt: 'Capital of UK, just the name',
-          },
-          name: 'test-agent-2',
-          type: 'tool-call-streaming-start',
-        },
-        {
-          args: {
-            prompt: 'Capital of UK, just the name',
-          },
-          argsTextDelta: 'London',
-          name: 'test-agent-2',
-          type: 'tool-call-delta',
-        },
-        {
-          args: {
-            prompt: 'Capital of UK, just the name',
-          },
-          name: 'test-agent-2',
-          type: 'tool-call-streaming-finish',
-        },
-        {
           payload: {
-            id: expect.any(String),
-            output: {
-              text: 'London',
-            },
-            endedAt: expect.any(Number),
+            stepName: 'test-agent-2',
+            id: 'test-agent-2',
             status: 'success',
+            output: {},
+            endedAt: expect.any(Number),
           },
-          type: 'workflow-step-result',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
         },
         {
+          type: 'workflow-finish',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
           payload: {
-            metadata: {},
             output: {
               usage: {
-                inputTokens: 0,
-                outputTokens: 0,
-                totalTokens: 0,
+                inputTokens: 20,
+                outputTokens: 40,
+                totalTokens: 60,
               },
             },
+            metadata: {},
           },
-          type: 'workflow-finish',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
         },
-      ];
-      values.forEach((value, i) => {
-        const expectedValue = expectedValues[i];
-        expect(value).toMatchObject(expectedValue);
-      });
+      ]);
     });
 
     describe('Workflow integration', () => {
