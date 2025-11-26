@@ -5,9 +5,12 @@ A Netlify deployer for Mastra applications.
 ## Features
 
 - Deploy Mastra applications to Netlify Functions
-- Uses Netlify Frameworks API for zero-configuration deployments
-- Automatic function bundling with pre-optimized settings
-- Built-in request routing and redirects
+## Features
+
+- Deploy Mastra applications to Netlify Functions
+- Generates Netlify Frameworks API configuration during build
+- Bundles functions with optimized settings for serverless environments
+- Routes all requests through a single API endpoint
 
 ## Installation
 
