@@ -141,37 +141,6 @@ describe('Custom Gateway Integration', () => {
       expect(gateways?.custom).toBe(gateway1);
       expect(gateways?.another).toBe(gateway2);
     });
-
-    it('should allow adding gateways after initialization', () => {
-      const mastra = new Mastra();
-      expect(mastra.listGateways()).toBeDefined();
-      expect(Object.keys(mastra.listGateways() ?? {})).toHaveLength(0);
-
-      const customGateway = new TestCustomGateway();
-      mastra.addGateway(customGateway, 'custom');
-
-      const gateways = mastra.listGateways();
-      expect(gateways).toBeDefined();
-      expect(Object.keys(gateways ?? {})).toHaveLength(1);
-      expect(gateways?.custom).toBe(customGateway);
-    });
-
-    it('should allow getting a gateway by name', () => {
-      const gateway1 = new TestCustomGateway();
-      const mastra = new Mastra({
-        gateways: {
-          custom: gateway1,
-        },
-      });
-
-      const gateway = mastra.getGateway('custom');
-      expect(gateway).toBe(gateway1);
-    });
-
-    it('should throw error when getting non-existent gateway', () => {
-      const mastra = new Mastra();
-      expect(() => mastra.getGateway('nonexistent')).toThrow('Gateway with key nonexistent not found');
-    });
   });
 
   describe('ModelRouterLanguageModel with Custom Gateways', () => {

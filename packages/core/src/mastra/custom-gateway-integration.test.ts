@@ -148,23 +148,10 @@ describe('Mastra Custom Gateway Integration', () => {
       expect(gateways?.test.name).toBe('test-gateway');
     });
 
-    it('should return empty record when no gateways are configured', () => {
+    it('should return undefined when no gateways are configured', () => {
       const mastra = new Mastra();
       const gateways = mastra.listGateways();
-      expect(gateways).toBeDefined();
-      expect(Object.keys(gateways ?? {})).toHaveLength(0);
-    });
-
-    it('should allow adding gateways after construction', () => {
-      const mastra = new Mastra();
-      const testGateway = new TestGateway();
-
-      mastra.addGateway(testGateway, 'test');
-
-      const gateways = mastra.listGateways();
-      expect(gateways).toBeDefined();
-      expect(Object.keys(gateways ?? {})).toHaveLength(1);
-      expect(gateways?.test).toBe(testGateway);
+      expect(gateways).toBeUndefined();
     });
 
     it('should support multiple gateways', () => {
@@ -180,103 +167,6 @@ describe('Mastra Custom Gateway Integration', () => {
       expect(Object.keys(gateways ?? {})).toHaveLength(2);
       expect(gateways?.g1.name).toBe('gateway-1');
       expect(gateways?.g2.name).toBe('gateway-2');
-    });
-
-    it('should allow getting a gateway by name', () => {
-      const testGateway = new TestGateway();
-      const mastra = new Mastra({
-        gateways: {
-          test: testGateway,
-        },
-      });
-
-      const gateway = mastra.getGateway('test');
-      expect(gateway).toBe(testGateway);
-      expect(gateway.name).toBe('test-gateway');
-    });
-
-    it('should throw error when getting non-existent gateway', () => {
-      const mastra = new Mastra();
-      expect(() => mastra.getGateway('nonexistent')).toThrow('Gateway with key nonexistent not found');
-    });
-
-    it('should allow getting a gateway by its ID', () => {
-      class GatewayWithId extends MastraModelGateway {
-        readonly id = 'test-gateway-v1';
-        readonly name = 'test-gateway-name';
-        readonly prefix = 'test-id';
-
-        async fetchProviders() {
-          return {
-            'test-provider': {
-              name: 'Test Provider',
-              models: ['model-1'],
-              apiKeyEnvVar: 'TEST_API_KEY',
-              gateway: 'test-gateway-name',
-            },
-          };
-        }
-
-        buildUrl(_modelId: string) {
-          return 'https://api.test-id.com/v1';
-        }
-
-        async getApiKey(_modelId: string) {
-          return 'test-key';
-        }
-
-        async resolveLanguageModel({
-          modelId,
-          providerId,
-          apiKey,
-        }: {
-          modelId: string;
-          providerId: string;
-          apiKey: string;
-        }) {
-          return createOpenAICompatible({
-            name: providerId,
-            apiKey,
-            baseURL: this.buildUrl(`${providerId}/${modelId}`),
-            supportsStructuredOutputs: true,
-          }).chatModel(modelId);
-        }
-      }
-
-      const gateway = new GatewayWithId();
-      const mastra = new Mastra({
-        gateways: {
-          myKey: gateway,
-        },
-      });
-
-      // Get by ID (not the key)
-      const retrievedGateway = mastra.getGatewayById('test-gateway-v1');
-      expect(retrievedGateway).toBe(gateway);
-      expect(retrievedGateway.getId()).toBe('test-gateway-v1');
-    });
-
-    it('should use name as ID when gateway has no explicit ID', () => {
-      const testGateway = new TestGateway(); // name = 'test-gateway', no id
-      const mastra = new Mastra({
-        gateways: {
-          someKey: testGateway,
-        },
-      });
-
-      // Should be able to get by name when no ID is set
-      const retrievedGateway = mastra.getGatewayById('test-gateway');
-      expect(retrievedGateway).toBe(testGateway);
-    });
-
-    it('should throw error when getting gateway by non-existent ID', () => {
-      const mastra = new Mastra({
-        gateways: {
-          test: new TestGateway(),
-        },
-      });
-
-      expect(() => mastra.getGatewayById('non-existent-id')).toThrow('Gateway with ID non-existent-id not found');
     });
   });
 
@@ -401,53 +291,6 @@ describe('Mastra Custom Gateway Integration', () => {
       expect(llm2).toBeDefined();
       expect(llm1.getProvider()).toBe('provider-1');
       expect(llm2.getProvider()).toBe('provider-2');
-    });
-  });
-
-  describe('Gateway Lifecycle', () => {
-    it('should allow adding gateways after initialization', () => {
-      const gateway1 = new TestGateway();
-      const mastra = new Mastra({
-        gateways: {
-          test: gateway1,
-        },
-      });
-
-      expect(Object.keys(mastra.listGateways() ?? {})).toHaveLength(1);
-
-      mastra.addGateway(new Gateway2(), 'g2');
-
-      const gateways = mastra.listGateways();
-      expect(Object.keys(gateways ?? {})).toHaveLength(2);
-      expect(gateways?.test.name).toBe('test-gateway');
-      expect(gateways?.g2.name).toBe('gateway-2');
-    });
-
-    it('should not replace existing gateways when adding with same key', () => {
-      const testGateway = new TestGateway();
-      const mastra = new Mastra({
-        gateways: {
-          test: testGateway,
-        },
-      });
-
-      mastra.addGateway(new Gateway2(), 'test'); // Try to add with same key
-
-      const gateways = mastra.listGateways();
-      expect(Object.keys(gateways ?? {})).toHaveLength(1);
-      expect(gateways?.test).toBe(testGateway); // Original gateway should remain
-      expect(gateways?.test.name).toBe('test-gateway');
-    });
-
-    it('should use gateway ID as key if no key provided', () => {
-      const mastra = new Mastra();
-
-      const gateway = new Gateway2();
-
-      mastra.addGateway(gateway); // No key provided, should use gateway.id = 'g2'
-
-      const gateways = mastra.listGateways();
-      expect(gateways?.['g2']).toBe(gateway);
     });
   });
 

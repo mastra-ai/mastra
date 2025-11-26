@@ -119,21 +119,6 @@ const mastra = new Mastra({
 });
 ```
 
-### After Initialization
-
-Add gateways dynamically using `addGateway`:
-
-```typescript
-const mastra = new Mastra();
-
-// Add with explicit key
-mastra.addGateway(new MyPrivateGateway(), 'myGateway');
-
-// Add using gateway's ID
-mastra.addGateway(new MyPrivateGateway());
-// Stored with key 'my-private-gateway' (the gateway's id)
-```
-
 ## Using Custom Gateways
 
 Reference models from your custom gateway using the gateway ID as prefix:
@@ -141,13 +126,18 @@ Reference models from your custom gateway using the gateway ID as prefix:
 ```typescript
 import { Agent } from '@mastra/core';
 
-const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'private/my-provider/model-1', // Uses MyPrivateGateway
+const mastra = new Mastra({
+  gateways: {
+    private: new MyPrivateGateway(),
+  },
+  agents: {
+    myAgent: new Agent({
+      name: 'my-agent',
+      instructions: 'You are a helpful assistant',
+      model: 'private/my-provider/model-1', // Uses MyPrivateGateway
+    }),
+  },
 });
-
-mastra.addAgent(agent, 'myAgent');
 ```
 
 When you create an agent or use a model, Mastra's model router automatically selects the appropriate gateway based on the model ID. The gateway ID serves as the prefix. If no custom gateways match, it falls back to the built-in gateways.
@@ -243,31 +233,6 @@ declare module '@mastra/core/llm' {
 
 This extends the built-in type to include your custom models, giving you full autocomplete support.
 
-## Gateway Management
-
-### getGateway(key)
-
-Retrieve a gateway by its registration key:
-
-```typescript
-const gateway = mastra.getGateway('myGateway');
-console.log(gateway.name); // 'My Private Gateway'
-```
-
-### getGatewayById(id)
-
-Retrieve a gateway by its unique ID:
-
-```typescript
-const gateway = mastra.getGatewayById('my-private-gateway');
-console.log(gateway.name); // 'My Private Gateway'
-```
-
-This is useful when:
-- Gateways have explicit IDs different from their registration keys
-- You need to find a gateway by its ID across different instances
-- Supporting gateway versioning (e.g., `'gateway-v1'`, `'gateway-v2'`)
-
 ### listGateways()
 
 Get all registered gateways:
@@ -317,13 +282,13 @@ interface ProviderConfig {
 Understanding the distinction:
 
 - **Key**: The registration key used when adding the gateway to Mastra (record key)
-- **ID**: The gateway's unique identifier (via `id` property or `name` if not set)
+- **ID**: The gateway's unique identifier (via `id` property), used as the prefix in model strings
 
 ```typescript
 class VersionedGateway extends MastraModelGateway {
   readonly id = 'my-gateway-v2';     // Unique ID for versioning and prefixing
   readonly name = 'My Gateway';       // Display name
-\  // ... implementation
+  // ... implementation
 }
 
 const mastra = new Mastra({
@@ -332,14 +297,12 @@ const mastra = new Mastra({
   },
 });
 
-// Retrieve by key
-const byKey = mastra.getGateway('currentGateway');
-
-// Retrieve by ID
-const byId = mastra.getGatewayById('my-gateway-v2');
-
-// Both return the same gateway
-console.log(byKey === byId); // true
+// Access models using the gateway ID as prefix
+const agent = new Agent({
+  name: 'my-agent',
+  instructions: 'You are helpful',
+  model: 'my-gateway-v2/provider/model-1', // Uses VersionedGateway
+});
 ```
 
 ## Model ID Format
@@ -492,19 +455,8 @@ describe('MyPrivateGateway', () => {
       },
     });
 
-    const gateway = mastra.getGateway('private');
-    expect(gateway.name).toBe('My Private Gateway');
-  });
-
-  it('should resolve models by ID', () => {
-    const mastra = new Mastra({
-      gateways: {
-        key: new MyPrivateGateway(),
-      },
-    });
-
-    const gateway = mastra.getGatewayById('my-private-gateway');
-    expect(gateway).toBeDefined();
+    const gateways = mastra.listGateways();
+    expect(gateways?.private.name).toBe('My Private Gateway');
   });
 });
 ```
@@ -537,4 +489,4 @@ Mastra includes built-in gateways as reference implementations:
 - **NetlifyGateway**: Netlify AI Gateway integration with token exchange
 - **ModelsDevGateway**: Registry of OpenAI-compatible providers from models.dev
 
-See [Netlify](/models/v1/gateways/netlify), [OpenRouter](/models/v1/gateways/openrouter), and [Vercel](/models/v1/gateways/vercel) for examples of gateway usage.
+See [Netlify](/models/gateways/netlify), [OpenRouter](/models/gateways/openrouter), and [Vercel](/models/gateways/vercel) for examples of gateway usage.
