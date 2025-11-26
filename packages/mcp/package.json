@@ -25,6 +25,7 @@
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "pnpm build --watch",
+    "test:client": "vitest run ./src/client/client.test.ts",
     "test:integration": "cd integration-tests && pnpm test:mcp",
     "test": "pnpm test:integration && vitest run",
     "lint": "eslint ."
