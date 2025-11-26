@@ -204,6 +204,11 @@
       "source": "/examples/v1/observability/basic-ai-tracing",
       "destination": "/docs/v1/observability/overview",
       "permanent": true
+    },
+    {
+      "source": "/docs/v1/agents/human-in-the-loop-with-tools",
+      "destination": "/docs/v1/agents/agent-approval",
+      "permanent": true
     }
   ]
 }
