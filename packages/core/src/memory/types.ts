@@ -5,7 +5,7 @@ import type { ZodObject } from 'zod';
 
 export type { MastraDBMessage } from '../agent';
 import type { EmbeddingModelId } from '../llm/model/index.js';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { RequestContext } from '../request-context';
 import type { MastraStorage } from '../storage';
 import type { DynamicArgument } from '../types';
@@ -403,8 +403,9 @@ export type MemoryConfig = {
         /**
          * Language model to use for title generation.
          * Can be static or a function that receives request context for dynamic selection.
+         * Accepts both Mastra models and standard AI SDK LanguageModelV1/V2.
          */
-        model: DynamicArgument<MastraLanguageModel>;
+        model: DynamicArgument<MastraModelConfig>;
         /**
          * Custom instructions for title generation.
          * Can be static or a function that receives request context for dynamic customization.
@@ -423,7 +424,7 @@ export type MemoryConfig = {
     generateTitle?:
       | boolean
       | {
-          model: DynamicArgument<MastraLanguageModel>;
+          model: DynamicArgument<MastraModelConfig>;
           instructions?: DynamicArgument<string>;
         };
   };

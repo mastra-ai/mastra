@@ -17,7 +17,7 @@ import type {
   StreamTextWithMessagesArgs,
   StreamObjectWithMessagesArgs,
 } from '../llm/model/base.types';
-import type { MastraLanguageModel, TripwireProperties } from '../llm/model/shared.types';
+import type { MastraModelConfig, TripwireProperties } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
@@ -118,18 +118,18 @@ export interface AgentLegacyCapabilities {
     userMessage: UIMessage | UIMessageWithMetadata,
     requestContext: RequestContext,
     tracingContext: TracingContext,
-    titleModel?: DynamicArgument<MastraLanguageModel>,
+    titleModel?: DynamicArgument<MastraModelConfig>,
     titleInstructions?: DynamicArgument<string>,
   ): Promise<string | undefined>;
   /** Resolve title generation config */
   resolveTitleGenerationConfig(
     generateTitleConfig:
       | boolean
-      | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> }
+      | { model: DynamicArgument<MastraModelConfig>; instructions?: DynamicArgument<string> }
       | undefined,
   ): {
     shouldGenerate: boolean;
-    model?: DynamicArgument<MastraLanguageModel>;
+    model?: DynamicArgument<MastraModelConfig>;
     instructions?: DynamicArgument<string>;
   };
   /** Save step messages */
