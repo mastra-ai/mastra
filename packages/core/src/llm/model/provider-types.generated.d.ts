@@ -138,6 +138,7 @@ export type ProviderModelsMap = {
     'qwen-qwq-32b',
     'qwen/qwen3-32b',
   ];
+  readonly bailing: readonly ['Ling-1T', 'Ring-1T'];
   readonly mistral: readonly [
     'codestral-latest',
     'devstral-medium-2507',
@@ -940,10 +941,12 @@ export type ProviderModelsMap = {
     'anthropic/claude-haiku-4-5',
     'anthropic/claude-opus-4',
     'anthropic/claude-opus-4-1',
+    'anthropic/claude-opus-4-5',
     'anthropic/claude-sonnet-4',
     'anthropic/claude-sonnet-4-5',
     'google/gemini-2.5-flash',
     'google/gemini-2.5-pro',
+    'google/gemini-3-pro-preview',
     'openai/gpt-4.1',
     'openai/gpt-4.1-mini',
     'openai/gpt-4o-mini',
