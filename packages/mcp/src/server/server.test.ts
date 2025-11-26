@@ -159,7 +159,8 @@ describe('MCPServer', () => {
     vi.clearAllMocks();
 
     // @ts-ignore - Mocking Date completely
-    global.Date = vi.fn((...args: any[]) => {
+    // Must use a regular function (not arrow function) to support `new Date()` constructor calls
+    global.Date = vi.fn(function (this: any, ...args: any[]) {
       if (args.length === 0) {
         // new Date()
         return mockDate;
@@ -171,9 +172,7 @@ describe('MCPServer', () => {
     // @ts-ignore
     global.Date.now = vi.fn(() => mockDate.getTime());
     // @ts-ignore
-    global.Date.prototype.toISOString = vi.fn(() => mockDateISO);
-    // @ts-ignore // Static Date.toISOString() might be used by some libraries
-    global.Date.toISOString = vi.fn(() => mockDateISO);
+    global.Date.prototype = OriginalDate.prototype;
   });
 
   // Restore original Date after all tests in this describe block
@@ -1229,7 +1228,11 @@ describe('MCPServer', () => {
   describe('MCPServer Session Management', () => {
     let sessionServer: MCPServer;
     let sessionHttpServer: http.Server;
-    const SESSION_TEST_PORT = 9600 + Math.floor(Math.random() * 1000);
+    let currentTestPort: number;
+
+    beforeEach(() => {
+      currentTestPort = 9600 + Math.floor(Math.random() * 1000);
+    });
 
     afterEach(async () => {
       if (sessionHttpServer) {
@@ -1254,7 +1257,7 @@ describe('MCPServer', () => {
       });
 
       sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
-        const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
         await sessionServer.startHTTP({
           url,
           httpPath: '/http',
@@ -1264,21 +1267,21 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(SESSION_TEST_PORT, () => resolve()));
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
 
       const client = new InternalMastraMCPClient({
         name: 'default-session-client',
         server: {
-          url: new URL(`http://localhost:${SESSION_TEST_PORT}/http`),
+          url: new URL(`http://localhost:${currentTestPort}/http`),
         },
       });
 
       await client.connect();
 
       // Verify that a session was created by checking if we can list tools
-      const tools = await client.listTools();
+      const tools = await client.tools();
       expect(tools).toBeDefined();
-      expect(tools.tools).toBeInstanceOf(Array);
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
 
       await client.disconnect();
     });
@@ -1291,7 +1294,7 @@ describe('MCPServer', () => {
       });
 
       sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
-        const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
         await sessionServer.startHTTP({
           url,
           httpPath: '/http',
@@ -1303,21 +1306,21 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(SESSION_TEST_PORT, () => resolve()));
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
 
       const client = new InternalMastraMCPClient({
         name: 'no-session-client',
         server: {
-          url: new URL(`http://localhost:${SESSION_TEST_PORT}/http`),
+          url: new URL(`http://localhost:${currentTestPort}/http`),
         },
       });
 
       await client.connect();
 
       // Should work in stateless mode
-      const tools = await client.listTools();
+      const tools = await client.tools();
       expect(tools).toBeDefined();
-      expect(tools.tools).toBeInstanceOf(Array);
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
 
       await client.disconnect();
     });
@@ -1330,7 +1333,7 @@ describe('MCPServer', () => {
       });
 
       sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
-        const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
         await sessionServer.startHTTP({
           url,
           httpPath: '/http',
@@ -1342,21 +1345,21 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(SESSION_TEST_PORT, () => resolve()));
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
 
       const client = new InternalMastraMCPClient({
         name: 'serverless-client',
         server: {
-          url: new URL(`http://localhost:${SESSION_TEST_PORT}/http`),
+          url: new URL(`http://localhost:${currentTestPort}/http`),
         },
       });
 
       await client.connect();
 
       // Should work in stateless serverless mode
-      const tools = await client.listTools();
+      const tools = await client.tools();
       expect(tools).toBeDefined();
-      expect(tools.tools).toBeInstanceOf(Array);
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
 
       await client.disconnect();
     });
@@ -1378,7 +1381,7 @@ describe('MCPServer', () => {
       });
 
       sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
-        const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
         await sessionServer.startHTTP({
           url,
           httpPath: '/http',
@@ -1390,12 +1393,12 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(SESSION_TEST_PORT, () => resolve()));
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
 
       const client = new InternalMastraMCPClient({
         name: 'custom-session-client',
         server: {
-          url: new URL(`http://localhost:${SESSION_TEST_PORT}/http`),
+          url: new URL(`http://localhost:${currentTestPort}/http`),
         },
       });
 
@@ -1417,7 +1420,7 @@ describe('MCPServer', () => {
       });
 
       sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
-        const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
 
         await sessionServer.startHTTP({
           url,
@@ -1426,33 +1429,27 @@ describe('MCPServer', () => {
           res,
           options: {
             sessionIdGenerator: undefined, // User explicitly disables sessions
-            // The default is sessionIdGenerator: () => randomUUID()
-            // This test verifies that the user's undefined overrides the default
           },
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(SESSION_TEST_PORT, () => resolve()));
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
 
       const client = new InternalMastraMCPClient({
         name: 'override-test-client',
         server: {
-          url: new URL(`http://localhost:${SESSION_TEST_PORT}/http`),
+          url: new URL(`http://localhost:${currentTestPort}/http`),
         },
       });
 
       await client.connect();
 
-      // Should work with sessions disabled
-      const tools = await client.listTools();
+      // Should work with serverless mode enabled
+      const tools = await client.tools();
       expect(tools).toBeDefined();
-      expect(tools.tools).toBeInstanceOf(Array);
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
 
       await client.disconnect();
-
-      // Note: serverlessModeCalled check is removed because sessionIdGenerator: undefined
-      // doesn't automatically trigger serverless mode - it just disables session tracking
-      // Serverless mode is only triggered by options.serverless: true
     });
   });
 });
@@ -1675,6 +1672,36 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     });
 
     const agentMock = new MockLanguageModelV2({
+      doGenerate: async params => {
+        const hasToolResults = params.prompt.some(
+          (msg: any) =>
+            msg.role === 'tool' ||
+            (Array.isArray(msg.content) && msg.content.some((c: any) => c.type === 'tool-result')),
+        );
+
+        if (!hasToolResults) {
+          return {
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'call-1',
+                toolName: 'authCheck',
+                input: JSON.stringify({ query: 'agent call' }),
+              },
+            ],
+            warnings: [],
+          };
+        } else {
+          return {
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Tool executed successfully' }],
+            warnings: [],
+          };
+        }
+      },
       doStream: async params => {
         const hasToolResults = params.prompt.some(
           (msg: any) =>
@@ -1718,6 +1745,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     });
 
     const agentWithTool = new Agent({
+      id: 'AgentWithAuthCheckTool',
       name: 'AgentWithAuthCheckTool',
       instructions: 'You use the authCheck tool',
       description: 'Agent that uses authCheck tool',
@@ -1773,7 +1801,7 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
   });
 
   it('should convert a provided workflow to an MCP tool', () => {
-    const testWorkflow = createMockWorkflow('MyTestWorkflow', 'A test workflow.');
+    const testWorkflow = createMockWorkflow('MyTestWorkflow', 'A test workflow.', z.object({ input: z.string() }));
     server = new MCPServer({
       name: 'WorkflowToolServer',
       version: '1.0.0',
