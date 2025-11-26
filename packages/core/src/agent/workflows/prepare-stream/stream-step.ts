@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
-import { RuntimeContext } from '../../../runtime-context';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig } from '../../../memory/types';
+import { RuntimeContext } from '../../../runtime-context';
 import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
