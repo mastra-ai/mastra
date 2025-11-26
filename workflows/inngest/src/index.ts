@@ -1958,7 +1958,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
     try {
       stepRes = await this.inngestStep.run(`workflow.${executionContext.workflowId}.step.${step.id}`, async () => {
-        console.log('====executing step====', step.id);
         let execResults: {
           status: 'success' | 'failed' | 'suspended' | 'bailed';
           output?: any;
