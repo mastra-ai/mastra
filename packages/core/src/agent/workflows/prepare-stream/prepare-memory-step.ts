@@ -176,15 +176,6 @@ export function createPrepareMemoryStep<
         inputProcessorOverrides: options.inputProcessors,
       });
 
-      // Add instructions as system message(s) to the existing messageList
-      // which already contains processed historical messages from input processors
-      addSystemMessage(messageList, instructions);
-
-      messageList.add(options.context || [], 'context');
-
-      // Add user-provided system message if present
-      addSystemMessage(messageList, options.system, 'user-provided');
-
       return {
         thread: threadObject,
         messageList: messageList,

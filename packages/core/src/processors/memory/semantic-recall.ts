@@ -469,21 +469,22 @@ export class SemanticRecall implements Processor {
     const { messages, messageList, runtimeContext } = args;
 
     if (!this.vector || !this.embedder || !this.storage) {
-      return messages;
+      // Return messageList if available to signal no transformation occurred
+      return messageList || messages;
     }
 
     try {
       const memoryContext = parseMemoryRuntimeContext(runtimeContext);
 
       if (!memoryContext) {
-        return messages;
+        return messageList || messages;
       }
 
       const { thread, resourceId } = memoryContext;
       const threadId = thread?.id;
 
       if (!threadId) {
-        return messages;
+        return messageList || messages;
       }
 
       const indexName = this.indexName || this.getDefaultIndexName();
@@ -565,7 +566,9 @@ export class SemanticRecall implements Processor {
       this.logger?.error('[SemanticRecall] Error in processOutputResult:', { error });
     }
 
-    return messages;
+    // Return messageList to signal no message transformation occurred
+    // (we only created embeddings as a side effect)
+    return messageList || messages;
   }
 
   /**

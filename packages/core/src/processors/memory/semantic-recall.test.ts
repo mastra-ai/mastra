@@ -1011,8 +1011,8 @@ describe('SemanticRecall', () => {
         runtimeContext,
       });
 
-      // Should return messages unchanged
-      expect(result).toEqual([userMessage, assistantMessage]);
+      // Should return messageList (not an array) to signal no transformation
+      expect(result).toBe(messageList);
 
       // Should create embeddings for both messages (called separately)
       expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
@@ -1400,8 +1400,8 @@ describe('SemanticRecall', () => {
         runtimeContext,
       });
 
-      // Should return messages unchanged
-      expect(result).toEqual([userMessage]);
+      // Should return messageList to signal no transformation
+      expect(result).toBe(messageList);
 
       // Should not create embeddings
       expect(mockEmbedder.doEmbed).not.toHaveBeenCalled();
@@ -1459,8 +1459,8 @@ describe('SemanticRecall', () => {
         runtimeContext,
       });
 
-      // Should return messages unchanged even on error
-      expect(result).toEqual([userMessage]);
+      // Should return messageList even on error to signal no transformation
+      expect(result).toBe(messageList);
 
       // Should not call upsert if embedding fails
       expect(mockVector.upsert).not.toHaveBeenCalled();
@@ -1519,8 +1519,8 @@ describe('SemanticRecall', () => {
         runtimeContext,
       });
 
-      // Should return messages unchanged even on error
-      expect(result).toEqual([userMessage]);
+      // Should return messageList even on error to signal no transformation
+      expect(result).toBe(messageList);
 
       // Should have attempted to upsert
       expect(mockVector.upsert).toHaveBeenCalled();
