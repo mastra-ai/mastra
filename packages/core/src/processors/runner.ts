@@ -435,7 +435,8 @@ export class ProcessorRunner {
             }
           }
 
-          processableMessages = nonSystemMessages;
+          // Use messageList.get.input.db() for consistency with MessageList return type
+          processableMessages = messageList.get.input.db();
         }
       }
 
