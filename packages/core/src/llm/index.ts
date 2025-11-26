@@ -152,5 +152,6 @@ export type LLMStreamObjectOptions<Z extends ZodSchema | JSONSchema7 | undefined
   DefaultLLMStreamObjectOptions;
 
 export type { ProviderConfig } from './model/gateways/base';
+export { MastraModelGateway, NetlifyGateway, ModelsDevGateway } from './model/gateways';
 
 export { ModelRouterEmbeddingModel, type EmbeddingModelId } from './model';
