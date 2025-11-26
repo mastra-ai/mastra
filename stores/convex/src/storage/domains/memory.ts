@@ -9,6 +9,7 @@ import {
   TABLE_THREADS,
   calculatePagination,
   normalizePerPage,
+  safelyParseJSON,
 } from '@mastra/core/storage';
 import type {
   StorageListMessagesInput,
@@ -17,8 +18,6 @@ import type {
   StorageListThreadsByResourceIdOutput,
   StorageResourceType,
 } from '@mastra/core/storage';
-
-import { safelyParseJSON } from '@mastra/core/storage/utils';
 
 import type { StoreOperationsConvex } from '../operations';
 
@@ -220,8 +219,10 @@ export class MemoryConvex extends MemoryStorage {
     }
 
     messages.sort((a, b) => {
-      const aValue = field === 'createdAt' || field === 'updatedAt' ? new Date((a as any)[field]).getTime() : (a as any)[field];
-      const bValue = field === 'createdAt' || field === 'updatedAt' ? new Date((b as any)[field]).getTime() : (b as any)[field];
+      const aValue =
+        field === 'createdAt' || field === 'updatedAt' ? new Date((a as any)[field]).getTime() : (a as any)[field];
+      const bValue =
+        field === 'createdAt' || field === 'updatedAt' ? new Date((b as any)[field]).getTime() : (b as any)[field];
       if (typeof aValue === 'number' && typeof bValue === 'number') {
         return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       }
@@ -316,7 +317,8 @@ export class MemoryConvex extends MemoryStorage {
         current.type = update.type;
       }
       if (update.createdAt) {
-        current.createdAt = update.createdAt instanceof Date ? update.createdAt.toISOString() : (update.createdAt as string);
+        current.createdAt =
+          update.createdAt instanceof Date ? update.createdAt.toISOString() : (update.createdAt as string);
       }
       if (update.content) {
         const existingContent = safelyParseJSON(current.content) || {};

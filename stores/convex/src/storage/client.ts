@@ -1,5 +1,6 @@
-import { makeFunctionReference, type FunctionReference } from 'convex/server';
 import { ConvexHttpClient } from 'convex/browser';
+import { makeFunctionReference } from 'convex/server';
+import type { FunctionReference } from 'convex/server';
 
 import type { StorageRequest, StorageResponse } from './types';
 
@@ -30,6 +31,7 @@ export class ConvexAdminClient {
     this.client = new ConvexHttpClient(deploymentUrl, {
       skipConvexDeploymentUrlCheck: true,
     });
+
     this.client.setAdminAuth(adminAuthToken);
 
     if (fetchOptions?.headers) {

@@ -1,12 +1,10 @@
 import crypto from 'node:crypto';
 
-import { TABLE_WORKFLOW_SNAPSHOT, type TABLE_NAMES } from '@mastra/core/storage';
-import type { StorageColumn } from '@mastra/core/storage';
+import { TABLE_WORKFLOW_SNAPSHOT, StoreOperations } from '@mastra/core/storage';
+import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 
-import { StoreOperations } from '@mastra/core/storage/domains/operations/base';
-
-import type { EqualityFilter } from './types';
 import type { ConvexAdminClient } from './client';
+import type { EqualityFilter } from './types';
 
 export class StoreOperationsConvex extends StoreOperations {
   constructor(private readonly client: ConvexAdminClient) {
@@ -51,13 +49,7 @@ export class StoreOperationsConvex extends StoreOperations {
     });
   }
 
-  async batchInsert({
-    tableName,
-    records,
-  }: {
-    tableName: TABLE_NAMES;
-    records: Record<string, any>[];
-  }): Promise<void> {
+  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     if (records.length === 0) return;
 
     await this.client.callStorage({

@@ -1,4 +1,4 @@
-import type { MutationCtx } from 'convex/server';
+import type { GenericMutationCtx as MutationCtx } from 'convex/server';
 import { mutationGeneric } from 'convex/server';
 
 import type { StorageRequest, StorageResponse } from '../storage/types';
@@ -79,21 +79,25 @@ async function loadRecord(ctx: MutationCtx, tableName: string, keys: Record<stri
 }
 
 async function deleteByTable(ctx: MutationCtx, tableName: string) {
-  const docs = await ctx.db.query(TABLE_NAME).withIndex('by_table', q => q.eq('table', tableName)).collect();
+  const docs = await ctx.db
+    .query(TABLE_NAME)
+    .withIndex('by_table', q => q.eq('table', tableName))
+    .collect();
   for (const doc of docs) {
     await ctx.db.delete(doc._id);
   }
 }
 
 async function queryTable(ctx: MutationCtx, tableName: string, filters?: { field: string; value: any }[]) {
-  const docs = await ctx.db.query(TABLE_NAME).withIndex('by_table', q => q.eq('table', tableName)).collect();
+  const docs = await ctx.db
+    .query(TABLE_NAME)
+    .withIndex('by_table', q => q.eq('table', tableName))
+    .collect();
   if (!filters || filters.length === 0) {
     return docs.map(doc => doc.record);
   }
 
-  return docs
-    .map(doc => doc.record)
-    .filter(record => filters.every(filter => record?.[filter.field] === filter.value));
+  return docs.map(doc => doc.record).filter(record => filters.every(filter => record?.[filter.field] === filter.value));
 }
 
 async function deleteMany(ctx: MutationCtx, tableName: string, ids: string[]) {

@@ -1,5 +1,8 @@
-import { MastraStorage, type StorageColumn, type StorageResourceType, type StorageThreadType } from '@mastra/core/storage';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
+  StorageColumn,
+  StorageResourceType,
   PaginationInfo,
   StorageListMessagesInput,
   StorageListMessagesOutput,
@@ -9,26 +12,17 @@ import type {
   StoragePagination,
   WorkflowRun,
   WorkflowRuns,
-} from '@mastra/core/storage';
-import {
   TABLE_NAMES,
-  TABLE_MESSAGES,
-  TABLE_RESOURCES,
-  TABLE_SCORERS,
-  TABLE_THREADS,
-  TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
-
-import type { MastraDBMessage } from '@mastra/core/memory';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import { MastraStorage } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 import type { ConvexAdminClientConfig } from './client';
 import { ConvexAdminClient } from './client';
-import { StoreOperationsConvex } from './operations';
 import { MemoryConvex } from './domains/memory';
-import { WorkflowsConvex } from './domains/workflows';
 import { ScoresConvex } from './domains/scores';
+import { WorkflowsConvex } from './domains/workflows';
+import { StoreOperationsConvex } from './operations';
 
 export type ConvexStoreConfig = ConvexAdminClientConfig & {
   id: string;
@@ -94,13 +88,7 @@ export class ConvexStore extends MastraStorage {
     await this.operations.insert({ tableName, record });
   }
 
-  async batchInsert({
-    tableName,
-    records,
-  }: {
-    tableName: TABLE_NAMES;
-    records: Record<string, any>[];
-  }): Promise<void> {
+  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     await this.operations.batchInsert({ tableName, records });
   }
 

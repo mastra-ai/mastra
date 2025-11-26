@@ -1,14 +1,9 @@
 import crypto from 'node:crypto';
 
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  TABLE_SCORERS,
-  type PaginationInfo,
-  type StoragePagination,
-} from '@mastra/core/storage';
-
-import { ScoresStorage } from '@mastra/core/storage/domains/scores/base';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import { TABLE_SCORERS, ScoresStorage } from '@mastra/core/storage';
+import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 
 import type { StoreOperationsConvex } from '../operations';
 
