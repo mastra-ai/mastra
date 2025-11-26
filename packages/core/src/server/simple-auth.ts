@@ -1,5 +1,6 @@
 import type { HonoRequest } from 'hono';
-import { MastraAuthProvider, type MastraAuthProviderOptions } from './auth';
+import { MastraAuthProvider } from './auth';
+import type { MastraAuthProviderOptions } from './auth';
 
 export interface SimpleAuthOptions<TUser = unknown> extends MastraAuthProviderOptions<TUser> {
   /**
