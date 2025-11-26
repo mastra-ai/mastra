@@ -1,9 +1,8 @@
-import type { CoreMessage } from '@internal/ai-sdk-v4';
+import type { CoreMessage } from 'ai';
 import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { MockMemory } from '../../memory/mock';
-import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
+import { MockMemory } from '../test-utils';
 
 describe('Base64 Images with Threads - Issue #10480', () => {
   let mockModel: MockLanguageModelV2;
@@ -20,9 +19,7 @@ describe('Base64 Images with Threads - Issue #10480', () => {
       }),
     });
 
-    mockMemory = new MockMemory({
-      storage: new InMemoryStore(),
-    });
+    mockMemory = new MockMemory();
   });
 
   it('should handle raw base64 image strings (without data: prefix) with thread and resource', async () => {
