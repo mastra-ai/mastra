@@ -512,6 +512,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
         }
         return part;
       }
+
       return;
     }
   }

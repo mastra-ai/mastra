@@ -1522,4 +1522,222 @@ describe('MessageList V5 Support', () => {
       });
     });
   });
+
+  /**
+   * GitHub Issue #9005: GPT-5 Mini Reasoning Model Compatibility
+   *
+   * OpenAI's GPT-5 models use the Responses API which requires:
+   * - Each function_call item must be accompanied by its associated reasoning item
+   * - Reasoning items must have `providerOptions.openai.itemId` set
+   * - When replaying conversation history, reasoning items MUST include their original IDs
+   *
+   * If `providerOptions.openai.itemId` is missing on reasoning parts, the OpenAI SDK
+   * will SKIP the reasoning entirely, causing the error:
+   * "Item 'fc_xxx' of type 'function_call' was provided without its required 'reasoning' item: 'rs_xxx'"
+   */
+  describe('Issue #9005 - GPT-5 Reasoning Model Compatibility', () => {
+    it('should preserve OpenAI reasoning itemId through V5 UI → V2 → V5 UI → V5 Model round-trip', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      // Simulate the exact structure OpenAI returns for reasoning items
+      // The itemId is critical - without it, reasoning gets skipped by the OpenAI SDK
+      const openaiReasoningProviderMetadata = {
+        openai: {
+          itemId: 'rs_08bb11e324d4e4680068f4c71de92c81939e298c28f83703b2',
+          reasoningEncryptedContent: 'encrypted_content_here',
+        },
+      };
+
+      const openaiToolCallProviderMetadata = {
+        openai: {
+          itemId: 'fc_08bb11e324d4e4680068f4c72182808193b7ba870871731d72',
+        },
+      };
+
+      // Create an AIV5 UI Message simulating an OpenAI GPT-5 response with reasoning + tool call
+      const v5UIMessage: AIV5UIMessage = {
+        id: 'msg-gpt5-response',
+        role: 'assistant',
+        parts: [
+          // Reasoning part with OpenAI's itemId
+          {
+            type: 'reasoning',
+            text: 'Let me think about how to use this tool...',
+            state: 'done',
+            providerMetadata: openaiReasoningProviderMetadata,
+          },
+          // Tool call that depends on the reasoning
+          {
+            type: 'tool-testTool',
+            toolCallId: 'call-123',
+            state: 'output-available',
+            input: { message: 'hello' },
+            output: { result: 'Tool executed: hello' },
+            callProviderMetadata: openaiToolCallProviderMetadata,
+          },
+        ],
+      };
+
+      // Step 1: Add message as 'response' (simulates storing LLM response)
+      list.add(v5UIMessage, 'response');
+
+      // Step 2: Get V2 (DB format) and verify providerMetadata is stored
+      const v2Messages = list.get.all.v2();
+      expect(v2Messages).toHaveLength(1);
+      const v2ReasoningPart = v2Messages[0].content.parts?.find(p => p.type === 'reasoning');
+      expect(v2ReasoningPart).toBeDefined();
+      expect(v2ReasoningPart?.providerMetadata).toBeDefined();
+      expect(v2ReasoningPart?.providerMetadata).toEqual(openaiReasoningProviderMetadata);
+
+      // Step 3: Create a new MessageList (simulating memory recall)
+      const listFromMemory = new MessageList({ threadId, resourceId });
+
+      // Add the V2 message as if it came from memory
+      listFromMemory.add(v2Messages[0], 'memory');
+
+      // Step 4: Convert to V5 UI and verify providerMetadata is restored
+      const v5UIFromMemory = listFromMemory.get.all.aiV5.ui();
+      expect(v5UIFromMemory).toHaveLength(1);
+      const v5ReasoningPartFromMemory = v5UIFromMemory[0].parts.find(p => p.type === 'reasoning');
+      expect(v5ReasoningPartFromMemory).toBeDefined();
+      expect(v5ReasoningPartFromMemory?.providerMetadata).toEqual(openaiReasoningProviderMetadata);
+
+      // Step 5: CRITICAL - Convert to V5 Model messages (what gets sent to OpenAI)
+      // Note: convertToModelMessages splits assistant messages with tool results
+      // into multiple messages (assistant with tool-call, tool with tool-result)
+      const v5ModelMessages = listFromMemory.get.all.aiV5.model();
+      expect(v5ModelMessages.length).toBeGreaterThanOrEqual(1);
+
+      // Find the assistant message that contains reasoning
+      const assistantMessage = v5ModelMessages.find(m => m.role === 'assistant');
+      expect(assistantMessage).toBeDefined();
+
+      const modelContent = assistantMessage!.content;
+      expect(Array.isArray(modelContent)).toBe(true);
+
+      if (Array.isArray(modelContent)) {
+        const reasoningPart = modelContent.find((p: any) => p.type === 'reasoning');
+
+        // THIS IS THE CRITICAL ASSERTION:
+        // The reasoning part MUST have providerOptions.openai.itemId for OpenAI to accept it
+        expect(reasoningPart).toBeDefined();
+        expect(reasoningPart).toHaveProperty('providerOptions');
+        expect((reasoningPart as any).providerOptions).toHaveProperty('openai');
+        expect((reasoningPart as any).providerOptions.openai).toHaveProperty('itemId');
+        expect((reasoningPart as any).providerOptions.openai.itemId).toBe(
+          'rs_08bb11e324d4e4680068f4c71de92c81939e298c28f83703b2',
+        );
+      }
+    });
+
+    it('should preserve OpenAI reasoning itemId when adding V5 Model messages directly', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      // Simulate an AIV5 Model Message (what the AI SDK returns in streamResult.response.messages)
+      const v5ModelMessage: AIV5ModelMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'reasoning',
+            text: 'Reasoning about the problem...',
+            providerOptions: {
+              openai: {
+                itemId: 'rs_test123',
+              },
+            },
+          },
+          {
+            type: 'tool-call',
+            toolCallId: 'call-456',
+            toolName: 'testTool',
+            input: { query: 'test' },
+            providerOptions: {
+              openai: {
+                itemId: 'fc_test456',
+              },
+            },
+          },
+        ],
+      };
+
+      // Add as response
+      list.add(v5ModelMessage, 'response');
+
+      // Get back as V5 Model messages
+      // Note: tool-call without result will stay in same message
+      const modelMessages = list.get.all.aiV5.model();
+      expect(modelMessages.length).toBeGreaterThanOrEqual(1);
+
+      // Find assistant message with reasoning
+      const assistantMessage = modelMessages.find(m => m.role === 'assistant');
+      expect(assistantMessage).toBeDefined();
+
+      const content = assistantMessage!.content;
+      expect(Array.isArray(content)).toBe(true);
+
+      if (Array.isArray(content)) {
+        const reasoningPart = content.find((p: any) => p.type === 'reasoning');
+        expect(reasoningPart).toBeDefined();
+        expect((reasoningPart as any).providerOptions?.openai?.itemId).toBe('rs_test123');
+      }
+    });
+
+    it('should preserve reasoning with tool calls in the correct order for OpenAI Responses API', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      // OpenAI requires reasoning to appear BEFORE its associated tool call
+      const v5UIMessage: AIV5UIMessage = {
+        id: 'msg-ordered',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'reasoning',
+            text: 'First, I need to analyze...',
+            state: 'done',
+            providerMetadata: { openai: { itemId: 'rs_001' } },
+          },
+          {
+            type: 'tool-calculator',
+            toolCallId: 'call-001',
+            state: 'output-available',
+            input: { expression: '2+2' },
+            output: { result: 4 },
+            callProviderMetadata: { openai: { itemId: 'fc_001' } },
+          },
+          {
+            type: 'text',
+            text: 'The result is 4.',
+          },
+        ],
+      };
+
+      list.add(v5UIMessage, 'response');
+
+      // Simulate memory round-trip
+      const v2 = list.get.all.v2();
+      const newList = new MessageList({ threadId, resourceId });
+      newList.add(v2[0], 'memory');
+
+      const modelMessages = newList.get.all.aiV5.model();
+      const content = modelMessages[0]?.content;
+
+      if (Array.isArray(content)) {
+        // Find indices of reasoning and tool-call
+        const reasoningIndex = content.findIndex((p: any) => p.type === 'reasoning');
+        const toolCallIndex = content.findIndex((p: any) => p.type === 'tool-call');
+
+        // Reasoning must come before tool-call for OpenAI Responses API
+        expect(reasoningIndex).toBeGreaterThanOrEqual(0);
+        expect(toolCallIndex).toBeGreaterThanOrEqual(0);
+        expect(reasoningIndex).toBeLessThan(toolCallIndex);
+
+        // Both must have their providerOptions preserved
+        const reasoningPart = content[reasoningIndex];
+        const toolCallPart = content[toolCallIndex];
+
+        expect((reasoningPart as any).providerOptions?.openai?.itemId).toBe('rs_001');
+        expect((toolCallPart as any).providerOptions?.openai?.itemId).toBe('fc_001');
+      }
+    });
+  });
 });

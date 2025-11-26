@@ -17,16 +17,23 @@ export interface ProviderConfig {
 
 export abstract class MastraModelGateway {
   /**
+   * Unique identifier for the gateway
+   * This ID is used as the prefix for all providers from this gateway (e.g., "netlify/anthropic")
+   * Exception: models.dev is a provider registry and doesn't use a prefix
+   */
+  abstract readonly id: string;
+
+  /**
    * Name of the gateway provider
    */
   abstract readonly name: string;
 
   /**
-   * Optional prefix for provider IDs
-   * If set, all providers from this gateway will be prefixed (e.g., "netlify/openai")
-   * Registry gateways (like models.dev) typically don't have a prefix
+   * Get the gateway ID
    */
-  abstract readonly prefix?: string;
+  getId(): string {
+    return this.id;
+  }
 
   /**
    * Fetch provider configurations from the gateway

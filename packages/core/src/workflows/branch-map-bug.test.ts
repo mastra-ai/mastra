@@ -70,7 +70,7 @@ describe('Branch with Map Bug - Issue #10407', () => {
       .branch([[async ({ inputData }) => inputData.value > 10, workflowAWithMap]])
       .commit();
 
-    const run = await mainWorkflowWithMapBug.createRun();
+    const run = await mainWorkflowWithMapBug.createRunAsync();
     const result = await run.start({
       inputData: { value: 15 }, // Should trigger workflowA
     });

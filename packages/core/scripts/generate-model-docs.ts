@@ -869,6 +869,12 @@ ${logoImport}
 
 Gateway providers aggregate multiple model providers and add features like caching, rate limiting, analytics, and automatic failover. Use gateways when you need observability, cost management, or simplified multi-provider access.
 
+## Custom Gateways
+
+Create custom gateways for private LLM deployments or specialized provider integrations. See [Custom Gateways](/models/v1/gateways/custom-gateways) for implementation details.
+
+## Built-in Gateways
+
 <CardGrid>
 ${gatewaysList
   .map(g => {
@@ -997,7 +1003,10 @@ function generateGatewaysSidebarItems(grouped: GroupedProviders): any[] {
   // Sort gateways alphabetically
   const gatewaysList = Array.from(grouped.gateways.keys()).sort((a, b) => a.localeCompare(b));
 
-  const items = [{ type: 'doc', id: 'gateways/index', label: 'Gateways' }];
+  const items = [
+    { type: 'doc', id: 'gateways/index', label: 'Gateways' },
+    { type: 'doc', id: 'gateways/custom-gateways', label: 'Custom Gateways' },
+  ];
 
   for (const gatewayId of gatewaysList) {
     const providers = grouped.gateways.get(gatewayId);
