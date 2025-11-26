@@ -5,7 +5,7 @@ description: Learn how to require approvals and suspend tool execution while kee
 
 # Agent Approval
 
-Agents sometimes require the same [human-in-the-loop](/docs/v1/workflows/human-in-the-loop) oversight used in workflows when calling tools that handle sensitive operations, like deleting resources or performing running long processes. With agent approval you can suspend a tool call mid execution, or prevent a tool from being called entirely until the agent receives human input.
+Agents sometimes require the same [human-in-the-loop](/docs/v1/workflows/human-in-the-loop) oversight used in workflows when calling tools that handle sensitive operations, like deleting resources or performing running long processes. With agent approval you can suspend a tool call and provide feedback to the user, or approve or decline a tool call based on targeted application conditions.
 
 ## Tool call approval
 
@@ -69,88 +69,115 @@ const handleDecline = async () => {
 };
 ```
 
+## Tool level approval
 
-## Tool level approval - TODO
+There are two types of tool call approval. The first uses `requireToolApproval` and prevents an agent from calling a tool until `resumeStream` is invoked. The second uses `suspend` and lets the agent provide context or confirmation prompts so the user can decide whether the tool call should continue.
+
+### Tool approval using `requireToolApproval`
+
+In this approach `requireApproval` is moved from the agent definition to the tool.
+
+```typescript
+export const testTool = createTool({
+  id: "test-tool",
+  description: "Fetches weather for a location",
+  inputSchema: z.object({
+    location: z.string()
+  }),
+  outputSchema: z.object({
+    weather: z.string()
+  }),
+  resumeSchema: z.object({
+    approved: z.boolean()
+  }),
+  execute: async ({ location }) => {
+    const response = await fetch(`https://wttr.in/${location}?format=3`);
+    const weather = await response.text();
+
+    return { weather };
+  },
+  requireApproval: true
+});
+```
+
+When `requireApproval` is true for a tool, the stream will include chunks of type `tool-call-approval` to indicate that the call is paused. To continue the call, invoke `resumeStream` with the required `resumeSchema` and the `runId`.
+
+```typescript
+const stream = await agent.stream("What's the weather in London?");
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === "tool-call-approval") {
+    console.log("Approval required.");
+  }
+}
+
+const handleResume = async () => {
+  const resumedStream = await agent.resumeStream({ approved: true }, { runId: stream.runId });
+
+  for await (const chunk of resumedStream.textStream) {
+    process.stdout.write(chunk);
+  }
+  process.stdout.write("\n");
+};
+```
+
+
+### Tool approval using `suspend`
+
+With this approach neither the agent or tool use `requireApproval`. Instead, the tool implementation calls `suspend` to pause execution and return context or confirmation prompts to the user.
 
 ```typescript
 
-```
-## ----   OLD
-
-Sometimes agents need human oversight before they can run potentially sensitive tools or long-running workflows. Mastra lets you pause tool execution to wait for approval, decline a tool call entirely, or suspend a tool mid-flight until the required data is available.
-
-## Tool approvals
-
-### Enforcing approval on every tool
-
-Pass `requireToolApproval: true` when calling `stream` (or `generate`) to automatically pause execution whenever the agent tries to invoke a tool. The stream closes until you explicitly approve or decline the tool call using the original run’s `runId`.
-
-```typescript {2,6} title="Require approval before executing any tool" showLineNumbers copy
-const stream = await myAgent.stream("Find the user with name - John Smith", {
-  requireToolApproval: true,
-});
-
-const approvedToolCallStream = await myAgent.approveToolCall({ runId: stream.runId });
-const declinedToolCallStream = await myAgent.declineToolCall({ runId: stream.runId });
-```
-
-### Requiring approval per tool
-
-You can also enforce approval on specific tools. Set `requireApproval: true` when creating a tool so the agent pauses only when it tries to invoke that tool.
-
-```typescript {8} title="Mark a tool as approval-only" showLineNumbers copy
-const findUserTool = createTool({
-  id: "Find user tool",
-  description: "Returns the name and email for a matching user",
+export const testToolB = createTool({
+  id: "test-tool-b",
+  description: "Fetches weather for a location",
   inputSchema: z.object({
-    name: z.string(),
+    location: z.string()
   }),
-  execute: async inputData => {
-    return mockFindUser(inputData);
-  },
-  requireApproval: true,
-});
-```
-
-When the agent reaches this tool, it emits a tool-call event you can approve or decline with the same `approveToolCall` or `declineToolCall` helpers.
-
-## Tool suspension
-
-Sometimes a tool can’t finish immediately—maybe it's waiting for external confirmation or extra input. You can suspend and later resume execution using `agent.suspend`, `resumeStream`, and optional schemas that define what data is required at each step.
-
-```typescript {10,14} title="Suspend and resume a tool" showLineNumbers copy
-const findUserTool = createTool({
-  id: "Find user tool",
-  description: "Returns the name and email for a matching user",
-  inputSchema: z.object({
-    name: z.string(),
-  }),
-  suspendSchema: z.object({
-    message: z.string(),
+  outputSchema: z.object({
+    weather: z.string()
   }),
   resumeSchema: z.object({
-    name: z.string(),
+    approved: z.boolean()
   }),
-  execute: async (inputData, { agent }) => {
-    if (!agent.resumeData) {
-      return agent.suspend({ message: "Please provide the name of the user" });
+  suspendSchema: z.object({
+    reason: z.string()
+  }),
+  execute: async ({ location }, { agent } = {}) => {
+    const { resumeData: { approved } = {}, suspend } = agent ?? {};
+
+    if (!approved) {
+      return suspend?.({ reason: "Approval required." });
     }
 
-    return {
-      name: agent.resumeData.name,
-      email: "test@test.com",
-    };
-  },
+    const response = await fetch(`https://wttr.in/${location}?format=3`);
+    const weather = await response.text();
+
+    return { weather };
+  }
 });
 ```
 
-To continue execution, call `resumeStream` with the run’s `runId` and the `resumeData` that satisfies the `resumeSchema`. When using `suspend` directly in the tool, you don’t need to add `requireToolApproval: true` to the agent stream/generate call, nor `requireApproval: true` to the tool definition.
+With this approach the stream will include a `tool-call-suspended` chunk, and the `suspendPayload` will contain the `reason` defined by the tool's `suspendSchema`. To continue the call, invoke `resumeStream` with the required `resumeSchema` and the `runId`.
 
-```typescript {1} title="Resume a suspended tool call" showLineNumbers copy
-const resumedStream = await myAgent.resumeStream(
-  { name: "John Smith" },
-  { runId: stream.runId },
-);
+```typescript
+const stream = await agent.stream("What's the weather in London?");
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === "tool-call-suspended") {
+    console.log(chunk.payload.suspendPayload);
+  }
+}
+
+const handleResume = async () => {
+  const resumedStream = await agent.resumeStream({ approved: true }, { runId: stream.runId });
+
+  for await (const chunk of resumedStream.textStream) {
+    process.stdout.write(chunk);
+  }
+  process.stdout.write("\n");
+};
+
 ```
 
 ## Related
