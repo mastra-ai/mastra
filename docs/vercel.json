@@ -207,7 +207,7 @@
     },
     {
       "source": "/docs/v1/agents/human-in-the-loop-with-tools",
-      "destination": "/docs/agents/agent-approval",
+      "destination": "/docs/v1/agents/agent-approval",
       "permanent": true
     }
   ]
