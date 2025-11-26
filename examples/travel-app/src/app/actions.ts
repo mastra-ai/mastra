@@ -74,7 +74,7 @@ export async function runAgent(formData: FormData) {
 
     Other Notes:
     - make sure to add layover information if it exists, if not, ignore it
-    - make sure to add images for the hotels and accomodations
+    - make sure to add images for the hotels and accommodations
     - flightPriority is a value between 0 and 100 where 0 means the prioritize price the most and 100 means
     prioritize convenience the most (shortest trip and matching time).
     - ALWAYS pass entire date timestamps back for departureTime and arrivalTime.

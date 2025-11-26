@@ -26,6 +26,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "gateways/azure-openai",
+          label: "Azure-openai",
+        },
+        {
+          type: "doc",
           id: "gateways/netlify",
           label: "Netlify",
         },
@@ -130,6 +135,11 @@ const sidebars = {
           type: "doc",
           id: "providers/cloudflare-workers-ai",
           label: "Cloudflare Workers AI",
+        },
+        {
+          type: "doc",
+          id: "providers/cohere",
+          label: "Cohere",
         },
         {
           type: "doc",
@@ -253,6 +263,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/poe",
+          label: "Poe",
+        },
+        {
+          type: "doc",
           id: "providers/requesty",
           label: "Requesty",
         },
@@ -260,6 +275,11 @@ const sidebars = {
           type: "doc",
           id: "providers/scaleway",
           label: "Scaleway",
+        },
+        {
+          type: "doc",
+          id: "providers/siliconflow",
+          label: "SiliconFlow",
         },
         {
           type: "doc",
