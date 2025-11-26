@@ -1672,7 +1672,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           threadId: z.string().optional().describe('Thread ID for conversation continuity for memory messages'),
           resourceId: z.string().optional().describe('Resource/user identifier for memory messages'),
           instructions: z.string().optional().describe('Custom instructions to override agent defaults'),
-          maxSteps: z.number().optional().describe('Maximum number of execution steps for the sub-agent'),
+          maxSteps: z.number().min(3).optional().describe('Maximum number of execution steps for the sub-agent'),
+          // using minimum of 3 to ensure if the agent has a tool call, the llm gets executed again after the tool call step, using the tool call result
+          // to return a proper llm response
         });
 
         const agentOutputSchema = z.object({
