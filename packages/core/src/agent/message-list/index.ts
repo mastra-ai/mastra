@@ -3059,6 +3059,14 @@ export class MessageList {
       parts,
     };
 
+    // Preserve metadata from input message if present
+    if ('metadata' in coreMessage && coreMessage.metadata !== null && coreMessage.metadata !== undefined) {
+      content.metadata = {
+        ...(content.metadata || {}),
+        ...(coreMessage.metadata as Record<string, unknown>),
+      };
+    }
+
     // Preserve original string content for round-trip
     if (coreMessage.content) {
       content.metadata = {
