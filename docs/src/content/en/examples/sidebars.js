@@ -211,18 +211,6 @@ const sidebars = {
         },
       ],
     },
-    {
-      type: "category",
-      label: "Observability",
-      collapsed: true,
-      items: [
-        {
-          type: "doc",
-          id: "observability/basic-ai-tracing",
-          label: "Basic AI Tracing",
-        },
-      ],
-    },
   ],
 };
 

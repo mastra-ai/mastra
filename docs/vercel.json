@@ -199,6 +199,11 @@
       "source": "/examples/v1/evals/running-in-ci",
       "destination": "/docs/v1/evals/running-in-ci",
       "permanent": true
+    },
+    {
+      "source": "/examples/v1/observability/basic-ai-tracing",
+      "destination": "/docs/v1/observability/overview",
+      "permanent": true
     }
   ]
 }
