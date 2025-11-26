@@ -12,6 +12,7 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory, MemoryConfig } from '../memory';
 import type { IModelSpanTracker } from '../observability';
 import type { OutputProcessor, ProcessorState } from '../processors';
+import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream/base/schema';
 import type {
   ChunkType,
@@ -37,6 +38,8 @@ export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
   model?: MastraLanguageModelV2;
   toolChoice?: ToolChoice<TOOLS>;
   activeTools?: Array<keyof TOOLS>;
+  /** Dynamically replace the tools available for this step */
+  tools?: TOOLS;
   system?: string;
   messages?: Array<ModelMessage>;
 };
@@ -46,6 +49,12 @@ export type PrepareStepFunction<TOOLS extends ToolSet = ToolSet> = (options: {
   stepNumber: number;
   model: MastraLanguageModelV2;
   messages: Array<ModelMessage>;
+  /** Current tools available to the agent */
+  tools: TOOLS;
+  /** Request context for dynamic configuration */
+  requestContext: RequestContext;
+  /** Mastra instance for accessing other agents, tools, etc. */
+  mastra?: Mastra;
 }) => PromiseLike<PrepareStepResult<TOOLS> | undefined> | PrepareStepResult<TOOLS> | undefined;
 
 export type LoopConfig<OUTPUT extends OutputSchema = undefined> = {
@@ -62,6 +71,8 @@ export type LoopConfig<OUTPUT extends OutputSchema = undefined> = {
 
 export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
   mastra?: Mastra;
+  /** Runtime context for dynamic configuration */
+  requestContext?: RequestContext;
   resumeContext?: {
     resumeData: any;
     snapshot: any;

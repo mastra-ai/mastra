@@ -161,6 +161,7 @@ export class MastraLLMVNext extends MastraBase {
     toolCallId,
     methodType,
     includeRawChunks,
+    requestContext,
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     let stopWhenToUse;
 
@@ -207,6 +208,7 @@ export class MastraLLMVNext extends MastraBase {
     try {
       const loopOptions: LoopOptions<Tools, OUTPUT> = {
         mastra: this.#mastra,
+        requestContext,
         resumeContext,
         runId,
         toolCallId,

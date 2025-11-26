@@ -6,6 +6,7 @@ import { MessageList } from '../../../agent/message-list';
 import type { MastraDBMessage } from '../../../agent/message-list';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import type { MastraLanguageModelV2 } from '../../../llm/model/shared.types';
+import { RequestContext } from '../../../request-context';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { MastraModelOutput } from '../../../stream/base/output';
@@ -463,6 +464,8 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   downloadConcurrency,
   processorStates,
   methodType,
+  requestContext,
+  mastra,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'llm-execution',
@@ -474,15 +477,21 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
       let request: any;
       let rawResponse: any;
 
-      const { outputStream, callBail, runState } = await executeStreamWithFallbackModels<{
+      const { outputStream, callBail, runState, stepModel, stepTools } = await executeStreamWithFallbackModels<{
         outputStream: MastraModelOutput<OUTPUT | undefined>;
         runState: AgenticRunState;
         callBail?: boolean;
+        stepModel: MastraLanguageModelV2;
+        stepTools: Tools | undefined;
       }>(models)(async (model, isLastModel) => {
         const runState = new AgenticRunState({
           _internal: _internal!,
           model,
         });
+
+        // Declare stepModel and stepTools outside switch so they're accessible for return
+        let stepModel = model;
+        let stepTools = tools;
 
         switch (model.specificationVersion) {
           case 'v2': {
@@ -494,17 +503,21 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
             let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
             // Call prepareStep callback if provided
-            let stepModel = model;
             let stepToolChoice = toolChoice;
-            let stepTools = tools;
 
             if (options?.prepareStep) {
               try {
+                // Use passed requestContext or create a new one as fallback
+                const requestContextToUse = requestContext || new RequestContext();
+
                 const prepareStepResult = await options.prepareStep({
                   stepNumber: inputData.output?.steps?.length || 0,
                   steps: inputData.output?.steps || [],
                   model,
                   messages: messageList.get.all.aiV5.model(),
+                  tools: stepTools as Tools,
+                  requestContext: requestContextToUse,
+                  mastra,
                 });
 
                 if (prepareStepResult) {
@@ -514,6 +527,11 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
                   if (prepareStepResult.toolChoice) {
                     stepToolChoice = prepareStepResult.toolChoice;
                   }
+                  // First apply full tools replacement if provided
+                  if (prepareStepResult.tools) {
+                    stepTools = prepareStepResult.tools as typeof tools;
+                  }
+                  // Then filter with activeTools (takes precedence - can filter the replaced tools)
                   if (prepareStepResult.activeTools && stepTools) {
                     const activeToolsSet = new Set(prepareStepResult.activeTools);
                     stepTools = Object.fromEntries(
@@ -592,9 +610,9 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
 
         const outputStream = new MastraModelOutput({
           model: {
-            modelId: model.modelId,
-            provider: model.provider,
-            version: model.specificationVersion,
+            modelId: stepModel.modelId,
+            provider: stepModel.provider,
+            version: stepModel.specificationVersion,
           },
           stream: modelResult as ReadableStream<ChunkType>,
           messageList,
@@ -639,7 +657,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
               controller.enqueue({ type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
             }
 
-            return { callBail: true, outputStream, runState };
+            return { callBail: true, outputStream, runState, stepModel, stepTools };
           }
 
           if (isLastModel) {
@@ -664,7 +682,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
           }
         }
 
-        return { outputStream, callBail: false, runState };
+        return { outputStream, callBail: false, runState, stepModel, stepTools };
       });
 
       if (callBail) {
@@ -802,6 +820,14 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
           ...(object ? { object } : {}),
         },
         messages,
+        // Include the actual model used (may be swapped via prepareStep)
+        model: {
+          modelId: stepModel.modelId,
+          provider: stepModel.provider,
+          version: stepModel.specificationVersion,
+        },
+        // Include the tools used (may be modified via prepareStep)
+        stepTools,
       };
     },
   });

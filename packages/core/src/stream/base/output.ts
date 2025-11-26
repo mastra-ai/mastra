@@ -450,8 +450,17 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 providerMetadata: providerMetadata,
               };
 
+              // Use model from chunk payload if available (may be swapped via prepareStep), otherwise fall back to constructor model
+              const payloadModel = (chunk.payload as any).model as
+                | { modelId?: string; provider?: string; version?: string }
+                | undefined;
+              const modelToUse =
+                payloadModel?.modelId && payloadModel?.provider && payloadModel?.version
+                  ? { modelId: payloadModel.modelId, provider: payloadModel.provider, version: payloadModel.version }
+                  : self.#model;
+
               await options?.onStepFinish?.({
-                ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
+                ...(modelToUse.modelId && modelToUse.provider && modelToUse.version ? { model: modelToUse } : {}),
                 ...stepResult,
               });
 

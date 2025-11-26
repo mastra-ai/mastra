@@ -40,6 +40,7 @@ export function workflowLoopStream<
   streamState,
   agentId,
   toolCallId,
+  requestContext: passedRequestContext,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType<OUTPUT>>({
@@ -49,6 +50,9 @@ export function workflowLoopStream<
           controller.enqueue(chunk);
         },
       });
+
+      // Use passed requestContext or create a new one for the workflow
+      const requestContext = passedRequestContext || new RequestContext();
 
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
         resumeContext,
@@ -64,6 +68,7 @@ export function workflowLoopStream<
         startTimestamp,
         streamState,
         agentId,
+        requestContext,
         ...rest,
       });
 
@@ -105,8 +110,6 @@ export function workflowLoopStream<
       const run = await agenticLoopWorkflow.createRun({
         runId,
       });
-
-      const requestContext = new RequestContext();
 
       if (requireToolApproval) {
         requestContext.set('__mastra_requireToolApproval', true);

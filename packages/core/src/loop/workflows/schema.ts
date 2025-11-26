@@ -139,6 +139,15 @@ export const llmIterationOutputSchema = z.object({
     request: z.record(z.any()).optional(),
   }),
   stepResult: llmIterationStepResultSchema,
+  model: z
+    .object({
+      modelId: z.string().optional(),
+      provider: z.string().optional(),
+      version: z.string().optional(),
+    })
+    .optional(),
+  /** Tools modified via prepareStep - passed to tool-call-step */
+  stepTools: z.record(z.any()).optional(),
 });
 
 export const toolCallInputSchema = z.object({
@@ -148,6 +157,8 @@ export const toolCallInputSchema = z.object({
   providerMetadata: z.record(z.any()).optional(),
   providerExecuted: z.boolean().optional(),
   output: z.any().optional(),
+  /** Dynamic tools added via prepareStep - used if provided, otherwise falls back to original tools */
+  dynamicTools: z.record(z.any()).optional(),
 });
 
 export const toolCallOutputSchema = toolCallInputSchema.extend({
