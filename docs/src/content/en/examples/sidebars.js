@@ -17,29 +17,12 @@ const sidebars = {
       label: "Agents",
       collapsed: true,
       items: [
-        { type: "doc", id: "agents/calling-agents", label: "Calling Agents" },
-        {
-          type: "doc",
-          id: "agents/system-prompt",
-          label: "Changing the System Prompt",
-        },
         {
           type: "doc",
           id: "agents/supervisor-agent",
           label: "Supervisor Agent",
         },
-        { type: "doc", id: "agents/image-analysis", label: "Image Analysis" },
         { type: "doc", id: "agents/request-context", label: "Request Context" },
-        {
-          type: "doc",
-          id: "agents/ai-sdk-v5-integration",
-          label: "AI SDK v5 Integration",
-        },
-        {
-          type: "doc",
-          id: "agents/whatsapp-chat-bot",
-          label: "WhatsApp Chat Bot",
-        },
       ],
     },
     {
@@ -51,45 +34,6 @@ const sidebars = {
           type: "doc",
           id: "workflows/inngest-workflow",
           label: "Inngest Workflow",
-        },
-      ],
-    },
-    {
-      type: "category",
-      label: "Processors",
-      collapsed: true,
-      items: [
-        {
-          type: "doc",
-          id: "processors/message-length-limiter",
-          label: "Message Length Limiter",
-        },
-        {
-          type: "doc",
-          id: "processors/response-length-limiter",
-          label: "Response Length Limiter",
-        },
-        {
-          type: "doc",
-          id: "processors/response-validator",
-          label: "Response Validator",
-        },
-      ],
-    },
-    {
-      type: "category",
-      label: "Memory",
-      collapsed: true,
-      items: [
-        {
-          type: "doc",
-          id: "memory/working-memory-template",
-          label: "Memory with Template",
-        },
-        {
-          type: "doc",
-          id: "memory/working-memory-schema",
-          label: "Memory with Schema",
         },
       ],
     },
@@ -250,14 +194,6 @@ const sidebars = {
             },
           ],
         },
-      ],
-    },
-    {
-      type: "category",
-      label: "Evals",
-      collapsed: true,
-      items: [
-        { type: "doc", id: "evals/running-in-ci", label: "Running in CI" },
       ],
     },
     {

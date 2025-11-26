@@ -746,73 +746,33 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
-      const messageIds = new Set<string>();
-
-      // Step 1: Get messages from the thread
-      // If filters are applied, we need to fetch all messages first, then filter and paginate
-      // Otherwise, we can paginate first by index
-      const hasFilters = !!resourceId || !!filter?.dateRange;
-
-      if (hasFilters || perPage === Number.MAX_SAFE_INTEGER) {
-        // Get all messages when filters are applied or when limit is false
-        try {
-          const threadMessagesKey = this.getThreadMessagesKey(threadId);
-          const allIds = await this.getFullOrder(threadMessagesKey);
-          allIds.forEach(id => messageIds.add(id));
-        } catch {
-          // If no message order found, continue with empty set
-        }
-      } else {
-        // No filters - paginate by index first (more efficient)
-        if (perPage > 0) {
-          try {
-            const threadMessagesKey = this.getThreadMessagesKey(threadId);
-            const fullOrder = await this.getFullOrder(threadMessagesKey);
-            const totalMessages = fullOrder.length;
-
-            // Apply offset and limit - direction-aware pagination
-            // For ASC: select from start (oldest first)
-            // For DESC: select from end (newest first)
-            let start: number;
-            let end: number;
-            if (direction === 'ASC') {
-              start = offset;
-              end = Math.min(offset + perPage - 1, totalMessages - 1);
-            } else {
-              // DESC: calculate window from the end (newest messages)
-              start = Math.max(totalMessages - offset - perPage, 0);
-              end = totalMessages - offset - 1;
-            }
-            const paginatedIds = await this.getRange(threadMessagesKey, start, end);
-            paginatedIds.forEach(id => messageIds.add(id));
-          } catch {
-            // If no message order found, continue with empty set
-          }
-        }
+      // Step 1: Get thread messages (for pagination)
+      const threadMessageIds = new Set<string>();
+      try {
+        const threadMessagesKey = this.getThreadMessagesKey(threadId);
+        const allIds = await this.getFullOrder(threadMessagesKey);
+        allIds.forEach(id => threadMessageIds.add(id));
+      } catch {
+        // If no message order found, continue with empty set
       }
 
-      // Step 2: Add included messages with context (if any)
-      if (include && include.length > 0) {
-        await this.getIncludedMessagesWithContext(threadId, include, messageIds);
-      }
-
-      // Fetch and parse all messages
-      const messages = await this.fetchAndParseMessagesFromMultipleThreads(
-        Array.from(messageIds),
-        include,
-        include && include.length > 0 ? undefined : threadId,
+      // Fetch thread messages
+      const threadMessages = await this.fetchAndParseMessagesFromMultipleThreads(
+        Array.from(threadMessageIds),
+        undefined,
+        threadId,
       );
 
-      // Filter by resourceId if specified
-      let filteredMessages = messages;
+      // Filter thread messages by resourceId if specified
+      let filteredThreadMessages = threadMessages;
       if (resourceId) {
-        filteredMessages = filteredMessages.filter(msg => msg.resourceId === resourceId);
+        filteredThreadMessages = filteredThreadMessages.filter(msg => msg.resourceId === resourceId);
       }
 
-      // Filter by dateRange if specified
+      // Filter thread messages by dateRange if specified
       const dateRange = filter?.dateRange;
       if (dateRange) {
-        filteredMessages = filteredMessages.filter(msg => {
+        filteredThreadMessages = filteredThreadMessages.filter(msg => {
           const messageDate = new Date(msg.createdAt);
           if (dateRange.start && messageDate < new Date(dateRange.start)) return false;
           if (dateRange.end && messageDate > new Date(dateRange.end)) return false;
@@ -820,25 +780,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         });
       }
 
-      // Get total count BEFORE pagination (for hasMore calculation)
-      let total: number;
-      if (hasFilters) {
-        // With filters, total is the count of filtered messages
-        total = filteredMessages.length;
-      } else {
-        // No filters - get total from order
-        try {
-          const threadMessagesKey = this.getThreadMessagesKey(threadId);
-          const fullOrder = await this.getFullOrder(threadMessagesKey);
-          total = fullOrder.length;
-        } catch {
-          // Fallback to filtered messages length
-          total = filteredMessages.length;
-        }
-      }
+      // Get total count for pagination
+      const total = filteredThreadMessages.length;
 
       // If perPage is 0 AND there are no include messages, return empty array immediately
-      // When include is provided, we still need to return those messages even with perPage: 0
       if (perPage === 0 && (!include || include.length === 0)) {
         return {
           messages: [],
@@ -849,64 +794,78 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         };
       }
 
-      // Apply pagination if filters were applied (we fetched all messages above)
-      // Direction-aware slicing: for DESC, slice from the end (newest messages)
-      if (hasFilters && perPage !== Number.MAX_SAFE_INTEGER && perPage > 0) {
-        if (direction === 'ASC') {
-          filteredMessages = filteredMessages.slice(offset, offset + perPage);
-        } else {
-          // DESC: slice from the end (newest messages first)
-          const start = Math.max(filteredMessages.length - offset - perPage, 0);
-          const end = filteredMessages.length - offset;
-          filteredMessages = filteredMessages.slice(start, end);
+      // Sort thread messages by createdAt BEFORE pagination
+      filteredThreadMessages.sort((a, b) => {
+        const timeA = new Date(a.createdAt).getTime();
+        const timeB = new Date(b.createdAt).getTime();
+        const timeDiff = direction === 'ASC' ? timeA - timeB : timeB - timeA;
+        if (timeDiff === 0) {
+          return a.id.localeCompare(b.id);
+        }
+        return timeDiff;
+      });
+
+      // Apply pagination to thread messages
+      // After sorting, pagination is simply offset + limit from the sorted array
+      // (same as SQL: ORDER BY ... LIMIT ... OFFSET ...)
+      let paginatedMessages: (MastraMessageV1 & { _index?: number })[];
+      if (perPage === 0) {
+        // perPage: 0 means return no paginated messages (only include messages)
+        paginatedMessages = [];
+      } else if (perPage === Number.MAX_SAFE_INTEGER) {
+        // perPage: false (MAX_SAFE_INTEGER) means return all messages
+        paginatedMessages = filteredThreadMessages;
+      } else {
+        // Normal pagination - just slice from the sorted array
+        paginatedMessages = filteredThreadMessages.slice(offset, offset + perPage);
+      }
+
+      // Step 2: Get included messages separately (not subject to pagination)
+      let includedMessages: (MastraMessageV1 & { _index?: number })[] = [];
+      if (include && include.length > 0) {
+        const includedMessageIds = new Set<string>();
+        await this.getIncludedMessagesWithContext(threadId, include, includedMessageIds);
+
+        // Remove IDs that are already in paginated messages to avoid duplicate fetches
+        const paginatedIds = new Set(paginatedMessages.map(m => m.id));
+        const idsToFetch = Array.from(includedMessageIds).filter(id => !paginatedIds.has(id));
+
+        if (idsToFetch.length > 0) {
+          includedMessages = await this.fetchAndParseMessagesFromMultipleThreads(idsToFetch, include, undefined);
         }
       }
 
-      // Calculate paginated count (before adding included messages)
-      const paginatedCount =
-        hasFilters && perPage !== Number.MAX_SAFE_INTEGER && perPage > 0
-          ? filteredMessages.length // Already sliced
-          : filteredMessages.length;
+      // Step 3: Combine paginated + included messages, deduplicate
+      const seenIds = new Set<string>();
+      const allMessages: (MastraMessageV1 & { _index?: number })[] = [];
 
-      // Sort messages
-      try {
-        const threadMessagesKey = this.getThreadMessagesKey(threadId);
-        const messageOrder = await this.getFullOrder(threadMessagesKey);
-        const orderMap = new Map(messageOrder.map((id, index) => [id, index]));
-
-        filteredMessages.sort((a, b) => {
-          const indexA = orderMap.get(a.id);
-          const indexB = orderMap.get(b.id);
-
-          if (indexA !== undefined && indexB !== undefined) {
-            return direction === 'ASC' ? indexA - indexB : indexB - indexA;
-          }
-
-          // Fallback to createdAt sorting
-          const timeA = new Date(a.createdAt).getTime();
-          const timeB = new Date(b.createdAt).getTime();
-          const timeDiff = direction === 'ASC' ? timeA - timeB : timeB - timeA;
-
-          // Handle tiebreaker for stable sorting
-          if (timeDiff === 0) {
-            return a.id.localeCompare(b.id);
-          }
-          return timeDiff;
-        });
-      } catch {
-        // Fallback to createdAt sorting
-        filteredMessages.sort((a, b) => {
-          const timeA = new Date(a.createdAt).getTime();
-          const timeB = new Date(b.createdAt).getTime();
-          const timeDiff = direction === 'ASC' ? timeA - timeB : timeB - timeA;
-
-          // Handle tiebreaker for stable sorting
-          if (timeDiff === 0) {
-            return a.id.localeCompare(b.id);
-          }
-          return timeDiff;
-        });
+      for (const msg of paginatedMessages) {
+        if (!seenIds.has(msg.id)) {
+          allMessages.push(msg);
+          seenIds.add(msg.id);
+        }
       }
+
+      for (const msg of includedMessages) {
+        if (!seenIds.has(msg.id)) {
+          allMessages.push(msg);
+          seenIds.add(msg.id);
+        }
+      }
+
+      // Sort combined messages by createdAt
+      allMessages.sort((a, b) => {
+        const timeA = new Date(a.createdAt).getTime();
+        const timeB = new Date(b.createdAt).getTime();
+        const timeDiff = direction === 'ASC' ? timeA - timeB : timeB - timeA;
+        if (timeDiff === 0) {
+          return a.id.localeCompare(b.id);
+        }
+        return timeDiff;
+      });
+
+      let filteredMessages = allMessages;
+      const paginatedCount = paginatedMessages.length;
 
       // Only return early if there are no messages AND no includes to process
       if (total === 0 && filteredMessages.length === 0 && (!include || include.length === 0)) {
@@ -952,21 +911,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
-      // Otherwise, check if there are more pages in the pagination window (direction-aware)
+      // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-
-      let hasMore: boolean;
-      if (perPageInput === false || allThreadMessagesReturned) {
-        hasMore = false;
-      } else if (direction === 'ASC') {
-        // ASC: check if there are more messages after the current window
-        hasMore = offset + paginatedCount < total;
-      } else {
-        // DESC: check if there are more (older) messages before the current window
-        // Window starts at: total - offset - perPage, so there are more if start > 0
-        hasMore = total - offset - perPage > 0;
-      }
+      const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + paginatedCount < total;
 
       return {
         messages: finalMessages,

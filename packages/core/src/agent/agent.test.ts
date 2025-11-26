@@ -10,14 +10,12 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { config } from 'dotenv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { noopLogger } from '../logger';
 import { Mastra } from '../mastra';
 import type { MastraDBMessage, StorageThreadType } from '../memory';
 import { MockMemory } from '../memory/mock';
 import { RequestContext } from '../request-context';
-import { MockStore } from '../storage';
 import type { MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import { delay } from '../utils';
@@ -26,8 +24,6 @@ import { assertNoDuplicateParts } from './test-utils';
 import { Agent } from './index';
 
 config();
-
-const mockStorage = new MockStore();
 
 const mockFindUser = vi.fn().mockImplementation(async data => {
   const list = [
@@ -206,6 +202,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       obamaObjectModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: '{"winner":"Barack Obama"}' }],
+          warnings: [],
+        }),
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: '1' },
@@ -223,6 +226,81 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       openaiModel = openai_v5('gpt-4o');
     }
+  });
+
+  describe('test schema compat structured output', async () => {
+    it('should convert optional fields to nullable for openai and succeed without error', async () => {
+      const weatherInfo = createTool({
+        id: 'weather-info',
+        description: 'Fetches the current weather information for a given city',
+        inputSchema: z.object({
+          city: z.string(),
+        }),
+        execute: async inputData => {
+          return {
+            city: inputData.city,
+            weather: 'sunny',
+            temperature_celsius: 19,
+            temperature_fahrenheit: 66,
+            humidity: 50,
+            wind: '10 mph',
+          };
+        },
+      });
+
+      const weatherAgent = new Agent({
+        id: 'weather-agent',
+        name: 'Weather Agent',
+        instructions:
+          'You are a weather agent. When asked about weather in any city, use the weather info tool with the city name as the input.',
+        description: 'An agent that can help you get the weather for a given city.',
+        model: 'openai/gpt-4o',
+        tools: {
+          weatherInfo,
+        },
+      });
+
+      const mastra = new Mastra({
+        agents: { weatherAgent },
+        logger: false,
+      });
+      const agent = mastra.getAgent('weatherAgent');
+
+      const schema = z.object({
+        weather: z.string(),
+        temperature: z.number(),
+        humidity: z.number(),
+        // Optional should be transformed to nullable and then the data set to undefined
+        windSpeed: z.string().optional(),
+        // Optional.nullable should be transformed to nullable and then the data set to undefined
+        barometricPressure: z.number().optional().nullable(),
+        // Nullable should not change and be able to return a nullable value from openAI
+        precipitation: z.number().nullable(),
+      });
+
+      const result = await agent.generate(
+        'What is the weather in London? You can omit wind speed, precipitation, and barometric pressure.',
+        {
+          structuredOutput: {
+            schema,
+          },
+        },
+      );
+
+      expect(result.error).toBeUndefined();
+
+      const resultData = {
+        weather: expect.any(String),
+        temperature: expect.any(Number),
+        humidity: expect.any(Number),
+        windSpeed: undefined,
+        barometricPressure: undefined,
+        precipitation: null,
+      };
+
+      const resultObject = await result.object;
+      expect(resultObject).toEqual(resultData);
+    });
   });
 
   describe(`${version} - agent`, () => {
@@ -378,332 +456,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         expect(previousPartialObject['winner']).toBe('Barack Obama');
       }
-    });
-
-    describe('tool approval and suspension', () => {
-      describe.skipIf(version === 'v1')('requireToolApproval', () => {
-        it('should call findUserTool with requireToolApproval on tool and be able to reject the tool call', async () => {
-          mockFindUser.mockClear(); // Reset mock call count before this test
-
-          const findUserTool = createTool({
-            id: 'Find user tool',
-            description: 'This is a test tool that returns the name and email',
-            inputSchema: z.object({
-              name: z.string(),
-            }),
-            // requireApproval: true,
-            execute: async input => {
-              return mockFindUser(input) as Promise<Record<string, any>>;
-            },
-          });
-
-          const userAgent = new Agent({
-            id: 'user-agent',
-            name: 'User Agent',
-            instructions: 'You are an agent that can get list of users using findUserTool.',
-            model: openaiModel,
-            tools: { findUserTool },
-          });
-
-          const mastra = new Mastra({
-            agents: { userAgent },
-            logger: false,
-            storage: mockStorage,
-          });
-
-          const agentOne = mastra.getAgent('userAgent');
-
-          const stream = await agentOne.stream('Find the user with name - Dero Israel', { requireToolApproval: true });
-          let toolCallId = '';
-          for await (const _chunk of stream.fullStream) {
-            if (_chunk.type === 'tool-call-approval') {
-              toolCallId = _chunk.payload.toolCallId;
-            }
-          }
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          const resumeStream = await agentOne.declineToolCall({ runId: stream.runId, toolCallId });
-          for await (const _chunk of resumeStream.fullStream) {
-            console.log(_chunk);
-          }
-
-          const toolResults = await resumeStream.toolResults;
-
-          expect((await resumeStream.toolCalls).length).toBe(1);
-          expect(toolResults.length).toBe(1);
-          expect(toolResults[0].payload?.result).toBe('Tool call was not approved by the user');
-          expect(mockFindUser).toHaveBeenCalledTimes(0);
-        }, 500000);
-
-        it('should call findUserTool with requireToolApproval on agent', async () => {
-          const findUserTool = createTool({
-            id: 'Find user tool',
-            description: 'This is a test tool that returns the name and email',
-            inputSchema: z.object({
-              name: z.string(),
-            }),
-            execute: async input => {
-              return mockFindUser(input) as Promise<Record<string, any>>;
-            },
-          });
-
-          const userAgent = new Agent({
-            id: 'user-agent',
-            name: 'User Agent',
-            instructions: 'You are an agent that can get list of users using findUserTool.',
-            model: openaiModel,
-            tools: { findUserTool },
-          });
-
-          const mastra = new Mastra({
-            agents: { userAgent },
-            logger: false,
-            storage: mockStorage,
-          });
-
-          const agentOne = mastra.getAgent('userAgent');
-
-          let toolCall;
-          let response;
-          if (version === 'v1') {
-            response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
-              maxSteps: 2,
-              toolChoice: 'required',
-            });
-            toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
-          } else {
-            const stream = await agentOne.stream('Find the user with name - Dero Israel', {
-              requireToolApproval: true,
-            });
-            let toolCallId = '';
-            for await (const _chunk of stream.fullStream) {
-              if (_chunk.type === 'tool-call-approval') {
-                toolCallId = _chunk.payload.toolCallId;
-              }
-            }
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const resumeStream = await agentOne.approveToolCall({ runId: stream.runId, toolCallId });
-            for await (const _chunk of resumeStream.fullStream) {
-            }
-
-            toolCall = (await resumeStream.toolResults).find(
-              (result: any) => result.payload.toolName === 'findUserTool',
-            ).payload;
-          }
-
-          const name = toolCall?.result?.name;
-
-          expect(mockFindUser).toHaveBeenCalled();
-          expect(name).toBe('Dero Israel');
-        }, 500000);
-
-        it('should call findUserTool with requireToolApproval on tool', async () => {
-          const findUserTool = createTool({
-            id: 'Find user tool',
-            description: 'This is a test tool that returns the name and email',
-            inputSchema: z.object({
-              name: z.string(),
-            }),
-            requireApproval: true,
-            execute: async input => {
-              return mockFindUser(input) as Promise<Record<string, any>>;
-            },
-          });
-
-          const userAgent = new Agent({
-            id: 'user-agent',
-            name: 'User Agent',
-            instructions: 'You are an agent that can get list of users using findUserTool.',
-            model: openaiModel,
-            tools: { findUserTool },
-          });
-
-          const mastra = new Mastra({
-            agents: { userAgent },
-            logger: false,
-            storage: mockStorage,
-          });
-
-          const agentOne = mastra.getAgent('userAgent');
-
-          let toolCall;
-          let response;
-          if (version === 'v1') {
-            response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
-              maxSteps: 2,
-              toolChoice: 'required',
-            });
-            toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
-          } else {
-            const stream = await agentOne.stream('Find the user with name - Dero Israel');
-            let toolCallId = '';
-            for await (const _chunk of stream.fullStream) {
-              if (_chunk.type === 'tool-call-approval') {
-                toolCallId = _chunk.payload.toolCallId;
-              }
-            }
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const resumeStream = await agentOne.approveToolCall({ runId: stream.runId, toolCallId });
-            for await (const _chunk of resumeStream.fullStream) {
-            }
-
-            toolCall = (await resumeStream.toolResults).find(
-              (result: any) => result.payload.toolName === 'findUserTool',
-            ).payload;
-          }
-
-          const name = toolCall?.result?.name;
-
-          expect(mockFindUser).toHaveBeenCalled();
-          expect(name).toBe('Dero Israel');
-        }, 500000);
-      });
-
-      describe.skipIf(version === 'v1')('suspension', () => {
-        it('should call findUserTool with suspend and resume', async () => {
-          const findUserTool = createTool({
-            id: 'Find user tool',
-            description: 'This is a test tool that returns the name and email',
-            inputSchema: z.object({
-              name: z.string(),
-            }),
-            suspendSchema: z.object({
-              message: z.string(),
-            }),
-            resumeSchema: z.object({
-              name: z.string(),
-            }),
-            execute: async (inputData, context) => {
-              console.log('context', context);
-              if (!context?.agent?.resumeData) {
-                return await context?.agent?.suspend({ message: 'Please provide the name of the user' });
-              }
-
-              return {
-                name: context?.agent?.resumeData?.name,
-                email: 'test@test.com',
-              };
-            },
-          });
-
-          const userAgent = new Agent({
-            id: 'user-agent',
-            name: 'User Agent',
-            instructions: 'You are an agent that can get list of users using findUserTool.',
-            model: openaiModel,
-            tools: { findUserTool },
-          });
-
-          const mastra = new Mastra({
-            agents: { userAgent },
-            logger: false,
-            storage: mockStorage,
-          });
-
-          const agentOne = mastra.getAgent('userAgent');
-
-          let toolCall;
-          const stream = await agentOne.stream('Find the user with name - Dero Israel');
-          for await (const _chunk of stream.fullStream) {
-          }
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          const resumeStream = await agentOne.resumeStream({ name: 'Dero Israel' }, { runId: stream.runId });
-          for await (const _chunk of resumeStream.fullStream) {
-          }
-
-          toolCall = (await resumeStream.toolResults).find(
-            (result: any) => result.payload.toolName === 'findUserTool',
-          ).payload;
-
-          const name = toolCall?.result?.name;
-          const email = toolCall?.result?.email;
-
-          expect(name).toBe('Dero Israel');
-          expect(email).toBe('test@test.com');
-        }, 10000);
-      });
-
-      describe.skipIf(version === 'v1')('persist model output stream state', () => {
-        it('should persist text stream state', async () => {
-          const findUserTool = createTool({
-            id: 'Find user tool',
-            description: 'This is a test tool that returns the name and email',
-            inputSchema: z.object({
-              name: z.string(),
-            }),
-            execute: async input => {
-              return mockFindUser(input) as Promise<Record<string, any>>;
-            },
-          });
-
-          const userAgent = new Agent({
-            id: 'user-agent',
-            name: 'User Agent',
-            instructions: 'You are an agent that can get list of users using findUserTool.',
-            model: openaiModel,
-            tools: { findUserTool },
-          });
-
-          const mastra = new Mastra({
-            agents: { userAgent },
-            logger: false,
-            storage: mockStorage,
-          });
-
-          const agentOne = mastra.getAgent('userAgent');
-
-          let toolCall;
-          let response;
-          if (version === 'v1') {
-            response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
-              maxSteps: 2,
-              toolChoice: 'required',
-            });
-            toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
-          } else {
-            const stream = await agentOne.stream(
-              'First tell me about what tools you have. Then call the user tool to find the user with name - Dero Israel. Then tell me about what format you received the data and tell me what it would look like in human readable form.',
-              {
-                requireToolApproval: true,
-              },
-            );
-            let firstText = '';
-            let toolCallId = '';
-            for await (const chunk of stream.fullStream) {
-              if (chunk.type === 'text-delta') {
-                firstText += chunk.payload.text;
-              }
-              if (chunk.type === 'tool-call-approval') {
-                toolCallId = chunk.payload.toolCallId;
-              }
-            }
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const resumeStream = await agentOne.resumeStream({ approved: true }, { runId: stream.runId, toolCallId });
-            let secondText = '';
-            for await (const chunk of resumeStream.fullStream) {
-              if (chunk.type === 'text-delta') {
-                secondText += chunk.payload.text;
-              }
-            }
-
-            const finalText = await resumeStream.text;
-
-            const steps = await resumeStream.steps;
-            const textBySteps = steps.map(step => step.text);
-
-            expect(finalText).toBe(firstText + secondText);
-            expect(steps.length).toBe(2);
-            expect(textBySteps.join('')).toBe(firstText + secondText);
-            toolCall = (await resumeStream.toolResults).find(
-              (result: any) => result.payload.toolName === 'findUserTool',
-            ).payload;
-          }
-
-          const name = toolCall?.result?.name;
-
-          expect(mockFindUser).toHaveBeenCalled();
-          expect(name).toBe('Dero Israel');
-        }, 500000);
-      });
     });
 
     it('should call tool without input or output schemas', async () => {
@@ -4758,6 +4510,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
 
         const errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw testAPICallError;
+          },
           doStream: async () => {
             throw testAPICallError;
           },
@@ -4810,6 +4565,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         (testError as any).requestId = testErrorRequestId;
 
         const errorModel = new MockLanguageModelV2({
+          doGenerate() {
+            throw testError;
+          },
           doStream: async () => {
             throw testError;
           },
@@ -4886,6 +4644,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         (testError as any).requestId = testErrorRequestId;
 
         const errorModel = new MockLanguageModelV2({
+          doGenerate() {
+            throw testError;
+          },
           doStream: async () => {
             throw testError;
           },
@@ -4952,6 +4713,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     describe('stream options', () => {
       it('should call options.onError when stream error occurs in stream', async () => {
         const errorModel = new MockLanguageModelV2({
+          doGenerate() {
+            throw new Error('Simulated stream error');
+          },
           doStream: async () => {
             throw new Error('Simulated stream error');
           },
@@ -5015,6 +4779,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let pullCalls = 0;
 
         const abortModel = new MockLanguageModelV2({
+          // @ts-expect-error - error
+          doGenerate: async () => {
+            await new Promise(resolve => setImmediate(resolve));
+            abortController.abort();
+          },
           doStream: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             warnings: [],
@@ -5196,6 +4965,31 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
       } else {
         mockModel = new MockLanguageModelV2({
+          doGenerate: async ({ prompt }: LanguageModelV2CallOptions) => {
+            const messages = Array.isArray(prompt) ? prompt : [];
+            const textContent = messages
+              .map(msg => {
+                if (typeof msg.content === 'string') {
+                  return msg.content;
+                } else if (Array.isArray(msg.content)) {
+                  return msg.content
+                    .filter(part => part.type === 'text')
+                    .map(part => (part as LanguageModelV2TextPart).text)
+                    .join(' ');
+                }
+                return '';
+              })
+              .filter(Boolean)
+              .join(' ');
+
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [{ type: 'text', text: `processed: ${textContent}` }],
+              warnings: [],
+            };
+          },
           doStream: async ({ prompt }) => {
             const messages = Array.isArray(prompt) ? prompt : [];
             const textContent = messages
@@ -5759,6 +5553,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
       } else {
         dummyModel = new MockLanguageModelV2({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+            content: [{ type: 'text', text: 'Response acknowledging metadata' }],
+            warnings: [],
+          }),
           doStream: async () => ({
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },

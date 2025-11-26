@@ -68,10 +68,13 @@ export interface Config<
   TVectors extends Record<string, MastraVector<any>> = Record<string, MastraVector<any>>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
-  TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
+  TMCPServers extends Record<string, MCPServerBase<any>> = Record<string, MCPServerBase<any>>,
   TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
-  TTools extends Record<string, ToolAction<any, any, any, any>> = Record<string, ToolAction<any, any, any, any>>,
-  TProcessors extends Record<string, Processor> = Record<string, Processor>,
+  TTools extends Record<string, ToolAction<any, any, any, any, any, any>> = Record<
+    string,
+    ToolAction<any, any, any, any, any, any>
+  >,
+  TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
 > {
   /**
    * Agents are autonomous systems that can make decisions and take actions.
@@ -231,10 +234,13 @@ export class Mastra<
   TVectors extends Record<string, MastraVector<any>> = Record<string, MastraVector<any>>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
-  TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
+  TMCPServers extends Record<string, MCPServerBase<any>> = Record<string, MCPServerBase<any>>,
   TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
-  TTools extends Record<string, ToolAction<any, any, any, any>> = Record<string, ToolAction<any, any, any, any>>,
-  TProcessors extends Record<string, Processor> = Record<string, Processor>,
+  TTools extends Record<string, ToolAction<any, any, any, any, any, any>> = Record<
+    string,
+    ToolAction<any, any, any, any, any, any>
+  >,
+  TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -590,7 +596,7 @@ export class Mastra<
    * const sameAgent = mastra.getAgentById(assistant.id);
    * ```
    */
-  public getAgentById(id: string): Agent {
+  public getAgentById<TAgentName extends keyof TAgents>(id: TAgents[TAgentName]['id']): TAgents[TAgentName] {
     let agent = Object.values(this.#agents).find(a => a.id === id);
 
     if (!agent) {
@@ -617,7 +623,7 @@ export class Mastra<
       throw error;
     }
 
-    return agent;
+    return agent as TAgents[TAgentName];
   }
 
   /**
@@ -763,20 +769,20 @@ export class Mastra<
    * const vectorStore = mastra.getVectorById('chroma-123');
    * ```
    */
-  public getVectorById(id: string): MastraVector {
+  public getVectorById<TVectorName extends keyof TVectors>(id: TVectors[TVectorName]['id']): TVectors[TVectorName] {
     const allVectors = this.#vectors ?? ({} as Record<string, MastraVector>);
 
     // First try to find by internal ID
     for (const vector of Object.values(allVectors)) {
       if (vector.id === id) {
-        return vector as MastraVector;
+        return vector as TVectors[TVectorName];
       }
     }
 
     // Fallback to searching by registration key
     const vectorByKey = allVectors[id];
     if (vectorByKey) {
-      return vectorByKey;
+      return vectorByKey as TVectors[TVectorName];
     }
 
     const error = new MastraError({
@@ -998,7 +1004,9 @@ export class Mastra<
    * console.log(sameWorkflow.name); // "process-data"
    * ```
    */
-  public getWorkflowById(id: string): Workflow {
+  public getWorkflowById<TWorkflowName extends keyof TWorkflows>(
+    id: TWorkflows[TWorkflowName]['id'],
+  ): TWorkflows[TWorkflowName] {
     let workflow = Object.values(this.#workflows).find(a => a.id === id);
 
     if (!workflow) {
@@ -1025,7 +1033,7 @@ export class Mastra<
       throw error;
     }
 
-    return workflow;
+    return workflow as TWorkflows[TWorkflowName];
   }
 
   public async listActiveWorkflowRuns(): Promise<WorkflowRuns> {
@@ -1213,10 +1221,10 @@ export class Mastra<
    * });
    * ```
    */
-  public getScorerById(id: string): MastraScorer<any, any, any, any> {
+  public getScorerById<TScorerName extends keyof TScorers>(id: TScorers[TScorerName]['id']): TScorers[TScorerName] {
     for (const [_key, value] of Object.entries(this.#scorers ?? {})) {
       if (value.id === id || value?.name === id) {
-        return value;
+        return value as TScorers[TScorerName];
       }
     }
 
@@ -1282,7 +1290,7 @@ export class Mastra<
    * const tool = mastra.getToolById('calculator-tool-id');
    * ```
    */
-  public getToolById(id: string): ToolAction<any, any, any, any> {
+  public getToolById<TToolName extends keyof TTools>(id: TTools[TToolName]['id']): TTools[TToolName] {
     const allTools = this.#tools;
 
     if (!allTools) {
@@ -1296,14 +1304,14 @@ export class Mastra<
     // First try to find by internal ID
     for (const tool of Object.values(allTools)) {
       if (tool.id === id) {
-        return tool as ToolAction<any, any, any, any>;
+        return tool as TTools[TToolName];
       }
     }
 
     // Fallback to searching by registration key
     const toolByKey = allTools[id];
     if (toolByKey) {
-      return toolByKey;
+      return toolByKey as TTools[TToolName];
     }
 
     const error = new MastraError({
@@ -1427,7 +1435,9 @@ export class Mastra<
    * const processor = mastra.getProcessorById('validator-processor-id');
    * ```
    */
-  public getProcessorById(id: string): Processor {
+  public getProcessorById<TProcessorName extends keyof TProcessors>(
+    id: TProcessors[TProcessorName]['id'],
+  ): TProcessors[TProcessorName] {
     const allProcessors = this.#processors;
 
     if (!allProcessors) {
@@ -1442,14 +1452,14 @@ export class Mastra<
     // First try to find by internal ID
     for (const processor of Object.values(allProcessors)) {
       if (processor.id === id) {
-        return processor as Processor;
+        return processor as TProcessors[TProcessorName];
       }
     }
 
     // Fallback to searching by registration key
     const processorByKey = allProcessors[id];
     if (processorByKey) {
-      return processorByKey;
+      return processorByKey as TProcessors[TProcessorName];
     }
 
     const error = new MastraError({
@@ -2016,7 +2026,10 @@ export class Mastra<
    * }
    * ```
    */
-  public getMCPServerById(serverId: string, version?: string): MCPServerBase | undefined {
+  public getMCPServerById<TMCPServerName extends keyof TMCPServers>(
+    serverId: TMCPServers[TMCPServerName]['id'],
+    version?: string,
+  ): TMCPServers[TMCPServerName] | undefined {
     if (!this.#mcpServers) {
       return undefined;
     }
@@ -2035,11 +2048,11 @@ export class Mastra<
       if (!specificVersionServer) {
         this.#logger?.debug(`MCP server with logical ID '${serverId}' found, but not version '${version}'.`);
       }
-      return specificVersionServer;
+      return specificVersionServer as TMCPServers[TMCPServerName] | undefined;
     } else {
       // No version specified, find the one with the most recent releaseDate
       if (matchingLogicalIdServers.length === 1) {
-        return matchingLogicalIdServers[0];
+        return matchingLogicalIdServers[0] as TMCPServers[TMCPServerName];
       }
 
       matchingLogicalIdServers.sort((a, b) => {
@@ -2063,7 +2076,7 @@ export class Mastra<
           typeof latestServer.releaseDate === 'string' &&
           !isNaN(new Date(latestServer.releaseDate).getTime())
         ) {
-          return latestServer;
+          return latestServer as TMCPServers[TMCPServerName];
         }
       }
       this.#logger?.warn(

@@ -2,7 +2,7 @@ import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
 import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
 import type { ToolAction, ToolExecutionContext } from './types';
-import { validateToolInput, validateToolOutput } from './validation';
+import { validateToolInput, validateToolOutput, validateToolSuspendData } from './validation';
 
 /**
  * A type-safe tool that agents and workflows can call to perform specific actions.
@@ -65,10 +65,11 @@ export class Tool<
     TSuspendSchema,
     TResumeSchema
   >,
-> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext>
+  TId extends string = string,
+> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId>
 {
   /** Unique identifier for the tool */
-  id: string;
+  id: TId;
 
   /** Description of what the tool does */
   description: string;
@@ -120,7 +121,7 @@ export class Tool<
    * });
    * ```
    */
-  constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext>) {
+  constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId>) {
     this.id = opts.id;
     this.description = opts.description;
     this.inputSchema = opts.inputSchema;
@@ -142,8 +143,24 @@ export class Tool<
           return error as any;
         }
 
+        let suspendData = null;
+
+        const baseContext = context
+          ? {
+              ...context,
+              ...(context.suspend
+                ? {
+                    suspend: (args: any) => {
+                      suspendData = args;
+                      return context.suspend?.(args);
+                    },
+                  }
+                : {}),
+            }
+          : {};
+
         // Organize context based on execution source
-        let organizedContext = context;
+        let organizedContext = baseContext;
         if (!context) {
           // No context provided - create a minimal context with requestContext
           organizedContext = {
@@ -152,16 +169,16 @@ export class Tool<
           };
         } else {
           // Check if this is agent execution (has toolCallId and messages)
-          const isAgentExecution = context.toolCallId && context.messages;
+          const isAgentExecution = baseContext.toolCallId && baseContext.messages;
 
           // Check if this is workflow execution (has workflow properties)
           // Agent execution takes precedence - don't treat as workflow if it's an agent call
-          const isWorkflowExecution = !isAgentExecution && (context.workflow || context.workflowId);
+          const isWorkflowExecution = !isAgentExecution && (baseContext.workflow || baseContext.workflowId);
 
-          if (isAgentExecution && !context.agent) {
+          if (isAgentExecution && !baseContext.agent) {
             // Reorganize agent context - nest agent-specific properties under 'agent' key
             const { toolCallId, messages, suspend, resumeData, threadId, resourceId, writableStream, ...rest } =
-              context;
+              baseContext;
             organizedContext = {
               ...rest,
               agent: {
@@ -176,9 +193,9 @@ export class Tool<
               // Ensure requestContext is always present
               requestContext: rest.requestContext || new RequestContext(),
             };
-          } else if (isWorkflowExecution && !context.workflow) {
+          } else if (isWorkflowExecution && !baseContext.workflow) {
             // Reorganize workflow context - nest workflow-specific properties under 'workflow' key
-            const { workflowId, runId, state, setState, suspend, resumeData, ...rest } = context;
+            const { workflowId, runId, state, setState, suspend, resumeData, ...rest } = baseContext;
             organizedContext = {
               ...rest,
               workflow: {
@@ -195,17 +212,54 @@ export class Tool<
           } else {
             // Ensure requestContext is always present even for direct execution
             organizedContext = {
-              ...context,
-              requestContext: context.requestContext || new RequestContext(),
+              ...baseContext,
+              agent: baseContext.agent
+                ? {
+                    ...baseContext.agent,
+                    suspend: (args: any) => {
+                      suspendData = args;
+                      return baseContext.agent?.suspend?.(args);
+                    },
+                  }
+                : baseContext.agent,
+              workflow: baseContext.workflow
+                ? {
+                    ...baseContext.workflow,
+                    suspend: (args: any) => {
+                      suspendData = args;
+                      return baseContext.workflow?.suspend?.(args);
+                    },
+                  }
+                : baseContext.workflow,
+              requestContext: baseContext.requestContext || new RequestContext(),
             };
+          }
+        }
+
+        const resumeData =
+          organizedContext.agent?.resumeData ?? organizedContext.workflow?.resumeData ?? organizedContext?.resumeData;
+
+        if (resumeData) {
+          const resumeValidation = validateToolInput(this.resumeSchema, resumeData, this.id);
+          if (resumeValidation.error) {
+            return resumeValidation.error as any;
           }
         }
 
         // Call the original execute with validated input and organized context
         const output = await originalExecute(data as any, organizedContext);
 
+        if (suspendData) {
+          const suspendValidation = validateToolSuspendData(this.suspendSchema, suspendData, this.id);
+          if (suspendValidation.error) {
+            return suspendValidation.error as any;
+          }
+        }
+
+        const skiptOutputValidation = !!(typeof output === 'undefined' && suspendData);
+
         // Validate output if schema exists
-        const outputValidation = validateToolOutput(this.outputSchema, output, this.id);
+        const outputValidation = validateToolOutput(this.outputSchema, output, this.id, skiptOutputValidation);
         if (outputValidation.error) {
           return outputValidation.error as any;
         }
@@ -293,6 +347,7 @@ export class Tool<
  * ```
  */
 export function createTool<
+  TId extends string = string,
   TSchemaIn extends ZodLikeSchema | undefined = undefined,
   TSchemaOut extends ZodLikeSchema | undefined = undefined,
   TSuspendSchema extends ZodLikeSchema = any,
@@ -301,19 +356,20 @@ export function createTool<
     TSuspendSchema,
     TResumeSchema
   >,
-  TExecute extends ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext>['execute'] = ToolAction<
+  TExecute extends ToolAction<
     TSchemaIn,
     TSchemaOut,
     TSuspendSchema,
     TResumeSchema,
-    TContext
-  >['execute'],
+    TContext,
+    TId
+  >['execute'] = ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId>['execute'],
 >(
-  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
+  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> & {
     execute?: TExecute;
   },
 ): [TSchemaIn, TSchemaOut, TExecute] extends [ZodLikeSchema, ZodLikeSchema, Function]
-  ? Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
+  ? Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> & {
       inputSchema: TSchemaIn;
       outputSchema: TSchemaOut;
       execute: (
@@ -321,6 +377,6 @@ export function createTool<
         context?: TContext,
       ) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown>;
     }
-  : Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> {
+  : Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> {
   return new Tool(opts) as any;
 }

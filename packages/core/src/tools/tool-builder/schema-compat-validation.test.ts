@@ -257,12 +257,12 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
     );
 
     // EXPECTED BEHAVIOR (with the fix):
-    // Validation should accept null because the schema sent to the LLM was .nullable()
+    // Validation should accept undefined because the compat layer uses a transform to convert the value back to undefined.
     expect(executeResult).not.toHaveProperty('error');
     expect(executeResult).toEqual({
       success: true,
       newMemory: newMemoryValue,
-      searchString: null,
+      searchString: undefined,
       updateReason: 'append-new-memory',
     });
 

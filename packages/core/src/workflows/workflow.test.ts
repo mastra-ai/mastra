@@ -2,13 +2,13 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
-import { MockLanguageModelV2 } from 'ai-v5/test';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { z as zv4 } from 'zod-v4';
 import { Agent } from '../agent';
 import { RequestContext } from '../di';
 import { MastraError } from '../error';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { Mastra } from '../mastra';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 import { MockStore } from '../storage/mock';
@@ -1746,7 +1746,7 @@ describe('Workflow', () => {
       streamResult = run.resumeStreamVNext({ resumeData, step: promptAgent });
       console.log('created stream');
       for await (const _data of streamResult.fullStream) {
-        console.log('data===', _data);
+        // console.log('data===', _data);
       }
 
       expect(evaluateToneAction).toHaveBeenCalledTimes(1);

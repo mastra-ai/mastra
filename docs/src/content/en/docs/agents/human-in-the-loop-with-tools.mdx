@@ -3,7 +3,7 @@ title: "Human in the Loop with Tools | Agents"
 description: Learn how to require approvals and suspend tool execution while keeping humans in control of agent workflows.
 ---
 
-# Human in the Loop with Tools
+# Human-in-the-Loop with Tools
 
 Sometimes agents need human oversight before they can run potentially sensitive tools or long-running workflows. Mastra lets you pause tool execution to wait for approval, decline a tool call entirely, or suspend a tool mid-flight until the required data is available.
 
@@ -59,13 +59,13 @@ const findUserTool = createTool({
   resumeSchema: z.object({
     name: z.string(),
   }),
-  execute: async (inputData, { workflow }) => {
-    if (!workflow.resumeData) {
-      return workflow.suspend({ message: "Please provide the name of the user" });
+  execute: async (inputData, { agent }) => {
+    if (!agent.resumeData) {
+      return agent.suspend({ message: "Please provide the name of the user" });
     }
 
     return {
-      name: workflow?.resumeData?.name,
+      name: agent?.resumeData?.name,
       email: "test@test.com",
     };
   },
@@ -73,11 +73,12 @@ const findUserTool = createTool({
 ```
 
 To continue execution, call `resumeStream` with the run’s `runId` and the `resumeData` that satisfies the `resumeSchema`. The workflow resumes from the suspension point and the tool completes with the new data.
+When using `suspend` directly in the tool, you don't need to add `requireToolApproval: true` to the agent `stream`/`generate` call, nor `requireApproval: true` to the tool creation.
 
 ```typescript {1} title="Resume a suspended tool call" showLineNumbers copy
 const resumedStream = await myAgent.resumeStream(
   { name: "John Smith" },
-  { runId: stream.runId },
+  { runId: stream.runId }
 );
 ```
 
@@ -88,4 +89,3 @@ const resumedStream = await myAgent.resumeStream(
 - [Tools Overview](../mcp/overview)
 - [Agent Memory](./agent-memory)
 - [Request Context](/docs/v1/server-db/request-context)
-- [Calling Agents](/examples/v1/agents/calling-agents)
