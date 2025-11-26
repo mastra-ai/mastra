@@ -4,7 +4,14 @@ import type { WorkflowRunStatus, WorkflowStepStatus, WorkflowStreamEvent } from 
 import type { InferUIMessageChunk, UIMessage } from 'ai';
 import type { ZodType } from 'zod';
 import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from './helpers';
-import { isAgentExecutionDataChunkType, isDataChunkType, isWorkflowExecutionDataChunkType } from './utils';
+import type { ToolAgentChunkType, ToolWorkflowChunkType, ToolNetworkChunkType } from './helpers';
+import {
+  isAgentExecutionDataChunkType,
+  isDataChunkType,
+  isWorkflowExecutionDataChunkType,
+  safeParseErrorObject,
+  isMastraTextStreamChunk,
+} from './utils';
 
 type LanguageModelV2Usage = {
   /**
@@ -78,7 +85,9 @@ export type AgentDataPart = {
 // used so it's not serialized to JSON
 const PRIMITIVE_CACHE_SYMBOL = Symbol('primitive-cache');
 
-export function WorkflowStreamToAISDKTransformer() {
+export function WorkflowStreamToAISDKTransformer({
+  includeTextStreamParts,
+}: { includeTextStreamParts?: boolean } = {}) {
   const bufferedWorkflows = new Map<
     string,
     {
@@ -92,8 +101,12 @@ export function WorkflowStreamToAISDKTransformer() {
         data?: string;
         type?: 'start' | 'finish';
       }
+    | InferUIMessageChunk<UIMessage>
     | WorkflowDataPart
     | ChunkType
+    | ToolAgentChunkType
+    | ToolWorkflowChunkType
+    | ToolNetworkChunkType
   >({
     start(controller) {
       controller.enqueue({
@@ -106,8 +119,7 @@ export function WorkflowStreamToAISDKTransformer() {
       });
     },
     transform(chunk, controller) {
-      const transformed = transformWorkflow<any>(chunk, bufferedWorkflows);
-
+      const transformed = transformWorkflow<any>(chunk, bufferedWorkflows, false, includeTextStreamParts);
       if (transformed) controller.enqueue(transformed);
     },
   });
@@ -394,6 +406,7 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
     }
   >,
   isNested?: boolean,
+  includeTextStreamParts?: boolean,
 ) {
   switch (payload.type) {
     case 'workflow-start':
@@ -489,6 +502,20 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
     }
     case 'workflow-step-output': {
       const output = payload.payload.output;
+
+      if (includeTextStreamParts && output && isMastraTextStreamChunk(output)) {
+        const part = convertMastraChunkToAISDKv5({ chunk: output, mode: 'stream' });
+
+        const transformedChunk = convertFullStreamChunkToUIMessageStream<any>({
+          part: part as any,
+          onError(error) {
+            return safeParseErrorObject(error);
+          },
+        });
+
+        return transformedChunk;
+      }
+
       if (output && isDataChunkType(output)) {
         if (!('data' in output)) {
           throw new Error(
@@ -835,7 +862,7 @@ export function transformNetwork(
 
         step[PRIMITIVE_CACHE_SYMBOL] = step[PRIMITIVE_CACHE_SYMBOL] || new Map();
         const result = transformWorkflow(payload.payload as WorkflowStreamEvent, step[PRIMITIVE_CACHE_SYMBOL]);
-        if (result) {
+        if (result && 'data' in result) {
           const data = result.data;
           step.task = data;
 
