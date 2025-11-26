@@ -85,7 +85,6 @@ function validateError(err: ValidationError | Error, file: OutputChunk, logger: 
         id: 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND',
         messagePrefix: `Mastra wasn't able to build your project, We couldn't load "${missingModule}" from "${moduleName}". Please add`,
       };
-
     }
   }
 
@@ -105,7 +104,6 @@ function validateError(err: ValidationError | Error, file: OutputChunk, logger: 
       messagePrefix: errorConfig.messagePrefix,
     });
   }
-
 }
 
 async function validateFile(root: string, file: OutputChunk, logger: IMastraLogger) {
