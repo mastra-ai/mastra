@@ -106,21 +106,6 @@ function validateError(err: ValidationError | Error, file: OutputChunk, logger: 
     });
   }
 
-  // if (moduleName && errorConfig) {
-  //   const pkgInfo = await getPackageInfo(moduleName);
-  //   const packageName = pkgInfo?.packageJson?.name;
-
-  //   if (packageName) {
-  //     throwExternalDependencyError({
-  //       errorId: errorConfig.id,
-  //       moduleName,
-  //       packageName,
-  //       messagePrefix: errorConfig.messagePrefix,
-  //     });
-  //   } else {
-  //     logger.debug(`Could not determine the module name for file ${file.fileName}`);
-  //   }
-  // }
 }
 
 async function validateFile(root: string, file: OutputChunk, logger: IMastraLogger) {
