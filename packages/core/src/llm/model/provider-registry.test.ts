@@ -662,8 +662,6 @@ describe('Corrupted JSON recovery', () => {
 }`; // <-- extra garbage from concurrent write
     originalWriteFileSync(corruptedJsonPath, corruptedContent, 'utf-8');
 
-    // Mock getPackageRoot to return our temp directory
-    const packageRootMock = vi.fn().mockReturnValue(tempDir);
 
     // We need to test that loadRegistry detects corruption and falls back
     // Let's call getProviderConfig which internally calls loadRegistry
