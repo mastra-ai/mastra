@@ -1,5 +1,5 @@
 ---
-'@mastra/cloud-deployer': patch
+'@mastra/deployer-cloud': patch
 '@mastra/core': patch
 ---
 
