@@ -355,7 +355,7 @@ export async function dev({
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
   let portToUse = serverOptions?.port ?? process.env.PORT;
   let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
-  let basePathToUse = normalizeServerBase(serverOptions?.base ?? '/');
+  const basePathToUse = normalizeServerBase(serverOptions?.base ?? '/');
 
   if (!portToUse || isNaN(Number(portToUse))) {
     const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);
