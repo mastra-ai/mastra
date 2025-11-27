@@ -142,6 +142,12 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
 });
 ```
 
+:::tip Agent streaming in workflows
+When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are automatically streamed to the UI in real-time. This provides a seamless streaming experience even when agents are running inside workflow steps.
+
+Learn more in [Workflow Streaming](/docs/v1/streaming/workflow-streaming#streaming-agent-text-chunks-to-ui).
+:::
+
 ### `networkRoute()`
 
 Use the `networkRoute()` utility to create a route handler that automatically formats the agent network stream into an AI SDK-compatible format.

@@ -1,42 +1,43 @@
 export function getAuthEntrypoint() {
+  const tokensObject: Record<string, { id: string }> = {};
+
+  if (process.env.PLAYGROUND_JWT_TOKEN) {
+    tokensObject[process.env.PLAYGROUND_JWT_TOKEN] = { id: 'business-api' };
+  }
+  if (process.env.BUSINESS_JWT_TOKEN) {
+    tokensObject[process.env.BUSINESS_JWT_TOKEN] = { id: 'business-api' };
+  }
+
   return `
-  import { MastraAuthProvider } from '@mastra/core/server';
+  import { SimpleAuth, CompositeAuth } from '@mastra/core/server';
 
-  class MastraCloudAuth extends MastraAuthProvider {
-    constructor (auth) {
-      super()
-      this.auth = auth
+  class MastraCloudAuth extends SimpleAuth {
+    constructor() {
+      super({
+        tokens: ${JSON.stringify(tokensObject)}
+      });
     }
 
-    async authenticateToken (...args) {
-      if (typeof args[0] === 'string') {
-        const token = args[0].replace('Bearer ', '');
-        const validTokens = [];
-        ${process.env.PLAYGROUND_JWT_TOKEN ? `validTokens.push('${process.env.PLAYGROUND_JWT_TOKEN}');` : ''}
-        ${process.env.BUSINESS_JWT_TOKEN ? `validTokens.push('${process.env.BUSINESS_JWT_TOKEN}');` : ''}
-        
-        if (validTokens.includes(token)) {
-          return { id: 'business-api' }
-        }
+    async authorizeUser(user, request) {
+      // Allow access to /api path
+      if (request && request.url && new URL(request.url).pathname === '/api') {
+        return true;
       }
-      return this.auth.authenticateToken(...args)
-    }
-
-    async authorizeUser (...args) {
-      if (args[1] && args[1].path === '/api') {
-        return true
+      // Allow access for business-api users
+      if (user && user.id === 'business-api') {
+        return true;
       }
-      if (args[0] && args[0].id === 'business-api') {
-        return true
-      }
-      return this.auth.authorizeUser(...args)
+      return false;
     }
   }
 
   const serverConfig = mastra.getServer()
   if (serverConfig && serverConfig.auth) {
-    const auth = serverConfig.auth
-    serverConfig.auth = new MastraCloudAuth(auth)
+    const existingAuth = serverConfig.auth
+    const cloudAuth = new MastraCloudAuth()
+    
+    // Use CompositeAuth to combine cloud auth with existing auth
+    serverConfig.auth = new CompositeAuth([cloudAuth, existingAuth])
   }
   `;
 }
