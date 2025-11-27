@@ -10,14 +10,14 @@ import { getTableName } from '../utils';
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
   const data = {
     ...row,
-    input: safelyParseJSON(row.input),
-    scorer: safelyParseJSON(row.scorer),
-    preprocessStepResult: safelyParseJSON(row.preprocessStepResult),
-    analyzeStepResult: safelyParseJSON(row.analyzeStepResult),
-    output: safelyParseJSON(row.output),
-    additionalContext: safelyParseJSON(row.additionalContext),
-    runtimeContext: safelyParseJSON(row.runtimeContext),
-    entity: safelyParseJSON(row.entity),
+    input: row.input !== null ? safelyParseJSON(row.input) : undefined,
+    scorer: row.scorer !== null ? safelyParseJSON(row.scorer) : undefined,
+    preprocessStepResult: row.preprocessStepResult !== null ? safelyParseJSON(row.preprocessStepResult) : undefined,
+    analyzeStepResult: row.analyzeStepResult !== null ? safelyParseJSON(row.analyzeStepResult) : undefined,
+    output: row.output !== null ? safelyParseJSON(row.output) : undefined,
+    additionalContext: row.additionalContext !== null ? safelyParseJSON(row.additionalContext) : undefined,
+    runtimeContext: row.runtimeContext !== null ? safelyParseJSON(row.runtimeContext) : undefined,
+    entity: row.entity !== null ? safelyParseJSON(row.entity) : undefined,
     createdAt: row.createdAtZ || row.createdAt,
     updatedAt: row.updatedAtZ || row.updatedAt,
   };
