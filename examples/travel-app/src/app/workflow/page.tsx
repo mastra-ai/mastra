@@ -19,7 +19,7 @@ export default function Page() {
 
         <h3 className="text-lg font-semibold mb-2">1. Assemble Agent</h3>
         <p className="mb-2">
-          The agent is is defined with a name, a set of instructions, and a
+          The agent is defined with a name, a set of instructions, and a
           model. This agent is not provided any tools and is just responsible
           for making calls to the LLM.
         </p>
