@@ -2073,4 +2073,213 @@ describe('Tracing Integration Tests', () => {
 
     testExporter.finalExpectations();
   });
+
+  /**
+   * GitHub Issue #9846: SensitiveDataFilter fails to redact tool results in MODEL_STEP span input messages
+   * @see https://github.com/mastra-ai/mastra/issues/9846
+   *
+   * This test verifies that the SensitiveDataFilter properly filters sensitive data
+   * including when it's embedded in JSON strings (like HTTP request bodies in MODEL_STEP spans).
+   */
+  describe('GitHub Issue #9846 - SensitiveDataFilter with tool results', () => {
+    it('should redact sensitive fields in TOOL_CALL output', async () => {
+      // Import SensitiveDataFilter for custom configuration
+      const { SensitiveDataFilter } = await import('./span_processors/sensitive-data-filter');
+
+      // Reset tool tracking for this test
+      resetToolCallTracking();
+
+      // Create a tool that returns sensitive data - use 'password' which is a default sensitive field
+      const sensitiveApiTool = createTool({
+        id: 'api-call',
+        description: 'Makes API calls',
+        inputSchema: z.object({
+          endpoint: z.string(),
+          method: z.string().default('GET'),
+        }),
+        outputSchema: z.object({
+          status: z.number(),
+          data: z.any(),
+        }),
+        execute: async () => ({
+          status: 200,
+          data: {
+            user: {
+              password: 'super-secret-123', // Should be redacted (default sensitive field)
+              token: 'bearer-token-xyz', // Should be redacted (default sensitive field)
+              publicId: 'user-123', // Should NOT be redacted
+            },
+          },
+        }),
+      });
+
+      // Create an agent with the tool
+      const testAgent = new Agent({
+        id: 'api-agent',
+        name: 'API Agent',
+        instructions: 'You make API calls',
+        model: mockModelV2,
+        tools: { apiCall: sensitiveApiTool },
+      });
+
+      // Create Mastra with default SensitiveDataFilter (includes password, token, etc.)
+      const mastra = new Mastra({
+        storage: new MockStore(),
+        observability: new Observability({
+          configs: {
+            test: {
+              serviceName: 'integration-tests',
+              exporters: [testExporter],
+              spanOutputProcessors: [new SensitiveDataFilter()],
+            },
+          },
+        }),
+        agents: { testAgent },
+      });
+
+      const agent = mastra.getAgent('testAgent');
+
+      // Use a prompt that triggers the API tool (matches getToolCallFromPrompt pattern)
+      const result = await agent.generate('Call the api endpoint /users');
+
+      expect(result.text).toBeDefined();
+      expect(result.traceId).toBeDefined();
+
+      // Get all spans
+      const toolCallSpans = testExporter.getSpansByType(SpanType.TOOL_CALL);
+
+      // Verify tool was called and output is properly redacted
+      expect(toolCallSpans.length).toBe(1);
+      const toolSpan = toolCallSpans[0];
+
+      // Verify the sensitive fields are redacted in the TOOL_CALL output
+      const output = toolSpan?.output as any;
+      expect(output?.data?.user?.password).toBe('[REDACTED]');
+      expect(output?.data?.user?.token).toBe('[REDACTED]');
+      expect(output?.data?.user?.publicId).toBe('user-123'); // Not sensitive
+
+      testExporter.finalExpectations();
+    });
+
+    it('should redact sensitive fields in MODEL_STEP input when request.body contains JSON string with tool results', async () => {
+      // Import SensitiveDataFilter for custom configuration
+      const { SensitiveDataFilter } = await import('./span_processors/sensitive-data-filter');
+
+      // Simulate tool result in the conversation that would be sent back to the model
+      const messagesWithToolResult = {
+        messages: [
+          { role: 'user', content: 'Get user info' },
+          { role: 'assistant', content: [{ type: 'tool-call', toolName: 'getUser' }] },
+          {
+            role: 'tool',
+            content: {
+              result: {
+                password: 'super-secret-123', // Should be redacted
+                token: 'bearer-token-xyz', // Should be redacted
+                publicId: 'user-123', // Should NOT be redacted
+              },
+            },
+          },
+        ],
+      };
+
+      // Create a mock that returns request.body as a JSON string containing tool results
+      // This simulates what real AI providers return
+      const mockWithRequestBody = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: '1', delta: 'Here is the user info.' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
+            },
+          ]),
+          // This is the key: request.body is a JSON STRING containing the messages
+          // Real AI providers serialize the request body as a string
+          request: {
+            body: JSON.stringify(messagesWithToolResult),
+          },
+          rawResponse: {},
+          warnings: [],
+        }),
+        // Also implement doGenerate in case it's called
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'Here is the user info.' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
+          request: {
+            body: JSON.stringify(messagesWithToolResult),
+          },
+          rawResponse: {},
+          warnings: [],
+        }),
+      });
+
+      // Create an agent with the mock
+      const testAgent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'You are a test agent',
+        model: mockWithRequestBody,
+      });
+
+      // Create Mastra with default SensitiveDataFilter
+      const mastra = new Mastra({
+        storage: new MockStore(),
+        observability: new Observability({
+          configs: {
+            test: {
+              serviceName: 'integration-tests',
+              exporters: [testExporter],
+              spanOutputProcessors: [new SensitiveDataFilter()],
+            },
+          },
+        }),
+        agents: { testAgent },
+      });
+
+      const agent = mastra.getAgent('testAgent');
+      const result = await agent.generate('Get user info');
+
+      expect(result.text).toBeDefined();
+      expect(result.traceId).toBeDefined();
+
+      // Get MODEL_STEP spans
+      const modelStepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(modelStepSpans.length).toBeGreaterThanOrEqual(1);
+
+      // Check each MODEL_STEP span's input
+      for (const stepSpan of modelStepSpans) {
+        const input = stepSpan.input as any;
+
+        if (input?.body) {
+          // The body should be a string (JSON serialized)
+          const bodyStr = typeof input.body === 'string' ? input.body : JSON.stringify(input.body);
+
+          console.log('\n=== MODEL_STEP input.body (should have redacted sensitive data) ===');
+          console.log(bodyStr);
+          console.log('=== END ===\n');
+
+          // The sensitive data should be REDACTED in the body string
+          expect(bodyStr).not.toContain('"password":"super-secret-123"');
+          expect(bodyStr).not.toContain('"token":"bearer-token-xyz"');
+
+          // If password/token appear, they should be redacted
+          if (bodyStr.includes('password')) {
+            expect(bodyStr).toContain('"password":"[REDACTED]"');
+          }
+          if (bodyStr.includes('token')) {
+            expect(bodyStr).toContain('"token":"[REDACTED]"');
+          }
+
+          // Non-sensitive data should still be visible
+          expect(bodyStr).toContain('user-123');
+        }
+      }
+
+      testExporter.finalExpectations();
+    });
+  });
 });

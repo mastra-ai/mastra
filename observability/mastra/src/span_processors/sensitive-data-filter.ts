@@ -92,9 +92,19 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
   /**
    * Recursively filter objects/arrays for sensitive keys.
    * Handles circular references by replacing with a marker.
+   * Also handles JSON strings by parsing, filtering, and re-serializing them.
    */
   private deepFilter(obj: any, seen = new WeakSet()): any {
-    if (obj === null || typeof obj !== 'object') {
+    if (obj === null) {
+      return obj;
+    }
+
+    // Handle strings - check if they might be JSON and filter if so
+    if (typeof obj === 'string') {
+      return this.filterJsonString(obj, seen);
+    }
+
+    if (typeof obj !== 'object') {
       return obj;
     }
 
@@ -123,6 +133,32 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
     }
 
     return filtered;
+  }
+
+  /**
+   * Filter JSON strings by parsing, filtering, and re-serializing them.
+   * This handles cases where sensitive data is embedded in JSON strings,
+   * such as HTTP request bodies in MODEL_STEP span inputs.
+   *
+   * @see https://github.com/mastra-ai/mastra/issues/9846
+   */
+  private filterJsonString(str: string, seen: WeakSet<object>): string {
+    const trimmed = str.trim();
+
+    // Only try to parse if it looks like a JSON object or array
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      try {
+        const parsed = JSON.parse(str);
+        // Create a new WeakSet for the parsed object to avoid false circular references
+        const filtered = this.deepFilter(parsed, new WeakSet());
+        return JSON.stringify(filtered);
+      } catch {
+        // Not valid JSON, return as-is
+        return str;
+      }
+    }
+
+    return str;
   }
 
   private tryFilter(value: any): any {

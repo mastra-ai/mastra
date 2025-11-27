@@ -313,6 +313,187 @@ describe('Tracing', () => {
       });
     });
 
+    /**
+     * Issue #9846: SensitiveDataFilter fails to redact tool results in MODEL_STEP span input messages
+     *
+     * The SensitiveDataFilter successfully redacts sensitive fields in TOOL_CALL span outputs,
+     * but fails to redact the same data when it appears in MODEL_STEP span inputs as part of
+     * the conversation messages array.
+     *
+     * This is because:
+     * 1. When request.body is a JSON STRING, deepFilter treats it as a primitive and can't recurse
+     * 2. When request.body is a parsed OBJECT, deepFilter should work correctly
+     *
+     * @see https://github.com/mastra-ai/mastra/issues/9846
+     */
+    describe('GitHub Issue #9846 - Tool results in MODEL_STEP input', () => {
+      it('should redact sensitive fields in MODEL_STEP input when body is an object', () => {
+        // This test verifies that when the request body is a proper object,
+        // the SensitiveDataFilter DOES redact sensitive fields correctly
+        const processor = new SensitiveDataFilter({ sensitiveFields: ['fullName', 'email'] });
+
+        // Simulate MODEL_STEP span input with tool result messages containing sensitive data
+        const mockSpan = {
+          id: 'model-step-1',
+          name: 'step: 1',
+          type: SpanType.MODEL_STEP,
+          startTime: new Date(),
+          traceId: 'trace-123',
+          trace: { traceId: 'trace-123' } as any,
+          input: {
+            // This is what the request object looks like when body is properly parsed as an object
+            body: {
+              input: [
+                { role: 'user', content: 'Get the assignee for ticket 123' },
+                { role: 'assistant', content: 'I will look that up for you.' },
+                {
+                  role: 'assistant',
+                  content: [{ type: 'tool-call', toolCallId: 'tc-1', toolName: 'getTicket', args: { id: 123 } }],
+                },
+                {
+                  // This is the function_call_output message containing sensitive data
+                  type: 'function_call_output',
+                  toolCallId: 'tc-1',
+                  output: {
+                    assignee: {
+                      fullName: 'John Doe', // Should be redacted
+                      email: 'john.doe@example.com', // Should be redacted
+                      userId: 'user-123', // Should NOT be redacted
+                    },
+                  },
+                },
+              ],
+            },
+          },
+          observabilityInstance: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        } as any;
+
+        const filtered = processor.process(mockSpan);
+        expect(filtered).not.toBeNull();
+
+        const input = filtered!.input as any;
+
+        // When body is an object, sensitive fields should be redacted
+        const toolResultMessage = input.body.input[3];
+        expect(toolResultMessage.output.assignee.fullName).toBe('[REDACTED]');
+        expect(toolResultMessage.output.assignee.email).toBe('[REDACTED]');
+        expect(toolResultMessage.output.assignee.userId).toBe('user-123'); // Not sensitive
+      });
+
+      it('should redact sensitive fields in MODEL_STEP input when body is a JSON string (BUG REPRODUCTION)', () => {
+        // This test reproduces the bug from issue #9846
+        // When request.body is a JSON STRING, the SensitiveDataFilter cannot recurse into it
+        const processor = new SensitiveDataFilter({ sensitiveFields: ['fullName', 'email'] });
+
+        // The messages array with tool result containing sensitive data
+        const messagesWithSensitiveData = {
+          input: [
+            { role: 'user', content: 'Get the assignee for ticket 123' },
+            { role: 'assistant', content: 'I will look that up for you.' },
+            {
+              role: 'assistant',
+              content: [{ type: 'tool-call', toolCallId: 'tc-1', toolName: 'getTicket', args: { id: 123 } }],
+            },
+            {
+              // This is the function_call_output message containing sensitive data
+              type: 'function_call_output',
+              toolCallId: 'tc-1',
+              output: {
+                assignee: {
+                  fullName: 'John Doe', // Should be redacted but ISN'T because it's in a string
+                  email: 'john.doe@example.com', // Should be redacted but ISN'T because it's in a string
+                  userId: 'user-123',
+                },
+              },
+            },
+          ],
+        };
+
+        // Simulate MODEL_STEP span input where body is a JSON STRING (as it comes from the AI SDK)
+        const mockSpan = {
+          id: 'model-step-1',
+          name: 'step: 1',
+          type: SpanType.MODEL_STEP,
+          startTime: new Date(),
+          traceId: 'trace-123',
+          trace: { traceId: 'trace-123' } as any,
+          input: {
+            // This is what the request object looks like when body is a JSON string
+            body: JSON.stringify(messagesWithSensitiveData),
+          },
+          observabilityInstance: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        } as any;
+
+        const filtered = processor.process(mockSpan);
+        expect(filtered).not.toBeNull();
+
+        const input = filtered!.input as any;
+
+        // BUG: When body is a JSON string, the filter cannot recurse into it
+        // The string contains the sensitive data un-redacted
+        const bodyString = input.body as string;
+
+        // Parse the body to check what's inside
+        const parsedBody = JSON.parse(bodyString);
+        const toolResultMessage = parsedBody.input[3];
+
+        // EXPECTED BEHAVIOR (what we want): Sensitive data should be redacted
+        // ACTUAL BEHAVIOR (the bug): Sensitive data is NOT redacted because it's inside a string
+        //
+        // This test currently FAILS because the bug exists.
+        // Once the bug is fixed, this test should pass.
+        expect(toolResultMessage.output.assignee.fullName).toBe('[REDACTED]');
+        expect(toolResultMessage.output.assignee.email).toBe('[REDACTED]');
+        expect(toolResultMessage.output.assignee.userId).toBe('user-123'); // Not sensitive
+      });
+
+      it('should verify that TOOL_CALL span output IS properly redacted (for comparison)', () => {
+        // This test shows that TOOL_CALL spans are properly redacted,
+        // demonstrating the inconsistency with MODEL_STEP input
+        const processor = new SensitiveDataFilter({ sensitiveFields: ['fullName', 'email'] });
+
+        const mockToolSpan = {
+          id: 'tool-call-1',
+          name: 'tool: getTicket',
+          type: SpanType.TOOL_CALL,
+          startTime: new Date(),
+          traceId: 'trace-123',
+          trace: { traceId: 'trace-123' } as any,
+          input: { id: 123 },
+          output: {
+            assignee: {
+              fullName: 'John Doe', // Should be redacted
+              email: 'john.doe@example.com', // Should be redacted
+              userId: 'user-123', // Should NOT be redacted
+            },
+          },
+          observabilityInstance: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        } as any;
+
+        const filtered = processor.process(mockToolSpan);
+        expect(filtered).not.toBeNull();
+
+        const output = filtered!.output as any;
+
+        // TOOL_CALL output is properly redacted because it's an object, not a string
+        expect(output.assignee.fullName).toBe('[REDACTED]');
+        expect(output.assignee.email).toBe('[REDACTED]');
+        expect(output.assignee.userId).toBe('user-123'); // Not sensitive
+      });
+    });
+
     describe('as part of the default config', () => {
       it('should automatically filter sensitive data in default tracing', () => {
         const tracing = new DefaultObservabilityInstance({
