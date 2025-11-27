@@ -24,7 +24,6 @@ export function nodeGypDetector(): Plugin {
     },
 
     async generateBundle(options, bundle) {
-      console.log(options);
       const binaryMapByChunk = new Map<string, Set<string>>();
       // Iterate through all output chunks
       for (const [fileName, chunk] of Object.entries(bundle)) {
