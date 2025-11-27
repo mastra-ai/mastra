@@ -292,7 +292,7 @@ describe('Custom Data Handling', () => {
         },
       });
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as any, { from: 'workflow' });
+      const aiSdkStream = toAISdkFormat(mockStream as any, { from: 'workflow' });
 
       const chunks: any[] = [];
       for await (const chunk of aiSdkStream) {
@@ -403,7 +403,7 @@ describe('Custom Data Handling', () => {
       const { networkStreamFixture } = await import('./__fixtures__/network.stream');
       const mockStream = ReadableStream.from(networkStreamFixture);
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraAgentNetworkStream, { from: 'network' });
+      const aiSdkStream = toAISdkFormat(mockStream as unknown as MastraAgentNetworkStream, { from: 'network' });
 
       const chunks: any[] = [];
       for await (const chunk of aiSdkStream) {
@@ -439,7 +439,7 @@ describe('Custom Data Handling', () => {
       const { networkStreamFixture } = await import('./__fixtures__/network.stream');
       const mockStream = ReadableStream.from(networkStreamFixture);
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraAgentNetworkStream, { from: 'network' });
+      const aiSdkStream = toAISdkFormat(mockStream as unknown as MastraAgentNetworkStream, { from: 'network' });
 
       const chunks: any[] = [];
       for await (const chunk of aiSdkStream) {
