@@ -96,7 +96,7 @@ export function validateToolInput<T = any>(
 
   const error: ValidationError<T> = {
     error: true,
-    message: `Tool validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(input)}`,
+    message: `Tool input validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(input)}`,
     validationErrors: validation.error.format() as z.ZodFormattedError<T>,
   };
 
