@@ -19,6 +19,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Guardrails | Agents](https://mastra.ai/en/docs/agents/guardrails): Learn how to implement guardrails using input and output processors to secure and control AI interactions.
 - [Agent Networks | Agents](https://mastra.ai/en/docs/agents/networks): Learn how to coordinate multiple agents, workflows, and tools using agent networks for complex, non-deterministic task execution.
 - [Using Agents | Agents](https://mastra.ai/en/docs/agents/overview): Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
+- [Processors | Agents | Mastra Docs](https://mastra.ai/en/docs/agents/processors): Learn how to use input and output processors to transform, validate, and control messages in Mastra agents.
 - [Using Tools | Agents](https://mastra.ai/en/docs/agents/using-tools): Learn how to create tools and add them to agents to extend capabilities beyond text generation.
 - [MastraAuthAuth0 Class | Auth](https://mastra.ai/en/docs/auth/auth0): Documentation for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication.
 - [MastraAuthClerk Class | Auth](https://mastra.ai/en/docs/auth/clerk): Documentation for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication.
