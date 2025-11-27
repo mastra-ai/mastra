@@ -14,6 +14,7 @@ import type { StructuredOutputOptions } from '../agent/types';
 import type { MastraLanguageModelV2 } from '../llm/model/shared.types';
 import type { TracingContext } from '../observability';
 import type { OutputProcessor } from '../processors';
+import type { RequestContext } from '../request-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './base/schema';
 
@@ -680,6 +681,7 @@ export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = 
   returnScorerData?: boolean;
   tracingContext?: TracingContext;
   processorStates?: Map<string, any>;
+  requestContext?: RequestContext;
 };
 
 export type LLMStepResult<OUTPUT extends OutputSchema = undefined> = {

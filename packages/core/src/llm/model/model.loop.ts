@@ -159,6 +159,7 @@ export class MastraLLMVNext extends MastraBase {
     _internal,
     agentId,
     toolCallId,
+    requestContext,
     methodType,
     includeRawChunks,
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
@@ -224,6 +225,7 @@ export class MastraLLMVNext extends MastraBase {
         modelSpanTracker,
         requireToolApproval,
         agentId,
+        requestContext,
         methodType,
         includeRawChunks,
         options: {

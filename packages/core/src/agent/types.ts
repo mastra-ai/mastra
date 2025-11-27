@@ -21,6 +21,7 @@ import type {
   StreamObjectOnFinishCallback,
 } from '../llm/model/base.types';
 import type { ProviderOptions } from '../llm/model/provider-options';
+import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
@@ -37,7 +38,6 @@ import type { Workflow } from '../workflows';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
-import type { SaveQueueManager } from './save-queue';
 
 export type { MastraDBMessage, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
@@ -75,6 +75,11 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
    * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
    */
   jsonPromptInjection?: boolean;
+
+  /**
+   * Optional logger instance for structured logging
+   */
+  logger?: IMastraLogger;
 } & FallbackFields<OUTPUT>;
 
 export type SerializableStructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = Omit<
@@ -365,7 +370,6 @@ export type AgentExecuteOnFinishOptions = {
   messageList: MessageList;
   threadExists: boolean;
   structuredOutput?: boolean;
-  saveQueueManager: SaveQueueManager;
   overrideScorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
 };
 

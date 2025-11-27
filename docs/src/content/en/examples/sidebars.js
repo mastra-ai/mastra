@@ -44,70 +44,12 @@ const sidebars = {
       items: [
         {
           type: "category",
-          label: "Chunking",
-          items: [
-            { type: "doc", id: "rag/chunking/chunk-text", label: "Chunk Text" },
-            {
-              type: "doc",
-              id: "rag/chunking/chunk-markdown",
-              label: "Chunk Markdown",
-            },
-            {
-              type: "doc",
-              id: "rag/chunking/chunk-html",
-              label: "Chunk HTML",
-            },
-            {
-              type: "doc",
-              id: "rag/chunking/chunk-json",
-              label: "Chunk JSON",
-            },
-            {
-              type: "doc",
-              id: "rag/chunking/adjust-chunk-size",
-              label: "Adjust Chunk Size",
-            },
-            {
-              type: "doc",
-              id: "rag/chunking/adjust-chunk-delimiters",
-              label: "Adjust Chunk Delimiters",
-            },
-          ],
-        },
-        {
-          type: "category",
           label: "Embedding",
           items: [
             {
               type: "doc",
-              id: "rag/embedding/embed-text-chunk",
-              label: "Embed Text Chunk",
-            },
-            {
-              type: "doc",
-              id: "rag/embedding/embed-chunk-array",
-              label: "Embed Chunk Array",
-            },
-            {
-              type: "doc",
-              id: "rag/embedding/embed-text-with-cohere",
-              label: "Embed Text with Cohere",
-            },
-            {
-              type: "doc",
               id: "rag/embedding/metadata-extraction",
               label: "Metadata Extraction",
-            },
-          ],
-        },
-        {
-          type: "category",
-          label: "Upsert",
-          items: [
-            {
-              type: "doc",
-              id: "rag/upsert/upsert-embeddings",
-              label: "Upsert Embeddings",
             },
           ],
         },
@@ -120,48 +62,12 @@ const sidebars = {
               id: "rag/query/hybrid-vector-search",
               label: "Hybrid Vector Search",
             },
-            {
-              type: "doc",
-              id: "rag/query/retrieve-results",
-              label: "Retrieve Results",
-            },
-          ],
-        },
-        {
-          type: "category",
-          label: "Rerank",
-          items: [
-            {
-              type: "doc",
-              id: "rag/rerank/rerank",
-              label: "Re-ranking Results",
-            },
-            {
-              type: "doc",
-              id: "rag/rerank/rerank-rag",
-              label: "Re-ranking Results with Tools",
-            },
-            {
-              type: "doc",
-              id: "rag/rerank/reranking-with-cohere",
-              label: "Re-ranking results with Cohere",
-            },
-            {
-              type: "doc",
-              id: "rag/rerank/reranking-with-zeroentropy",
-              label: "Re-ranking results with ZeroEntropy",
-            },
           ],
         },
         {
           type: "category",
           label: "Usage",
           items: [
-            {
-              type: "doc",
-              id: "rag/usage/basic-rag",
-              label: "Using the Vector Query Tool",
-            },
             {
               type: "doc",
               id: "rag/usage/cleanup-rag",

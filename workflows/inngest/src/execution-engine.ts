@@ -689,6 +689,23 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               endedAt: Date.now(),
             };
 
+      // Emit step failure events (ported from commit 75c9d9a)
+      await emitter.emit('watch', {
+        type: 'workflow-step-result',
+        payload: {
+          id: step.id,
+          ...stepFailure,
+        },
+      });
+
+      await emitter.emit('watch', {
+        type: 'workflow-step-finish',
+        payload: {
+          id: step.id,
+          metadata: {},
+        },
+      });
+
       // Serialize requestContext for failure case
       const serializedRequestContext: Record<string, any> = {};
       requestContext.forEach((value, key) => {

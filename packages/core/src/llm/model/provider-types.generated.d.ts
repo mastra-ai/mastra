@@ -138,6 +138,7 @@ export type ProviderModelsMap = {
     'qwen-qwq-32b',
     'qwen/qwen3-32b',
   ];
+  readonly bailing: readonly ['Ling-1T', 'Ring-1T'];
   readonly mistral: readonly [
     'codestral-latest',
     'devstral-medium-2507',
@@ -397,6 +398,28 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.5',
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.6',
+  ];
+  readonly agentrouter: readonly [
+    'claude-3-5-haiku-20241022',
+    'claude-3-5-sonnet-20240620',
+    'claude-3-5-sonnet-20241022',
+    'claude-3-7-sonnet-20250219',
+    'claude-3-7-sonnet-20250219-thinking',
+    'claude-haiku-4-5-20251001',
+    'claude-opus-4-20250514',
+    'claude-opus-4-20250514-thinking',
+    'claude-sonnet-4-20250514',
+    'claude-sonnet-4-20250514-thinking',
+    'claude-sonnet-4-5-20250929',
+    'deepseek-r1-0528',
+    'deepseek-v3.1',
+    'deepseek-v3.2',
+    'gemini-3-pro-preview',
+    'glm-4.5',
+    'glm-4.6',
+    'gpt-5',
+    'gpt-5.1',
+    'kimi-k2-thinking',
   ];
   readonly cortecs: readonly [
     'claude-4-5-sonnet',
@@ -940,10 +963,12 @@ export type ProviderModelsMap = {
     'anthropic/claude-haiku-4-5',
     'anthropic/claude-opus-4',
     'anthropic/claude-opus-4-1',
+    'anthropic/claude-opus-4-5',
     'anthropic/claude-sonnet-4',
     'anthropic/claude-sonnet-4-5',
     'google/gemini-2.5-flash',
     'google/gemini-2.5-pro',
+    'google/gemini-3-pro-preview',
     'openai/gpt-4.1',
     'openai/gpt-4.1-mini',
     'openai/gpt-4o-mini',
@@ -977,6 +1002,25 @@ export type ProviderModelsMap = {
     'claude-sonnet-4-20250514',
     'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
+  ];
+  readonly 'io-intelligence': readonly [
+    'deepseek-ai-deepseek-r1-0528',
+    'intel-qwen3-coder-480b-a35b-instruct-int4-mixed-ar',
+    'meta-llama-llama-3-2-90b-vision-instruct',
+    'meta-llama-llama-3-3-70b-instruct',
+    'meta-llama-llama-4-maverick-17b-128e-instruct-fp8',
+    'mistralai-devstral-small-2505',
+    'mistralai-magistral-small-2506',
+    'mistralai-mistral-large-instruct-2411',
+    'mistralai-mistral-nemo-instruct-2407',
+    'moonshotai-kimi-k2-instruct-0905',
+    'moonshotai-kimi-k2-thinking',
+    'openai-gpt-oss-120b',
+    'openai-gpt-oss-20b',
+    'qwen-qwen2-5-vl-32b-instruct',
+    'qwen-qwen3-235b-a22b-thinking-2507',
+    'qwen-qwen3-next-80b-a3b-instruct',
+    'zai-org-glm-4-6',
   ];
   readonly 'fireworks-ai': readonly [
     'accounts/fireworks/models/deepseek-r1-0528',

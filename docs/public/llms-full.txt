@@ -354,6 +354,198 @@ For more details on voice capabilities, see the [Voice API Reference](/reference
 
 
 ---
+title: "Agent Approval | Agents"
+description: Learn how to require approvals and suspend tool execution while keeping humans in control of agent workflows.
+---
+
+# Agent Approval
+[EN] Source: https://mastra.ai/en/docs/agents/agent-approval
+
+Agents sometimes require the same [human-in-the-loop](/docs/v1/workflows/human-in-the-loop) oversight used in workflows when calling tools that handle sensitive operations, like deleting resources or performing running long processes. With agent approval you can suspend a tool call and provide feedback to the user, or approve or decline a tool call based on targeted application conditions.
+
+## Tool call approval
+
+Tool call approval can be enabled at the agent level and apply to every tool the agent uses, or at the tool level providing more granular control over individual tool calls.
+
+### Storage
+
+Agent approval uses a snapshot to capture the state of the request. Ensure you've enabled a storage provider in your main Mastra instance. If storage isn't enabled you'll see an error relating to snapshot not found.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core/mastra";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  // ...
+  storage: new LibSQLStore({
+    id: "mastra-storage",
+    url: ":memory:"
+  })
+});
+```
+
+
+## Agent-level approval
+
+When calling an agent using `.stream()` set `requireToolApproval` to `true` which will prevent the agent from calling any of the tools defined in its configuration.
+
+```typescript showLineNumbers
+const stream = await agent.stream("What's the weather in London?", {
+  requireToolApproval: true
+});
+```
+
+### Approving tool calls
+
+To approve a tool call, access `approveToolCall` from the `agent`, passing in the `runId` of the stream. This will let the agent know its now OK to call its tools.
+
+```typescript showLineNumbers
+const handleApproval = async () => {
+  const approvedStream = await agent.approveToolCall({ runId: stream.runId });
+
+  for await (const chunk of approvedStream.textStream) {
+    process.stdout.write(chunk);
+  }
+  process.stdout.write("\n");
+};
+```
+
+### Declining tool calls
+
+To decline a tool call, access the `declineToolCall` from the `agent`. You will see the streamed response from the agent, but it won't call its tools.
+
+```typescript showLineNumbers
+const handleDecline = async () => {
+  const declinedStream = await agent.declineToolCall({ runId: stream.runId });
+
+  for await (const chunk of declinedStream.textStream) {
+    process.stdout.write(chunk);
+  }
+  process.stdout.write("\n");
+};
+```
+
+## Tool-level approval
+
+There are two types of tool call approval. The first uses `requireApproval`, which is a property on the tool definition, while `requireToolApproval` is a parameter passed to `agent.stream()`. The second uses `suspend` and lets the agent provide context or confirmation prompts so the user can decide whether the tool call should continue.
+
+### Tool approval using `requireToolApproval`
+
+In this approach, `requireApproval` is configured on the tool definition (shown below) rather than on the agent.
+
+```typescript
+export const testTool = createTool({
+  id: "test-tool",
+  description: "Fetches weather for a location",
+  inputSchema: z.object({
+    location: z.string()
+  }),
+  outputSchema: z.object({
+    weather: z.string()
+  }),
+  resumeSchema: z.object({
+    approved: z.boolean()
+  }),
+  execute: async ({ location }) => {
+    const response = await fetch(`https://wttr.in/${location}?format=3`);
+    const weather = await response.text();
+
+    return { weather };
+  },
+  requireApproval: true
+});
+```
+
+When `requireApproval` is true for a tool, the stream will include chunks of type `tool-call-approval` to indicate that the call is paused. To continue the call, invoke `resumeStream` with the required `resumeSchema` and the `runId`.
+
+```typescript
+const stream = await agent.stream("What's the weather in London?");
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === "tool-call-approval") {
+    console.log("Approval required.");
+  }
+}
+
+const handleResume = async () => {
+  const resumedStream = await agent.resumeStream({ approved: true }, { runId: stream.runId });
+
+  for await (const chunk of resumedStream.textStream) {
+    process.stdout.write(chunk);
+  }
+  process.stdout.write("\n");
+};
+```
+
+
+### Tool approval using `suspend`
+
+With this approach, neither the agent nor the tool uses `requireApproval`. Instead, the tool implementation calls `suspend` to pause execution and return context or confirmation prompts to the user.
+
+```typescript
+
+export const testToolB = createTool({
+  id: "test-tool-b",
+  description: "Fetches weather for a location",
+  inputSchema: z.object({
+    location: z.string()
+  }),
+  outputSchema: z.object({
+    weather: z.string()
+  }),
+  resumeSchema: z.object({
+    approved: z.boolean()
+  }),
+  suspendSchema: z.object({
+    reason: z.string()
+  }),
+  execute: async ({ location }, { agent } = {}) => {
+    const { resumeData: { approved } = {}, suspend } = agent ?? {};
+
+    if (!approved) {
+      return suspend?.({ reason: "Approval required." });
+    }
+
+    const response = await fetch(`https://wttr.in/${location}?format=3`);
+    const weather = await response.text();
+
+    return { weather };
+  }
+});
+```
+
+With this approach the stream will include a `tool-call-suspended` chunk, and the `suspendPayload` will contain the `reason` defined by the tool's `suspendSchema`. To continue the call, invoke `resumeStream` with the required `resumeSchema` and the `runId`.
+
+```typescript
+const stream = await agent.stream("What's the weather in London?");
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === "tool-call-suspended") {
+    console.log(chunk.payload.suspendPayload);
+  }
+}
+
+const handleResume = async () => {
+  const resumedStream = await agent.resumeStream({ approved: true }, { runId: stream.runId });
+
+  for await (const chunk of resumedStream.textStream) {
+    process.stdout.write(chunk);
+  }
+  process.stdout.write("\n");
+};
+
+```
+
+## Related
+
+- [Using Tools](./using-tools)
+- [Agent Overview](./overview)
+- [Tools Overview](../mcp/overview)
+- [Agent Memory](./agent-memory)
+- [Request Context](/docs/v1/server-db/request-context)
+
+
+---
 title: "Agent Memory | Agents"
 description: Learn how to add memory to agents to store conversation history and maintain context across interactions.
 ---
@@ -574,7 +766,7 @@ export const moderatedAgent = new Agent({
   model: "openai/gpt-5.1",
   inputProcessors: [
     new ModerationProcessor({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       categories: ["hate", "harassment", "violence"],
       threshold: 0.7,
       strategy: "block",
@@ -623,7 +815,7 @@ export const secureAgent = new Agent({
   // ...
   inputProcessors: [
     new PromptInjectionDetector({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       threshold: 0.8,
       strategy: "rewrite",
       detectionTypes: ["injection", "jailbreak", "system-override"],
@@ -647,7 +839,7 @@ export const multilingualAgent = new Agent({
   // ...
   inputProcessors: [
     new LanguageDetector({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       targetLanguages: ["English", "en"],
       strategy: "translate",
       threshold: 0.8,
@@ -720,7 +912,7 @@ const scrubbedAgent = new Agent({
   name: "Scrubbed Agent",
   outputProcessors: [
     new SystemPromptScrubber({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       strategy: "redact",
       customPatterns: ["system prompt", "internal instructions"],
       includeDetections: true,
@@ -752,7 +944,7 @@ export const moderatedAgent = new Agent({
   // ...
   inputProcessors: [
     new ModerationProcessor({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       threshold: 0.7,
       strategy: "block",
       categories: ["hate", "harassment", "violence"],
@@ -781,7 +973,7 @@ export const privateAgent = new Agent({
   // ...
   inputProcessors: [
     new PIIDetector({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       threshold: 0.6,
       strategy: "redact",
       redactionMethod: "mask",
@@ -908,100 +1100,6 @@ Available examples:
 - [Message Length Limiter](https://github.com/mastra-ai/mastra/tree/main/examples/processors-message-length-limiter)
 - [Response Length Limiter](https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-length-limiter)
 - [Response Validator](https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-validator)
-
-
----
-title: "Human in the Loop with Tools | Agents"
-description: Learn how to require approvals and suspend tool execution while keeping humans in control of agent workflows.
----
-
-# Human-in-the-Loop with Tools
-[EN] Source: https://mastra.ai/en/docs/agents/human-in-the-loop-with-tools
-
-Sometimes agents need human oversight before they can run potentially sensitive tools or long-running workflows. Mastra lets you pause tool execution to wait for approval, decline a tool call entirely, or suspend a tool mid-flight until the required data is available.
-
-## Tool approvals
-
-### Enforcing approval on every tool
-
-Pass `requireToolApproval: true` when calling `stream` (or `generate`) to automatically pause execution whenever the agent tries to invoke a tool. The stream closes until you explicitly approve or decline the tool call using the original run’s `runId`.
-
-```typescript {2,6} title="Require approval before executing any tool" showLineNumbers copy
-const stream = await myAgent.stream("Find the user with name - John Smith", {
-  requireToolApproval: true,
-});
-
-const approvedToolCallStream = await myAgent.approveToolCall({ runId: stream.runId });
-const declinedToolCallStream = await myAgent.declineToolCall({ runId: stream.runId });
-```
-
-### Requiring approval per tool
-
-You can also enforce approval on specific tools. Set `requireApproval: true` when creating a tool so the agent pauses only when it tries to invoke that tool.
-
-```typescript {8} title="Mark a tool as approval-only" showLineNumbers copy
-const findUserTool = createTool({
-  id: "Find user tool",
-  description: "Returns the name and email for a matching user",
-  inputSchema: z.object({
-    name: z.string(),
-  }),
-  execute: async (inputData) => {
-    return mockFindUser(inputData);
-  },
-  requireApproval: true,
-});
-```
-
-When the agent reaches this tool, it emits a tool-call event you can approve or decline with the same `approveToolCall` or `declineToolCall` helpers.
-
-## Tool suspension
-
-Sometimes a tool can’t finish immediately—maybe it’s waiting for external confirmation or extra input. You can suspend and later resume execution using `workflow.suspend`, `resumeStream`, and optional schemas that define what data is required at each step.
-
-```typescript {10,14} title="Suspend and resume a tool" showLineNumbers copy
-const findUserTool = createTool({
-  id: "Find user tool",
-  description: "Returns the name and email for a matching user",
-  inputSchema: z.object({
-    name: z.string(),
-  }),
-  suspendSchema: z.object({
-    message: z.string(),
-  }),
-  resumeSchema: z.object({
-    name: z.string(),
-  }),
-  execute: async (inputData, { agent }) => {
-    if (!agent.resumeData) {
-      return agent.suspend({ message: "Please provide the name of the user" });
-    }
-
-    return {
-      name: agent?.resumeData?.name,
-      email: "test@test.com",
-    };
-  },
-});
-```
-
-To continue execution, call `resumeStream` with the run’s `runId` and the `resumeData` that satisfies the `resumeSchema`. The workflow resumes from the suspension point and the tool completes with the new data.
-When using `suspend` directly in the tool, you don't need to add `requireToolApproval: true` to the agent `stream`/`generate` call, nor `requireApproval: true` to the tool creation.
-
-```typescript {1} title="Resume a suspended tool call" showLineNumbers copy
-const resumedStream = await myAgent.resumeStream(
-  { name: "John Smith" },
-  { runId: stream.runId }
-);
-```
-
-## Related
-
-- [Using Tools](./using-tools)
-- [Agent Overview](./overview)
-- [Tools Overview](../mcp/overview)
-- [Agent Memory](./agent-memory)
-- [Request Context](/docs/v1/server-db/request-context)
 
 
 ---
@@ -1664,6 +1762,241 @@ Use [Studio](/docs/v1/getting-started/studio) to test agents with different mess
 - [Agent Memory](/docs/v1/agents/agent-memory)
 - [Request Context](/docs/v1/server-db/request-context)
 
+
+---
+title: "Processors | Agents | Mastra Docs"
+description: "Learn how to use input and output processors to transform, validate, and control messages in Mastra agents."
+---
+
+# Processors
+[EN] Source: https://mastra.ai/en/docs/agents/processors
+
+Processors transform, validate, or control messages as they pass through an agent. They run at specific points in the agent's execution pipeline, allowing you to modify inputs before they reach the language model or outputs before they're returned to users.
+
+Processors are configured as:
+
+- **`inputProcessors`**: Run before messages reach the language model.
+- **`outputProcessors`**: Run after the language model generates a response, but before it's returned to users.
+
+Some processors implement both input and output logic and can be used in either array depending on where the transformation should occur.
+
+## When to use processors
+
+Use processors to:
+
+- Normalize or validate user input
+- Add guardrails to your agent
+- Detect and prevent prompt injection or jailbreak attempts
+- Moderate content for safety or compliance
+- Transform messages (e.g., translate languages, filter tool calls)
+- Limit token usage or message history length
+- Redact sensitive information (PII)
+- Apply custom business logic to messages
+
+Mastra includes several processors for common use cases. You can also create custom processors for application-specific requirements.
+
+## Adding processors to an agent
+
+Import and instantiate the processor, then pass it to the agent's `inputProcessors` or `outputProcessors` array:
+
+```typescript {3,9-15} title="src/mastra/agents/moderated-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { ModerationProcessor } from "@mastra/core/processors";
+
+export const moderatedAgent = new Agent({
+  name: "moderated-agent",
+  instructions: "You are a helpful assistant",
+  model: openai("gpt-4o-mini"),
+  inputProcessors: [
+    new ModerationProcessor({
+      model: openai("gpt-4.1-nano"),
+      categories: ["hate", "harassment", "violence"],
+      threshold: 0.7,
+      strategy: "block",
+    }),
+  ],
+});
+```
+
+## Execution order
+
+Processors run in the order they appear in the array:
+
+```typescript
+inputProcessors: [
+  new UnicodeNormalizer(),
+  new PromptInjectionDetector(),
+  new ModerationProcessor(),
+];
+```
+
+For output processors, the order determines the sequence of transformations applied to the model's response.
+
+### With memory enabled
+
+When memory is enabled on an agent, memory processors are automatically added to the pipeline:
+
+**Input processors:**
+```
+[Memory Processors] → [Your inputProcessors]
+```
+Memory loads conversation history first, then your processors run.
+
+**Output processors:**
+```
+[Your outputProcessors] → [Memory Processors]
+```
+Your processors run first, then memory persists messages.
+
+This ordering ensures that if your output guardrail calls `abort()`, memory processors are skipped and no messages are saved. See [Memory Processors](/docs/v1/memory/memory-processors#processor-execution-order) for details.
+
+## Creating custom processors
+
+Custom processors implement the `InputProcessor` or `OutputProcessor` interface:
+
+### Custom input processor
+
+```typescript title="src/mastra/processors/custom-input.ts" showLineNumbers copy
+import type {
+  InputProcessor,
+  MastraMessageV2,
+  RuntimeContext,
+} from "@mastra/core";
+
+export class CustomInputProcessor implements InputProcessor {
+  name = "custom-input";
+
+  async processInput({
+    messages,
+    context,
+  }: {
+    messages: MastraMessageV2[];
+    context: RuntimeContext;
+  }): Promise<MastraMessageV2[]> {
+    // Transform messages before they reach the LLM
+    return messages.map((msg) => ({
+      ...msg,
+      content: {
+        ...msg.content,
+        content: msg.content.content.toLowerCase(),
+      },
+    }));
+  }
+}
+```
+
+### Custom output processor
+
+```typescript title="src/mastra/processors/custom-output.ts" showLineNumbers copy
+import type {
+  OutputProcessor,
+  MastraMessageV2,
+  RuntimeContext,
+} from "@mastra/core";
+
+export class CustomOutputProcessor implements OutputProcessor {
+  name = "custom-output";
+
+  async processOutputResult({
+    messages,
+    context,
+  }: {
+    messages: MastraMessageV2[];
+    context: RuntimeContext;
+  }): Promise<MastraMessageV2[]> {
+    // Transform messages after the LLM generates them
+    return messages.filter((msg) => msg.role !== "system");
+  }
+
+  async processOutputStream({
+    stream,
+    context,
+  }: {
+    stream: ReadableStream;
+    context: RuntimeContext;
+  }): Promise<ReadableStream> {
+    // Transform streaming responses
+    return stream;
+  }
+}
+```
+
+Both `processInput` and `processOutputResult` receive a `context` object containing execution metadata such as `threadId`, `resourceId`, and other runtime information.
+
+## Built-in Utility Processors
+
+Mastra provides utility processors for common tasks:
+
+**For security and validation processors**, see the [Guardrails](/docs/v1/agents/guardrails) page for input/output guardrails and moderation processors.
+**For memory-specific processors**, see the [Memory Processors](/docs/v1/memory/memory-processors) page for processors that handle message history, semantic recall, and working memory.
+
+### TokenLimiter
+
+Prevents context window overflow by removing older messages when the total token count exceeds a specified limit.
+
+```typescript copy showLineNumbers {9-12}
+import { Agent } from "@mastra/core/agent";
+import { TokenLimiter } from "@mastra/core/processors";
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  name: "my-agent",
+  model: openai("gpt-4o"),
+  inputProcessors: [
+    // Ensure the total tokens don't exceed ~127k
+    new TokenLimiter(127000),
+  ],
+});
+```
+
+The `TokenLimiter` uses the `o200k_base` encoding by default (suitable for GPT-4o). You can specify other encodings for different models:
+
+```typescript copy showLineNumbers {6-9}
+import cl100k_base from "js-tiktoken/ranks/cl100k_base";
+
+const agent = new Agent({
+  name: "my-agent",
+  inputProcessors: [
+    new TokenLimiter({
+      limit: 16000, // Example limit for a 16k context model
+      encoding: cl100k_base,
+    }),
+  ],
+});
+```
+
+### ToolCallFilter
+
+Removes tool calls from messages sent to the LLM, saving tokens by excluding potentially verbose tool interactions.
+
+```typescript copy showLineNumbers {5-14}
+import { Agent } from "@mastra/core/agent";
+import { ToolCallFilter, TokenLimiter } from "@mastra/core/processors";
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  name: "my-agent",
+  model: openai("gpt-4o"),
+  inputProcessors: [
+    // Example 1: Remove all tool calls/results
+    new ToolCallFilter(),
+
+    // Example 2: Remove only specific tool calls
+    new ToolCallFilter({ exclude: ["generateImageTool"] }),
+
+    // Always place TokenLimiter last
+    new TokenLimiter(127000),
+  ],
+});
+```
+
+> **Note:** The example above filters tool calls and limits tokens for the LLM, but these filtered messages will still be saved to memory. To also filter messages before they're saved to memory, manually add memory processors before utility processors. See [Memory Processors](/docs/v1/memory/memory-processors#manual-control-and-deduplication) for details.
+
+## Related documentation
+
+- [Guardrails](/docs/v1/agents/guardrails) - Security and validation processors
+- [Memory Processors](/docs/v1/memory/memory-processors) - Memory-specific processors and automatic integration
 
 ---
 title: "Using Tools | Agents"
@@ -6920,133 +7253,319 @@ description: "Learn how to use memory processors in Mastra to filter, trim, and 
 # Memory Processors
 [EN] Source: https://mastra.ai/en/docs/memory/memory-processors
 
-Memory Processors allow you to modify the list of messages retrieved from memory _before_ they are added to the agent's context window and sent to the LLM. This is useful for managing context size, filtering content, and optimizing performance.
+Memory processors transform and filter messages as they pass through an agent with memory enabled. They manage context window limits, remove unnecessary content, and optimize the information sent to the language model.
 
-Processors operate on the messages retrieved based on your memory configuration (e.g., `lastMessages`, `semanticRecall`). They do **not** affect the new incoming user message.
+When memory is enabled on an agent, Mastra adds memory processors to the agent's processor pipeline. These processors retrieve conversation history, working memory, and semantically relevant messages, then persist new messages after the model responds.
 
-## Built-in Processors
+Memory processors are [processors](/docs/v1/agents/processors) that operate specifically on memory-related messages and state.
 
-Mastra provides built-in processors:
+## Built-in Memory Processors
 
-### `TokenLimiter`
+Mastra automatically adds these processors when memory is enabled:
 
-This processor is used to prevent errors caused by exceeding the LLM's context window limit. It counts the tokens in the retrieved memory messages and removes the oldest messages until the total count is below the specified `limit`.
+### MessageHistory
 
-```typescript copy showLineNumbers {9-12}
-import { Memory } from "@mastra/memory";
-import { TokenLimiter } from "@mastra/memory/processors";
+Retrieves conversation history and persists new messages.
+
+**When you configure:**
+
+```typescript
+memory: new Memory({
+  lastMessages: 10,
+});
+```
+
+**Mastra internally:**
+
+1. Creates a `MessageHistory` processor with `limit: 10`
+2. Adds it to the agent's input processors (runs before the LLM)
+3. Adds it to the agent's output processors (runs after the LLM)
+
+**What it does:**
+
+- **Input**: Fetches the last 10 messages from storage and prepends them to the conversation
+- **Output**: Persists new messages to storage after the model responds
+
+**Example:**
+
+```typescript copy showLineNumbers
 import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
   id: "test-agent",
   name: "Test Agent",
-  model: "openai/gpt-5.1",
+  instructions: "You are a helpful assistant",
+  model: 'openai/gpt-4o',
   memory: new Memory({
-    processors: [
-      // Ensure the total tokens from memory don't exceed ~127k
-      new TokenLimiter(127000),
-    ],
+    storage: new LibSQLStore({
+      id: "memory-store",
+      url: "file:memory.db",
+    }),
+    lastMessages: 10, // MessageHistory processor automatically added
   }),
 });
 ```
 
-The `TokenLimiter` uses the `o200k_base` encoding by default (suitable for GPT-4o). You can specify other encodings if needed for different models:
+### SemanticRecall
 
-```typescript copy showLineNumbers {6-9}
-// Import the encoding you need (e.g., for older OpenAI models)
-import cl100k_base from "js-tiktoken/ranks/cl100k_base";
+Retrieves semantically relevant messages based on the current input and creates embeddings for new messages.
 
-const memoryForOlderModel = new Memory({
-  processors: [
-    new TokenLimiter({
-      limit: 16000, // Example limit for a 16k context model
-      encoding: cl100k_base,
+**When you configure:**
+
+```typescript
+memory: new Memory({
+  semanticRecall: { enabled: true },
+  vector: myVectorStore,
+  embedder: myEmbedder,
+});
+```
+
+**Mastra internally:**
+
+1. Creates a `SemanticRecall` processor
+2. Adds it to the agent's input processors (runs before the LLM)
+3. Adds it to the agent's output processors (runs after the LLM)
+4. Requires both a vector store and embedder to be configured
+
+**What it does:**
+
+- **Input**: Performs vector similarity search to find relevant past messages and prepends them to the conversation
+- **Output**: Creates embeddings for new messages and stores them in the vector store for future retrieval
+
+**Example:**
+
+```typescript copy showLineNumbers
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+import { PineconeVector } from "@mastra/pinecone";
+import { OpenAIEmbedder } from "@mastra/openai";
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  name: "semantic-agent",
+  instructions: "You are a helpful assistant with semantic memory",
+  model: 'openai/gpt-4o',
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: "memory-store",
+      url: "file:memory.db",
     }),
-  ],
+    vector: new PineconeVector({
+      id: "memory-vector",
+      apiKey: process.env.PINECONE_API_KEY!,
+      environment: "us-east-1",
+    }),
+    embedder: new OpenAIEmbedder({
+      model: "text-embedding-3-small",
+      apiKey: process.env.OPENAI_API_KEY!,
+    }),
+    semanticRecall: { enabled: true }, // SemanticRecall processor automatically added
+  }),
 });
 ```
 
-See the [OpenAI cookbook](https://cookbook.openai.com/examples/how_to_count_tokens_with_tiktoken#encodings) or [`js-tiktoken` repo](https://github.com/dqbd/tiktoken) for more on encodings.
+### WorkingMemory
 
-### `ToolCallFilter`
+Manages working memory state across conversations.
 
-This processor removes tool calls from the memory messages sent to the LLM. It saves tokens by excluding potentially verbose tool interactions from the context, which is useful if the details aren't needed for future interactions. It's also useful if you always want your agent to call a specific tool again and not rely on previous tool results in memory.
+**When you configure:**
 
-```typescript copy showLineNumbers {5-14}
+```typescript
+memory: new Memory({
+  workingMemory: { enabled: true },
+});
+```
+
+**Mastra internally:**
+
+1. Creates a `WorkingMemory` processor
+2. Adds it to the agent's input processors (runs before the LLM)
+3. Requires a storage adapter to be configured
+
+**What it does:**
+
+- **Input**: Retrieves working memory state for the current thread and prepends it to the conversation
+- **Output**: No output processing
+
+**Example:**
+
+```typescript copy showLineNumbers
+import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { ToolCallFilter, TokenLimiter } from "@mastra/memory/processors";
+import { LibSQLStore } from "@mastra/libsql";
+import { openai } from "@ai-sdk/openai";
 
-const memoryFilteringTools = new Memory({
-  processors: [
-    // Example 1: Remove all tool calls/results
-    new ToolCallFilter(),
-
-    // Example 2: Remove only noisy image generation tool calls/results
-    new ToolCallFilter({ exclude: ["generateImageTool"] }),
-
-    // Always place TokenLimiter last
-    new TokenLimiter(127000),
-  ],
+const agent = new Agent({
+  name: "working-memory-agent",
+  instructions: "You are an assistant with working memory",
+  model: 'openai/gpt-4o',
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: "memory-store",
+      url: "file:memory.db",
+    }),
+    workingMemory: { enabled: true }, // WorkingMemory processor automatically added
+  }),
 });
 ```
 
-## Applying Multiple Processors
+## Manual Control and Deduplication
 
-You can chain multiple processors. They execute in the order they appear in the `processors` array. The output of one processor becomes the input for the next.
+If you manually add a memory processor to `inputProcessors` or `outputProcessors`, Mastra will **not** automatically add it. This gives you full control over processor ordering:
 
-**Order matters!** It's generally best practice to place `TokenLimiter` **last** in the chain. This ensures it operates on the final set of messages after other filtering has occurred, providing the most accurate token limit enforcement.
-
-```typescript copy showLineNumbers {7-14}
+```typescript copy showLineNumbers
+import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { ToolCallFilter, TokenLimiter } from "@mastra/memory/processors";
-// Assume a hypothetical 'PIIFilter' custom processor exists
-// import { PIIFilter } from './custom-processors';
+import { MessageHistory } from "@mastra/memory/processors";
+import { TokenLimiter } from "@mastra/core/processors";
+import { LibSQLStore } from "@mastra/libsql";
+import { openai } from "@ai-sdk/openai";
 
-const memoryWithMultipleProcessors = new Memory({
-  processors: [
-    // 1. Filter specific tool calls first
-    new ToolCallFilter({ exclude: ["verboseDebugTool"] }),
-    // 2. Apply custom filtering (e.g., remove hypothetical PII - use with caution)
-    // new PIIFilter(),
-    // 3. Apply token limiting as the final step
-    new TokenLimiter(127000),
+// Custom MessageHistory with different configuration
+const customMessageHistory = new MessageHistory({
+  storage: new LibSQLStore({ id: "memory-store", url: "file:memory.db" }),
+  lastMessages: 20,
+});
+
+const agent = new Agent({
+  name: "custom-memory-agent",
+  instructions: "You are a helpful assistant",
+  model: 'openai/gpt-4o',
+  memory: new Memory({
+    storage: new LibSQLStore({ id: "memory-store", url: "file:memory.db" }),
+    lastMessages: 10, // This would normally add MessageHistory(10)
+  }),
+  inputProcessors: [
+    customMessageHistory, // Your custom one is used instead
+    new TokenLimiter({ limit: 4000 }), // Runs after your custom MessageHistory
   ],
 });
 ```
 
-## Creating Custom Processors
+## Processor Execution Order
 
-You can create custom logic by extending the base `MemoryProcessor` class.
+Understanding the execution order is important when combining guardrails with memory:
 
-```typescript copy showLineNumbers {5-20,24-27}
-import { Memory, MemoryProcessorOpts, MemoryProcessor } from "@mastra/memory";
-import { CoreMessage } from "@mastra/core/llm";
+### Input Processors
 
-class ConversationOnlyFilter extends MemoryProcessor {
-  constructor() {
-    // Provide a name for easier debugging if needed
-    super({ name: "ConversationOnlyFilter" });
-  }
+```
+[Memory Processors] → [Your inputProcessors]
+```
 
-  process(
-    messages: CoreMessage[],
-    _opts: MemoryProcessorOpts = {}, // Options passed during memory retrieval, rarely needed here
-  ): CoreMessage[] {
-    // Filter messages based on role
-    return messages.filter(
-      (msg) => msg.role === "user" || msg.role === "assistant",
+1. **Memory processors run FIRST**: `WorkingMemory`, `MessageHistory`, `SemanticRecall`
+2. **Your input processors run AFTER**: guardrails, filters, validators
+
+This means memory loads conversation history before your processors can validate or filter the input.
+
+### Output Processors
+
+```
+[Your outputProcessors] → [Memory Processors]
+```
+
+1. **Your output processors run FIRST**: guardrails, filters, validators
+2. **Memory processors run AFTER**: `SemanticRecall` (embeddings), `MessageHistory` (persistence)
+
+This ordering is designed to be **safe by default**: if your output guardrail calls `abort()`, the memory processors never run and **no messages are saved**.
+
+## Guardrails and Memory
+
+The default execution order provides safe guardrail behavior:
+
+### Output guardrails (recommended)
+
+Output guardrails run **before** memory processors save messages. If a guardrail aborts:
+
+- The tripwire is triggered
+- Memory processors are skipped
+- **No messages are persisted to storage**
+
+```typescript copy showLineNumbers
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+
+// Output guardrail that blocks inappropriate content
+const contentBlocker = {
+  id: "content-blocker",
+  processOutputResult: async ({ messages, abort }) => {
+    const hasInappropriateContent = messages.some((msg) =>
+      containsBadContent(msg)
     );
-  }
-}
+    if (hasInappropriateContent) {
+      abort("Content blocked by guardrail");
+    }
+    return messages;
+  },
+};
 
-// Use the custom processor
-const memoryWithCustomFilter = new Memory({
-  processors: [
-    new ConversationOnlyFilter(),
-    new TokenLimiter(127000), // Still apply token limiting
-  ],
+const agent = new Agent({
+  name: "safe-agent",
+  instructions: "You are a helpful assistant",
+  model: 'openai/gpt-4o',
+  memory: new Memory({ lastMessages: 10 }),
+  // Your guardrail runs BEFORE memory saves
+  outputProcessors: [contentBlocker],
+});
+
+// If the guardrail aborts, nothing is saved to memory
+const result = await agent.generate("Hello");
+if (result.tripwire) {
+  console.log("Blocked:", result.tripwireReason);
+  // Memory is empty - no messages were persisted
+}
+```
+
+### Input guardrails
+
+Input guardrails run **after** memory processors load history. If a guardrail aborts:
+
+- The tripwire is triggered
+- The LLM is never called
+- Output processors (including memory persistence) are skipped
+- **No messages are persisted to storage**
+
+```typescript copy showLineNumbers
+// Input guardrail that validates user input
+const inputValidator = {
+  id: "input-validator",
+  processInput: async ({ messages, abort }) => {
+    const lastUserMessage = messages.findLast((m) => m.role === "user");
+    if (isInvalidInput(lastUserMessage)) {
+      abort("Invalid input detected");
+    }
+    return messages;
+  },
+};
+
+const agent = new Agent({
+  name: "validated-agent",
+  instructions: "You are a helpful assistant",
+  model: 'openai/gpt-4o',
+  memory: new Memory({ lastMessages: 10 }),
+  // Your guardrail runs AFTER memory loads history
+  inputProcessors: [inputValidator],
 });
 ```
+
+### Summary
+
+| Guardrail Type | When it runs | If it aborts |
+| -------------- | ------------ | ------------ |
+| Input | After memory loads history | LLM not called, nothing saved |
+| Output | Before memory saves | Nothing saved to storage |
+
+Both scenarios are safe - guardrails prevent inappropriate content from being persisted to memory
+
+## Related documentation
+
+- [Processors](/docs/v1/agents/processors) - General processor concepts and custom processor creation
+- [Guardrails](/docs/v1/agents/guardrails) - Security and validation processors
+- [Memory Overview](/docs/v1/memory/overview) - Memory types and configuration
 
 When creating custom processors avoid mutating the input `messages` array or its objects directly.
 
@@ -8643,8 +9162,186 @@ We also support various external tracing providers like MLflow, Langfuse, Braint
 
 - **[Set up Tracing](/docs/v1/observability/tracing/overview)**: Configure tracing for your application
 - **[Configure Logging](/docs/v1/observability/logging)**: Add structured logging
-- **[View Examples](/examples/v1/observability/basic-ai-tracing)**: See observability in action
 - **[API Reference](/reference/v1/observability/tracing/instances)**: Detailed configuration options
+
+
+---
+title: "OpenTelemetry Bridge | Tracing | Observability"
+description: "Integrate Mastra tracing with existing OpenTelemetry infrastructure"
+---
+
+# OpenTelemetry Bridge
+[EN] Source: https://mastra.ai/en/docs/observability/tracing/bridges/otel
+
+:::warning
+
+The OpenTelemetry Bridge is currently **experimental**. APIs and configuration options may change in future releases.
+
+:::
+
+The OpenTelemetry (OTEL) Bridge enables bidirectional integration between Mastra's tracing system and existing OpenTelemetry infrastructure. Unlike exporters that send trace data to external platforms, the bridge creates native OTEL spans that participate in your distributed tracing context.
+
+:::info Looking to send traces without existing OTEL infrastructure?
+
+If you don't have existing OpenTelemetry instrumentation, the [OpenTelemetry Exporter](/docs/v1/observability/tracing/exporters/otel) may be simpler — it sends traces directly without requiring an OTEL SDK setup.
+
+:::
+
+## When to Use the Bridge
+
+Use the OtelBridge when you:
+
+- Have existing OTEL instrumentation in your application (HTTP servers, database clients, etc.)
+- Want Mastra operations to appear as child spans of your existing OTEL traces
+- Need OTEL-instrumented code inside Mastra tools to maintain proper parent-child relationships
+- Are building a distributed system where trace context must propagate across services
+
+## How It Works
+
+The OtelBridge provides two-way integration:
+
+**From OTEL to Mastra:**
+- Reads from OTEL ambient context (AsyncLocalStorage) automatically
+- Inherits trace ID and parent span ID from active OTEL spans
+- Respects OTEL sampling decisions — if a trace is not sampled, Mastra won't create spans for it
+- No manual trace ID passing required when OTEL auto-instrumentation is active
+
+**From Mastra to OTEL:**
+- Creates native OTEL spans for Mastra operations (agents, LLM calls, tools, workflows)
+- Maintains proper parent-child relationships in distributed traces
+- Allows OTEL-instrumented code (HTTP clients, database calls) within Mastra operations to nest correctly
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/otel-bridge
+```
+
+The bridge works with your existing OpenTelemetry setup. Depending on your configuration, you may also need some of these packages:
+
+- `@opentelemetry/sdk-node` - Core Node.js SDK for OTEL
+- `@opentelemetry/auto-instrumentations-node` - Auto-instrumentation for common libraries
+- `@opentelemetry/exporter-trace-otlp-proto` - OTLP exporter (Protobuf over HTTP)
+- `@opentelemetry/exporter-trace-otlp-http` - OTLP exporter (JSON over HTTP)
+- `@opentelemetry/exporter-trace-otlp-grpc` - OTLP exporter (gRPC)
+- `@opentelemetry/sdk-trace-base` - Base tracing SDK (for BatchSpanProcessor, etc.)
+- `@opentelemetry/core` - Core utilities (for W3CTraceContextPropagator, etc.)
+
+## Configuration
+
+Using the OtelBridge requires two steps:
+
+1. Configure OpenTelemetry instrumentation in your application
+2. Add the OtelBridge to your Mastra observability config
+
+### Step 1: OpenTelemetry Instrumentation
+
+Create an instrumentation file that initializes OTEL. This must run before your application code:
+
+```typescript title="instrumentation.ts" showLineNumbers copy
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
+import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { W3CTraceContextPropagator } from "@opentelemetry/core";
+
+const sdk = new NodeSDK({
+  serviceName: "my-service",
+  spanProcessors: [
+    new BatchSpanProcessor(
+      new OTLPTraceExporter({
+        url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || "http://localhost:4318/v1/traces",
+      })
+    ),
+  ],
+  instrumentations: [getNodeAutoInstrumentations()],
+  textMapPropagator: new W3CTraceContextPropagator(),
+});
+
+sdk.start();
+
+export { sdk };
+```
+
+### Step 2: Mastra Configuration
+
+Add the OtelBridge to your Mastra observability config:
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { OtelBridge } from "@mastra/otel-bridge";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-service",
+        bridge: new OtelBridge(),
+      },
+    },
+  }),
+  agents: {
+    /* your agents */
+  },
+});
+```
+
+No Mastra exporters are required when using the bridge — traces are sent via your OTEL SDK configuration. You can optionally add Mastra exporters if you want to send traces to additional destinations.
+
+### Running Your Application
+
+Use the `--import` flag to ensure instrumentation loads before your application:
+
+```bash
+tsx --import ./instrumentation.ts ./src/index.ts
+```
+
+## Trace Hierarchy
+
+With the OtelBridge, your traces maintain proper hierarchy across OTEL and Mastra boundaries:
+
+```
+HTTP POST /api/chat (from Hono middleware)
+└── agent.assistant (from Mastra via OtelBridge)
+    ├── chat gpt-4o (LLM call)
+    ├── tool.execute search (tool execution)
+    │   └── HTTP GET api.example.com (from OTEL auto-instrumentation)
+    └── chat gpt-4o (follow-up LLM call)
+```
+
+## Multi-Service Distributed Tracing
+
+The OtelBridge enables trace propagation across service boundaries. When Service A calls Service B via HTTP, trace context propagates automatically:
+
+```
+Service A: HTTP POST /api/process
+└── HTTP POST service-b/api/analyze (outgoing call)
+
+Service B: HTTP POST /api/analyze (incoming call - same trace!)
+└── agent.analyzer (Mastra agent inherits trace context)
+    └── chat gpt-4o
+```
+
+Both services must have:
+1. OTEL instrumentation configured
+2. W3C Trace Context propagator enabled
+3. Mastra with OtelBridge configured
+
+## Troubleshooting
+
+If traces aren't appearing or connecting as expected:
+
+- Verify OTEL SDK is initialized before Mastra (use `--import` flag or import at top of entry point)
+- Ensure the OtelBridge is added to your observability config
+- Check that your OTEL backend is running and accessible
+
+## Related
+
+- [Tracing Overview](/docs/v1/observability/tracing/overview)
+- [OpenTelemetry Exporter](/docs/v1/observability/tracing/exporters/otel) - For sending traces to OTEL backends
+- [OtelBridge Reference](/reference/v1/observability/tracing/bridges/otel) - API documentation
+- [OpenTelemetry GenAI Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
 
 
 ---
@@ -9408,13 +10105,13 @@ description: "Send traces to any OpenTelemetry-compatible observability platform
 # OpenTelemetry Exporter
 [EN] Source: https://mastra.ai/en/docs/observability/tracing/exporters/otel
 
-:::warning
+The OpenTelemetry (OTEL) exporter sends your traces to any OTEL-compatible observability platform using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, SigNoz, MLflow, Dash0, Traceloop, Laminar, and more.
 
-The OpenTelemetry exporter is currently **experimental**. APIs and configuration options may change in future releases.
+:::info Looking for bidirectional OTEL integration?
+
+If you have existing OpenTelemetry instrumentation and want Mastra traces to inherit context from active OTEL spans, see the [OpenTelemetry Bridge](/docs/v1/observability/tracing/bridges/otel) instead.
 
 :::
-
-The OpenTelemetry (OTEL) exporter sends your traces to any OTEL-compatible observability platform using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, SigNoz, MLflow, Dash0, Traceloop, Laminar, and more.
 
 ## Installation
 
@@ -9672,6 +10369,7 @@ Install the suggested package for your provider.
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
+- [OpenTelemetry Bridge](/docs/v1/observability/tracing/bridges/otel) - For bidirectional OTEL context integration
 - [OpenTelemetry GenAI Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
 - [OTEL Exporter Reference](/reference/v1/observability/tracing/exporters/otel)
 
@@ -9886,6 +10584,23 @@ In addition to the internal exporters, Mastra supports integration with popular 
 - **[LangSmith](/docs/v1/observability/tracing/exporters/langsmith)** - Pushes traces into LangSmith's observability and evaluation toolkit
 - **[OpenTelemetry](/docs/v1/observability/tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
   - Supports: Dash0, MLflow, Laminar, New Relic, SigNoz, Traceloop, Zipkin, and others!
+
+## Bridges
+
+Bridges provide bidirectional integration with external tracing systems. Unlike exporters that send trace data to external platforms, bridges create native spans in external systems and inherit context from them. This enables Mastra operations to participate in existing distributed traces.
+
+- **[OpenTelemetry Bridge](/docs/v1/observability/tracing/bridges/otel)** - Integrate with existing OpenTelemetry infrastructure
+
+### Bridges vs Exporters
+
+| Feature | Bridges | Exporters |
+| --- | --- | --- |
+| Creates native spans in external systems | Yes | No |
+| Inherits context from external systems | Yes | No |
+| Sends data to backends | Via external SDK | Directly |
+| Use case | Existing distributed tracing | Standalone Mastra tracing |
+
+You can use both together — a bridge for context propagation and exporters to send traces to additional destinations.
 
 ## Sampling Strategies
 
@@ -10539,10 +11254,6 @@ Mastra automatically creates spans for:
 
 ## See Also
 
-### Examples
-
-- [Basic Tracing Example](/examples/v1/observability/basic-ai-tracing) - Working implementation
-
 ### Reference Documentation
 
 - [Configuration API](/reference/v1/observability/tracing/configuration) - ObservabilityConfig details
@@ -10560,6 +11271,10 @@ Mastra automatically creates spans for:
 - [Langfuse](/reference/v1/observability/tracing/exporters/langfuse) - Langfuse integration
 - [MLflow](/reference/v1/observability/tracing/exporters/otel#mlflow) - MLflow OTLP endpoint setup
 - [OpenTelemetry](/reference/v1/observability/tracing/exporters/otel) - OTEL-compatible platforms
+
+### Bridges
+
+- [OpenTelemetry Bridge](/reference/v1/observability/tracing/bridges/otel) - OTEL context integration
 
 ### Processors
 
@@ -10862,7 +11577,6 @@ This ensures that processing errors don't prevent traces from being exported or 
 ## Related
 
 - [SensitiveDataFilter API](/reference/v1/observability/tracing/processors/sensitive-data-filter)
-- [Basic Tracing Example](/examples/v1/observability/basic-ai-tracing)
 
 
 ---
@@ -11213,6 +11927,8 @@ const results = await pgVector.query({
 console.log(results);
 ```
 
+The `topK` parameter specifies the maximum number of most similar results to return from the vector search.
+
 Results include both the text content and a similarity score:
 
 ```ts showLineNumbers copy
@@ -11230,8 +11946,6 @@ Results include both the text content and a similarity score:
   // ... more results
 ];
 ```
-
-For an example of how to use the basic retrieval method, see the [Retrieve Results](/examples/v1/rag/query/retrieve-results) example.
 
 ## Advanced Retrieval options
 
@@ -11331,7 +12045,14 @@ This is particularly useful when:
 
 #### Database-Specific Configurations
 
-The Vector Query Tool supports database-specific configurations that enable you to leverage unique features and optimizations of different vector stores:
+The Vector Query Tool supports database-specific configurations that enable you to leverage unique features and optimizations of different vector stores.
+
+:::note
+These configurations are for **query-time options** like namespaces, performance tuning, and filtering—not for database connection setup. 
+
+
+Connection credentials (URLs, auth tokens) are configured when you instantiate the vector store class (e.g., `new LibSQLVector({ connectionUrl: '...' })`).
+:::
 
 ```ts showLineNumbers copy
 // Pinecone with namespace
@@ -11671,12 +12392,24 @@ const relevanceProvider = new MastraAgentRelevanceScorer('relevance-scorer', "op
 const rerankedResults = await rerank({
   results: initialResults,
   query,
-  provider: relevanceProvider,
+  scorer: relevanceProvider,
   options: {
+    weights: {
+      semantic: 0.5, // How well the content matches the query semantically
+      vector: 0.3, // Original vector similarity score
+      position: 0.2, // Preserves original result ordering
+    },
     topK: 10,
   },
 );
 ```
+
+The weights control how different factors influence the final ranking:
+
+- `semantic`: Higher values prioritize semantic understanding and relevance to the query
+- `vector`: Higher values favor the original vector similarity scores
+- `position`: Higher values help maintain the original ordering of results
+
 
 > **Note:** For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
 
@@ -11693,8 +12426,6 @@ const relevanceProvider = new ZeroEntropyRelevanceScorer("zerank-1");
 The re-ranked results combine vector similarity with semantic understanding to improve retrieval quality.
 
 For more details about re-ranking, see the [rerank()](/reference/v1/rag/rerankWithScorer) method.
-
-For an example of how to use the re-ranking method, see the Re-ranking Results example in the examples section.
 
 ### Graph-based Retrieval
 
@@ -12220,8 +12951,6 @@ The upsert operation:
 - Updates existing vectors if they share the same ID
 - Creates new vectors if they don't exist
 - Automatically handles batching for large datasets
-
-For complete examples of upserting embeddings in different vector stores, see the [Upsert Embeddings](/examples/v1/rag/upsert/upsert-embeddings) guide.
 
 ## Adding Metadata
 
@@ -19111,7 +19840,6 @@ The Examples section is a short list of example projects demonstrating basic AI 
     "Memory",
     "RAG",
     "Voice",
-    "Observability",
   ]}
   items={{
     Agent: [
@@ -19151,44 +19879,9 @@ The Examples section is a short list of example projects demonstrating basic AI 
       },
     ],
     RAG: [
-      { title: "Chunk Text", href: "/examples/v1/rag/chunking/chunk-text" },
-      {
-        title: "Chunk Markdown",
-        href: "/examples/v1/rag/chunking/chunk-markdown",
-      },
-      { title: "Chunk HTML", href: "/examples/v1/rag/chunking/chunk-html" },
-      { title: "Chunk JSON", href: "/examples/v1/rag/chunking/chunk-json" },
-      {
-        title: "Adjust Chunk Size",
-        href: "/examples/v1/rag/chunking/adjust-chunk-size",
-      },
-      {
-        title: "Adjust Chunk Delimiters",
-        href: "/examples/v1/rag/chunking/adjust-chunk-delimiters",
-      },
-      {
-        title: "Embed Text Chunk",
-        href: "/examples/v1/rag/embedding/embed-text-chunk",
-      },
-      {
-        title: "Embed Chunk Array",
-        href: "/examples/v1/rag/embedding/embed-chunk-array",
-      },
-      {
-        title: "Embed Text with Cohere",
-        href: "/examples/v1/rag/embedding/embed-text-with-cohere",
-      },
       {
         title: "Metadata Extraction",
         href: "/examples/v1/rag/embedding/metadata-extraction",
-      },
-      {
-        title: "Upsert Embeddings",
-        href: "/examples/v1/rag/upsert/upsert-embeddings",
-      },
-      {
-        title: "Using the Vector Query Tool",
-        href: "/examples/v1/rag/usage/basic-rag",
       },
       {
         title: "Optimizing Information Density",
@@ -19211,507 +19904,7 @@ The Examples section is a short list of example projects demonstrating basic AI 
       { title: "Turn Taking", href: "/examples/v1/voice/turn-taking" },
       { title: "Speech to Speech", href: "/examples/v1/voice/speech-to-speech" },
     ],
-    Observability: [
-      {
-        title: "Basic AI Tracing",
-        href: "/examples/v1/observability/basic-ai-tracing",
-      },
-    ],
   }}
-/>
-
-
----
-title: "Example: Basic Tracing Example | Observability"
-description: Get started with Tracing in your Mastra application
----
-
-# Basic Tracing Example
-[EN] Source: https://mastra.ai/en/examples/observability/basic-ai-tracing
-
-This example demonstrates how to set up basic Tracing in a Mastra application with automatic instrumentation for agents and workflows.
-
-## Prerequisites
-
-- Node.js v22.13.0 or later
-- A configured storage backend (libsql or memory)
-
-## Setup
-
-### 1. Install Dependencies
-
-```bash npm2yarn
-npm install @mastra/core@beta
-```
-
-If you want to view traces in Mastra Cloud, create an `.env` file with your access token:
-
-```bash
-export MASTRA_CLOUD_ACCESS_TOKEN=your_token_here
-```
-
-### 2. Configure Mastra with Default Tracing
-
-Create your Mastra configuration with Tracing enabled:
-
-```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
-import { LibSQLStorage } from "@mastra/libsql";
-import { Observability } from "@mastra/observability";
-
-export const mastra = new Mastra({
-  // Configure storage (required for DefaultExporter)
-  storage: new LibSQLStorage({
-    url: "file:local.db",
-  }),
-
-  // Enable Tracing with default configuration
-  observability: new Observability({
-    default: { enabled: true },
-  }),
-});
-```
-
-This default configuration automatically includes:
-
-- **[DefaultExporter](/docs/v1/observability/tracing/exporters/default)** - Persists traces to your storage
-- **[CloudExporter](/docs/v1/observability/tracing/exporters/cloud)** - Sends to Mastra Cloud (if token is set)
-- **[SensitiveDataFilter](/docs/v1/observability/tracing/processors/sensitive-data-filter)** - Redacts sensitive fields
-- **[100% sampling](/docs/v1/observability/tracing/overview#always-sample)** - All traces are collected
-
-### 3. Create an Agent with Automatic Tracing
-
-```typescript title="src/mastra/agents/example-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-import { createTool } from "@mastra/core/tools";
-
-// Create a tool using createTool
-const getCurrentTime = createTool({
-  name: "getCurrentTime",
-  description: "Get the current time",
-  input: {},
-  execute: async () => {
-    // Tool calls are automatically traced
-    return { time: new Date().toISOString() };
-  },
-});
-
-export const exampleAgent = new Agent({
-  id: "example-agent",
-  name: "Example Agent",
-  instructions: "You are a helpful AI assistant.",
-  model: "openai/gpt-5.1",
-  tools: {
-    getCurrentTime,
-  },
-});
-```
-
-### 4. Execute and View Traces
-
-```typescript title="src/example.ts" showLineNumbers copy
-import { mastra } from "./mastra";
-
-async function main() {
-  // Get the agent
-  const agent = mastra.getAgent("example-agent");
-
-  // Execute agent - automatically creates traces
-  const result = await agent.generate("What time is it?");
-
-  console.log("Agent response:", result.text);
-  console.log("Trace ID:", result.traceId);
-  console.log("View trace at: http://localhost:3000/traces/" + result.traceId);
-}
-
-main().catch(console.error);
-```
-
-## What Gets Traced
-
-When you run this example, Mastra automatically creates spans for:
-
-1. **AGENT_RUN** - The complete agent execution
-2. **MODEL_GENERATION** - The model execution inside the agent
-3. **TOOL_CALL** - Tool executions
-
-Example trace hierarchy:
-
-```
-AGENT_RUN (example-agent)
-├── MODEL_GENERATION (gpt-5.1) - Model input & output
-├── TOOL_CALL (getCurrentTime) - Tool execution
-```
-
-## Viewing Traces
-
-In Studio or Mastra Cloud, go to the Observability page, and click on a Trace. You can also click on individual spans to get input, output, attributes & metadata.
-
-## Adding Custom Metadata
-
-Enhance your traces with custom metadata:
-
-```typescript title="src/example-with-metadata.ts" showLineNumbers copy
-const result = await agent.generate("What time is it?", {
-  // Add custom metadata to traces
-  metadata: {
-    userId: "user_123",
-    sessionId: "session_abc",
-    feature: "time-query",
-    environment: "development",
-  },
-});
-```
-
-## Related
-
-### Documentation
-
-- [Tracing Overview](/docs/v1/observability/tracing/overview) - Complete guide to tracing
-- [Sensitive Data Filter](/docs/v1/observability/tracing/processors/sensitive-data-filter) - Redact sensitive information
-- [Configuration Patterns](/docs/v1/observability/tracing/overview#common-configuration-patterns--troubleshooting) - Best practices
-
-### Reference
-
-- [Configuration](/reference/v1/observability/tracing/configuration) - ObservabilityConfig API
-- [Exporters](/reference/v1/observability/tracing/exporters/default-exporter) - DefaultExporter details
-- [Span Types](/reference/v1/observability/tracing/spans) - Span interfaces and methods
-- [Tracing Classes](/reference/v1/observability/tracing/instances) - Core tracing classes
-
-
----
-title: "Example: Adjust Chunk Delimiters | RAG"
-description: Adjust chunk delimiters in Mastra to better match your content structure.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
-# Adjust Chunk Delimiters
-[EN] Source: https://mastra.ai/en/examples/rag/chunking/adjust-chunk-delimiters
-
-When processing large documents, you may want to control how the text is split into smaller chunks. By default, documents are split on newlines, but you can customize this behavior to better match your content structure. This example shows how to specify a custom delimiter for chunking documents.
-
-```tsx copy
-import { MDocument } from "@mastra/rag";
-
-const doc = MDocument.fromText("Your plain text content...");
-
-const chunks = await doc.chunk({
-  separator: "\n",
-});
-```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/adjust-chunk-delimiters"
-  }
-/>
-
-
----
-title: "Example: Adjust Chunk Size | RAG"
-description: Adjust chunk size in Mastra to better match your content and memory requirements.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
-# Adjust Chunk Size
-[EN] Source: https://mastra.ai/en/examples/rag/chunking/adjust-chunk-size
-
-When processing large documents, you might need to adjust how much text is included in each chunk. By default, chunks are 1024 characters long, but you can customize this size to better match your content and memory requirements. This example shows how to set a custom chunk size when splitting documents.
-
-```tsx copy
-import { MDocument } from "@mastra/rag";
-
-const doc = MDocument.fromText("Your plain text content...");
-
-const chunks = await doc.chunk({
-  size: 512,
-});
-```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/adjust-chunk-size"
-  }
-/>
-
-
----
-title: "Example: Semantically Chunking HTML | RAG"
-description: Chunk HTML content in Mastra to semantically chunk the document.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
-# Semantically Chunking HTML
-[EN] Source: https://mastra.ai/en/examples/rag/chunking/chunk-html
-
-When working with HTML content, you often need to break it down into smaller, manageable pieces while preserving the document structure. The chunk method splits HTML content intelligently, maintaining the integrity of HTML tags and elements. This example shows how to chunk HTML documents for search or retrieval purposes.
-
-```tsx copy
-import { MDocument } from "@mastra/rag";
-
-const html = `
-<div>
-    <h1>h1 content...</h1>
-    <p>p content...</p>
-</div>
-`;
-
-const doc = MDocument.fromHTML(html);
-
-const chunks = await doc.chunk({
-  headers: [
-    ["h1", "Header 1"],
-    ["p", "Paragraph"],
-  ],
-});
-
-console.log(chunks);
-```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/chunk-html"
-  }
-/>
-
-
----
-title: "Example: Semantically Chunking JSON | RAG"
-description: Chunk JSON data in Mastra to semantically chunk the document.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
-# Semantically Chunking JSON
-[EN] Source: https://mastra.ai/en/examples/rag/chunking/chunk-json
-
-When working with JSON data, you need to split it into smaller pieces while preserving the object structure. The chunk method breaks down JSON content intelligently, maintaining the relationships between keys and values. This example shows how to chunk JSON documents for search or retrieval purposes.
-
-```tsx copy
-import { MDocument } from "@mastra/rag";
-
-const testJson = {
-  name: "John Doe",
-  age: 30,
-  email: "john.doe@example.com",
-};
-
-const doc = MDocument.fromJSON(JSON.stringify(testJson));
-
-const chunks = await doc.chunk({
-  maxSize: 100,
-});
-
-console.log(chunks);
-```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/chunk-json"
-  }
-/>
-
-
----
-title: "Example: Chunk Markdown | RAG"
-description: Example of using Mastra to chunk markdown documents for search or retrieval purposes.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
-# Chunk Markdown
-[EN] Source: https://mastra.ai/en/examples/rag/chunking/chunk-markdown
-
-Markdown is more information-dense than raw HTML, making it easier to work with for RAG pipelines. When working with markdown, you need to split it into smaller pieces while preserving headers and formatting. The `chunk` method handles Markdown-specific elements like headers, lists, and code blocks intelligently. This example shows how to chunk markdown documents for search or retrieval purposes.
-
-```tsx copy
-import { MDocument } from "@mastra/rag";
-
-const doc = MDocument.fromMarkdown("# Your markdown content...");
-
-const chunks = await doc.chunk();
-```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/chunk-markdown"
-  }
-/>
-
-
----
-title: "Example: Chunk Text | RAG"
-description: Example of using Mastra to split large text documents into smaller chunks for processing.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
-# Chunk Text
-[EN] Source: https://mastra.ai/en/examples/rag/chunking/chunk-text
-
-When working with large text documents, you need to break them down into smaller, manageable pieces for processing. The chunk method splits text content into segments that can be used for search, analysis, or retrieval. This example shows how to split plain text into chunks using default settings.
-
-```tsx copy
-import { MDocument } from "@mastra/rag";
-
-const doc = MDocument.fromText("Your plain text content...");
-
-const chunks = await doc.chunk();
-```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/chunk-text"
-  }
-/>
-
-
----
-title: "Example: Embed Chunk Array | RAG"
-description: Example of using Mastra to generate embeddings for an array of text chunks for similarity search.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
-# Embed Chunk Array
-[EN] Source: https://mastra.ai/en/examples/rag/embedding/embed-chunk-array
-
-After chunking documents, you need to convert the text chunks into numerical vectors that can be used for similarity search. The `embed` method transforms text chunks into embeddings using your chosen provider and model. This example shows how to generate embeddings for an array of text chunks.
-
-```tsx copy
-import { MDocument } from "@mastra/rag";
-import { embedMany } from "ai";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
-
-const doc = MDocument.fromText("Your text content...");
-
-const chunks = await doc.chunk();
-
-const { embeddings } = await embedMany({
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-  values: chunks.map((chunk) => chunk.text),
-});
-```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/embed-chunk-array"
-  }
-/>
-
-
----
-title: "Example: Embed Text Chunk | RAG"
-description: Example of using Mastra to generate an embedding for a single text chunk for similarity search.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
-# Embed Text Chunk
-[EN] Source: https://mastra.ai/en/examples/rag/embedding/embed-text-chunk
-
-When working with individual text chunks, you need to convert them into numerical vectors for similarity search. The `embed` method transforms a single text chunk into an embedding using your chosen provider and model.
-
-```tsx copy
-import { MDocument } from "@mastra/rag";
-import { embed } from "ai";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
-
-const doc = MDocument.fromText("Your text content...");
-
-const chunks = await doc.chunk();
-
-const { embedding } = await embed({
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-  value: chunks[0].text,
-});
-```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/embed-text-chunk"
-  }
-/>
-
-
----
-title: "Example: Embed Text with Cohere | RAG"
-description: Example of using Mastra to generate embeddings using Cohere's embedding model.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
-# Embed Text with Cohere
-[EN] Source: https://mastra.ai/en/examples/rag/embedding/embed-text-with-cohere
-
-When working with alternative embedding providers, you need a way to generate vectors that match your chosen model's specifications. The `embed` method supports multiple providers, allowing you to switch between different embedding services. This example shows how to generate embeddings using Cohere's embedding model.
-
-```tsx copy
-import { MDocument } from "@mastra/rag";
-import { embedMany } from "ai";
-
-const doc = MDocument.fromText("Your text content...");
-
-const chunks = await doc.chunk();
-
-const { embeddings } = await embedMany({
-  model: "cohere/embed-english-v3.0",
-  values: chunks.map((chunk) => chunk.text),
-});
-```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/embed-text-with-cohere"
-  }
 />
 
 
@@ -19867,7 +20060,7 @@ The system implements filtered vector search using Mastra and PGVector. Here's w
 
 > **Note**: For examples of how to extract metadata from your documents, see the [Metadata Extraction](../embedding/metadata-extraction) guide.
 >
-> To learn how to create and store embeddings, see the [Upsert Embeddings](/examples/v1/rag/upsert/upsert-embeddings) guide.
+> To learn how to create and store embeddings, see the [Vector Databases](/docs/v1/rag/vector-databases) guide.
 
 ## Setup
 
@@ -19935,1159 +20128,6 @@ console.log("Results:", result);
 <GithubLink
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/hybrid-vector-search"
-  }
-/>
-
-
----
-title: "Example: Retrieving Top-K Results | RAG"
-description: Example of using Mastra to query a vector database and retrieve semantically similar chunks.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
-# Retrieving Top-K Results
-[EN] Source: https://mastra.ai/en/examples/rag/query/retrieve-results
-
-After storing embeddings in a vector database, you need to query them to find similar content.
-
-The `query` method returns the most semantically similar chunks to your input embedding, ranked by relevance. The `topK` parameter allows you to specify the number of results to return.
-
-This example shows how to retrieve similar chunks from a Pinecone vector database.
-
-```tsx copy
-import { PineconeVector } from "@mastra/pinecone";
-import { MDocument } from "@mastra/rag";
-import { embedMany } from "ai";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
-
-const doc = MDocument.fromText("Your text content...");
-
-const chunks = await doc.chunk();
-
-const { embeddings } = await embedMany({
-  values: chunks.map((chunk) => chunk.text),
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-});
-
-const pinecone = new PineconeVector({
-  id: 'pinecone-vector',
-  apiKey: "your-api-key",
-});
-
-await pinecone.createIndex({
-  indexName: "test_index",
-  dimension: 1536,
-});
-
-await pinecone.upsert({
-  indexName: "test_index",
-  vectors: embeddings,
-  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
-});
-
-const topK = 10;
-
-const results = await pinecone.query({
-  indexName: "test_index",
-  queryVector: embeddings[0],
-  topK,
-});
-
-console.log(results);
-```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/retrieve-results"
-  }
-/>
-
-
----
-title: "Example: Re-ranking Results with Tools | RAG"
-description: Example of implementing a RAG system with re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
-# Re-ranking Results with Tools
-[EN] Source: https://mastra.ai/en/examples/rag/rerank/rerank-rag
-
-This example demonstrates how to use Mastra's vector query tool to implement a Retrieval-Augmented Generation (RAG) system with re-ranking using OpenAI embeddings and PGVector for vector storage.
-
-## Overview
-
-The system implements RAG with re-ranking using Mastra and OpenAI. Here's what it does:
-
-1. Sets up a Mastra agent with gpt-5.1 for response generation
-2. Creates a vector query tool with re-ranking capabilities
-3. Chunks text documents into smaller segments and creates embeddings from them
-4. Stores them in a PostgreSQL vector database
-5. Retrieves and re-ranks relevant chunks based on queries
-6. Generates context-aware responses using the Mastra agent
-
-## Setup
-
-### Environment Setup
-
-Make sure to set up your environment variables:
-
-```bash title=".env"
-OPENAI_API_KEY=your_openai_api_key_here
-POSTGRES_CONNECTION_STRING=your_connection_string_here
-```
-
-### Dependencies
-
-Then, import the necessary dependencies:
-
-```typescript copy showLineNumbers title="index.ts"
-import { Mastra } from "@mastra/core";
-import { Agent } from "@mastra/core/agent";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
-import { PgVector } from "@mastra/pg";
-import {
-  MDocument,
-  createVectorQueryTool,
-  MastraAgentRelevanceScorer,
-} from "@mastra/rag";
-import { embedMany } from "ai";
-```
-
-## Vector Query Tool Creation with Re-ranking
-
-Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database and re-rank results:
-
-```typescript copy showLineNumbers{8} title="index.ts"
-const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: "pgVector",
-  indexName: "embeddings",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-  reranker: {
-    model: new MastraAgentRelevanceScorer(
-      "relevance-scorer",
-      "openai/gpt-5.1",
-    ),
-  },
-});
-```
-
-## Agent Configuration
-
-Set up the Mastra agent that will handle the responses:
-
-```typescript copy showLineNumbers{17} title="index.ts"
-export const ragAgent = new Agent({
-  id: "rag-agent",
-  name: "RAG Agent",
-  instructions: `You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
-    Important: When asked to answer a question, please base your answer only on the context provided in the tool.
-    If the context doesn't contain enough information to fully answer the question, please state that explicitly.`,
-  model: "openai/gpt-5.1",
-  tools: {
-    vectorQueryTool,
-  },
-});
-```
-
-## Instantiate PgVector and Mastra
-
-Instantiate PgVector and Mastra with the components:
-
-```typescript copy showLineNumbers{29} title="index.ts"
-const pgVector = new PgVector({
-  id: 'rag-vectors',
-  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
-});
-
-export const mastra = new Mastra({
-  agents: { ragAgent },
-  vectors: { pgVector },
-});
-
-const agent = mastra.getAgent("ragAgent");
-```
-
-## Document Processing
-
-Create a document and process it into chunks:
-
-```typescript copy showLineNumbers{38} title="index.ts"
-const doc1 = MDocument.fromText(`
-market data shows price resistance levels.
-technical charts display moving averages.
-support levels guide trading decisions.
-breakout patterns signal entry points.
-price action determines trade timing.
-
-baseball cards show gradual value increase.
-rookie cards command premium prices.
-card condition affects resale value.
-authentication prevents fake trading.
-grading services verify card quality.
-
-volume analysis confirms price trends.
-sports cards track seasonal demand.
-chart patterns predict movements.
-mint condition doubles card worth.
-resistance breaks trigger orders.
-rare cards appreciate yearly.
-`);
-
-const chunks = await doc1.chunk({
-  strategy: "recursive",
-  size: 150,
-  overlap: 20,
-  separator: "\n",
-});
-```
-
-## Creating and Storing Embeddings
-
-Generate embeddings for the chunks and store them in the vector database:
-
-```typescript copy showLineNumbers{66} title="index.ts"
-const { embeddings } = await embedMany({
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-  values: chunks.map((chunk) => chunk.text),
-});
-
-const vectorStore = mastra.getVector("pgVector");
-await vectorStore.createIndex({
-  indexName: "embeddings",
-  dimension: 1536,
-});
-
-await vectorStore.upsert({
-  indexName: "embeddings",
-  vectors: embeddings,
-  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
-});
-```
-
-## Querying with Re-ranking
-
-Try different queries to see how the re-ranking affects results:
-
-```typescript copy showLineNumbers{82} title="index.ts"
-const queryOne = "explain technical trading analysis";
-const answerOne = await agent.generate(queryOne);
-console.log("\nQuery:", queryOne);
-console.log("Response:", answerOne.text);
-
-const queryTwo = "explain trading card valuation";
-const answerTwo = await agent.generate(queryTwo);
-console.log("\nQuery:", queryTwo);
-console.log("Response:", answerTwo.text);
-
-const queryThree = "how do you analyze market resistance";
-const answerThree = await agent.generate(queryThree);
-console.log("\nQuery:", queryThree);
-console.log("Response:", answerThree.text);
-```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank-rag"
-  }
-/>
-
-
----
-title: "Example: Re-ranking Results | RAG"
-description: Example of implementing semantic re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
-# Re-ranking Results
-[EN] Source: https://mastra.ai/en/examples/rag/rerank/rerank
-
-This example demonstrates how to implement a Retrieval-Augmented Generation (RAG) system with re-ranking using Mastra, OpenAI embeddings, and PGVector for vector storage.
-
-## Overview
-
-The system implements RAG with re-ranking using Mastra and OpenAI. Here's what it does:
-
-1. Chunks text documents into smaller segments and creates embeddings from them
-2. Stores vectors in a PostgreSQL database
-3. Performs initial vector similarity search
-4. Re-ranks results using Mastra's rerank function, combining vector similarity, semantic relevance, and position scores
-5. Compares initial and re-ranked results to show improvements
-
-## Setup
-
-### Environment Setup
-
-Make sure to set up your environment variables:
-
-```bash title=".env"
-OPENAI_API_KEY=your_openai_api_key_here
-POSTGRES_CONNECTION_STRING=your_connection_string_here
-```
-
-### Dependencies
-
-Then, import the necessary dependencies:
-
-```typescript copy showLineNumbers title="src/index.ts"
-import { PgVector } from "@mastra/pg";
-import {
-  MDocument,
-  rerankWithScorer as rerank,
-  MastraAgentRelevanceScorer,
-} from "@mastra/rag";
-import { embedMany, embed } from "ai";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
-```
-
-## Document Processing
-
-Create a document and process it into chunks:
-
-```typescript copy showLineNumbers{7} title="src/index.ts"
-const doc1 = MDocument.fromText(`
-market data shows price resistance levels.
-technical charts display moving averages.
-support levels guide trading decisions.
-breakout patterns signal entry points.
-price action determines trade timing.
-`);
-
-const chunks = await doc1.chunk({
-  strategy: "recursive",
-  size: 150,
-  overlap: 20,
-  separator: "\n",
-});
-```
-
-## Creating and Storing Embeddings
-
-Generate embeddings for the chunks and store them in the vector database:
-
-```typescript copy showLineNumbers{36} title="src/index.ts"
-const { embeddings } = await embedMany({
-  values: chunks.map((chunk) => chunk.text),
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-});
-
-const pgVector = new PgVector({
-  id: 'rag-vectors',
-  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
-});
-
-await pgVector.createIndex({
-  indexName: "embeddings",
-  dimension: 1536,
-});
-
-await pgVector.upsert({
-  indexName: "embeddings",
-  vectors: embeddings,
-  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
-});
-```
-
-## Vector Search and Re-ranking
-
-Perform vector search and re-rank the results:
-
-```typescript copy showLineNumbers{51} title="src/index.ts"
-const query = "explain technical trading analysis";
-
-// Get query embedding
-const { embedding: queryEmbedding } = await embed({
-  value: query,
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-});
-
-// Get initial results
-const initialResults = await pgVector.query({
-  indexName: "embeddings",
-  queryVector: queryEmbedding,
-  topK: 3,
-});
-
-// Re-rank results
-const rerankedResults = await rerank({
-  results: initialResults,
-  query,
-  scorer: new MastraAgentRelevanceScorer(
-    "relevance-scorer",
-    "openai/gpt-5.1",
-  ),
-  options: {
-    weights: {
-      semantic: 0.5, // How well the content matches the query semantically
-      vector: 0.3, // Original vector similarity score
-      position: 0.2, // Preserves original result ordering
-    },
-    topK: 3,
-  },
-});
-```
-
-The weights control how different factors influence the final ranking:
-
-- `semantic`: Higher values prioritize semantic understanding and relevance to the query
-- `vector`: Higher values favor the original vector similarity scores
-- `position`: Higher values help maintain the original ordering of results
-
-## Comparing Results
-
-Print both initial and re-ranked results to see the improvement:
-
-```typescript copy showLineNumbers{72} title="src/index.ts"
-console.log("Initial Results:");
-initialResults.forEach((result, index) => {
-  console.log(`Result ${index + 1}:`, {
-    text: result.metadata.text,
-    score: result.score,
-  });
-});
-
-console.log("Re-ranked Results:");
-rerankedResults.forEach(({ result, score, details }, index) => {
-  console.log(`Result ${index + 1}:`, {
-    text: result.metadata.text,
-    score: score,
-    semantic: details.semantic,
-    vector: details.vector,
-    position: details.position,
-  });
-});
-```
-
-The re-ranked results show how combining vector similarity with semantic understanding can improve retrieval quality. Each result includes:
-
-- Overall score combining all factors
-- Semantic relevance score from the language model
-- Vector similarity score from the embedding comparison
-- Position-based score for maintaining original order when appropriate
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank"
-  }
-/>
-
-
----
-title: "Example: Reranking with Cohere | RAG"
-description: Example of using Mastra to improve document retrieval relevance with Cohere's reranking service.
----
-
-# Reranking with Cohere
-[EN] Source: https://mastra.ai/en/examples/rag/rerank/reranking-with-cohere
-
-When retrieving documents for RAG, initial vector similarity search may miss important semantic matches.
-
-Cohere's reranking service helps improve result relevance by reordering documents using multiple scoring factors.
-
-```typescript
-import {
-  rerankWithScorer as rerank,
-  CohereRelevanceScorer
-} from "@mastra/rag";
-
-const results = rerank({
-  results: searchResults,
-  query: "deployment configuration",
-  scorer: new CohereRelevanceScorer('rerank-v3.5'),
-  {
-    topK: 5,
-    weights: {
-      semantic: 0.4,
-      vector: 0.4,
-      position: 0.2,
-    },
-  },
-);
-```
-
-## Links
-
-- [rerank() reference](/reference/v1/rag/rerankWithScorer)
-- [Retrieval docs](/docs/v1/rag/retrieval)
-
-
----
-title: "Example: Reranking with ZeroEntropy | RAG"
-description: Example of using Mastra to improve document retrieval relevance with ZeroEntropy's reranking service.
----
-
-# Reranking with ZeroEntropy
-[EN] Source: https://mastra.ai/en/examples/rag/rerank/reranking-with-zeroentropy
-
-```typescript
-import {
-  rerankWithScorer as rerank,
-  ZeroEntropyRelevanceScorer
-} from "@mastra/rag";
-
-const results = rerank({
-  results: searchResults,
-  query: "deployment configuration",
-  scorer: new ZeroEntropyRelevanceScorer('zerank-1'),
-  {
-    topK: 5,
-    weights: {
-      semantic: 0.4,
-      vector: 0.4,
-      position: 0.2,
-    },
-  },
-);
-```
-
-## Links
-
-- [rerank() reference](/reference/v1/rag/rerankWithScorer)
-- [Retrieval docs](/docs/v1/rag/retrieval)
-
-
----
-title: "Example: Upsert Embeddings | RAG"
-description: Examples of using Mastra to store embeddings in various vector databases for similarity search.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
-
-# Upsert Embeddings
-[EN] Source: https://mastra.ai/en/examples/rag/upsert/upsert-embeddings
-
-After generating embeddings, you need to store them in a database that supports vector similarity search. This example shows how to store embeddings in various vector databases for later retrieval.
-
-<Tabs>
-  <TabItem value="pg-vector" label="PgVector">
-
-The `PgVector` class provides methods to create indexes and insert embeddings into PostgreSQL with the pgvector extension.
-
-```tsx copy
-import { PgVector } from "@mastra/pg";
-import { MDocument } from "@mastra/rag";
-import { embedMany } from "ai";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
-
-const doc = MDocument.fromText("Your text content...");
-
-const chunks = await doc.chunk();
-
-const { embeddings } = await embedMany({
-  values: chunks.map((chunk) => chunk.text),
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-});
-
-const pgVector = new PgVector({
-  id: 'pg-vector',
-  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
-});
-
-await pgVector.createIndex({
-  indexName: "test_index",
-  dimension: 1536,
-});
-
-await pgVector.upsert({
-  indexName: "test_index",
-  vectors: embeddings,
-  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
-});
-```
-
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pgvector"
-  }
-/>
-
-  </TabItem>
-
-  <TabItem value="pinecone-vector" label="PineconeVector">
-
-The `PineconeVector` class provides methods to create indexes and insert embeddings into Pinecone, a managed vector database service.
-
-```tsx copy
-import { PineconeVector } from "@mastra/pinecone";
-import { MDocument } from "@mastra/rag";
-import { embedMany } from "ai";
-
-const doc = MDocument.fromText("Your text content...");
-
-const chunks = await doc.chunk();
-
-const { embeddings } = await embedMany({
-  values: chunks.map((chunk) => chunk.text),
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-});
-
-const pinecone = new PineconeVector({
-  id: 'pinecone-vector',
-  apiKey: process.env.PINECONE_API_KEY!,
-});
-
-await pinecone.createIndex({
-  indexName: "testindex",
-  dimension: 1536,
-});
-
-await pinecone.upsert({
-  indexName: "testindex",
-  vectors: embeddings,
-  metadata: chunks?.map((chunk) => ({ text: chunk.text })),
-});
-```
-
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pinecone"
-  }
-/>
-
-  </TabItem>
-
-  <TabItem value="qdrant-vector" label="QdrantVector">
-
-The `QdrantVector` class provides methods to create collections and insert embeddings into Qdrant, a high-performance vector database.
-
-```tsx copy
-import { QdrantVector } from "@mastra/qdrant";
-import { MDocument } from "@mastra/rag";
-import { embedMany } from "ai";
-
-const doc = MDocument.fromText("Your text content...");
-
-const chunks = await doc.chunk();
-
-const { embeddings } = await embedMany({
-  values: chunks.map((chunk) => chunk.text),
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-  maxRetries: 3,
-});
-
-const qdrant = new QdrantVector({
-  id: 'qdrant-vector',
-  url: process.env.QDRANT_URL,
-  apiKey: process.env.QDRANT_API_KEY,
-});
-
-await qdrant.createIndex({
-  indexName: "test_collection",
-  dimension: 1536,
-});
-
-await qdrant.upsert({
-  indexName: "test_collection",
-  vectors: embeddings,
-  metadata: chunks?.map((chunk) => ({ text: chunk.text })),
-});
-```
-
-  </TabItem>
-
-  <TabItem value="chroma-vector" label="ChromaVector">
-
-The `ChromaVector` class provides methods to create collections and insert embeddings into Chroma, an open-source embedding database.
-
-```tsx copy
-import { ChromaVector } from "@mastra/chroma";
-import { MDocument } from "@mastra/rag";
-import { embedMany } from "ai";
-
-const doc = MDocument.fromText("Your text content...");
-
-const chunks = await doc.chunk();
-
-const { embeddings } = await embedMany({
-  values: chunks.map((chunk) => chunk.text),
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-});
-
-// Running Chroma locally
-const store = new ChromaVector({
-  id: 'chroma-vector',
-});
-
-// Running on Chroma Cloud
-const store = new ChromaVector({
-  id: 'chroma-vector',
-  apiKey: process.env.CHROMA_API_KEY,
-  tenant: process.env.CHROMA_TENANT,
-  database: process.env.CHROMA_DATABASE,
-});
-
-await store.createIndex({
-  indexName: "test_collection",
-  dimension: 1536,
-});
-
-await chroma.upsert({
-  indexName: "test_collection",
-  vectors: embeddings,
-  metadata: chunks.map((chunk) => ({ text: chunk.text })),
-  documents: chunks.map((chunk) => chunk.text),
-});
-```
-
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-chroma"
-  }
-/>
-
-  </TabItem>
-
-  <TabItem value="AstraVector" label="AstraVector">
-
-he `AstraVector` class provides methods to create collections and insert embeddings into DataStax Astra DB, a cloud-native vector database.
-
-```tsx copy
-import { AstraVector } from "@mastra/astra";
-import { MDocument } from "@mastra/rag";
-import { embedMany } from "ai";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
-
-const doc = MDocument.fromText("Your text content...");
-
-const chunks = await doc.chunk();
-
-const { embeddings } = await embedMany({
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-  values: chunks.map((chunk) => chunk.text),
-});
-
-const astra = new AstraVector({
-  token: process.env.ASTRA_DB_TOKEN,
-  endpoint: process.env.ASTRA_DB_ENDPOINT,
-  keyspace: process.env.ASTRA_DB_KEYSPACE,
-});
-
-await astra.createIndex({
-  indexName: "test_collection",
-  dimension: 1536,
-});
-
-await astra.upsert({
-  indexName: "test_collection",
-  vectors: embeddings,
-  metadata: chunks?.map((chunk) => ({ text: chunk.text })),
-});
-```
-
-  </TabItem>
-
-  <TabItem value="libsql-vector" label="LibSQLVector">
-
-The `LibSQLVector` class provides methods to create collections and insert embeddings into LibSQL, a fork of SQLite with vector extensions.
-
-```tsx copy
-import { LibSQLVector } from "@mastra/core/vector/libsql";
-import { MDocument } from "@mastra/rag";
-import { embedMany } from "ai";
-
-const doc = MDocument.fromText("Your text content...");
-
-const chunks = await doc.chunk();
-
-const { embeddings } = await embedMany({
-  values: chunks.map((chunk) => chunk.text),
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-});
-
-const libsql = new LibSQLVector({
-  id: 'libsql-vector',
-  connectionUrl: process.env.DATABASE_URL,
-  authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
-});
-
-await libsql.createIndex({
-  indexName: "test_collection",
-  dimension: 1536,
-});
-
-await libsql.upsert({
-  indexName: "test_collection",
-  vectors: embeddings,
-  metadata: chunks?.map((chunk) => ({ text: chunk.text })),
-});
-```
-
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-libsql"
-  }
-/>
-
-  </TabItem>
-
-  <TabItem value="upstash-vector" label="UpstashVector">
-
-The `UpstashVector` class provides methods to create collections and insert embeddings into Upstash Vector, a serverless vector database.
-
-```tsx copy
-import { UpstashVector } from "@mastra/upstash";
-import { MDocument } from "@mastra/rag";
-import { embedMany } from "ai";
-
-const doc = MDocument.fromText("Your text content...");
-
-const chunks = await doc.chunk();
-
-const { embeddings } = await embedMany({
-  values: chunks.map((chunk) => chunk.text),
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-});
-
-const upstash = new UpstashVector({
-  id: 'upstash-vector',
-  url: process.env.UPSTASH_URL,
-  token: process.env.UPSTASH_TOKEN,
-});
-
-// There is no store.createIndex call here, Upstash creates indexes (known as namespaces in Upstash) automatically
-// when you upsert if that namespace does not exist yet.
-await upstash.upsert({
-  indexName: "test_collection", // the namespace name in Upstash
-  vectors: embeddings,
-  metadata: chunks?.map((chunk) => ({ text: chunk.text })),
-});
-```
-
-  </TabItem>
-
-  <TabItem value="cloudflare-vector" label="CloudflareVector">
-
-The `CloudflareVector` class provides methods to create collections and insert embeddings into Cloudflare Vectorize, a serverless vector database service.
-
-```tsx copy
-import { CloudflareVector } from "@mastra/vectorize";
-import { MDocument } from "@mastra/rag";
-import { embedMany } from "ai";
-
-const doc = MDocument.fromText("Your text content...");
-
-const chunks = await doc.chunk();
-
-const { embeddings } = await embedMany({
-  values: chunks.map((chunk) => chunk.text),
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-});
-
-const vectorize = new CloudflareVector({
-  accountId: process.env.CF_ACCOUNT_ID,
-  apiToken: process.env.CF_API_TOKEN,
-});
-
-await vectorize.createIndex({
-  indexName: "test_collection",
-  dimension: 1536,
-});
-
-await vectorize.upsert({
-  indexName: "test_collection",
-  vectors: embeddings,
-  metadata: chunks?.map((chunk) => ({ text: chunk.text })),
-});
-```
-
-  </TabItem>
-  <TabItem value="mongodb-vector" label="MongoDBVector">
-
-The `MongoDBVector` class provides methods to create indexes and insert embeddings into MongoDB with Atlas Search.
-
-```tsx copy
-import { MongoDBVector } from "@mastra/mongodb";
-import { MDocument } from "@mastra/rag";
-import { embedMany } from "ai";
-
-const doc = MDocument.fromText("Your text content...");
-
-const chunks = await doc.chunk();
-
-const { embeddings } = await embedMany({
-  values: chunks.map((chunk) => chunk.text),
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-});
-
-const vectorDB = new MongoDBVector({
-  uri: process.env.MONGODB_URI!,
-  dbName: process.env.MONGODB_DB_NAME!,
-});
-
-await vectorDB.createIndex({
-  indexName: "test_index",
-  dimension: 1536,
-});
-
-await vectorDB.upsert({
-  indexName: "test_index",
-  vectors: embeddings,
-  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
-});
-```
-
-  </TabItem>
-
-  <TabItem value="opensearch-vector" label="OpenSearchVector">
-
-The `OpenSearchVector` class provides methods to create indexes and insert embeddings into OpenSearch, a distributed search engine with vector search capabilities.
-
-```tsx copy
-import { OpenSearchVector } from "@mastra/opensearch";
-import { MDocument } from "@mastra/rag";
-import { embedMany } from "ai";
-
-const doc = MDocument.fromText("Your text content...");
-
-const chunks = await doc.chunk();
-
-const { embeddings } = await embedMany({
-  values: chunks.map((chunk) => chunk.text),
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-});
-
-const vectorDB = new OpenSearchVector({
-  uri: process.env.OPENSEARCH_URI!,
-});
-
-await vectorDB.createIndex({
-  indexName: "test_index",
-  dimension: 1536,
-});
-
-await vectorDB.upsert({
-  indexName: "test_index",
-  vectors: embeddings,
-  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
-});
-```
-
-  </TabItem>
-
-  <TabItem value="couchbase-vector" label="CouchbaseVector">
-
-The `CouchbaseVector` class provides methods to create indexes and insert embeddings into Couchbase, a distributed NoSQL database with vector search capabilities.
-
-```tsx copy
-import { CouchbaseVector } from "@mastra/couchbase";
-import { MDocument } from "@mastra/rag";
-import { embedMany } from "ai";
-
-const doc = MDocument.fromText("Your text content...");
-
-const chunks = await doc.chunk();
-
-const { embeddings } = await embedMany({
-  values: chunks.map((chunk) => chunk.text),
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-});
-
-const couchbase = new CouchbaseVector({
-  connectionString: process.env.COUCHBASE_CONNECTION_STRING,
-  username: process.env.COUCHBASE_USERNAME,
-  password: process.env.COUCHBASE_PASSWORD,
-  bucketName: process.env.COUCHBASE_BUCKET,
-  scopeName: process.env.COUCHBASE_SCOPE,
-  collectionName: process.env.COUCHBASE_COLLECTION,
-});
-
-await couchbase.createIndex({
-  indexName: "test_collection",
-  dimension: 1536,
-});
-
-await couchbase.upsert({
-  indexName: "test_collection",
-  vectors: embeddings,
-  metadata: chunks?.map((chunk) => ({ text: chunk.text })),
-});
-```
-
-  </TabItem>
-
-  <TabItem value="lance-vector" label="LanceVectorStore">
-
-The `LanceVectorStore` class provides methods to create tables, indexes and insert embeddings into LanceDB, an embedded vector database built on the Lance columnar format.
-
-```tsx copy
-import { LanceVectorStore } from "@mastra/lance";
-import { MDocument } from "@mastra/rag";
-import { embedMany } from "ai";
-
-const doc = MDocument.fromText("Your text content...");
-
-const chunks = await doc.chunk();
-
-const { embeddings } = await embedMany({
-  values: chunks.map((chunk) => chunk.text),
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-});
-
-const lance = await LanceVectorStore.create("/path/to/db");
-
-// In LanceDB you need to create a table first
-await lance.createIndex({
-  tableName: "myVectors",
-  indexName: "vector",
-  dimension: 1536,
-});
-
-await lance.upsert({
-  tableName: "myVectors",
-  vectors: embeddings,
-  metadata: chunks?.map((chunk) => ({ text: chunk.text })),
-});
-```
-
-  </TabItem>
-</Tabs>
-
-
----
-title: "Example: Using the Vector Query Tool | RAG"
-description: Example of implementing a basic RAG system in Mastra using OpenAI embeddings and PGVector for vector storage.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
-# Using the Vector Query Tool
-[EN] Source: https://mastra.ai/en/examples/rag/usage/basic-rag
-
-This example demonstrates how to implement and use `createVectorQueryTool` for semantic search in a RAG system. It shows how to configure the tool, manage vector storage, and retrieve relevant context effectively.
-
-## Overview
-
-The system implements RAG using Mastra and OpenAI. Here's what it does:
-
-1. Sets up a Mastra agent with gpt-5.1 for response generation
-2. Creates a vector query tool to manage vector store interactions
-3. Uses existing embeddings to retrieve relevant context
-4. Generates context-aware responses using the Mastra agent
-
-> **Note**: To learn how to create and store embeddings, see the [Upsert Embeddings](/examples/v1/rag/upsert/upsert-embeddings) guide.
-
-## Setup
-
-### Environment Setup
-
-Make sure to set up your environment variables:
-
-```bash title=".env"
-OPENAI_API_KEY=your_openai_api_key_here
-POSTGRES_CONNECTION_STRING=your_connection_string_here
-```
-
-### Dependencies
-
-Import the necessary dependencies:
-
-```typescript copy showLineNumbers title="src/index.ts"
-import { Mastra } from "@mastra/core";
-import { Agent } from "@mastra/core/agent";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
-import { createVectorQueryTool } from "@mastra/rag";
-import { PgVector } from "@mastra/pg";
-```
-
-## Vector Query Tool Creation
-
-Create a tool that can query the vector database:
-
-```typescript copy showLineNumbers{4} title="src/index.ts"
-const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: "pgVector",
-  indexName: "embeddings",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-});
-```
-
-## Agent Configuration
-
-Set up the Mastra agent that will handle the responses:
-
-```typescript copy showLineNumbers{13} title="src/index.ts"
-export const ragAgent = new Agent({
-  id: "rag-agent",
-  name: "RAG Agent",
-  instructions:
-    "You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.",
-  model: "openai/gpt-5.1",
-  tools: {
-    vectorQueryTool,
-  },
-});
-```
-
-## Instantiate PgVector and Mastra
-
-Instantiate PgVector and Mastra with all components:
-
-```typescript copy showLineNumbers{23} title="src/index.ts"
-const pgVector = new PgVector({
-  id: 'rag-vectors',
-  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
-});
-
-export const mastra = new Mastra({
-  agents: { ragAgent },
-  vectors: { pgVector },
-});
-
-const agent = mastra.getAgent("ragAgent");
-```
-
-## Example Usage
-
-```typescript copy showLineNumbers{32} title="src/index.ts"
-const prompt = `
-[Insert query based on document here]
-Please base your answer only on the context provided in the tool.
-If the context doesn't contain enough information to fully answer the question, please state that explicitly.
-`;
-
-const completion = await agent.generate(prompt);
-console.log(completion.text);
-```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/basic-rag"
   }
 />
 
@@ -24415,6 +23455,12 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
   }),
 });
 ```
+
+:::tip Agent streaming in workflows
+When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are automatically streamed to the UI in real-time. This provides a seamless streaming experience even when agents are running inside workflow steps.
+
+Learn more in [Workflow Streaming](/docs/v1/streaming/workflow-streaming#streaming-agent-text-chunks-to-ui).
+:::
 
 ### `networkRoute()`
 
@@ -34571,7 +33617,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 54+ AI providers and 1113+ models through Mastra's model router."
+description: "Access 57+ AI providers and 1154+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -34584,7 +33630,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1113 models from 54 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1154 models from 57 providers through a single API.
 
 ## Features
 
@@ -34712,7 +33758,7 @@ Browse the directory of available models using the navigation on the left, or ex
             <span>Google</span>
           </div>
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 47 more</div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 50 more</div>
       </div>
     </CardGridItem>
 </CardGrid>
@@ -34880,6 +33926,336 @@ const agent = new Agent({
 })
 ```
 You can use an AI SDK model (e.g. `groq('gemma2-9b-it')`) anywhere that accepts a `"provider/model"` string, including within model router fallbacks and [scorers](/docs/v1/evals/overview).
+
+---
+title: "AgentRouter | Models | Mastra"
+description: "Use AgentRouter models with Mastra. 20 models available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+
+
+# <img src="https://models.dev/logos/agentrouter.svg" alt="AgentRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />AgentRouter
+[EN] Source: https://mastra.ai/en/models/providers/agentrouter
+
+Access 20 AgentRouter models through Mastra's model router. Authentication is handled automatically using the `AGENTROUTER_API_KEY` environment variable.
+
+Learn more in the [AgentRouter documentation](https://docs.agentrouter.org).
+
+```bash
+AGENTROUTER_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "agentrouter/claude-3-5-haiku-20241022"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [AgentRouter documentation](https://docs.agentrouter.org) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "agentrouter/claude-3-5-haiku-20241022",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": 1,
+    "outputCost": 5
+  },
+  {
+    "model": "agentrouter/claude-3-5-sonnet-20240620",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "agentrouter/claude-3-5-sonnet-20241022",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "agentrouter/claude-3-7-sonnet-20250219",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "agentrouter/claude-3-7-sonnet-20250219-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "agentrouter/claude-haiku-4-5-20251001",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 2,
+    "outputCost": 4
+  },
+  {
+    "model": "agentrouter/claude-opus-4-20250514",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": 21,
+    "outputCost": 105
+  },
+  {
+    "model": "agentrouter/claude-opus-4-20250514-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "model": "agentrouter/claude-sonnet-4-20250514",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "agentrouter/claude-sonnet-4-20250514-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "model": "agentrouter/claude-sonnet-4-5-20250929",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 64000,
+    "inputCost": 6,
+    "outputCost": 30
+  },
+  {
+    "model": "agentrouter/deepseek-r1-0528",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.3,
+    "outputCost": 0.045
+  },
+  {
+    "model": "agentrouter/deepseek-v3.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.3,
+    "outputCost": 0.045
+  },
+  {
+    "model": "agentrouter/deepseek-v3.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.3,
+    "outputCost": 0.045
+  },
+  {
+    "model": "agentrouter/gemini-3-pro-preview",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 64000,
+    "inputCost": 2,
+    "outputCost": 8
+  },
+  {
+    "model": "agentrouter/glm-4.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": 0.003,
+    "outputCost": null
+  },
+  {
+    "model": "agentrouter/glm-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.003,
+    "outputCost": null
+  },
+  {
+    "model": "agentrouter/gpt-5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1280000,
+    "maxOutput": 1280000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "agentrouter/gpt-5.1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 2
+  },
+  {
+    "model": "agentrouter/kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.002,
+    "outputCost": null
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://agentrouter.org/v1",
+    id: "agentrouter/claude-3-5-haiku-20241022",
+    apiKey: process.env.AGENTROUTER_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "agentrouter/kimi-k2-thinking"
+      : "agentrouter/claude-3-5-haiku-20241022";
+  }
+});
+```
+
+
+
 
 ---
 title: "AIHubMix"
@@ -36713,6 +36089,120 @@ To use this provider with Mastra agents, see the [Agent Overview documentation](
 ```bash npm2yarn copy
 npm install @ai-sdk/azure
 ```
+
+
+---
+title: "Bailing | Models | Mastra"
+description: "Use Bailing models with Mastra. 2 models available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+
+
+# <img src="https://models.dev/logos/bailing.svg" alt="Bailing logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Bailing
+[EN] Source: https://mastra.ai/en/models/providers/bailing
+
+Access 2 Bailing models through Mastra's model router. Authentication is handled automatically using the `BAILING_API_TOKEN` environment variable.
+
+Learn more in the [Bailing documentation](https://alipaytbox.yuque.com/sxs0ba/ling/intro).
+
+```bash
+BAILING_API_TOKEN=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "bailing/Ling-1T"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Bailing documentation](https://alipaytbox.yuque.com/sxs0ba/ling/intro) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "bailing/Ling-1T",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 32000,
+    "inputCost": 0.57,
+    "outputCost": 2.29
+  },
+  {
+    "model": "bailing/Ring-1T",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32000,
+    "inputCost": 0.57,
+    "outputCost": 2.29
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.tbox.cn/api/llm/v1/chat/completions",
+    id: "bailing/Ling-1T",
+    apiKey: process.env.BAILING_API_TOKEN,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "bailing/Ring-1T"
+      : "bailing/Ling-1T";
+  }
+});
+```
+
+
 
 
 ---
@@ -41033,6 +40523,11 @@ Direct access to individual AI model providers. Each provider offers unique mode
       href="/models/v1/providers/xai"
       logo="https://models.dev/logos/xai.svg"
     />    <CardGridItem
+      title="AgentRouter"
+      description="20 models"
+      href="/models/v1/providers/agentrouter"
+      logo="https://models.dev/logos/agentrouter.svg"
+    />    <CardGridItem
       title="Alibaba"
       description="39 models"
       href="/models/v1/providers/alibaba"
@@ -41042,6 +40537,11 @@ Direct access to individual AI model providers. Each provider offers unique mode
       description="61 models"
       href="/models/v1/providers/alibaba-cn"
       logo="https://models.dev/logos/alibaba-cn.svg"
+    />    <CardGridItem
+      title="Bailing"
+      description="2 models"
+      href="/models/v1/providers/bailing"
+      logo="https://models.dev/logos/bailing.svg"
     />    <CardGridItem
       title="Baseten"
       description="4 models"
@@ -41102,6 +40602,11 @@ Direct access to individual AI model providers. Each provider offers unique mode
       description="9 models"
       href="/models/v1/providers/inference"
       logo="https://models.dev/logos/inference.svg"
+    />    <CardGridItem
+      title="IO Intelligence"
+      description="17 models"
+      href="/models/v1/providers/io-intelligence"
+      logo="https://models.dev/logos/io-intelligence.svg"
     />    <CardGridItem
       title="Llama"
       description="7 models"
@@ -41174,7 +40679,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/poe.svg"
     />    <CardGridItem
       title="Requesty"
-      description="17 models"
+      description="19 models"
       href="/models/v1/providers/requesty"
       logo="https://models.dev/logos/requesty.svg"
     />    <CardGridItem
@@ -41441,6 +40946,300 @@ const agent = new Agent({
     return useAdvanced
       ? "inference/qwen/qwen3-embedding-4b"
       : "inference/google/gemma-3";
+  }
+});
+```
+
+
+
+
+---
+title: "IO Intelligence | Models | Mastra"
+description: "Use IO Intelligence models with Mastra. 17 models available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+
+
+# <img src="https://models.dev/logos/io-intelligence.svg" alt="IO Intelligence logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />IO Intelligence
+[EN] Source: https://mastra.ai/en/models/providers/io-intelligence
+
+Access 17 IO Intelligence models through Mastra's model router. Authentication is handled automatically using the `IOINTELLIGENCE_API_KEY` environment variable.
+
+Learn more in the [IO Intelligence documentation](https://io.net/docs/guides/intelligence/io-intelligence).
+
+```bash
+IOINTELLIGENCE_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "io-intelligence/deepseek-ai-deepseek-r1-0528"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [IO Intelligence documentation](https://io.net/docs/guides/intelligence/io-intelligence) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "io-intelligence/deepseek-ai-deepseek-r1-0528",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 2,
+    "outputCost": 8.75
+  },
+  {
+    "model": "io-intelligence/intel-qwen3-coder-480b-a35b-instruct-int4-mixed-ar",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 106000,
+    "maxOutput": 4096,
+    "inputCost": 0.22,
+    "outputCost": 0.95
+  },
+  {
+    "model": "io-intelligence/meta-llama-llama-3-2-90b-vision-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 16000,
+    "maxOutput": 4096,
+    "inputCost": 0.35,
+    "outputCost": 0.4
+  },
+  {
+    "model": "io-intelligence/meta-llama-llama-3-3-70b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.13,
+    "outputCost": 0.38
+  },
+  {
+    "model": "io-intelligence/meta-llama-llama-4-maverick-17b-128e-instruct-fp8",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 430000,
+    "maxOutput": 4096,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "io-intelligence/mistralai-devstral-small-2505",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "io-intelligence/mistralai-magistral-small-2506",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.5,
+    "outputCost": 1.5
+  },
+  {
+    "model": "io-intelligence/mistralai-mistral-large-instruct-2411",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 2,
+    "outputCost": 6
+  },
+  {
+    "model": "io-intelligence/mistralai-mistral-nemo-instruct-2407",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.02,
+    "outputCost": 0.04
+  },
+  {
+    "model": "io-intelligence/moonshotai-kimi-k2-instruct-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 4096,
+    "inputCost": 0.39,
+    "outputCost": 1.9
+  },
+  {
+    "model": "io-intelligence/moonshotai-kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 32768,
+    "maxOutput": 4096,
+    "inputCost": 0.55,
+    "outputCost": 2.25
+  },
+  {
+    "model": "io-intelligence/openai-gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 4096,
+    "inputCost": 0.04,
+    "outputCost": 0.4
+  },
+  {
+    "model": "io-intelligence/openai-gpt-oss-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 64000,
+    "maxOutput": 4096,
+    "inputCost": 0.03,
+    "outputCost": 0.14
+  },
+  {
+    "model": "io-intelligence/qwen-qwen2-5-vl-32b-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 4096,
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "io-intelligence/qwen-qwen3-235b-a22b-thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 4096,
+    "inputCost": 0.11,
+    "outputCost": 0.6
+  },
+  {
+    "model": "io-intelligence/qwen-qwen3-next-80b-a3b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 4096,
+    "inputCost": 0.1,
+    "outputCost": 0.8
+  },
+  {
+    "model": "io-intelligence/zai-org-glm-4-6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 4096,
+    "inputCost": 0.4,
+    "outputCost": 1.75
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.intelligence.io.solutions/api/v1",
+    id: "io-intelligence/deepseek-ai-deepseek-r1-0528",
+    apiKey: process.env.IOINTELLIGENCE_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "io-intelligence/zai-org-glm-4-6"
+      : "io-intelligence/deepseek-ai-deepseek-r1-0528";
   }
 });
 ```
@@ -44238,8 +44037,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 128000,
+    "contextWindow": 262144,
+    "maxOutput": 32768,
     "inputCost": 0.5,
     "outputCost": 2
   },
@@ -46222,7 +46021,7 @@ const agent = new Agent({
 
 ---
 title: "Requesty | Models | Mastra"
-description: "Use Requesty models with Mastra. 17 models available."
+description: "Use Requesty models with Mastra. 19 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -46232,7 +46031,7 @@ description: "Use Requesty models with Mastra. 17 models available."
 # <img src="https://models.dev/logos/requesty.svg" alt="Requesty logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Requesty
 [EN] Source: https://mastra.ai/en/models/providers/requesty
 
-Access 17 Requesty models through Mastra's model router. Authentication is handled automatically using the `REQUESTY_API_KEY` environment variable.
+Access 19 Requesty models through Mastra's model router. Authentication is handled automatically using the `REQUESTY_API_KEY` environment variable.
 
 Learn more in the [Requesty documentation](https://requesty.ai/solution/llm-routing/models).
 
@@ -46319,6 +46118,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 75
   },
   {
+    "model": "requesty/anthropic/claude-opus-4-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 5,
+    "outputCost": 25
+  },
+  {
     "model": "requesty/anthropic/claude-sonnet-4",
     "imageInput": true,
     "audioInput": false,
@@ -46365,6 +46176,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 1.25,
     "outputCost": 10
+  },
+  {
+    "model": "requesty/google/gemini-3-pro-preview",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 2,
+    "outputCost": 12
   },
   {
     "model": "requesty/openai/gpt-4.1",
@@ -47364,8 +47187,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "siliconflow/qwen-qwen3-omni-30b-a3b-captioner",
-    "imageInput": true,
-    "audioInput": false,
+    "imageInput": false,
+    "audioInput": true,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
@@ -64348,6 +64171,159 @@ const uiMessages = toAISdkV5Messages(messages);
 
 
 ---
+title: "Reference: OtelBridge | Observability"
+description: OpenTelemetry bridge for Tracing
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# OtelBridge
+[EN] Source: https://mastra.ai/en/reference/observability/tracing/bridges/otel
+
+:::warning
+
+The OpenTelemetry Bridge is currently **experimental**. APIs and configuration options may change in future releases.
+
+:::
+
+Enables bidirectional integration between Mastra tracing and OpenTelemetry infrastructure. Creates native OTEL spans for Mastra operations and inherits context from active OTEL spans.
+
+## Constructor
+
+```typescript
+new OtelBridge()
+```
+
+## Methods
+
+### executeInContext
+
+```typescript
+executeInContext<T>(spanId: string, fn: () => Promise<T>): Promise<T>
+```
+
+Executes an async function within the OTEL context of a Mastra span. OTEL-instrumented code running inside the function will have correct parent relationships.
+
+<PropertiesTable
+  props={[
+    {
+      name: "spanId",
+      type: "string",
+      description: "The ID of the Mastra span to use as context",
+      required: true,
+    },
+    {
+      name: "fn",
+      type: "() => Promise<T>",
+      description: "The async function to execute within the span context",
+      required: true,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<T>` - The result of the function execution.
+
+### executeInContextSync
+
+```typescript
+executeInContextSync<T>(spanId: string, fn: () => T): T
+```
+
+Executes a synchronous function within the OTEL context of a Mastra span.
+
+<PropertiesTable
+  props={[
+    {
+      name: "spanId",
+      type: "string",
+      description: "The ID of the Mastra span to use as context",
+      required: true,
+    },
+    {
+      name: "fn",
+      type: "() => T",
+      description: "The synchronous function to execute within the span context",
+      required: true,
+    },
+  ]}
+/>
+
+**Returns:** `T` - The result of the function execution.
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Shuts down the bridge and cleans up resources. Ends any spans that were not properly closed.
+
+## Usage Examples
+
+### Basic Usage
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { OtelBridge } from "@mastra/otel-bridge";
+
+const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-service",
+        bridge: new OtelBridge(),
+      },
+    },
+  }),
+  agents: { myAgent },
+});
+```
+
+### Combined with Exporters
+
+The bridge can be used alongside exporters. The bridge handles OTEL context, while exporters send data to additional destinations:
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { Observability, DefaultExporter } from "@mastra/observability";
+import { OtelBridge } from "@mastra/otel-bridge";
+import { LangfuseExporter } from "@mastra/langfuse";
+
+const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-service",
+        bridge: new OtelBridge(), // Handles OTEL context
+        exporters: [
+          new DefaultExporter(), // Studio access
+          new LangfuseExporter({
+            // Additional destination
+            publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+            secretKey: process.env.LANGFUSE_SECRET_KEY,
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## OpenTelemetry Setup Requirements
+
+The OtelBridge requires an active OpenTelemetry SDK to function. The bridge reads from OTEL's ambient context.
+
+See the [OtelBridge Guide](/docs/v1/observability/tracing/bridges/otel#configuration) for complete setup instructions, including how to configure OTEL instrumentation and run your application.
+
+## Related
+
+- [OtelBridge Guide](/docs/v1/observability/tracing/bridges/otel) - Setup guide with examples
+- [Tracing Overview](/docs/v1/observability/tracing/overview) - General tracing concepts
+- [OtelExporter Reference](/reference/v1/observability/tracing/exporters/otel) - OTEL exporter for sending traces
+
+
+---
 title: "Reference: Configuration | Observability"
 description: Tracing configuration types and registry functions
 ---
@@ -64581,10 +64557,6 @@ Shuts down all observability instances and clears the registry.
 - [Tracing Classes](/reference/v1/observability/tracing/instances) - Core tracing classes
 - [Interfaces](/reference/v1/observability/tracing/interfaces) - Type definitions
 - [Spans Reference](/reference/v1/observability/tracing/spans) - Span lifecycle
-
-### Examples
-
-- [Basic Tracing](/examples/v1/observability/basic-ai-tracing) - Getting started
 
 ### Exporters
 
@@ -66072,6 +66044,12 @@ The exporter preserves span hierarchy from Mastra's Tracing:
 - Maintains correct nesting for agents, workflows, LLM calls, and tools
 - Exports complete traces with all relationships intact
 
+## Related
+
+- [OtelExporter Guide](/docs/v1/observability/tracing/exporters/otel) - Setup guide with provider configurations
+- [OtelBridge](/docs/v1/observability/tracing/bridges/otel) - For bidirectional OTEL context integration
+- [Tracing Overview](/docs/v1/observability/tracing/overview) - General tracing concepts
+
 
 ---
 title: "Reference: PosthogExporter | Observability"
@@ -66367,10 +66345,6 @@ class CustomObservabilityInstance extends BaseObservabilityInstance {
 - [Configuration Reference](/reference/v1/observability/tracing/configuration) - Configuration options
 - [Interfaces Reference](/reference/v1/observability/tracing/interfaces) - Type definitions
 - [Spans Reference](/reference/v1/observability/tracing/spans) - Span lifecycle and methods
-
-### Examples
-
-- [Basic Tracing](/examples/v1/observability/basic-ai-tracing) - Getting started example
 
 ### Exporters
 
@@ -67090,10 +67064,6 @@ enum InternalSpans {
 - [Tracing Classes](/reference/v1/observability/tracing/instances) - Core implementations
 - [Spans Reference](/reference/v1/observability/tracing/spans) - Span lifecycle methods
 
-### Examples
-
-- [Basic Tracing](/examples/v1/observability/basic-ai-tracing) - Implementation example
-
 
 ---
 title: "Reference: SensitiveDataFilter | Observability"
@@ -67671,10 +67641,6 @@ A span that performs no operations. All methods are no-ops:
 - [Interfaces](/reference/v1/observability/tracing/interfaces) - Complete type reference
 - [Configuration](/reference/v1/observability/tracing/configuration) - Configuration options
 
-### Examples
-
-- [Basic Tracing](/examples/v1/observability/basic-ai-tracing) - Working with spans
-
 
 ---
 title: "Reference: Batch Parts Processor | Processors"
@@ -67811,7 +67777,7 @@ The `LanguageDetector` is an **input processor** that identifies the language of
 import { LanguageDetector } from "@mastra/core/processors";
 
 const processor = new LanguageDetector({
-  model: "openai/gpt-4.1-nano",
+  model: "openrouter/openai/gpt-oss-safeguard-20b",
   targetLanguages: ["English", "en"],
   threshold: 0.8,
   strategy: "translate"
@@ -67937,7 +67903,7 @@ export const agent = new Agent({
   model: "openai/gpt-5.1",
   inputProcessors: [
     new LanguageDetector({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       targetLanguages: ["English", "en"],
       threshold: 0.8,
       strategy: "translate",
@@ -67972,7 +67938,7 @@ The `ModerationProcessor` is a **hybrid processor** that can be used for both in
 import { ModerationProcessor } from "@mastra/core/processors";
 
 const processor = new ModerationProcessor({
-  model: "openai/gpt-4.1-nano",
+  model: "openrouter/openai/gpt-oss-safeguard-20b",
   threshold: 0.7,
   strategy: "block",
   categories: ["hate", "harassment", "violence"]
@@ -68092,7 +68058,7 @@ export const agent = new Agent({
   model: "openai/gpt-5.1",
   inputProcessors: [
     new ModerationProcessor({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       categories: ["hate", "harassment", "violence"],
       threshold: 0.7,
       strategy: "block",
@@ -68122,7 +68088,7 @@ export const agent = new Agent({
     }),
     // Then apply moderation on batched content
     new ModerationProcessor({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       strategy: "filter",
       chunkWindow: 1,
     }),
@@ -68151,7 +68117,7 @@ The `PIIDetector` is a **hybrid processor** that can be used for both input and 
 import { PIIDetector } from "@mastra/core/processors";
 
 const processor = new PIIDetector({
-  model: "openai/gpt-4.1-nano",
+  model: "openrouter/openai/gpt-oss-safeguard-20b",
   threshold: 0.6,
   strategy: "redact",
   detectionTypes: ["email", "phone", "credit-card", "ssn"]
@@ -68278,7 +68244,7 @@ export const agent = new Agent({
   model: "openai/gpt-5.1",
   inputProcessors: [
     new PIIDetector({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       detectionTypes: ["email", "phone", "credit-card", "ssn"],
       threshold: 0.6,
       strategy: "redact",
@@ -68310,7 +68276,7 @@ export const agent = new Agent({
     }),
     // Then apply PII detection on batched content
     new PIIDetector({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       strategy: "redact",
     })
   ]
@@ -68338,7 +68304,7 @@ The `PromptInjectionDetector` is an **input processor** that detects and prevent
 import { PromptInjectionDetector } from "@mastra/core/processors";
 
 const processor = new PromptInjectionDetector({
-  model: "openai/gpt-4.1-nano",
+  model: "openrouter/openai/gpt-oss-safeguard-20b",
   threshold: 0.8,
   strategy: "rewrite",
   detectionTypes: ["injection", "jailbreak", "system-override"]
@@ -68443,7 +68409,7 @@ export const agent = new Agent({
   model: "openai/gpt-5.1",
   inputProcessors: [
     new PromptInjectionDetector({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       detectionTypes: ['injection', 'jailbreak', 'system-override'],
       threshold: 0.8,
       strategy: 'rewrite',
@@ -68475,7 +68441,7 @@ The `SystemPromptScrubber` is an **output processor** that detects and handles s
 import { SystemPromptScrubber } from "@mastra/core/processors";
 
 const processor = new SystemPromptScrubber({
-  model: "openai/gpt-4.1-nano",
+  model: "openrouter/openai/gpt-oss-safeguard-20b",
   strategy: "redact",
   redactionMethod: "mask",
   includeDetections: true
@@ -68600,7 +68566,7 @@ export const agent = new Agent({
     }),
     // Then apply system prompt detection on batched content
     new SystemPromptScrubber({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       strategy: "redact",
       customPatterns: ["system prompt", "internal instructions"],
       includeDetections: true,
@@ -75408,7 +75374,7 @@ await agent.stream("message for agent", {
   },
   // Output processors for streaming response validation
   outputProcessors: [
-    new ModerationProcessor({ model: "openai/gpt-4.1-nano" }),
+    new ModerationProcessor({ model: "openrouter/openai/gpt-oss-safeguard-20b" }),
     new BatchPartsProcessor({ maxBatchSize: 3, maxWaitTime: 100 }),
   ],
 });
