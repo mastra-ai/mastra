@@ -2,6 +2,8 @@ import fsSync from 'fs';
 import fs from 'fs/promises';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
+import pkgJson from '../../../package.json';
+import type { PosthogAnalytics } from '../../analytics/index';
 import { getAnalytics } from '../../analytics/index';
 import { cloneTemplate, installDependencies } from '../../utils/clone-template';
 import { loadTemplates, selectTemplate, findTemplateByName, getDefaultProjectName } from '../../utils/template-utils';

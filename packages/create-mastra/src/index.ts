@@ -59,7 +59,6 @@ program
 
     if (args.default) {
       await create({
-        projectName,
         components: ['agents', 'tools', 'workflows', 'scorers'],
         llmProvider: 'openai',
         addExample: true,
