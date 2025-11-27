@@ -1,60 +1,9 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MastraModelOutput } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
-import { toAISdkV4Messages, toAISdkV5Messages } from '../convert-messages';
-import { toAISdkV5Stream } from '../convert-streams';
+import { toAISdkFormat } from '../to-ai-sdk-format';
 
 describe('toAISdkFormat', () => {
-  const sampleMessages: MastraDBMessage[] = [
-    {
-      id: 'msg-1',
-      role: 'user',
-      content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
-      createdAt: new Date(),
-    },
-    {
-      id: 'msg-2',
-      role: 'assistant',
-      content: { format: 2, parts: [{ type: 'text', text: 'Hi there!' }] },
-      createdAt: new Date(),
-    },
-  ];
-
-  describe('toAISdkV5Messages', () => {
-    it('should convert Mastra V2 messages to AI SDK V5 UI format', () => {
-      const result = toAISdkV5Messages(sampleMessages);
-
-      expect(result).toHaveLength(2);
-      expect(result[0]).toHaveProperty('id', 'msg-1');
-      expect(result[0]).toHaveProperty('role', 'user');
-      expect(result[1]).toHaveProperty('id', 'msg-2');
-      expect(result[1]).toHaveProperty('role', 'assistant');
-    });
-
-    it('should handle empty array', () => {
-      const result = toAISdkV5Messages([]);
-      expect(result).toEqual([]);
-    });
-  });
-
-  describe('toAISdkV4Messages', () => {
-    it('should convert Mastra V2 messages to AI SDK V4 UI format', () => {
-      const result = toAISdkV4Messages(sampleMessages);
-
-      expect(result).toHaveLength(2);
-      expect(result[0]).toHaveProperty('id', 'msg-1');
-      expect(result[0]).toHaveProperty('role', 'user');
-      expect(result[1]).toHaveProperty('id', 'msg-2');
-      expect(result[1]).toHaveProperty('role', 'assistant');
-    });
-
-    it('should handle empty array', () => {
-      const result = toAISdkV4Messages([]);
-      expect(result).toEqual([]);
-    });
-  });
-
-  describe('toAISdkV5Stream error handling', () => {
+  describe('toAISdkFormat error handling', () => {
     it('should preserve error message details when converting agent stream', async () => {
       const errorMessage =
         'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits';
@@ -85,7 +34,7 @@ describe('toAISdkFormat', () => {
         },
       });
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
+      const aiSdkStream = toAISdkFormat(mockStream as unknown as MastraModelOutput, { from: 'agent' });
 
       const errorChunks: any[] = [];
 
@@ -106,7 +55,7 @@ describe('toAISdkFormat', () => {
     });
   });
 
-  describe('toAISdkV5Stream tripwire handling', () => {
+  describe('toAISdkFormat tripwire handling', () => {
     it('should send finish event with finishReason "other" when tripwire occurs and stream does not exit gracefully', async () => {
       const tripwireReason = 'Content filter triggered';
 
@@ -132,7 +81,7 @@ describe('toAISdkFormat', () => {
         },
       });
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, {
+      const aiSdkStream = toAISdkFormat(mockStream as unknown as MastraModelOutput, {
         from: 'agent',
         sendFinish: true,
       });
@@ -203,7 +152,7 @@ describe('toAISdkFormat', () => {
         },
       });
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, {
+      const aiSdkStream = toAISdkFormat(mockStream as unknown as MastraModelOutput, {
         from: 'agent',
         sendFinish: true,
       });
