@@ -40,7 +40,7 @@ export class NetlifyDeployer extends Deployer {
     const result = await this._bundle(
       this.getEntry(),
       entryFile,
-      { outputDirectory, projectRoot, enableEsmShim: false },
+      { outputDirectory, projectRoot, enableEsmShim: true },
       toolsPaths,
       join(outputDirectory, this.outputDir),
     );
@@ -50,7 +50,7 @@ export class NetlifyDeployer extends Deployer {
     await writeJson(join(outputDirectory, '.netlify', 'v1', 'config.json'), {
       functions: {
         directory: '.netlify/v1/functions',
-        node_bundler: 'none',
+        node_bundler: 'none', // Mastra pre-bundles, don't re-bundle
         included_files: ['.netlify/v1/functions/**'],
       },
       redirects: [
@@ -90,16 +90,5 @@ export class NetlifyDeployer extends Deployer {
 
   async lint(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     await super.lint(entryFile, outputDirectory, toolsPaths);
-
-    // Check for LibSQL dependency which is not supported in Netlify Functions
-    const hasLibsql = (await this.deps.checkDependencies(['@mastra/libsql'])) === `ok`;
-
-    if (hasLibsql) {
-      this.logger?.error(
-        `Netlify Deployer does not support @libsql/client (which may have been installed by @mastra/libsql) as a dependency.
-        LibSQL with file URLs uses native Node.js bindings that cannot run in serverless environments. Use other Mastra Storage options instead e.g @mastra/pg`,
-      );
-      process.exit(1);
-    }
   }
 }

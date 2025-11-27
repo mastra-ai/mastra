@@ -5,9 +5,6 @@ A Netlify deployer for Mastra applications.
 ## Features
 
 - Deploy Mastra applications to Netlify Functions
-## Features
-
-- Deploy Mastra applications to Netlify Functions
 - Generates Netlify Frameworks API configuration during build
 - Bundles functions with optimized settings for serverless environments
 - Routes all requests through a single API endpoint
@@ -15,7 +12,7 @@ A Netlify deployer for Mastra applications.
 ## Installation
 
 ```bash
-pnpm add @mastra/deployer-netlify
+npm install @mastra/deployer-netlify
 ```
 
 ## Usage
@@ -26,11 +23,8 @@ The Netlify deployer is used as part of the Mastra framework:
 import { Mastra } from '@mastra/core/mastra';
 import { NetlifyDeployer } from '@mastra/deployer-netlify';
 
-const deployer = new NetlifyDeployer();
-
 const mastra = new Mastra({
-  deployer,
-  // ... other Mastra configuration options
+  deployer: new NetlifyDeployer(),
 });
 ```
 
@@ -38,7 +32,7 @@ const mastra = new Mastra({
 
 The deployer automatically creates the following structure:
 
-```
+```bash
 your-project/
 └── .netlify/
     └── v1/
@@ -52,7 +46,7 @@ your-project/
 
 ### Netlify Frameworks API Configuration
 
-The deployer uses Netlify's [Frameworks API](https://docs.netlify.com/build/frameworks/frameworks-api/) with a `.netlify/v1/config.json` file for zero-configuration deployments.
+The deployer uses Netlify's [Frameworks API](https://docs.netlify.com/build/frameworks/frameworks-api/) and generates a `.netlify/v1/config.json` file to configure functions and routing for Netlify.
 
 Generated configuration:
 
