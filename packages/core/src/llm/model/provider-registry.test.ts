@@ -662,7 +662,6 @@ describe('Corrupted JSON recovery', () => {
 }`; // <-- extra garbage from concurrent write
     originalWriteFileSync(corruptedJsonPath, corruptedContent, 'utf-8');
 
-
     // We need to test that loadRegistry detects corruption and falls back
     // Let's call getProviderConfig which internally calls loadRegistry
     const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
