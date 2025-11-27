@@ -644,7 +644,11 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       const hasMore = end < total;
 
       const list = new MessageList({ threadId, resourceId }).add(paginatedMessages as MastraMessageV2[], 'memory');
-      const finalMessages = format === 'v2' ? list.get.all.v2() : list.get.all.v1();
+      let finalMessages = format === 'v2' ? list.get.all.v2() : list.get.all.v1();
+
+      // Always sort messages by createdAt to ensure correct chronological order
+      // This is critical when `include` parameter brings in messages from semantic recall
+      finalMessages = finalMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
       return {
         messages: finalMessages,

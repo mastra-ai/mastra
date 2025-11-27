@@ -653,7 +653,13 @@ export class MemoryPG extends MemoryStorage {
       });
 
       const list = new MessageList().add(messagesWithParsedContent, 'memory');
-      const messagesToReturn = format === `v2` ? list.get.all.v2() : list.get.all.v1();
+      let messagesToReturn = format === `v2` ? list.get.all.v2() : list.get.all.v1();
+
+      // Always sort messages by createdAt to ensure correct chronological order
+      // This is critical when `include` parameter brings in messages from semantic recall
+      messagesToReturn = messagesToReturn.sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
 
       return {
         messages: messagesToReturn,

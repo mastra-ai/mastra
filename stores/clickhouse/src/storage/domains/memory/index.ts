@@ -930,10 +930,16 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       const paginatedMessages = transformRows<MastraMessageV2>(rows.data);
       messages.push(...paginatedMessages);
 
-      messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      // Use MessageList for proper deduplication and format conversion
+      const list = new MessageList().add(messages, 'memory');
+      let finalMessages = format === 'v2' ? list.get.all.v2() : list.get.all.v1();
+
+      // Always sort messages by createdAt to ensure correct chronological order
+      // This is critical when `include` parameter brings in messages from semantic recall
+      finalMessages = finalMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
       return {
-        messages: format === 'v2' ? messages : (messages as unknown as MastraMessageV1[]),
+        messages: finalMessages,
         total,
         page,
         perPage,

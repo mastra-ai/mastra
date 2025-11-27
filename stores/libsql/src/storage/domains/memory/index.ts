@@ -298,10 +298,14 @@ export class MemoryLibSQL extends MemoryStorage {
 
       messages.push(...(dataResult.rows || []).map((row: any) => this.parseRow(row)));
 
-      const messagesToReturn =
-        format === 'v1'
-          ? new MessageList().add(messages, 'memory').get.all.v1()
-          : new MessageList().add(messages, 'memory').get.all.v2();
+      const list = new MessageList().add(messages, 'memory');
+      let messagesToReturn = format === 'v1' ? list.get.all.v1() : list.get.all.v2();
+
+      // Always sort messages by createdAt to ensure correct chronological order
+      // This is critical when `include` parameter brings in messages from semantic recall
+      messagesToReturn = messagesToReturn.sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
 
       return {
         messages: messagesToReturn,
