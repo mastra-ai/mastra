@@ -1946,11 +1946,25 @@ export class Agent<
               let result: any;
 
               if ((methodType === 'generate' || methodType === 'generateLegacy') && modelVersion === 'v2') {
+                if (!agent.hasOwnMemory() && this.#memory) {
+                  agent.__setMemory(this.#memory);
+                }
+                const subAgentThreadId = randomUUID();
+                const subAgentResourceId = `${slugify(this.id)}-${agentName}`;
+
                 const generateResult = await agent.generate((context as any).prompt, {
                   runtimeContext,
                   tracingContext: innerTracingContext,
+                  ...(resourceId && threadId
+                    ? {
+                        memory: {
+                          resource: subAgentResourceId,
+                          thread: subAgentThreadId,
+                        },
+                      }
+                    : {}),
                 });
-                result = { text: generateResult.text };
+                result = { text: generateResult.text, subAgentThreadId, subAgentResourceId };
               } else if ((methodType === 'generate' || methodType === 'generateLegacy') && modelVersion === 'v1') {
                 const generateResult = await agent.generateLegacy((context as any).prompt, {
                   runtimeContext,
