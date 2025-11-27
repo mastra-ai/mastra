@@ -66,8 +66,14 @@ function getPackageNameFromBundledModuleName(moduleName: string) {
 function validateError(
   err: ValidationError | Error,
   file: OutputChunk,
-  binaryMapData: Record<string, string[]>,
-  logger: IMastraLogger,
+  {
+    binaryMapData,
+    workspaceMap,
+  }: {
+    binaryMapData: Record<string, string[]>;
+    logger: IMastraLogger;
+    workspaceMap: Map<string, WorkspacePackageInfo>;
+  },
 ) {
   let moduleName: string | undefined | null = null;
   let errorConfig: {
@@ -77,7 +83,7 @@ function validateError(
 
   if (err instanceof ValidationError) {
     if (err.type === 'TypeError') {
-      moduleName = basename(file.name);
+      moduleName = getPackageNameFromBundledModuleName(basename(file.name));
       errorConfig = {
         id: 'DEPLOYER_ANALYZE_TYPE_ERROR',
         messagePrefix: `Mastra wasn't able to bundle ${moduleName}, might be an older commonJS module. Please add`,
@@ -112,6 +118,20 @@ function validateError(
     }
   }
 
+  if (moduleName && workspaceMap.has(moduleName)) {
+    throw new MastraError({
+      id: 'DEPLOYER_ANALYZE_ERROR_IN_WORKSPACE',
+      domain: ErrorDomain.DEPLOYER,
+      category: ErrorCategory.USER,
+      details: {
+        // importFile: moduleName,
+        packageName: moduleName,
+      },
+      text: `We found an error in the ${moduleName} workspace package. Pleaes find the offending package and fix the error.
+Error: ${err.stack}`,
+    });
+  }
+
   if (errorConfig && moduleName) {
     throwExternalDependencyError({
       errorId: errorConfig.id,
@@ -125,8 +145,15 @@ function validateError(
 async function validateFile(
   root: string,
   file: OutputChunk,
-  binaryMapData: Record<string, string[]>,
-  logger: IMastraLogger,
+  {
+    binaryMapData,
+    logger,
+    workspaceMap,
+  }: {
+    binaryMapData: Record<string, string[]>;
+    logger: IMastraLogger;
+    workspaceMap: Map<string, WorkspacePackageInfo>;
+  },
 ) {
   try {
     if (!file.isDynamicEntry && file.isEntry) {
@@ -149,7 +176,7 @@ async function validateFile(
     }
 
     if (errorToHandle instanceof Error) {
-      validateError(errorToHandle, file, binaryMapData, logger);
+      validateError(errorToHandle, file, { binaryMapData, logger, workspaceMap });
     }
   }
 }
@@ -213,7 +240,7 @@ async function validateOutput(
     }
 
     // validate if the chunk is actually valid, a failsafe to make sure bundling didn't make any mistakes
-    await validateFile(projectRoot, file, binaryMapData, logger);
+    await validateFile(projectRoot, file, { binaryMapData, logger, workspaceMap });
   }
 
   return result;
