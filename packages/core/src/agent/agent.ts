@@ -334,10 +334,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       : [];
 
     // Get memory output processors (with deduplication)
-    const memory =
-      typeof this.#memory === 'function'
-        ? await this.#memory({ requestContext: requestContext || new RequestContext() })
-        : this.#memory;
+    // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
+    const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
     const memoryProcessors = memory ? memory.getOutputProcessors(configuredProcessors, requestContext) : [];
 
@@ -358,10 +356,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       : [];
 
     // Get memory input processors (with deduplication)
-    const memory =
-      typeof this.#memory === 'function'
-        ? await this.#memory({ requestContext: requestContext || new RequestContext() })
-        : this.#memory;
+    // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
+    const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
     const memoryProcessors = memory ? memory.getInputProcessors(configuredProcessors, requestContext) : [];
 

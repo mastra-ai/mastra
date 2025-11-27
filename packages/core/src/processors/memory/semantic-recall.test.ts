@@ -1466,6 +1466,108 @@ describe('SemanticRecall', () => {
       expect(mockVector.upsert).not.toHaveBeenCalled();
     });
 
+    it('should embed user messages from messageList even when only response messages are passed', async () => {
+      // This test verifies that when processOutputResult is called with only response messages
+      // (as is the case in runOutputProcessors), it still embeds user messages from the messageList
+      const mockStorage = {
+        listMessages: vi.fn(),
+        saveMessages: vi.fn(),
+      };
+
+      const mockEmbedder = {
+        modelId: 'test-model',
+        doEmbed: vi
+          .fn()
+          .mockResolvedValueOnce({ embeddings: [[0.1, 0.2, 0.3]] }) // for assistant message
+          .mockResolvedValueOnce({ embeddings: [[0.4, 0.5, 0.6]] }), // for user message
+      };
+
+      const mockVector = {
+        upsert: vi.fn().mockResolvedValue(undefined),
+        query: vi.fn(),
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        listIndexes: vi.fn().mockResolvedValue(['mastra_memory_test_model']),
+      };
+
+      const processor = new SemanticRecall({
+        storage: mockStorage as any,
+        embedder: mockEmbedder as any,
+        vector: mockVector as any,
+      });
+
+      const userMessage: MastraDBMessage = {
+        id: 'msg-user-1',
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'What is the weather?',
+          parts: [{ type: 'text', text: 'What is the weather?' }],
+        },
+        createdAt: new Date('2024-01-01T10:00:00Z'),
+      };
+
+      const assistantMessage: MastraDBMessage = {
+        id: 'msg-assistant-1',
+        role: 'assistant',
+        content: {
+          format: 2,
+          content: 'The weather is sunny.',
+          parts: [{ type: 'text', text: 'The weather is sunny.' }],
+        },
+        createdAt: new Date('2024-01-01T10:00:01Z'),
+      };
+
+      const runtimeContext = new RequestContext();
+      runtimeContext.set('MastraMemory', {
+        thread: { id: 'thread-123' },
+        resourceId: 'user-456',
+      });
+
+      // Add both messages to messageList, but only pass response message to processOutputResult
+      // This simulates how runOutputProcessors works - it passes messageList.get.response.db()
+      const messageList = new MessageList();
+      messageList.add([userMessage], 'input'); // User message added as input
+      messageList.add([assistantMessage], 'response'); // Assistant added as response
+
+      const result = await processor.processOutputResult({
+        messages: [assistantMessage], // Only response messages passed (like runOutputProcessors does)
+        messageList,
+        abort: vi.fn() as any,
+        runtimeContext,
+      });
+
+      expect(result).toBe(messageList);
+
+      // Should create embeddings for BOTH user and assistant messages
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(2);
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
+        values: ['The weather is sunny.'],
+      });
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
+        values: ['What is the weather?'],
+      });
+
+      // Should upsert embeddings for both messages
+      expect(mockVector.upsert).toHaveBeenCalledWith({
+        vectors: [
+          [0.1, 0.2, 0.3],
+          [0.4, 0.5, 0.6],
+        ],
+        ids: ['msg-assistant-1', 'msg-user-1'],
+        metadata: expect.arrayContaining([
+          expect.objectContaining({
+            message_id: 'msg-assistant-1',
+            role: 'assistant',
+          }),
+          expect.objectContaining({
+            message_id: 'msg-user-1',
+            role: 'user',
+          }),
+        ]),
+        indexName: 'mastra_memory_test_model',
+      });
+    });
+
     it('should handle vector store errors gracefully', async () => {
       const mockStorage = {
         listMessages: vi.fn(),

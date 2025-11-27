@@ -2153,6 +2153,22 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               endedAt: Date.now(),
             };
 
+      await emitter.emit('watch', {
+        type: 'workflow-step-result',
+        payload: {
+          id: step.id,
+          ...stepFailure,
+        },
+      });
+
+      await emitter.emit('watch', {
+        type: 'workflow-step-finish',
+        payload: {
+          id: step.id,
+          metadata: {},
+        },
+      });
+
       stepRes = {
         result: stepFailure,
         executionContext,
