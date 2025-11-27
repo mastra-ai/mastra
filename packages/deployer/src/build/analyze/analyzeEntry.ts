@@ -225,6 +225,7 @@ async function captureDependenciesToOptimize(
  * @param options.logger - Logger instance for debugging
  * @param options.sourcemapEnabled - Whether sourcemaps are enabled
  * @param options.workspaceMap - Map of workspace packages
+ * @param options.shouldCheckTransitiveDependencies - Whether to recursively analyze transitive workspace dependencies (default: false)
  * @returns A promise that resolves to an object containing the analyzed dependencies and generated output
  */
 export async function analyzeEntry(
