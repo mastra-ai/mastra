@@ -3902,7 +3902,10 @@ export class Agent<
         }
       : options;
 
-    const result = await this.stream(messages, normalizedOptions);
+    const result = await this.stream(messages, {
+      ...normalizedOptions,
+      methodType: 'generate',
+    });
     const fullOutput = await result.getFullOutput();
 
     const error = fullOutput.error;
@@ -3934,7 +3937,8 @@ export class Agent<
 
   async stream<OUTPUT extends OutputSchema = undefined, FORMAT extends 'mastra' | 'aisdk' | undefined = undefined>(
     messages: MessageListInput,
-    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT> & DeprecatedOutputOptions<OUTPUT>,
+    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT> &
+      DeprecatedOutputOptions<OUTPUT> & { methodType?: AgentMethodType },
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
     const defaultStreamOptions = await this.getDefaultVNextStreamOptions<OUTPUT>({
       runtimeContext: streamOptions?.runtimeContext,
@@ -4036,7 +4040,7 @@ export class Agent<
     const executeOptions = {
       ...mergedStreamOptions,
       messages,
-      methodType: 'stream',
+      methodType: baseStreamOptions.methodType || 'stream',
     } as InnerAgentExecutionOptions<OUTPUT, FORMAT>;
 
     const result = await this.#execute(executeOptions);
