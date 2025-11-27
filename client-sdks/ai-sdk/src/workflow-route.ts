@@ -21,7 +21,7 @@ export type WorkflowRouteOptions =
 export function workflowRoute({
   path = '/api/workflows/:workflowId/stream',
   workflow,
-  includeTextStreamParts = true,
+  includeTextStreamParts = false,
 }: WorkflowRouteOptions): ReturnType<typeof registerApiRoute> {
   if (!workflow && !path.includes('/:workflowId')) {
     throw new Error('Path must include :workflowId to route to the correct workflow or pass the workflow explicitly');

@@ -118,7 +118,7 @@ export const mastra = new Mastra({
     apiRoutes: [
       workflowRoute({
         path: "/workflow",
-        agent: "weatherAgent",
+        workflow: "weatherWorkflow",
       }),
     ],
   },
@@ -148,11 +148,27 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
 });
 ```
 
-:::tip Agent streaming in workflows
-When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are automatically streamed to the UI in real-time. This provides a seamless streaming experience even when agents are running inside workflow steps.
+To  enable agent text chunks and tool calls streaming when a workflow step pipes an agent's stream to the workflow writer (see [Workflow Streaming](/docs/streaming/workflow-streaming#workflow-using-an-agent)).
 
-Learn more in [Workflow Streaming](/docs/streaming/workflow-streaming#workflow-using-an-agent).
-:::
+Set the `includeTextStreamParts` `workflowRoute` option to `true`
+```typescript title="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core/mastra";
+import { workflowRoute } from "@mastra/ai-sdk";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      workflowRoute({
+        path: "/workflow",
+        workflow: "weatherWorkflow",
+        //This provides a seamless streaming experience even when agents are running inside workflow steps.
+        includeTextStreamParts: true
+      }),
+    ],
+  },
+});
+```
+
 
 ### `networkRoute()`
 
