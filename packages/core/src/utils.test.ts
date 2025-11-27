@@ -1,4 +1,4 @@
-import { jsonSchemaToZod } from 'json-schema-to-zod';
+import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { MastraError } from './error';

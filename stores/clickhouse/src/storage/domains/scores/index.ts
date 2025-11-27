@@ -4,6 +4,7 @@ import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import {
   ScoresStorage,
+  SCORERS_SCHEMA,
   TABLE_SCORERS,
   calculatePagination,
   normalizePerPage,
@@ -25,27 +26,33 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     const scorer = safelyParseJSON(row.scorer);
     const preprocessStepResult = safelyParseJSON(row.preprocessStepResult);
     const analyzeStepResult = safelyParseJSON(row.analyzeStepResult);
-    const metadata = safelyParseJSON(row.metadata);
     const input = safelyParseJSON(row.input);
     const output = safelyParseJSON(row.output);
-    const additionalContext = safelyParseJSON(row.additionalContext);
     const requestContext = safelyParseJSON(row.requestContext);
     const entity = safelyParseJSON(row.entity);
 
-    return {
+    const data: Record<string, any> = {
       ...row,
       scorer,
       preprocessStepResult,
       analyzeStepResult,
-      metadata,
       input,
       output,
-      additionalContext,
       requestContext,
       entity,
       createdAt: new Date(row.createdAt),
       updatedAt: new Date(row.updatedAt),
     };
+
+    const result: Record<string, any> = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (value === '_null_') {
+        continue;
+      }
+      result[key] = value;
+    }
+
+    return result as ScoreRowData;
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
@@ -100,9 +107,17 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     }
 
     try {
-      const record = {
-        ...parsedScore,
-      };
+      // Build record from schema columns, converting undefined to null for ClickHouse
+      const record: Record<string, unknown> = {};
+      for (const key of Object.keys(SCORERS_SCHEMA)) {
+        const value = parsedScore[key as keyof typeof parsedScore];
+        if (key === 'createdAt' || key === 'updatedAt') {
+          record[key] = new Date().toISOString();
+          continue;
+        }
+        record[key] = value === undefined || value === null ? '_null_' : value;
+      }
+
       await this.client.insert({
         table: TABLE_SCORERS,
         values: [record],
