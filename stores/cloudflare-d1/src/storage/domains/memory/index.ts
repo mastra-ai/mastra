@@ -873,7 +873,7 @@ export class MemoryStorageD1 extends MemoryStorage {
         total,
         page,
         perPage,
-        hasMore: selectBy?.last ? false : page * perPage + messages.length < total,
+        hasMore: selectBy?.last ? false : page * perPage + processedMessages.length < total,
       };
     } catch (error) {
       const mastraError = new MastraError(
