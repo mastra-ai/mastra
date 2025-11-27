@@ -12,7 +12,13 @@ import { InMemoryStore } from '../storage';
 import { createTool } from '../tools';
 import type { ToolAction } from '../tools';
 import { MastraMemory } from './memory';
-import type { StorageThreadType, MemoryConfig, MessageDeleteInput, WorkingMemoryTemplate } from './types';
+import type {
+  StorageThreadType,
+  MemoryConfig,
+  MessageDeleteInput,
+  WorkingMemoryTemplate,
+  WorkingMemory,
+} from './types';
 
 const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
 
@@ -20,17 +26,21 @@ export class MockMemory extends MastraMemory {
   constructor({
     storage,
     enableWorkingMemory = false,
+    workingMemoryTemplate,
     enableMessageHistory = true,
   }: {
     storage?: InMemoryStore;
     enableWorkingMemory?: boolean;
     enableMessageHistory?: boolean;
+    workingMemoryTemplate?: string;
   } = {}) {
     super({
       name: 'mock',
       storage: storage || new InMemoryStore(),
       options: {
-        workingMemory: enableWorkingMemory ? { enabled: true } : undefined,
+        workingMemory: enableWorkingMemory
+          ? ({ enabled: true, template: workingMemoryTemplate } as WorkingMemory)
+          : undefined,
         lastMessages: enableMessageHistory ? 10 : undefined,
       },
     });

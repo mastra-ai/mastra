@@ -243,27 +243,26 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       }
 
       case 'reasoning-end': {
-        // Use the accumulated reasoning deltas from runState
-        if (runState.state.reasoningDeltas.length > 0) {
-          const message: MastraDBMessage = {
-            id: messageId,
-            role: 'assistant',
-            content: {
-              format: 2,
-              parts: [
-                {
-                  type: 'reasoning' as const,
-                  reasoning: '',
-                  details: [{ type: 'text', text: runState.state.reasoningDeltas.join('') }],
-                  providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
-                },
-              ],
-            },
-            createdAt: new Date(),
-          };
+        // Always store reasoning, even if empty - OpenAI requires item_reference for tool calls
+        // See: https://github.com/mastra-ai/mastra/issues/9005
+        const message: MastraDBMessage = {
+          id: messageId,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'reasoning' as const,
+                reasoning: '',
+                details: [{ type: 'text', text: runState.state.reasoningDeltas.join('') }],
+                providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
+              },
+            ],
+          },
+          createdAt: new Date(),
+        };
 
-          messageList.add(message, 'response');
-        }
+        messageList.add(message, 'response');
 
         // Reset reasoning state
         runState.setState({

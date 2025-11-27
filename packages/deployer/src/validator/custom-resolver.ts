@@ -3,6 +3,7 @@ import type { ResolveHookContext } from 'node:module';
 import { builtinModules } from 'node:module';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { isDependencyPartOfPackage } from '../build/utils';
 
 const cache = new Map<string, Record<string, string>>();
 
@@ -52,12 +53,16 @@ async function getParentPath(specifier: string, url: string): Promise<string | n
   }
 
   const importers = cache.get(url);
-  if (!importers || !importers[specifier]) {
+  if (!importers) {
     return null;
   }
 
-  const specifierParent = importers[specifier];
+  const matchedPackage = Object.keys(importers).find(external => isDependencyPartOfPackage(specifier, external));
+  if (!matchedPackage) {
+    return null;
+  }
 
+  const specifierParent = importers[matchedPackage]!;
   return pathToFileURL(specifierParent).toString();
 }
 
