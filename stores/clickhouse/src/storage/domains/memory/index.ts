@@ -930,10 +930,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       const paginatedMessages = transformRows<MastraMessageV2>(rows.data);
       messages.push(...paginatedMessages);
 
-      // For last N functionality, sort messages chronologically
-      if (selectBy?.last) {
-        messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-      }
+      messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
       return {
         messages: format === 'v2' ? messages : (messages as unknown as MastraMessageV1[]),
