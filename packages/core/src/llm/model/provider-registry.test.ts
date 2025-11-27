@@ -709,8 +709,6 @@ describe('Corrupted JSON recovery', () => {
       return originalExistsSync(filePath);
     });
 
-    // Mock fs.unlinkSync to track deletion
-    let deletedPath: string | null = null;
     const unlinkSyncSpy = vi.spyOn(fs, 'unlinkSync').mockImplementation(filePath => {
       if (typeof filePath === 'string') {
         deletedPath = filePath;
