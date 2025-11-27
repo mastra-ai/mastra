@@ -254,7 +254,7 @@ export class InngestWorkflow<
           initialState,
           emitter,
           retryConfig: this.retryConfig,
-          requestContext: new RequestContext(), // TODO
+          requestContext: new RequestContext(Object.entries(event.data.requestContext ?? {})),
           resume,
           timeTravel,
           format,

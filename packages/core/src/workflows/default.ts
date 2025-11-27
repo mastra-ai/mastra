@@ -456,6 +456,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     let lastOutput: any;
     let lastState: Record<string, any> = timeTravel?.state ?? restart?.state ?? initialState ?? {};
     let lastExecutionContext: ExecutionContext | undefined;
+    let currentRequestContext = params.requestContext;
     for (let i = startIdx; i < steps.length; i++) {
       const entry = steps[i]!;
 
@@ -490,7 +491,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           abortController: params.abortController,
           emitter: params.emitter,
-          requestContext: params.requestContext,
+          requestContext: currentRequestContext,
           writableStream: params.writableStream,
           disableScorers,
         });
@@ -498,6 +499,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         // Apply mutable context changes from entry execution
         this.applyMutableContext(executionContext, lastOutput.mutableContext);
         lastState = lastOutput.mutableContext.state;
+        // Update requestContext from step result (important for Inngest memoization)
+        if (lastOutput.requestContext) {
+          currentRequestContext = this.deserializeRequestContext(lastOutput.requestContext);
+        }
 
         // if step result is not success, stop and return
         if (lastOutput.result.status !== 'success') {
@@ -516,7 +521,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             workflowStatus: result.status,
             result: result.result,
             error: result.error,
-            requestContext: params.requestContext,
+            requestContext: currentRequestContext,
           });
 
           if (result.error) {
@@ -563,7 +568,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           workflowStatus: result.status,
           result: result.result,
           error: result.error,
-          requestContext: params.requestContext,
+          requestContext: currentRequestContext,
         });
 
         workflowSpan?.error({
@@ -589,7 +594,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       workflowStatus: result.status,
       result: result.result,
       error: result.error,
-      requestContext: params.requestContext,
+      requestContext: currentRequestContext,
     });
 
     workflowSpan?.end({
@@ -2277,6 +2282,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }): Promise<EntryExecutionResult> {
     const prevOutput = this.getStepOutput(stepResults, prevStep);
     let execResults: any;
+    let entryRequestContext: Record<string, any> | undefined;
 
     if (entry.type === 'step') {
       const { step } = entry;
@@ -2304,7 +2310,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       execResults = stepExecResult.result;
       this.applyMutableContext(executionContext, stepExecResult.mutableContext);
       Object.assign(stepResults, stepExecResult.stepResults);
-      // Note: requestContext updates are handled at the execute() loop level
+      entryRequestContext = stepExecResult.requestContext;
     } else if (resume?.resumePath?.length && entry.type === 'parallel') {
       const idx = resume.resumePath.shift();
       const resumedStepResult = await this.executeEntry({
@@ -2678,7 +2684,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       result: execResults,
       stepResults,
       mutableContext: this.buildMutableContext(executionContext),
-      requestContext: this.serializeRequestContext(requestContext),
+      requestContext: entryRequestContext ?? this.serializeRequestContext(requestContext),
     };
   }
 }

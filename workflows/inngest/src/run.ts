@@ -144,6 +144,7 @@ export class InngestRun<
     outputOptions,
     tracingOptions,
     format,
+    requestContext,
   }: {
     inputData?: z.infer<TInput>;
     requestContext?: RequestContext;
@@ -187,6 +188,7 @@ export class InngestRun<
         outputOptions,
         tracingOptions,
         format,
+        requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
       },
     });
 
@@ -255,6 +257,11 @@ export class InngestRun<
 
     const resumeDataToUse = await this._validateResumeData(params.resumeData, suspendedStep);
 
+    // Merge persisted requestContext from snapshot with any new values from params
+    const persistedRequestContext = (snapshot as any)?.requestContext ?? {};
+    const newRequestContext = params.requestContext ? Object.fromEntries(params.requestContext.entries()) : {};
+    const mergedRequestContext = { ...persistedRequestContext, ...newRequestContext };
+
     const eventOutput = await this.inngest.send({
       name: `workflow.${this.workflowId}`,
       data: {
@@ -269,6 +276,7 @@ export class InngestRun<
           resumePayload: resumeDataToUse,
           resumePath: steps?.[0] ? (snapshot?.suspendedPaths?.[steps?.[0]] as any) : undefined,
         },
+        requestContext: mergedRequestContext,
       },
     });
 
@@ -408,6 +416,7 @@ export class InngestRun<
         timeTravel: timeTravelData,
         tracingOptions: params.tracingOptions,
         outputOptions: params.outputOptions,
+        requestContext: params.requestContext ? Object.fromEntries(params.requestContext.entries()) : {},
       },
     });
 

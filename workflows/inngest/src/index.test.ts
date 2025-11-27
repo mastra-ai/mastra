@@ -8161,8 +8161,8 @@ describe('MastraInngestWorkflow', () => {
     });
   });
 
-  // TODO: can we support this on inngest?
-  describe.skip('Dependency Injection', () => {
+  // Testing requestContext persistence across Inngest memoization
+  describe('Dependency Injection', () => {
     it('should inject requestContext dependencies into steps during run', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
@@ -8184,7 +8184,12 @@ describe('MastraInngestWorkflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
-      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        options: { validateInputs: false },
+      });
       workflow.then(step).commit();
 
       const mastra = new Mastra({
@@ -8334,6 +8339,7 @@ describe('MastraInngestWorkflow', () => {
         id: 'increment-workflow',
         inputSchema: z.object({ value: z.number() }),
         outputSchema: z.object({ value: z.number() }),
+        options: { validateInputs: false },
       })
         .then(incrementStep)
         .then(resumeStep)
@@ -8351,11 +8357,30 @@ describe('MastraInngestWorkflow', () => {
         )
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
-        storage: testStorage,
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
         workflows: { incrementWorkflow },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
       });
+
+      const app = await createHonoServer(mastra);
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
 
       const run = await incrementWorkflow.createRun();
       const result = await run.start({ inputData: { value: 0 } });
@@ -8365,6 +8390,8 @@ describe('MastraInngestWorkflow', () => {
         resumeData: { value: 21 },
         step: ['resume'],
       });
+
+      srv.close();
 
       expect(resumeResult.status).toBe('success');
     });
@@ -8421,6 +8448,7 @@ describe('MastraInngestWorkflow', () => {
         id: 'increment-workflow',
         inputSchema: z.object({ value: z.number() }),
         outputSchema: z.object({ value: z.number() }),
+        options: { validateInputs: false },
       })
         .then(incrementStep)
         .then(resumeStep)
@@ -8438,11 +8466,30 @@ describe('MastraInngestWorkflow', () => {
         )
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
-        storage: testStorage,
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
         workflows: { incrementWorkflow },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
       });
+
+      const app = await createHonoServer(mastra);
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
 
       const run = await incrementWorkflow.createRun();
       const result = await run.start({ inputData: { value: 0 } });
@@ -8452,6 +8499,8 @@ describe('MastraInngestWorkflow', () => {
         resumeData: { value: 21 },
         step: ['resume'],
       });
+
+      srv.close();
 
       expect(resumeResult.status).toBe('success');
     });
