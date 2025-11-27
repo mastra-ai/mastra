@@ -1567,8 +1567,8 @@ describe('Chroma Metadata Filtering', () => {
 
   createVectorTestSuite({
     vector: chromaVector,
+    dimension: 4,
     createIndex: async (indexName: string) => {
-      // Using dimension 4 as required by the metadata filtering test vectors
       await chromaVector.createIndex({ indexName, dimension: 4 });
     },
     deleteIndex: async (indexName: string) => {
@@ -1590,7 +1590,6 @@ describe.skipIf(!process.env.CHROMA_API_KEY)('ChromaCloudVector Fork Tests', () 
 
   beforeEach(async () => {
     cloudVector = new ChromaVector({
-      id: 'chroma-cloud-vector-fork-test',
       apiKey: process.env.CHROMA_API_KEY,
     });
 

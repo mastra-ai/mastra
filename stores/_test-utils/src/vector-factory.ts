@@ -10,6 +10,8 @@ export interface VectorTestConfig {
   waitForIndexing?: (indexName: string) => Promise<void>;
   connect?: () => Promise<void>;
   disconnect?: () => Promise<void>;
+  /** Vector dimension used by the index. Defaults to 1536. */
+  dimension?: number;
 }
 
 export function createVectorTestSuite(config: VectorTestConfig) {
