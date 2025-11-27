@@ -42,11 +42,16 @@ export const GET_SPEAKERS_ROUTE = createRoute({
 
       const voice = await agent.getVoice({ requestContext });
 
-      if (!voice) {
-        return [];
-      }
+      const speakers = await Promise.resolve()
+        .then(() => voice.getSpeakers())
+        .catch(err => {
+          if (err instanceof MastraError) {
+            // No voice provider configured, return empty array
+            return [];
+          }
+          throw err;
+        });
 
-      const speakers = await voice.getSpeakers();
       return speakers;
     } catch (error) {
       return handleError(error, 'Error getting speakers');
@@ -212,11 +217,16 @@ export const GET_LISTENER_ROUTE = createRoute({
 
       const voice = await agent.getVoice({ requestContext });
 
-      if (!voice) {
-        return { enabled: false };
-      }
+      const listeners = await Promise.resolve()
+        .then(() => voice.getListener())
+        .catch(err => {
+          if (err instanceof MastraError) {
+            // No voice provider configured
+            return { enabled: false };
+          }
+          throw err;
+        });
 
-      const listeners = await voice.getListener();
       return listeners;
     } catch (error) {
       return handleError(error, 'Error getting listeners');
