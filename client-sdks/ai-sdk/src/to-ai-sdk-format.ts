@@ -133,7 +133,7 @@ export function toAISdkFormat(
   const from = options?.from;
 
   if (from === 'workflow') {
-    const includeTextStreamParts = options?.includeTextStreamParts ?? true;
+    const includeTextStreamParts = options?.includeTextStreamParts ?? false;
 
     return (stream as ReadableStream<ChunkType>).pipeThrough(
       WorkflowStreamToAISDKTransformer({ includeTextStreamParts }),
