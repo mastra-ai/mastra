@@ -15,11 +15,19 @@ import { selectFields } from '../utils';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
-import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step, SuspendOptions } from './step';
+import type {
+  ConditionFunction,
+  ExecuteFunction,
+  ExecuteFunctionParams,
+  LoopConditionFunction,
+  Step,
+  SuspendOptions,
+} from './step';
 import { getStepResult } from './step';
 import type {
   DefaultEngineType,
   Emitter,
+  ExecutionContext,
   RestartExecutionParams,
   SerializedStepFlowEntry,
   StepFailure,
@@ -38,28 +46,8 @@ import {
   validateStepSuspendData,
 } from './utils';
 
-export type ExecutionContext = {
-  workflowId: string;
-  runId: string;
-  executionPath: number[];
-  activeStepsPath: Record<string, number[]>;
-  foreachIndex?: number;
-  suspendedPaths: Record<string, number[]>;
-  resumeLabels: Record<
-    string,
-    {
-      stepId: string;
-      foreachIndex?: number;
-    }
-  >;
-  waitingPaths?: Record<string, number[]>;
-  retryConfig: {
-    attempts: number;
-    delay: number;
-  };
-  format?: 'legacy' | 'vnext' | undefined;
-  state: Record<string, any>;
-};
+// Re-export ExecutionContext for backwards compatibility
+export type { ExecutionContext } from './types';
 
 /**
  * Default implementation of the ExecutionEngine
@@ -119,6 +107,185 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     return retryCount;
   }
 
+  // =============================================================================
+  // Execution Engine Hooks
+  // These methods can be overridden by subclasses to customize execution behavior
+  // =============================================================================
+
+  /**
+   * Check if a step is a nested workflow that requires special handling.
+   * Override this in subclasses to detect platform-specific workflow types.
+   *
+   * @param _step - The step to check
+   * @returns true if the step is a nested workflow, false otherwise
+   */
+  protected isNestedWorkflowStep(_step: Step<any, any, any>): boolean {
+    return false;
+  }
+
+  /**
+   * Execute the sleep duration. Override to use platform-specific sleep primitives.
+   *
+   * @param duration - The duration to sleep in milliseconds
+   * @param _sleepId - Unique identifier for this sleep operation
+   * @param _workflowId - The workflow ID (for constructing platform-specific IDs)
+   */
+  protected async executeSleepDuration(duration: number, _sleepId: string, _workflowId: string): Promise<void> {
+    await new Promise(resolve => setTimeout(resolve, duration < 0 ? 0 : duration));
+  }
+
+  /**
+   * Execute sleep until a specific date. Override to use platform-specific sleep primitives.
+   *
+   * @param date - The date to sleep until
+   * @param _sleepUntilId - Unique identifier for this sleep operation
+   * @param _workflowId - The workflow ID (for constructing platform-specific IDs)
+   */
+  protected async executeSleepUntilDate(date: Date, _sleepUntilId: string, _workflowId: string): Promise<void> {
+    const time = date.getTime() - Date.now();
+    await new Promise(resolve => setTimeout(resolve, time < 0 ? 0 : time));
+  }
+
+  /**
+   * Wrap a persistence operation. Override to add platform-specific durability.
+   *
+   * @param _operationId - Unique identifier for this persistence operation
+   * @param persistFn - The function that performs the actual persistence
+   */
+  protected async wrapPersistence(_operationId: string, persistFn: () => Promise<void>): Promise<void> {
+    await persistFn();
+  }
+
+  /**
+   * Wrap a durable operation (like dynamic sleep function evaluation).
+   * Override to add platform-specific durability.
+   *
+   * @param _operationId - Unique identifier for this operation
+   * @param operationFn - The function to execute
+   * @returns The result of the operation
+   */
+  protected async wrapDurableOperation<T>(_operationId: string, operationFn: () => Promise<T>): Promise<T> {
+    return operationFn();
+  }
+
+  /**
+   * Get the engine context to pass to step execution functions.
+   * Override to provide platform-specific engine primitives (e.g., Inngest step).
+   *
+   * @returns An object containing engine-specific context
+   */
+  protected getEngineContext(): Record<string, any> {
+    return {};
+  }
+
+  /**
+   * Evaluate a single condition for conditional execution.
+   * Override to add platform-specific durability (e.g., Inngest step.run wrapper).
+   *
+   * @param conditionFn - The condition function to evaluate
+   * @param index - The index of this condition
+   * @param context - The execution context for the condition
+   * @param operationId - Unique identifier for this operation
+   * @returns The index if condition is truthy, null otherwise
+   */
+  protected async evaluateCondition(
+    conditionFn: ConditionFunction<any, any, any, any, DefaultEngineType>,
+    index: number,
+    context: ExecuteFunctionParams<any, any, any, any, DefaultEngineType>,
+    _operationId: string,
+  ): Promise<number | null> {
+    const result = await conditionFn(context);
+    return result ? index : null;
+  }
+
+  /**
+   * Handle step execution start - emit events and return start timestamp.
+   * Override to add platform-specific durability (e.g., Inngest step.run wrapper).
+   *
+   * @param params - Parameters for step start
+   * @returns The start timestamp (used by some engines like Inngest)
+   */
+  protected async onStepExecutionStart(params: {
+    step: Step<string, any, any>;
+    inputData: any;
+    emitter: Emitter;
+    executionContext: ExecutionContext;
+    stepCallId: string;
+    stepInfo: Record<string, any>;
+    operationId: string;
+    skipEmits?: boolean;
+  }): Promise<number> {
+    const startedAt = Date.now();
+    if (!params.skipEmits) {
+      await params.emitter.emit('watch', {
+        type: 'workflow-step-start',
+        payload: {
+          id: params.step.id,
+          stepCallId: params.stepCallId,
+          ...params.stepInfo,
+        },
+      });
+    }
+    return startedAt;
+  }
+
+  /**
+   * Execute a nested workflow step. Override to use platform-specific workflow invocation.
+   * This hook is called when isNestedWorkflowStep returns true.
+   *
+   * Default behavior: returns null to indicate the base executeStep should handle it normally.
+   * Inngest overrides this to use inngestStep.invoke() for nested workflows.
+   *
+   * @param params - Parameters for nested workflow execution
+   * @returns StepResult if handled, null if should use default execution
+   */
+  protected async executeWorkflowStep(_params: {
+    step: Step<string, any, any>;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
+    executionContext: ExecutionContext;
+    resume?: {
+      steps: string[];
+      resumePayload: any;
+      runId?: string;
+    };
+    timeTravel?: TimeTravelExecutionParams;
+    prevOutput: any;
+    inputData: any;
+    emitter: Emitter;
+    startedAt: number;
+    abortController: AbortController;
+    requestContext: RequestContext;
+    tracingContext: TracingContext;
+    writableStream?: WritableStream<ChunkType>;
+    stepSpan?: Span<SpanType.WORKFLOW_STEP>;
+  }): Promise<StepResult<any, any, any, any> | null> {
+    // Default: return null to use standard execution
+    // Subclasses (like Inngest) override to use platform-specific invocation
+    return null;
+  }
+
+  /**
+   * Whether to include input in the workflow result.
+   * Override to false in subclasses that don't need input in the result.
+   */
+  protected get includeInputInResult(): boolean {
+    return true;
+  }
+
+  /**
+   * Format an error for the workflow result.
+   * Override to customize error formatting (e.g., include stack traces).
+   */
+  protected formatResultError(error: Error | string | undefined, lastOutput: StepResult<any, any, any, any>): string {
+    const outputError = (lastOutput as StepFailure<any, any, any, any>)?.error;
+    const errorSource = error || outputError;
+    const errorInstance = getErrorFromUnknown(errorSource, {
+      includeStack: false,
+      fallbackMessage: 'Unknown workflow error',
+    });
+    return typeof errorSource === 'string' ? errorInstance.message : `Error: ${errorInstance.message}`;
+  }
+
   protected async fmtReturnValue<TOutput>(
     emitter: Emitter,
     stepResults: Record<string, StepResult<any, any, any, any>>,
@@ -128,18 +295,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const base: any = {
       status: lastOutput.status,
       steps: stepResults,
-      input: stepResults.input,
+      ...(this.includeInputInResult && { input: stepResults.input }),
     };
 
     if (lastOutput.status === 'success') {
       base.result = lastOutput.output;
     } else if (lastOutput.status === 'failed') {
-      const errorSource = error || lastOutput.error;
-      const errorInstance = getErrorFromUnknown(errorSource, {
-        includeStack: false,
-        fallbackMessage: 'Unknown workflow error',
-      });
-      base.error = typeof errorSource === 'string' ? errorInstance.message : `Error: ${errorInstance.message}`;
+      base.error = this.formatResultError(error, lastOutput);
     } else if (lastOutput.status === 'suspended') {
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {
@@ -467,41 +629,43 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     if (fn) {
       const stepCallId = randomUUID();
-      duration = await fn({
-        runId,
-        workflowId,
-        mastra: this.mastra!,
-        requestContext,
-        inputData: prevOutput,
-        state: executionContext.state,
-        setState: (state: any) => {
-          executionContext.state = state;
-        },
-        retryCount: -1,
-        tracingContext: {
-          currentSpan: sleepSpan,
-        },
-        getInitData: () => stepResults?.input as any,
-        getStepResult: getStepResult.bind(this, stepResults),
-        // TODO: this function shouldn't have suspend probably?
-        suspend: async (_suspendPayload: any): Promise<any> => {},
-        bail: () => {},
-        abort: () => {
-          abortController?.abort();
-        },
-        [EMITTER_SYMBOL]: emitter,
-        [STREAM_FORMAT_SYMBOL]: executionContext.format,
-        engine: {},
-        abortSignal: abortController?.signal,
-        writer: new ToolStream(
-          {
-            prefix: 'workflow-step',
-            callId: stepCallId,
-            name: 'sleep',
-            runId,
+      duration = await this.wrapDurableOperation(`workflow.${workflowId}.sleep.${entry.id}`, async () => {
+        return fn({
+          runId,
+          workflowId,
+          mastra: this.mastra!,
+          requestContext,
+          inputData: prevOutput,
+          state: executionContext.state,
+          setState: (state: any) => {
+            executionContext.state = state;
           },
-          writableStream,
-        ),
+          retryCount: -1,
+          tracingContext: {
+            currentSpan: sleepSpan,
+          },
+          getInitData: () => stepResults?.input as any,
+          getStepResult: getStepResult.bind(this, stepResults),
+          // TODO: this function shouldn't have suspend probably?
+          suspend: async (_suspendPayload: any): Promise<any> => {},
+          bail: () => {},
+          abort: () => {
+            abortController?.abort();
+          },
+          [EMITTER_SYMBOL]: emitter,
+          [STREAM_FORMAT_SYMBOL]: executionContext.format,
+          engine: this.getEngineContext(),
+          abortSignal: abortController?.signal,
+          writer: new ToolStream(
+            {
+              prefix: 'workflow-step',
+              callId: stepCallId,
+              name: 'sleep',
+              runId,
+            },
+            writableStream,
+          ),
+        });
       });
 
       // Update sleep span with dynamic duration
@@ -513,10 +677,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     try {
-      await new Promise(resolve => setTimeout(resolve, !duration || duration < 0 ? 0 : duration));
+      await this.executeSleepDuration(!duration || duration < 0 ? 0 : duration, entry.id, workflowId);
       sleepSpan?.end();
     } catch (e) {
       sleepSpan?.error({ error: e as Error });
+      throw e;
     }
   }
 
@@ -573,42 +738,46 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     if (fn) {
       const stepCallId = randomUUID();
-      date = await fn({
-        runId,
-        workflowId,
-        mastra: this.mastra!,
-        requestContext,
-        inputData: prevOutput,
-        state: executionContext.state,
-        setState: (state: any) => {
-          executionContext.state = state;
-        },
-        retryCount: -1,
-        tracingContext: {
-          currentSpan: sleepUntilSpan,
-        },
-        getInitData: () => stepResults?.input as any,
-        getStepResult: getStepResult.bind(this, stepResults),
-        // TODO: this function shouldn't have suspend probably?
-        suspend: async (_suspendPayload: any): Promise<any> => {},
-        bail: () => {},
-        abort: () => {
-          abortController?.abort();
-        },
-        [EMITTER_SYMBOL]: emitter,
-        [STREAM_FORMAT_SYMBOL]: executionContext.format,
-        engine: {},
-        abortSignal: abortController?.signal,
-        writer: new ToolStream(
-          {
-            prefix: 'workflow-step',
-            callId: stepCallId,
-            name: 'sleepUntil',
-            runId,
+      const dateResult = await this.wrapDurableOperation(`workflow.${workflowId}.sleepUntil.${entry.id}`, async () => {
+        return fn({
+          runId,
+          workflowId,
+          mastra: this.mastra!,
+          requestContext,
+          inputData: prevOutput,
+          state: executionContext.state,
+          setState: (state: any) => {
+            executionContext.state = state;
           },
-          writableStream,
-        ),
+          retryCount: -1,
+          tracingContext: {
+            currentSpan: sleepUntilSpan,
+          },
+          getInitData: () => stepResults?.input as any,
+          getStepResult: getStepResult.bind(this, stepResults),
+          // TODO: this function shouldn't have suspend probably?
+          suspend: async (_suspendPayload: any): Promise<any> => {},
+          bail: () => {},
+          abort: () => {
+            abortController?.abort();
+          },
+          [EMITTER_SYMBOL]: emitter,
+          [STREAM_FORMAT_SYMBOL]: executionContext.format,
+          engine: this.getEngineContext(),
+          abortSignal: abortController?.signal,
+          writer: new ToolStream(
+            {
+              prefix: 'workflow-step',
+              callId: stepCallId,
+              name: 'sleepUntil',
+              runId,
+            },
+            writableStream,
+          ),
+        });
       });
+      // Ensure date is a Date object (may be serialized as string by durable execution engines)
+      date = dateResult instanceof Date ? dateResult : new Date(dateResult);
 
       // Update sleep until span with dynamic duration
       const time = !date ? 0 : date.getTime() - Date.now();
@@ -619,13 +788,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
     }
 
-    const time = !date ? 0 : date?.getTime() - Date.now();
+    if (!date) {
+      sleepUntilSpan?.end();
+      return;
+    }
 
     try {
-      await new Promise(resolve => setTimeout(resolve, time < 0 ? 0 : time));
+      await this.executeSleepUntilDate(date, entry.id, workflowId);
       sleepUntilSpan?.end();
     } catch (e) {
       sleepUntilSpan?.error({ error: e as Error });
+      throw e;
     }
   }
 
@@ -725,16 +898,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       tracingPolicy: this.options?.tracingPolicy,
     });
 
-    if (!skipEmits) {
-      await emitter.emit('watch', {
-        type: 'workflow-step-start',
-        payload: {
-          id: step.id,
-          stepCallId,
-          ...stepInfo,
-        },
-      });
-    }
+    const operationId = `workflow.${workflowId}.run.${runId}.step.${step.id}.running_ev`;
+    await this.onStepExecutionStart({
+      step,
+      inputData,
+      emitter,
+      executionContext,
+      stepCallId,
+      stepInfo,
+      operationId,
+      skipEmits,
+    });
 
     await this.persistStepUpdate({
       workflowId,
@@ -749,6 +923,31 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       workflowStatus: 'running',
       requestContext,
     });
+
+    // Check if this is a nested workflow that requires special handling
+    if (this.isNestedWorkflowStep(step)) {
+      const workflowResult = await this.executeWorkflowStep({
+        step,
+        stepResults,
+        executionContext,
+        resume,
+        timeTravel,
+        prevOutput,
+        inputData,
+        emitter,
+        startedAt: startTime ?? Date.now(),
+        abortController,
+        requestContext,
+        tracingContext,
+        writableStream,
+        stepSpan,
+      });
+
+      // If executeWorkflowStep returns a result, use it; otherwise continue with default execution
+      if (workflowResult !== null) {
+        return { ...stepInfo, ...workflowResult };
+      }
+    }
 
     const runStep = async (data: any) => {
       // Wrap data with a Proxy to show deprecation warning for runCount
@@ -858,7 +1057,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               : undefined,
           [EMITTER_SYMBOL]: emitter,
           [STREAM_FORMAT_SYMBOL]: executionContext.format,
-          engine: {},
+          engine: this.getEngineContext(),
           abortSignal: abortController?.signal,
           writer: new ToolStream(
             {
@@ -1283,61 +1482,62 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             tracingPolicy: this.options?.tracingPolicy,
           });
 
-          try {
-            const result = await cond(
-              createDeprecationProxy(
+          const operationId = `workflow.${workflowId}.conditional.${index}`;
+          const context = createDeprecationProxy(
+            {
+              runId,
+              workflowId,
+              mastra: this.mastra!,
+              requestContext,
+              inputData: prevOutput,
+              state: executionContext.state,
+              setState: (state: any) => {
+                executionContext.state = state;
+              },
+              retryCount: -1,
+              tracingContext: {
+                currentSpan: evalSpan,
+              },
+              getInitData: () => stepResults?.input as any,
+              getStepResult: getStepResult.bind(this, stepResults),
+              // TODO: this function shouldn't have suspend probably?
+              suspend: async (_suspendPayload: any): Promise<any> => {},
+              bail: () => {},
+              abort: () => {
+                abortController?.abort();
+              },
+              [EMITTER_SYMBOL]: emitter,
+              [STREAM_FORMAT_SYMBOL]: executionContext.format,
+              engine: this.getEngineContext(),
+              abortSignal: abortController?.signal,
+              writer: new ToolStream(
                 {
+                  prefix: 'workflow-step',
+                  callId: randomUUID(),
+                  name: 'conditional',
                   runId,
-                  workflowId,
-                  mastra: this.mastra!,
-                  requestContext,
-                  inputData: prevOutput,
-                  state: executionContext.state,
-                  setState: (state: any) => {
-                    executionContext.state = state;
-                  },
-                  retryCount: -1,
-                  tracingContext: {
-                    currentSpan: evalSpan,
-                  },
-                  getInitData: () => stepResults?.input as any,
-                  getStepResult: getStepResult.bind(this, stepResults),
-                  // TODO: this function shouldn't have suspend probably?
-                  suspend: async (_suspendPayload: any): Promise<any> => {},
-                  bail: () => {},
-                  abort: () => {
-                    abortController?.abort();
-                  },
-                  [EMITTER_SYMBOL]: emitter,
-                  [STREAM_FORMAT_SYMBOL]: executionContext.format,
-                  engine: {},
-                  abortSignal: abortController?.signal,
-                  writer: new ToolStream(
-                    {
-                      prefix: 'workflow-step',
-                      callId: randomUUID(),
-                      name: 'conditional',
-                      runId,
-                    },
-                    writableStream,
-                  ),
                 },
-                {
-                  paramName: 'runCount',
-                  deprecationMessage: runCountDeprecationMessage,
-                  logger: this.logger,
-                },
+                writableStream,
               ),
-            );
+            },
+            {
+              paramName: 'runCount',
+              deprecationMessage: runCountDeprecationMessage,
+              logger: this.logger,
+            },
+          );
+
+          try {
+            const result = await this.evaluateCondition(cond, index, context, operationId);
 
             evalSpan?.end({
-              output: result,
+              output: result !== null,
               attributes: {
-                result: !!result,
+                result: result !== null,
               },
             });
 
-            return result ? index : null;
+            return result;
           } catch (e: unknown) {
             const error = this.preprocessExecutionError(
               e,
@@ -1611,7 +1811,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             },
             [EMITTER_SYMBOL]: emitter,
             [STREAM_FORMAT_SYMBOL]: executionContext.format,
-            engine: {},
+            engine: this.getEngineContext(),
             abortSignal: abortController?.signal,
             writer: new ToolStream(
               {
@@ -1917,38 +2117,42 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     error?: string | Error;
     requestContext: RequestContext;
   }) {
-    const shouldPersistSnapshot = this.options?.shouldPersistSnapshot?.({ stepResults, workflowStatus });
+    const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate`;
 
-    if (!shouldPersistSnapshot) {
-      return;
-    }
+    await this.wrapPersistence(operationId, async () => {
+      const shouldPersistSnapshot = this.options?.shouldPersistSnapshot?.({ stepResults, workflowStatus });
 
-    const requestContextObj: Record<string, any> = {};
-    requestContext.forEach((value, key) => {
-      requestContextObj[key] = value;
-    });
+      if (!shouldPersistSnapshot) {
+        return;
+      }
 
-    await this.mastra?.getStorage()?.persistWorkflowSnapshot({
-      workflowName: workflowId,
-      runId,
-      resourceId,
-      snapshot: {
+      const requestContextObj: Record<string, any> = {};
+      requestContext.forEach((value, key) => {
+        requestContextObj[key] = value;
+      });
+
+      await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+        workflowName: workflowId,
         runId,
-        status: workflowStatus,
-        value: executionContext.state,
-        context: stepResults as any,
-        activePaths: executionContext.executionPath,
-        activeStepsPath: executionContext.activeStepsPath,
-        serializedStepGraph,
-        suspendedPaths: executionContext.suspendedPaths,
-        waitingPaths: {},
-        resumeLabels: executionContext.resumeLabels,
-        result,
-        error,
-        requestContext: requestContextObj,
-        // @ts-ignore
-        timestamp: Date.now(),
-      },
+        resourceId,
+        snapshot: {
+          runId,
+          status: workflowStatus,
+          value: executionContext.state,
+          context: stepResults as any,
+          activePaths: executionContext.executionPath,
+          activeStepsPath: executionContext.activeStepsPath,
+          serializedStepGraph,
+          suspendedPaths: executionContext.suspendedPaths,
+          waitingPaths: {},
+          resumeLabels: executionContext.resumeLabels,
+          result,
+          error,
+          requestContext: requestContextObj,
+          // @ts-ignore
+          timestamp: Date.now(),
+        },
+      });
     });
   }
 
