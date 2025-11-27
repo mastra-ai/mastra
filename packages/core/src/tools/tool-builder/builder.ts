@@ -415,10 +415,7 @@ export class CoreToolBuilder extends MastraBase {
         const parameters = processedSchema || this.getParameters();
         const { data, error } = validateToolInput(parameters, args, options.name);
         if (error) {
-          logger.warn(error.message, {
-            toolName: options.name,
-            args,
-          });
+          logger.warn(error.message);
           return error;
         }
         // Use validated/transformed data

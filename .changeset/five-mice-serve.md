@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Adjust the tool validation error messages to directly show the errors provided by Zod without extra logging context.
+Fixed tool validation error messages so logs show Zod validation errors directly instead of hiding them inside structured JSON.
