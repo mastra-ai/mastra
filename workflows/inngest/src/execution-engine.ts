@@ -37,6 +37,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   /**
    * Exclude input from result in Inngest workflows
    */
+  // TODO: get rid of this shit
   protected get includeInputInResult(): boolean {
     return false;
   }
@@ -85,8 +86,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }
 
   /**
-   * Handle step execution error by throwing RetryAfterError.
-   * Inngest handles retries externally via function config, so we throw to signal retry.
+   * Handle step execution error.
+   * If retries remaining, throw RetryAfterError to signal Inngest to retry.
+   * If retries exhausted, return failed result to record the failure.
    */
   protected handleStepError(
     error: unknown,
@@ -96,16 +98,28 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       stepId: string;
       stepSpan?: any;
       delay: number;
+      retries: number;
     },
-  ): never {
+  ): { status: 'failed'; error: string; endedAt: number } {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new RetryAfterError(errorMessage, params.delay, {
-      cause: {
-        status: 'failed',
-        error: `Error: ${errorMessage}`,
-        endedAt: Date.now(),
-      },
-    });
+
+    if (this.inngestAttempts < params.retries) {
+      // Retries remaining - signal Inngest to retry
+      throw new RetryAfterError(errorMessage, params.delay, {
+        cause: {
+          status: 'failed',
+          error: `Error: ${errorMessage}`,
+          endedAt: Date.now(),
+        },
+      });
+    }
+
+    // Retries exhausted - record as failed
+    return {
+      status: 'failed',
+      error: errorMessage,
+      endedAt: Date.now(),
+    };
   }
 
   /**

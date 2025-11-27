@@ -278,6 +278,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       stepId: string;
       stepSpan?: Span<SpanType>;
       delay: number;
+      retries: number;
     },
   ): { status: 'failed'; error: string; endedAt: number } {
     const processedError = this.preprocessExecutionError(
@@ -1244,6 +1245,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           stepId: step.id,
           stepSpan,
           delay,
+          retries,
         });
 
         if (errorResult) {
@@ -1258,7 +1260,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       await this.emitStepResultEvents({
         stepId: step.id,
         stepCallId,
-        execResults: execResults as StepResult<any, any, any, any>,
+        execResults: { ...stepInfo, ...execResults } as StepResult<any, any, any, any>,
         emitter,
       });
     }
