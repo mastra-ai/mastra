@@ -17,15 +17,15 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
   const deserialized: Record<string, any> = { ...row };
 
   // Reverse serialized JSON fields (stored as strings in D1)
-  deserialized.input = safelyParseJSON(row.input);
-  deserialized.output = safelyParseJSON(row.output);
-  deserialized.scorer = safelyParseJSON(row.scorer);
-  deserialized.preprocessStepResult = safelyParseJSON(row.preprocessStepResult);
-  deserialized.analyzeStepResult = safelyParseJSON(row.analyzeStepResult);
-  deserialized.metadata = safelyParseJSON(row.metadata);
-  deserialized.additionalContext = safelyParseJSON(row.additionalContext);
-  deserialized.runtimeContext = safelyParseJSON(row.runtimeContext);
-  deserialized.entity = safelyParseJSON(row.entity);
+  deserialized.input = row.input ? safelyParseJSON(row.input) : undefined;
+  deserialized.output = row.output ? safelyParseJSON(row.output) : undefined;
+  deserialized.scorer = row.scorer ? safelyParseJSON(row.scorer) : undefined;
+  deserialized.preprocessStepResult = row.preprocessStepResult ? safelyParseJSON(row.preprocessStepResult) : undefined;
+  deserialized.analyzeStepResult = row.analyzeStepResult ? safelyParseJSON(row.analyzeStepResult) : undefined;
+  deserialized.metadata = row.metadata ? safelyParseJSON(row.metadata) : undefined;
+  deserialized.additionalContext = row.additionalContext ? safelyParseJSON(row.additionalContext) : undefined;
+  deserialized.runtimeContext = row.runtimeContext ? safelyParseJSON(row.runtimeContext) : undefined;
+  deserialized.entity = row.entity ? safelyParseJSON(row.entity) : undefined;
 
   deserialized.createdAt = row.createdAtZ || row.createdAt;
   deserialized.updatedAt = row.updatedAtZ || row.updatedAt;

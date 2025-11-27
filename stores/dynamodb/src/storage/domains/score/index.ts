@@ -1,7 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
 import { saveScorePayloadSchema } from '@mastra/core/scores';
-import { ScoresStorage } from '@mastra/core/storage';
+import { SCORERS_SCHEMA, ScoresStorage } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
 
@@ -14,8 +14,20 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
 
   // Helper function to parse score data (handle JSON fields)
   private parseScoreData(data: any): ScoreRowData {
+    const result: Record<string, any> = {};
+    for (const key of Object.keys(SCORERS_SCHEMA)) {
+      if (['traceId', 'resourceId', 'threadId', 'spanId'].includes(key)) {
+        result[key] = data[key] === '' ? null : data[key];
+        continue;
+      }
+
+      result[key] = data[key];
+    }
+    // Entity is a reserved key so we need to replace it with entityData
+    result.entity = data.entityData ? data.entityData : null;
+
     return {
-      ...data,
+      ...result,
       // Convert date strings back to Date objects for consistency
       createdAt: data.createdAt ? new Date(data.createdAt) : new Date(),
       updatedAt: data.updatedAt ? new Date(data.updatedAt) : new Date(),

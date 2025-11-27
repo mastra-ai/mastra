@@ -1,24 +1,27 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/scores';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
-import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
+import { SCORERS_SCHEMA, ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
 import type { StoreOperationsCloudflare } from '../operations';
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  const deserialized: Record<string, any> = { ...row };
+  const result: Record<string, any> = {};
+  for (const [key, columnSchema] of Object.entries(SCORERS_SCHEMA)) {
+    const value = row[key];
+    if (value == null) {
+      continue;
+    }
 
-  deserialized.input = safelyParseJSON(row.input);
-  deserialized.output = safelyParseJSON(row.output);
-  deserialized.scorer = safelyParseJSON(row.scorer);
-  deserialized.preprocessStepResult = safelyParseJSON(row.preprocessStepResult);
-  deserialized.analyzeStepResult = safelyParseJSON(row.analyzeStepResult);
-  deserialized.metadata = safelyParseJSON(row.metadata);
-  deserialized.additionalContext = safelyParseJSON(row.additionalContext);
-  deserialized.runtimeContext = safelyParseJSON(row.runtimeContext);
-  deserialized.entity = safelyParseJSON(row.entity);
-
-  return deserialized as ScoreRowData;
+    if (columnSchema.type === 'jsonb') {
+      result[key] = safelyParseJSON(value);
+    } else if (columnSchema.type === 'timestamp') {
+      result[key] = new Date(value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result as ScoreRowData;
 }
 
 export class ScoresStorageCloudflare extends ScoresStorage {
