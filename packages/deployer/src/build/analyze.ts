@@ -278,6 +278,7 @@ If you think your configuration is valid, please open an issue.`);
 
   logger.info('Analyzing dependencies...');
 
+  const allUsedExternals = new Set<string>();
   for (const entry of entries) {
     const isVirtualFile = entry.includes('\n') || !existsSync(entry);
     const analyzeResult = await analyzeEntry({ entry, isVirtualFile }, mastraEntry, {
@@ -295,6 +296,7 @@ If you think your configuration is valid, please open an issue.`);
     for (const [dep, metadata] of analyzeResult.dependencies.entries()) {
       const isPartOfExternals = allExternals.some(external => isDependencyPartOfPackage(dep, external));
       if (isPartOfExternals) {
+        allUsedExternals.add(dep);
         continue;
       }
 
@@ -350,5 +352,8 @@ If you think your configuration is valid, please open an issue.`);
     logger,
   );
 
-  return result;
+  return {
+    ...result,
+    externalDependencies: new Set([...result.externalDependencies, ...Array.from(allUsedExternals)]),
+  };
 }
