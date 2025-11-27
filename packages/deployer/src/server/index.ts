@@ -265,54 +265,9 @@ export async function createHonoServer(
       },
     );
     // Playground routes - these should come after API routes
-    // Serve assets with MIME types and CSS rewriting
-    app.use(`${basePath}/assets/*`, async (c, next) => {
-      const path = c.req.path;
-
-      // Intercept CSS files to rewrite URLs when basePath is set
-      if (path.endsWith('.css') && basePath) {
-        // Remove basePath and /assets to get the filename
-        let filename = path;
-
-        if (filename.includes('..') || filename.includes('\0')) {
-          return c.notFound();
-        }
-
-        if (filename.startsWith(basePath)) {
-          filename = filename.slice(basePath.length);
-        }
-        if (filename.startsWith('/assets/')) {
-          filename = filename.slice('/assets/'.length);
-        }
-
-        try {
-          const cssPath = join(process.cwd(), './playground/assets', filename);
-          const cssContent = await readFile(cssPath, 'utf-8');
-
-          const normalizedBasePath = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
-          const escapedBasePath = normalizedBasePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-          // Rewrite url(/assets/...) and url("/assets/...) to url(/custom-path/assets/...)
-          const urlPattern = new RegExp(`url\\((["']?)\\/(?!${escapedBasePath.slice(1)}\\/)`, 'g');
-          const rewrittenCss = cssContent.replace(urlPattern, `url($1${normalizedBasePath}/`);
-
-          return c.newResponse(rewrittenCss, 200, { 'Content-Type': 'text/css' });
-        } catch (err) {
-          // File not found, fall through to serveStatic
-          return await next();
-        }
-      }
-
-      // Set MIME types for other assets
-      if (path.endsWith('.js')) {
-        c.header('Content-Type', 'application/javascript');
-      } else if (path.endsWith('.css')) {
-        c.header('Content-Type', 'text/css');
-      }
-      await next();
-    });
-
     // Serve static assets from playground directory
+    // Note: Vite builds with base: './' so all asset URLs are relative
+    // The <base href> tag in index.html handles path resolution for the SPA
     app.use(
       `${basePath}/assets/*`,
       serveStatic({
@@ -366,24 +321,9 @@ export async function createHonoServer(
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_HOST%%'`, `'${host}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PORT%%'`, `'${port}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, `'${hideCloudCta}'`);
-      // Inject the base path for frontend routing and favicon
-      indexHtml = indexHtml.replace(/%%MASTRA_BASE_PATH%%/g, basePath);
-
-      // Rewrite absolute asset paths to include base path
-      if (basePath) {
-        // Normalize basePath (remove trailing slash)
-        const normalizedBasePath = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
-
-        // Use regex with negative lookahead to avoid double-prefixing paths that already have the basePath
-        // This prevents replacing paths that were already modified by %%MASTRA_BASE_PATH%% substitution
-        const escapedBasePath = normalizedBasePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const srcPattern = new RegExp(`src="\/(?!${escapedBasePath.slice(1)}\/)`, 'g');
-        const hrefPattern = new RegExp(`href="\/(?!${escapedBasePath.slice(1)}\/)`, 'g');
-
-        indexHtml = indexHtml
-          .replace(srcPattern, `src="${normalizedBasePath}/`)
-          .replace(hrefPattern, `href="${normalizedBasePath}/`);
-      }
+      // Inject the base path for frontend routing
+      // The <base href> tag uses this to resolve all relative URLs correctly
+      indexHtml = indexHtml.replaceAll('%%MASTRA_BASE_PATH%%', basePath);
 
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }
