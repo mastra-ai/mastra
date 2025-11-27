@@ -7596,6 +7596,85 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Second message should not have metadata
       expect(secondUserMessage?.content.metadata).toBeUndefined();
     });
+    it('should handle content as string', async () => {
+      const agent = new Agent({
+        name: 'simple-content-agent',
+        instructions: 'You are a helpful assistant',
+        model: dummyModel,
+        memory: mockMemory,
+      });
+
+      if (version === 'v2') {
+        await agent.generate(
+          [
+            {
+              role: 'user',
+              content: 'First message with metadata',
+              metadata: {
+                foo: 'bar',
+              },
+            },
+          ],
+          {
+            memory: {
+              resource: 'simple-content-user',
+              thread: {
+                id: 'simple-content-thread',
+              },
+            },
+          },
+        );
+      } else {
+        await agent.generateLegacy(
+          [
+            {
+              role: 'user',
+              content: 'First message with metadata',
+              metadata: {
+                foo: 'bar',
+              },
+            },
+          ],
+          {
+            memory: {
+              resource: 'simple-content-user',
+              thread: {
+                id: 'simple-content-thread',
+              },
+            },
+          },
+        );
+      }
+
+      const messages = await mockMemory.getMessages({
+        threadId: 'simple-content-thread',
+        resourceId: 'simple-content-user',
+        format: 'v2',
+        selectBy: {
+          last: 10,
+        },
+      });
+
+      expect(messages.length).toBeGreaterThan(0);
+
+      // Find the user message
+      const userMessage = messages.find(m => m.role === 'user');
+      expect(userMessage).toBeDefined();
+
+      // Verify metadata was preserved in the simple content-only format
+      if (
+        userMessage &&
+        'content' in userMessage &&
+        typeof userMessage.content === 'object' &&
+        'metadata' in userMessage.content
+      ) {
+        expect(userMessage.content.metadata).toEqual({
+          foo: 'bar',
+        });
+      } else {
+        throw new Error('Expected user message to have content.metadata field');
+      }
+    });
   });
 
   it(`${version} - stream - should pass and call client side tools with experimental output`, async () => {

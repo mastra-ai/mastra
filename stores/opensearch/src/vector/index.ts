@@ -9,6 +9,7 @@ import type {
   QueryVectorParams,
   UpdateVectorParams,
   UpsertVectorParams,
+  DeleteVectorsParams,
 } from '@mastra/core/vector';
 import { MastraVector } from '@mastra/core/vector';
 import { Client as OpenSearchClient } from '@opensearch-project/opensearch';
@@ -311,25 +312,80 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
   }
 
   /**
-   * Updates a vector by its ID with the provided vector and/or metadata.
-   * @param indexName - The name of the index containing the vector.
-   * @param id - The ID of the vector to update.
-   * @param update - An object containing the vector and/or metadata to update.
-   * @param update.vector - An optional array of numbers representing the new vector.
-   * @param update.metadata - An optional record containing the new metadata.
+   * Updates vectors by ID or filter with the provided vector and/or metadata.
+   * @param params - Parameters containing either id or filter for targeting vectors to update
+   * @param params.indexName - The name of the index containing the vector(s).
+   * @param params.id - The ID of a single vector to update (mutually exclusive with filter).
+   * @param params.filter - A filter to match multiple vectors to update (mutually exclusive with id).
+   * @param params.update - An object containing the vector and/or metadata to update.
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+  async updateVector(params: UpdateVectorParams<OpenSearchVectorFilter>): Promise<void> {
+    const { indexName, update } = params;
+
+    // Validate mutually exclusive parameters
+    if ('id' in params && 'filter' in params && params.id && params.filter) {
+      throw new MastraError({
+        id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'id and filter are mutually exclusive',
+        details: { indexName },
+      });
+    }
+
+    if (!update.vector && !update.metadata) {
+      throw new MastraError({
+        id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_NO_UPDATES',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'No updates provided',
+        details: { indexName },
+      });
+    }
+
+    // Validate empty filter
+    if ('filter' in params && params.filter && Object.keys(params.filter).length === 0) {
+      throw new MastraError({
+        id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Cannot update with empty filter',
+        details: { indexName },
+      });
+    }
+
+    // Type-narrowing: check if updating by id or by filter
+    if ('id' in params && params.id) {
+      // Update by ID
+      await this.updateVectorById(indexName, params.id, update);
+    } else if ('filter' in params && params.filter) {
+      // Update by filter
+      await this.updateVectorsByFilter(indexName, params.filter, update);
+    } else {
+      throw new MastraError({
+        id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_MISSING_PARAMS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Either id or filter must be provided',
+        details: { indexName },
+      });
+    }
+  }
+
+  /**
+   * Updates a single vector by its ID.
+   */
+  private async updateVectorById(
+    indexName: string,
+    id: string,
+    update: { vector?: number[]; metadata?: Record<string, any> },
+  ): Promise<void> {
     let existingDoc;
     try {
-      if (!update.vector && !update.metadata) {
-        throw new Error('No updates provided');
-      }
-
       // First get the current document to merge with updates
       const { body } = await this.client
-
         .get({
           index: indexName,
           id: id,
@@ -348,7 +404,10 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
           id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { indexName, id },
+          details: {
+            indexName,
+            id,
+          },
         },
         error,
       );
@@ -393,7 +452,65 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
           id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            id,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Updates multiple vectors matching a filter.
+   */
+  private async updateVectorsByFilter(
+    indexName: string,
+    filter: OpenSearchVectorFilter,
+    update: { vector?: number[]; metadata?: Record<string, any> },
+  ): Promise<void> {
+    try {
+      const translator = new OpenSearchFilterTranslator();
+      const translatedFilter = translator.translate(filter);
+
+      // Build the update script
+      const scriptSource: string[] = [];
+      const scriptParams: Record<string, any> = {};
+
+      if (update.vector) {
+        scriptSource.push('ctx._source.embedding = params.embedding');
+        scriptParams.embedding = update.vector;
+      }
+
+      if (update.metadata) {
+        scriptSource.push('ctx._source.metadata = params.metadata');
+        scriptParams.metadata = update.metadata;
+      }
+
+      // Use update_by_query to update all matching documents
+      await this.client.updateByQuery({
+        index: indexName,
+        body: {
+          query: (translatedFilter as any) || { match_all: {} },
+          script: {
+            source: scriptSource.join('; '),
+            params: scriptParams,
+            lang: 'painless',
+          },
+        },
+        refresh: true,
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_BY_FILTER_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            filter: JSON.stringify(filter),
+          },
         },
         error,
       );
@@ -424,7 +541,93 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
           id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams<OpenSearchVectorFilter>): Promise<void> {
+    // Validate mutually exclusive parameters
+    if (ids && filter) {
+      throw new MastraError({
+        id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'ids and filter are mutually exclusive',
+        details: { indexName },
+      });
+    }
+
+    if (!ids && !filter) {
+      throw new MastraError({
+        id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Either filter or ids must be provided',
+        details: { indexName },
+      });
+    }
+
+    // Validate non-empty arrays and objects
+    if (ids && ids.length === 0) {
+      throw new MastraError({
+        id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Cannot delete with empty ids array',
+        details: { indexName },
+      });
+    }
+
+    if (filter && Object.keys(filter).length === 0) {
+      throw new MastraError({
+        id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Cannot delete with empty filter',
+        details: { indexName },
+      });
+    }
+
+    try {
+      if (ids) {
+        // Delete by IDs using bulk API
+        const bulkBody = ids.flatMap(id => [{ delete: { _index: indexName, _id: id } }]);
+
+        await this.client.bulk({
+          body: bulkBody,
+          refresh: true,
+        });
+      } else if (filter) {
+        // Delete by filter using delete_by_query
+        const translator = new OpenSearchFilterTranslator();
+        const translatedFilter = translator.translate(filter);
+
+        await this.client.deleteByQuery({
+          index: indexName,
+          body: {
+            query: (translatedFilter as any) || { match_all: {} },
+          },
+          refresh: true,
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_VECTORS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            ...(filter && { filter: JSON.stringify(filter) }),
+            ...(ids && { idsCount: ids.length }),
+          },
         },
         error,
       );

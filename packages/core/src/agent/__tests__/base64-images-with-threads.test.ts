@@ -1,9 +1,8 @@
-import type { CoreMessage } from '@internal/ai-sdk-v4';
+import type { CoreMessage } from 'ai';
 import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { MockMemory } from '../../memory/mock';
-import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
+import { MockMemory } from '../test-utils';
 
 describe('Base64 Images with Threads - Issue #10480', () => {
   let mockModel: MockLanguageModelV2;
@@ -18,11 +17,23 @@ describe('Base64 Images with Threads - Issue #10480', () => {
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
       }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'text-delta', id: '1', delta: 'I can see ' },
+          { type: 'text-delta', id: '2', delta: 'the image' },
+          {
+            type: 'finish',
+            id: '3',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+          },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
     });
 
-    mockMemory = new MockMemory({
-      storage: new InMemoryStore(),
-    });
+    mockMemory = new MockMemory();
   });
 
   it('should handle raw base64 image strings (without data: prefix) with thread and resource', async () => {
@@ -118,9 +129,16 @@ describe('Base64 Images with Threads - Issue #10480', () => {
       'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAIAQMAAAD+wSzIAAAABlBMVEX///+/v7+jQ3Y5AAAADklEQVQI12P4AIX8EAgALgAD/aNpbtEAAAAASUVORK5CYII';
 
     const streamModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        content: [{ type: 'text', text: 'I can see the image' }],
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
       doStream: async () => ({
         stream: convertArrayToReadableStream([
-          { type: 'text-delta', id: '1', delta: 'I see ' },
+          { type: 'text-delta', id: '1', delta: 'I can see ' },
           { type: 'text-delta', id: '2', delta: 'the image' },
           {
             type: 'finish',
@@ -171,7 +189,7 @@ describe('Base64 Images with Threads - Issue #10480', () => {
       fullText += textPart;
     }
 
-    expect(fullText).toBe('I see the image');
+    expect(fullText).toBe('I can see the image');
 
     // Verify thread was created
     const thread = await mockMemory.getThreadById({ threadId: 'test-thread-stream' });
@@ -276,6 +294,20 @@ describe('Base64 Images with Threads - Issue #10480', () => {
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
       }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'text-delta', id: '1', delta: 'I can see ' },
+          { type: 'text-delta', id: '2', delta: 'the image' },
+          {
+            type: 'finish',
+            id: '3',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+          },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
     });
 
     const agent = new Agent({
@@ -328,6 +360,20 @@ describe('Base64 Images with Threads - Issue #10480', () => {
         content: [{ type: 'text', text: 'I can see the image' }],
         finishReason: 'stop',
         usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'text-delta', id: '1', delta: 'I can see ' },
+          { type: 'text-delta', id: '2', delta: 'the image' },
+          {
+            type: 'finish',
+            id: '3',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+          },
+        ]),
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
       }),

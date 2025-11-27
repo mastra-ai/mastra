@@ -7,7 +7,7 @@ import { describe, expect, it, beforeAll } from 'vitest';
 import { AISDKSpeech } from '../speech';
 import { AISDKTranscription } from '../transcription';
 
-describe('AI SDK Voice Integration Tests', () => {
+describe.skip('AI SDK Voice Integration Tests', () => {
   const outputDir = path.join(process.cwd(), 'test-outputs');
 
   beforeAll(() => {

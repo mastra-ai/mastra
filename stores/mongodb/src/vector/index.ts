@@ -10,6 +10,7 @@ import type {
   DeleteIndexParams,
   DeleteVectorParams,
   UpdateVectorParams,
+  DeleteVectorsParams,
 } from '@mastra/core/vector';
 import { MongoClient } from 'mongodb';
 import type { MongoClientOptions, Document, Db, Collection } from 'mongodb';
@@ -332,9 +333,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       };
 
       if (Object.keys(combinedFilter).length > 0) {
+        // Exclude the special metadata document
+        const filterWithExclusion = {
+          $and: [{ _id: { $ne: '__index_metadata__' } }, combinedFilter],
+        };
+
         // pre-filter for candidate document IDs
         const candidateIds = await collection
-          .aggregate([{ $match: combinedFilter }, { $project: { _id: 1 } }])
+          .aggregate([{ $match: filterWithExclusion }, { $project: { _id: 1 } }])
           .map(doc => doc._id)
           .toArray();
 
@@ -344,6 +350,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           // No documents match the filter, return empty results
           return [];
         }
+      } else {
+        // Even with no filter, exclude the metadata document
+        vectorSearch.filter = { _id: { $ne: '__index_metadata__' } };
       }
 
       // Build the aggregation pipeline
@@ -478,7 +487,31 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+  async updateVector(params: UpdateVectorParams<MongoDBVectorFilter>): Promise<void> {
+    const { indexName, update } = params;
+
+    // Validate that both id and filter are not provided at the same time
+    if ('id' in params && params.id && 'filter' in params && params.filter) {
+      throw new MastraError({
+        id: 'STORAGE_MONGODB_VECTOR_UPDATE_MUTUALLY_EXCLUSIVE_PARAMS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: 'id and filter are mutually exclusive - provide only one',
+      });
+    }
+
+    // Check if neither id nor filter is provided
+    if (!('id' in params || 'filter' in params) || (!params.id && !params.filter)) {
+      throw new MastraError({
+        id: 'STORAGE_MONGODB_VECTOR_UPDATE_MISSING_PARAMS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Either id or filter must be provided',
+        details: { indexName },
+      });
+    }
+
     try {
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');
@@ -507,17 +540,62 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         updateDoc[this.metadataFieldName] = normalizedMeta;
       }
 
-      await collection.findOneAndUpdate({ _id: id }, { $set: updateDoc });
+      // Type narrowing: check if updating by id or by filter
+      if ('id' in params && params.id) {
+        // Update by ID
+        await collection.findOneAndUpdate({ _id: params.id }, { $set: updateDoc });
+      } else if ('filter' in params && params.filter) {
+        // Update by filter
+        const filter = params.filter;
+
+        if (!filter || Object.keys(filter).length === 0) {
+          throw new MastraError({
+            id: 'STORAGE_MONGODB_VECTOR_UPDATE_EMPTY_FILTER',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName },
+            text: 'Cannot update with empty filter',
+          });
+        }
+
+        const mongoFilter = this.transformFilter(filter);
+        const transformedFilter = this.transformMetadataFilter(mongoFilter);
+
+        if (!transformedFilter || Object.keys(transformedFilter).length === 0) {
+          throw new MastraError({
+            id: 'STORAGE_MONGODB_VECTOR_UPDATE_INVALID_FILTER',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName },
+            text: 'Filter produced empty query',
+          });
+        }
+
+        // Update multiple documents matching the filter
+        await collection.updateMany(transformedFilter, { $set: updateDoc });
+      }
     } catch (error: any) {
+      // If it's already a MastraError, rethrow it
+      if (error instanceof MastraError) {
+        throw error;
+      }
+
+      const errorDetails: Record<string, any> = { indexName };
+
+      if ('id' in params && params.id) {
+        errorDetails.id = params.id;
+      }
+
+      if ('filter' in params && params.filter) {
+        errorDetails.filter = JSON.stringify(params.filter);
+      }
+
       throw new MastraError(
         {
           id: 'STORAGE_MONGODB_VECTOR_UPDATE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: {
-            indexName,
-            id,
-          },
+          details: errorDetails,
         },
         error,
       );
@@ -544,6 +622,99 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           details: {
             indexName,
             id,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams<MongoDBVectorFilter>): Promise<void> {
+    // Validate that exactly one of filter or ids is provided
+    if (!filter && !ids) {
+      throw new MastraError({
+        id: 'STORAGE_MONGODB_VECTOR_DELETE_MISSING_PARAMS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: 'Either filter or ids must be provided',
+      });
+    }
+
+    if (filter && ids) {
+      throw new MastraError({
+        id: 'STORAGE_MONGODB_VECTOR_DELETE_CONFLICTING_PARAMS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: 'Cannot provide both filter and ids - they are mutually exclusive',
+      });
+    }
+
+    try {
+      const collection = await this.getCollection(indexName, true);
+
+      if (ids) {
+        // Delete by IDs
+        if (ids.length === 0) {
+          throw new MastraError({
+            id: 'STORAGE_MONGODB_VECTOR_DELETE_EMPTY_IDS',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName },
+            text: 'Cannot delete with empty ids array',
+          });
+        }
+
+        await collection.deleteMany({ _id: { $in: ids } });
+      } else {
+        // Delete by filter
+        // Safety check: Don't allow empty filters to prevent accidental deletion of all vectors
+        if (!filter || Object.keys(filter).length === 0) {
+          throw new MastraError({
+            id: 'STORAGE_MONGODB_VECTOR_DELETE_EMPTY_FILTER',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName },
+            text: 'Cannot delete with empty filter',
+          });
+        }
+
+        const mongoFilter = this.transformFilter(filter);
+        const transformedFilter = this.transformMetadataFilter(mongoFilter);
+
+        if (!transformedFilter || Object.keys(transformedFilter).length === 0) {
+          throw new MastraError({
+            id: 'STORAGE_MONGODB_VECTOR_DELETE_INVALID_FILTER',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName },
+            text: 'Filter produced empty query',
+          });
+        }
+
+        // Exclude the special metadata document and combine with user filter
+        const finalFilter = {
+          $and: [{ _id: { $ne: '__index_metadata__' } }, transformedFilter],
+        };
+
+        await collection.deleteMany(finalFilter);
+      }
+    } catch (error) {
+      // If it's already a MastraError, rethrow it
+      if (error instanceof MastraError) {
+        throw error;
+      }
+
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_VECTOR_DELETE_VECTORS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            ...(filter && { filter: JSON.stringify(filter) }),
+            ...(ids && { idsCount: ids.length }),
           },
         },
         error,
@@ -614,6 +785,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   private transformMetadataFilter(filter: any): any {
     if (!filter || typeof filter !== 'object') return filter;
 
+    // Handle arrays (shouldn't happen at top level, but be defensive)
+    if (Array.isArray(filter)) {
+      return filter.map(item => this.transformMetadataFilter(item));
+    }
+
     const transformed: any = {};
 
     for (const [key, value] of Object.entries(filter)) {
@@ -622,18 +798,26 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         // For logical operators like $and, $or, recursively transform their contents
         if (Array.isArray(value)) {
           transformed[key] = value.map(item => this.transformMetadataFilter(item));
-        } else {
+        } else if (typeof value === 'object' && value !== null) {
           transformed[key] = this.transformMetadataFilter(value);
+        } else {
+          transformed[key] = value;
         }
       }
       // Check if the key already has 'metadata.' prefix
       else if (key.startsWith('metadata.')) {
-        // Already prefixed, keep as is
-        transformed[key] = value;
+        // Already prefixed, keep as is but recursively transform the value if it's an object with operators
+        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          const hasOperator = Object.keys(value).some(k => k.startsWith('$'));
+          transformed[key] = hasOperator ? value : value;
+        } else {
+          transformed[key] = value;
+        }
       }
       // Check if this is a known metadata field that needs prefixing
       else if (this.isMetadataField(key)) {
         // Add metadata. prefix for fields stored in metadata subdocument
+        // If the value is an object with operators, keep the operators as-is
         transformed[`metadata.${key}`] = value;
       } else {
         // Keep other fields as is
