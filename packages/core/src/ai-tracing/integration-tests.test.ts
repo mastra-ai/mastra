@@ -565,17 +565,23 @@ const mockModelV2 = new MockLanguageModelV2({
 
     if (toolCall) {
       return {
-        content: [],
+        content: [
+          {
+            type: 'tool-call' as const,
+            toolCallType: 'function' as const,
+            toolCallId: toolCall.toolCallId,
+            toolName: toolCall.toolName,
+            input: JSON.stringify(toolCall.args),
+          },
+        ],
         finishReason: 'tool-calls' as const,
         usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
         warnings: [],
-        toolCalls: [
-          {
-            toolCallId: toolCall.toolCallId,
-            toolName: toolCall.toolName,
-            args: toolCall.args,
-          },
-        ],
+        response: {
+          id: 'test-id',
+          modelId: 'mock-model-id',
+          timestamp: new Date(0),
+        },
       };
     }
 
@@ -716,7 +722,7 @@ const agentMethods = [
       return { text: result.text, object: result.object, traceId: result.traceId };
     },
     model: mockModelV2,
-    expectedText: 'Mock V2 streaming response',
+    expectedText: 'Mock V2 response',
   },
   {
     name: 'streamLegacy',
@@ -1194,7 +1200,11 @@ describe('AI Tracing Integration Tests', () => {
             expect(llmGenerationSpan?.output.text).toBe('Mock streaming response');
             expect(agentRunSpan?.output.text).toBe('Mock streaming response');
             break;
-          default: // VNext generate & stream
+          case 'generate':
+            expect(llmGenerationSpan?.output.text).toBe('Mock V2 response');
+            expect(agentRunSpan?.output.text).toBe('Mock V2 response');
+            break;
+          default: // stream
             expect(llmGenerationSpan?.output.text).toBe('Mock V2 streaming response');
             expect(agentRunSpan?.output.text).toBe('Mock V2 streaming response');
             break;
@@ -1295,7 +1305,11 @@ describe('AI Tracing Integration Tests', () => {
             expect(llmGenerationSpan?.output.text).toBe('Mock streaming response');
             expect(agentRunSpan?.output.text).toBe('Mock streaming response');
             break;
-          default: // VNext generate & stream
+          case 'generate':
+            expect(llmGenerationSpan?.output.text).toBe('Mock V2 response');
+            expect(agentRunSpan?.output.text).toBe('Mock V2 response');
+            break;
+          default: // stream
             expect(llmGenerationSpan?.output.text).toBe('Mock V2 streaming response');
             expect(agentRunSpan?.output.text).toBe('Mock V2 streaming response');
             break;
@@ -1372,7 +1386,11 @@ describe('AI Tracing Integration Tests', () => {
             expect(llmGenerationSpan?.output.text).toBe('Mock streaming response');
             expect(agentRunSpan?.output.text).toBe('Mock streaming response');
             break;
-          default: // VNext generate & stream
+          case 'generate':
+            expect(llmGenerationSpan?.output.text).toBe('Mock V2 response');
+            expect(agentRunSpan?.output.text).toBe('Mock V2 response');
+            break;
+          default: // stream
             expect(llmGenerationSpan?.output.text).toBe('Mock V2 streaming response');
             expect(agentRunSpan?.output.text).toBe('Mock V2 streaming response');
             break;
@@ -1390,7 +1408,7 @@ describe('AI Tracing Integration Tests', () => {
 
   describe.each(agentMethods.filter(m => m.name === 'stream' || m.name === 'generate'))(
     'should trace agent using structuredOutput format using $name',
-    ({ method, model }) => {
+    ({ name, method, model }) => {
       it(`should trace spans correctly`, async () => {
         const testAgent = new Agent({
           name: 'Test Agent',
@@ -1470,13 +1488,14 @@ describe('AI Tracing Integration Tests', () => {
         // Verify LLM generation spans
         expect(testAgentLlmSpan?.name).toBe("llm: 'mock-model-id'");
         expect(testAgentLlmSpan?.input.messages).toHaveLength(2);
-        expect(testAgentLlmSpan?.output.text).toBe('Mock V2 streaming response');
+        const expectedText = name === 'generate' ? 'Mock V2 response' : 'Mock V2 streaming response';
+        expect(testAgentLlmSpan?.output.text).toBe(expectedText);
 
         expect(processorAgentLlmSpan?.name).toBe("llm: 'mock-model-id'");
         expect(processorAgentLlmSpan?.output.text).toBeDefined();
 
         // Verify Test Agent output
-        expect(testAgentSpan?.output.text).toBe('Mock V2 streaming response');
+        expect(testAgentSpan?.output.text).toBe(expectedText);
 
         // Verify structured output
         expect(result.object).toBeDefined();
@@ -1896,6 +1915,8 @@ describe('AI Tracing Integration Tests', () => {
 
       const agent = mastra.getAgent('testAgent');
       const result = await method(agent, 'Use child span tool to process test-data');
+
+      console.log(JSON.stringify(result, null, 2));
       expect(result.text).toBeDefined();
       expect(result.traceId).toBeDefined();
 
@@ -1975,6 +1996,13 @@ describe('AI Tracing Integration Tests', () => {
 
   it('should propagate tracingContext to agent steps in workflows', async () => {
     const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: 'Test response from agent' }],
+        warnings: [],
+      }),
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'response-metadata', id: '1' },

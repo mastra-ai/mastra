@@ -1649,6 +1649,126 @@ describe('Input and Output Processors', () => {
   testStructuredOutput('mastra', openai_v5('gpt-4o'));
 });
 
+describe('MockLanguageModelV2 doGenerate behavior', () => {
+  it('should call doGenerate when agent.generate is called', async () => {
+    let doGenerateCalled = false;
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        doGenerateCalled = true;
+        return {
+          content: [
+            {
+              type: 'text',
+              text: 'Response from doGenerate',
+            },
+          ],
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'You are a test agent.',
+      model: mockModel,
+    });
+
+    const result = await agent.generate('Hello');
+
+    expect(doGenerateCalled).toBe(true);
+    expect(result.text).toContain('Response from doGenerate');
+  });
+
+  it('should propagate errors from doGenerate', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        throw new Error('doGenerate error');
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'You are a test agent.',
+      model: mockModel,
+    });
+
+    await expect(agent.generate('Hello')).rejects.toThrow('doGenerate error');
+  });
+
+  it('should handle async doGenerate with delayed response', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        return {
+          content: [
+            {
+              type: 'text',
+              text: 'Delayed response',
+            },
+          ],
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'You are a test agent.',
+      model: mockModel,
+    });
+
+    const result = await agent.generate('Hello');
+
+    expect(result.text).toContain('Delayed response');
+  });
+
+  it('should receive prompt in doGenerate', async () => {
+    let receivedPrompt: any = null;
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        receivedPrompt = prompt;
+        return {
+          content: [
+            {
+              type: 'text',
+              text: 'Got the prompt',
+            },
+          ],
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'You are a test agent.',
+      model: mockModel,
+    });
+
+    await agent.generate('Test message');
+
+    expect(receivedPrompt).toBeDefined();
+    expect(Array.isArray(receivedPrompt)).toBe(true);
+    // The prompt should contain both the system message (instructions) and user message
+    expect(receivedPrompt.length).toBeGreaterThan(0);
+  });
+});
+
 describe('v1 model - output processors', () => {
   describe('generate output processors', () => {
     it('should process final text through output processors', async () => {

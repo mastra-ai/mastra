@@ -1946,11 +1946,25 @@ export class Agent<
               let result: any;
 
               if ((methodType === 'generate' || methodType === 'generateLegacy') && modelVersion === 'v2') {
+                if (!agent.hasOwnMemory() && this.#memory) {
+                  agent.__setMemory(this.#memory);
+                }
+                const subAgentThreadId = randomUUID();
+                const subAgentResourceId = `${slugify(this.id)}-${agentName}`;
+
                 const generateResult = await agent.generate((context as any).prompt, {
                   runtimeContext,
                   tracingContext: innerTracingContext,
+                  ...(resourceId && threadId
+                    ? {
+                        memory: {
+                          resource: subAgentResourceId,
+                          thread: subAgentThreadId,
+                        },
+                      }
+                    : {}),
                 });
-                result = { text: generateResult.text };
+                result = { text: generateResult.text, subAgentThreadId, subAgentResourceId };
               } else if ((methodType === 'generate' || methodType === 'generateLegacy') && modelVersion === 'v1') {
                 const generateResult = await agent.generateLegacy((context as any).prompt, {
                   runtimeContext,
@@ -3902,7 +3916,10 @@ export class Agent<
         }
       : options;
 
-    const result = await this.stream(messages, normalizedOptions);
+    const result = await this.stream(messages, {
+      ...normalizedOptions,
+      methodType: 'generate',
+    });
     const fullOutput = await result.getFullOutput();
 
     const error = fullOutput.error;
@@ -3934,7 +3951,8 @@ export class Agent<
 
   async stream<OUTPUT extends OutputSchema = undefined, FORMAT extends 'mastra' | 'aisdk' | undefined = undefined>(
     messages: MessageListInput,
-    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT> & DeprecatedOutputOptions<OUTPUT>,
+    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT> &
+      DeprecatedOutputOptions<OUTPUT> & { methodType?: AgentMethodType },
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
     const defaultStreamOptions = await this.getDefaultVNextStreamOptions<OUTPUT>({
       runtimeContext: streamOptions?.runtimeContext,
@@ -4036,7 +4054,7 @@ export class Agent<
     const executeOptions = {
       ...mergedStreamOptions,
       messages,
-      methodType: 'stream',
+      methodType: baseStreamOptions.methodType || 'stream',
     } as InnerAgentExecutionOptions<OUTPUT, FORMAT>;
 
     const result = await this.#execute(executeOptions);
