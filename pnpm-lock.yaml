@@ -1598,9 +1598,9 @@ importers:
       json-schema:
         specifier: ^0.4.0
         version: 0.4.0
-      json-schema-to-zod:
-        specifier: ^2.6.1
-        version: 2.6.1
+      lru-cache:
+        specifier: ^11.2.2
+        version: 11.2.4
       p-map:
         specifier: ^7.0.3
         version: 7.0.3
@@ -2665,9 +2665,6 @@ importers:
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
-      json-schema-to-zod:
-        specifier: ^2.6.1
-        version: 2.6.1
       lucide-react:
         specifier: ^0.474.0
         version: 0.474.0(react@19.2.0)
@@ -2750,6 +2747,9 @@ importers:
       '@mastra/react':
         specifier: workspace:*
         version: link:../../client-sdks/react
+      '@mastra/schema-compat':
+        specifier: workspace:*
+        version: link:../schema-compat
       '@storybook/addon-docs':
         specifier: ^9.1.10
         version: 9.1.13(@types/react@19.2.2)(storybook@9.1.13(@testing-library/dom@10.4.1)(msw@2.11.6(@types/node@20.19.23)(typescript@5.9.3))(prettier@3.6.2)(vite@7.1.11(@types/node@20.19.23)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1)))
@@ -2883,6 +2883,9 @@ importers:
       json-schema:
         specifier: ^0.4.0
         version: 0.4.0
+      json-schema-to-zod:
+        specifier: ^2.7.0
+        version: 2.7.0
       zod-from-json-schema:
         specifier: ^0.5.0
         version: 0.5.0
@@ -13276,6 +13279,10 @@ packages:
     resolution: {integrity: sha512-uiHmWH21h9FjKJkRBntfVGTLpYlCZ1n98D0izIlByqQLqpmkQpNTBtfbdP04Na6+43lgsvrShFh2uWLkQDKJuQ==}
     hasBin: true
 
+  json-schema-to-zod@2.7.0:
+    resolution: {integrity: sha512-eW59l3NQ6sa3HcB+Ahf7pP6iGU7MY4we5JsPqXQ2ZcIPF8QxSg/lkY8lN0Js/AG0NjMbk+nZGUfHlceiHF+bwQ==}
+    hasBin: true
+
   json-schema-traverse@0.4.1:
     resolution: {integrity: sha512-xbbCH5dCYU5T8LcEhhuh7HJ88HXuW3qsI3Y0zOZFKfZEHcpWiHU/Jxzk629Brsab/mMiHQti9wMP+845RPe3Vg==}
 
@@ -13598,6 +13605,10 @@ packages:
 
   lru-cache@10.4.3:
     resolution: {integrity: sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ==}
+
+  lru-cache@11.2.4:
+    resolution: {integrity: sha512-B5Y16Jr9LB9dHVkh6ZevG+vAbOsNOYCX+sXvFWFu7B3Iz5mijW3zdbMyhsh8ANd2mSWBYdJgnqi+mL7/LrOPYg==}
+    engines: {node: 20 || >=22}
 
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
@@ -27712,6 +27723,8 @@ snapshots:
 
   json-schema-to-zod@2.6.1: {}
 
+  json-schema-to-zod@2.7.0: {}
+
   json-schema-traverse@0.4.1: {}
 
   json-schema-traverse@1.0.0: {}
@@ -28026,6 +28039,8 @@ snapshots:
       highlight.js: 10.7.3
 
   lru-cache@10.4.3: {}
+
+  lru-cache@11.2.4: {}
 
   lru-cache@5.1.1:
     dependencies:

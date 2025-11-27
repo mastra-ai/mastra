@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 import { useForm, FormProvider, DefaultValues } from 'react-hook-form';
-import { parseSchema, getDefaultValues, removeEmptyValues } from '@autoform/core';
+import { parseSchema, getDefaultValues } from '@autoform/core';
 import { AutoFormProps, AutoFormProvider } from '@autoform/react';
 import { CustomAutoFormField } from './components/CustomAutoFormField';
+import { removeEmptyValues } from './utils';
 
 export function CustomAutoForm<T extends Record<string, any>>({
   schema,
