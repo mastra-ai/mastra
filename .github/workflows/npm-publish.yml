@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_type:
-        description: 'Type of publish'
+        description: "Type of publish"
         required: true
         type: choice
         options:
@@ -18,11 +18,11 @@ on:
           - snapshot
         default: prerelease
       tag:
-        description: 'npm tag (for snapshot: custom tag, otherwise auto-determined)'
+        description: "npm tag (for snapshot: custom tag, otherwise auto-determined)"
         required: false
         type: string
       dry_run:
-        description: 'Dry run (no actual publish)'
+        description: "Dry run (no actual publish)"
         required: false
         type: boolean
         default: false
@@ -51,8 +51,23 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: "https://registry.npmjs.org"
+          cache: "pnpm"
+
+      - name: Ensure npm 11.5.1+ for OIDC
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: pnpm install
 
       - name: Run build
         run: pnpm build
@@ -110,7 +125,7 @@ jobs:
         id: check_files
         uses: andstor/file-existence-action@v3.0.0
         with:
-          files: '.changeset/pre.json'
+          files: ".changeset/pre.json"
 
       - uses: pnpm/action-setup@v4
         name: Install pnpm
@@ -121,7 +136,11 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 24
-          cache: 'pnpm'
+          registry-url: "https://registry.npmjs.org"
+          cache: "pnpm"
+
+      - name: Ensure npm 11.5.1+ for OIDC
+        run: npm install -g npm@latest
 
       - name: Install dependencies
         run: pnpm install
@@ -208,7 +227,8 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 24
-          cache: 'pnpm'
+          registry-url: "https://registry.npmjs.org"
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install
@@ -262,8 +282,23 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: "https://registry.npmjs.org"
+          cache: "pnpm"
+
+      - name: Ensure npm 11.5.1+ for OIDC
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: pnpm install
 
       - name: Generate slugified branch name
         id: slugify
