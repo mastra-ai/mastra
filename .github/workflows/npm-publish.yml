@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_type:
-        description: "Type of publish"
+        description: 'Type of publish'
         required: true
         type: choice
         options:
@@ -18,11 +18,11 @@ on:
           - snapshot
         default: prerelease
       tag:
-        description: "npm tag (for snapshot: custom tag, otherwise auto-determined)"
+        description: 'npm tag (for snapshot: custom tag, otherwise auto-determined)'
         required: false
         type: string
       dry_run:
-        description: "Dry run (no actual publish)"
+        description: 'Dry run (no actual publish)'
         required: false
         type: boolean
         default: false
@@ -110,7 +110,7 @@ jobs:
         id: check_files
         uses: andstor/file-existence-action@v3.0.0
         with:
-          files: ".changeset/pre.json"
+          files: '.changeset/pre.json'
 
       - uses: pnpm/action-setup@v4
         name: Install pnpm
@@ -121,7 +121,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 24
-          cache: "pnpm"
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install
@@ -208,7 +208,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 24
-          cache: "pnpm"
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install
