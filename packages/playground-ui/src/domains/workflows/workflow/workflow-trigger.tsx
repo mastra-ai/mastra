@@ -1,4 +1,4 @@
-import jsonSchemaToZod from 'json-schema-to-zod';
+import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { Braces, Loader2, StopCircle } from 'lucide-react';
 import { useState, useEffect, useContext } from 'react';
 import { parse } from 'superjson';

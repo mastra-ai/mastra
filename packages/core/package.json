@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.0.0-beta.4",
+  "version": "1.0.0-beta.5",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -190,6 +190,7 @@
   },
   "dependencies": {
     "@a2a-js/sdk": "~0.2.4",
+    "@ai-sdk/azure": "^2.0.0",
     "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.12",
     "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.0",
     "@ai-sdk/ui-utils-v5": "npm:@ai-sdk/ui-utils@1.2.11",
@@ -205,10 +206,11 @@
     "hono-openapi": "^0.4.8",
     "js-tiktoken": "^1.0.20",
     "json-schema": "^0.4.0",
-    "json-schema-to-zod": "^2.6.1",
+    "lru-cache": "^11.2.2",
     "p-map": "^7.0.3",
     "p-retry": "^7.1.0",
-    "radash": "^12.1.1"
+    "radash": "^12.1.1",
+    "xxhash-wasm": "^1.1.0"
   },
   "peerDependencies": {
     "@mastra/observability": ">=1.0.0-0 <2.0.0-0",

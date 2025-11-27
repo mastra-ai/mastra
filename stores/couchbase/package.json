@@ -1,6 +1,6 @@
 {
   "name": "@mastra/couchbase",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.2",
   "description": "Couchbase vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -25,7 +25,7 @@
     "coverage": "vitest run --coverage",
     "pretest": "node scripts/start-docker.js",
     "test": "vitest run",
-    "posttest": "node scripts/stop-docker.js"
+    "posttest": "docker compose down -v"
   },
   "dependencies": {
     "couchbase": "^4.6.0"
@@ -33,6 +33,7 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@internal/storage-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "22.13.17",

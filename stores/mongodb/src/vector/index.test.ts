@@ -634,7 +634,7 @@ createVectorTestSuite({
     await vectorDB.disconnect();
   },
   createIndex: async (indexName: string) => {
-    await vectorDB.createIndex({ indexName, dimension: 4, metric: 'cosine' });
+    await vectorDB.createIndex({ indexName, dimension: 1536, metric: 'cosine' });
     await vectorDB.waitForIndexReady({ indexName });
   },
   deleteIndex: async (indexName: string) => {
