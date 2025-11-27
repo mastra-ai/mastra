@@ -150,16 +150,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }
 
   /**
-   * Wrap a persistence operation. Override to add platform-specific durability.
-   *
-   * @param _operationId - Unique identifier for this persistence operation
-   * @param persistFn - The function that performs the actual persistence
-   */
-  protected async wrapPersistence(_operationId: string, persistFn: () => Promise<void>): Promise<void> {
-    await persistFn();
-  }
-
-  /**
    * Wrap a durable operation (like dynamic sleep function evaluation).
    * Override to add platform-specific durability.
    *
@@ -195,10 +185,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     conditionFn: ConditionFunction<any, any, any, any, DefaultEngineType>,
     index: number,
     context: ExecuteFunctionParams<any, any, any, any, DefaultEngineType>,
-    _operationId: string,
+    operationId: string,
   ): Promise<number | null> {
-    const result = await conditionFn(context);
-    return result ? index : null;
+    return this.wrapDurableOperation(operationId, async () => {
+      const result = await conditionFn(context);
+      return result ? index : null;
+    });
   }
 
   /**
@@ -218,18 +210,20 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     operationId: string;
     skipEmits?: boolean;
   }): Promise<number> {
-    const startedAt = Date.now();
-    if (!params.skipEmits) {
-      await params.emitter.emit('watch', {
-        type: 'workflow-step-start',
-        payload: {
-          id: params.step.id,
-          stepCallId: params.stepCallId,
-          ...params.stepInfo,
-        },
-      });
-    }
-    return startedAt;
+    return this.wrapDurableOperation(params.operationId, async () => {
+      const startedAt = Date.now();
+      if (!params.skipEmits) {
+        await params.emitter.emit('watch', {
+          type: 'workflow-step-start',
+          payload: {
+            id: params.step.id,
+            stepCallId: params.stepCallId,
+            ...params.stepInfo,
+          },
+        });
+      }
+      return startedAt;
+    });
   }
 
   /**
@@ -265,6 +259,53 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     // Default: return null to use standard execution
     // Subclasses (like Inngest) override to use platform-specific invocation
     return null;
+  }
+
+  /**
+   * Handle step execution error. Override to customize error handling behavior.
+   * Default: logs error, records in span, returns failed result.
+   * Inngest: throws RetryAfterError to let Inngest handle retries externally.
+   *
+   * @param error - The error that occurred
+   * @param params - Error handling parameters
+   * @returns Failed result object, or throws to propagate error
+   */
+  protected handleStepError(
+    error: unknown,
+    params: {
+      workflowId: string;
+      runId: string;
+      stepId: string;
+      stepSpan?: Span<SpanType>;
+      delay: number;
+    },
+  ): { status: 'failed'; error: string; endedAt: number } {
+    const processedError = this.preprocessExecutionError(
+      error,
+      {
+        id: 'WORKFLOW_STEP_INVOKE_FAILED',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        details: { workflowId: params.workflowId, runId: params.runId, stepId: params.stepId },
+      },
+      `Error executing step ${params.stepId}: `,
+    );
+
+    params.stepSpan?.error({
+      error: processedError,
+      attributes: { status: 'failed' },
+    });
+
+    const errorInstance = getErrorFromUnknown(processedError, {
+      includeStack: false,
+      fallbackMessage: 'Unknown step execution error',
+    });
+
+    return {
+      status: 'failed',
+      error: `Error: ${errorInstance.message}`,
+      endedAt: Date.now(),
+    };
   }
 
   /**
@@ -917,7 +958,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         step,
       });
 
-    let resumeDataToUse;
+    let resumeDataToUse: unknown;
     if (timeTravelResumeData && !timeTravelResumeValidationError) {
       resumeDataToUse = timeTravelResumeData;
     } else if (timeTravelResumeData && timeTravelResumeValidationError) {
@@ -1032,9 +1073,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         await new Promise(resolve => setTimeout(resolve, delay));
       }
       try {
-        let suspended: { payload: any } | undefined;
-        let bailed: { payload: any } | undefined;
-
         if (validationError) {
           throw validationError;
         }
@@ -1046,100 +1084,136 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           timeTravelSteps = timeTravel.steps[0] === step.id ? timeTravel.steps.slice(1) : [];
         }
 
-        const result = await runStep({
-          runId,
-          resourceId,
-          workflowId,
-          mastra: this.mastra ? wrapMastra(this.mastra, { currentSpan: stepSpan }) : undefined,
-          requestContext,
-          inputData,
-          state: executionContext.state,
-          setState: (state: any) => {
-            executionContext.state = state;
-          },
-          retryCount,
-          resumeData: resumeDataToUse,
-          tracingContext: { currentSpan: stepSpan },
-          getInitData: () => stepResults?.input as any,
-          getStepResult: getStepResult.bind(this, stepResults),
-          suspend: async (suspendPayload?: any, suspendOptions?: SuspendOptions): Promise<any> => {
-            const { suspendData, validationError } = await validateStepSuspendData({
-              suspendData: suspendPayload,
-              step,
-            });
-            if (validationError) {
-              throw validationError;
-            }
-            executionContext.suspendedPaths[step.id] = executionContext.executionPath;
-            if (suspendOptions?.resumeLabel) {
-              const resumeLabel = Array.isArray(suspendOptions.resumeLabel)
-                ? suspendOptions.resumeLabel
-                : [suspendOptions.resumeLabel];
-              for (const label of resumeLabel) {
-                executionContext.resumeLabels[label] = {
-                  stepId: step.id,
-                  foreachIndex: executionContext.foreachIndex,
-                };
-              }
-            }
+        // Wrap step.execute with wrapDurableOperation for durability
+        // Return complete result including suspended/bailed/contextMutations for Inngest replay
+        const durableResult = await this.wrapDurableOperation(`workflow.${workflowId}.step.${step.id}`, async () => {
+          let suspended: { payload: any } | undefined;
+          let bailed: { payload: any } | undefined;
+          const contextMutations: {
+            suspendedPaths: Record<string, number[]>;
+            resumeLabels: Record<string, { stepId: string; foreachIndex?: number }>;
+            stateUpdate: any;
+          } = {
+            suspendedPaths: {},
+            resumeLabels: {},
+            stateUpdate: null,
+          };
 
-            suspended = { payload: suspendData };
-          },
-          bail: (result: any) => {
-            bailed = { payload: result };
-          },
-          abort: () => {
-            abortController?.abort();
-          },
-          // Only pass resume data if this step was actually suspended before
-          // This prevents pending nested workflows from trying to resume instead of start
-          resume:
-            stepResults[step.id]?.status === 'suspended'
-              ? {
-                  steps: resume?.steps?.slice(1) || [],
-                  resumePayload: resume?.resumePayload,
-                  // @ts-ignore
-                  runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
-                  label: resume?.label,
-                  forEachIndex: resume?.forEachIndex,
-                }
-              : undefined,
-          // Only pass restart data if this step is part of activeStepsPath
-          // This prevents pending nested workflows from trying to restart instead of start
-          restart: !!restart?.activeStepsPath?.[step.id],
-          timeTravel:
-            timeTravelSteps.length > 0
-              ? {
-                  inputData: timeTravel?.inputData,
-                  steps: timeTravelSteps,
-                  nestedStepResults: timeTravel?.nestedStepResults,
-                  resumeData: timeTravel?.resumeData,
-                }
-              : undefined,
-          [EMITTER_SYMBOL]: emitter,
-          [STREAM_FORMAT_SYMBOL]: executionContext.format,
-          engine: this.getEngineContext(),
-          abortSignal: abortController?.signal,
-          writer: new ToolStream(
-            {
-              prefix: 'workflow-step',
-              callId: stepCallId,
-              name: step.id,
-              runId,
+          const output = await runStep({
+            runId,
+            resourceId,
+            workflowId,
+            mastra: this.mastra ? wrapMastra(this.mastra, { currentSpan: stepSpan }) : undefined,
+            requestContext,
+            inputData,
+            state: executionContext.state,
+            setState: (state: any) => {
+              executionContext.state = state;
+              contextMutations.stateUpdate = state;
             },
-            writableStream,
-          ),
-          // Disable scorers must be explicitly set to false they are on by default
-          scorers: disableScorers === false ? undefined : step.scorers,
-          validateInputs: this.options?.validateInputs,
+            retryCount,
+            resumeData: resumeDataToUse,
+            tracingContext: { currentSpan: stepSpan },
+            getInitData: () => stepResults?.input as any,
+            getStepResult: getStepResult.bind(this, stepResults),
+            suspend: async (suspendPayload?: any, suspendOptions?: SuspendOptions): Promise<any> => {
+              const { suspendData, validationError: suspendValidationError } = await validateStepSuspendData({
+                suspendData: suspendPayload,
+                step,
+              });
+              if (suspendValidationError) {
+                throw suspendValidationError;
+              }
+              // Capture mutations for return value (needed for Inngest replay)
+              contextMutations.suspendedPaths[step.id] = executionContext.executionPath;
+              // Also apply directly for Default engine
+              executionContext.suspendedPaths[step.id] = executionContext.executionPath;
+
+              if (suspendOptions?.resumeLabel) {
+                const resumeLabel = Array.isArray(suspendOptions.resumeLabel)
+                  ? suspendOptions.resumeLabel
+                  : [suspendOptions.resumeLabel];
+                for (const label of resumeLabel) {
+                  const labelData = {
+                    stepId: step.id,
+                    foreachIndex: executionContext.foreachIndex,
+                  };
+                  // Capture for return value
+                  contextMutations.resumeLabels[label] = labelData;
+                  // Apply directly for Default engine
+                  executionContext.resumeLabels[label] = labelData;
+                }
+              }
+
+              suspended = { payload: suspendData };
+            },
+            bail: (result: any) => {
+              bailed = { payload: result };
+            },
+            abort: () => {
+              abortController?.abort();
+            },
+            // Only pass resume data if this step was actually suspended before
+            // This prevents pending nested workflows from trying to resume instead of start
+            resume:
+              stepResults[step.id]?.status === 'suspended'
+                ? {
+                    steps: resume?.steps?.slice(1) || [],
+                    resumePayload: resume?.resumePayload,
+                    // @ts-ignore
+                    runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
+                    label: resume?.label,
+                    forEachIndex: resume?.forEachIndex,
+                  }
+                : undefined,
+            // Only pass restart data if this step is part of activeStepsPath
+            // This prevents pending nested workflows from trying to restart instead of start
+            restart: !!restart?.activeStepsPath?.[step.id],
+            timeTravel:
+              timeTravelSteps.length > 0
+                ? {
+                    inputData: timeTravel?.inputData,
+                    steps: timeTravelSteps,
+                    nestedStepResults: timeTravel?.nestedStepResults,
+                    resumeData: timeTravel?.resumeData,
+                  }
+                : undefined,
+            [EMITTER_SYMBOL]: emitter,
+            [STREAM_FORMAT_SYMBOL]: executionContext.format,
+            engine: this.getEngineContext(),
+            abortSignal: abortController?.signal,
+            writer: new ToolStream(
+              {
+                prefix: 'workflow-step',
+                callId: stepCallId,
+                name: step.id,
+                runId,
+              },
+              writableStream,
+            ),
+            // Disable scorers must be explicitly set to false they are on by default
+            scorers: disableScorers === false ? undefined : step.scorers,
+            validateInputs: this.options?.validateInputs,
+          });
+
+          return { output, suspended, bailed, contextMutations };
         });
+
+        // Apply context mutations from the durable operation result
+        // For Default: these were already applied during execution, this is a no-op
+        // For Inngest: on replay, the wrapped function didn't re-execute, so we restore from the memoized result
+        Object.assign(executionContext.suspendedPaths, durableResult.contextMutations.suspendedPaths);
+        Object.assign(executionContext.resumeLabels, durableResult.contextMutations.resumeLabels);
+        if (durableResult.contextMutations.stateUpdate !== null) {
+          executionContext.state = durableResult.contextMutations.stateUpdate;
+        }
 
         if (step.scorers) {
           await this.runScorers({
             scorers: step.scorers,
             runId,
             input: inputData,
-            output: result,
+            output: durableResult.output,
             workflowId,
             stepId: step.id,
             requestContext,
@@ -1148,82 +1222,45 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           });
         }
 
-        if (suspended) {
+        if (durableResult.suspended) {
           execResults = {
             status: 'suspended',
-            suspendPayload: suspended.payload,
-            ...(result ? { suspendOutput: result } : {}),
+            suspendPayload: durableResult.suspended.payload,
+            ...(durableResult.output ? { suspendOutput: durableResult.output } : {}),
             suspendedAt: Date.now(),
           };
-        } else if (bailed) {
-          execResults = { status: 'bailed', output: bailed.payload, endedAt: Date.now() };
+        } else if (durableResult.bailed) {
+          execResults = { status: 'bailed', output: durableResult.bailed.payload, endedAt: Date.now() };
         } else {
-          execResults = { status: 'success', output: result, endedAt: Date.now() };
+          execResults = { status: 'success', output: durableResult.output, endedAt: Date.now() };
         }
 
         break;
       } catch (e) {
-        const error = this.preprocessExecutionError(
-          e,
-          {
-            id: 'WORKFLOW_STEP_INVOKE_FAILED',
-            domain: ErrorDomain.MASTRA_WORKFLOW,
-            category: ErrorCategory.USER,
-            details: { workflowId, runId, stepId: step.id },
-          },
-          `Error executing step ${step.id}: `,
-        );
-
-        stepSpan?.error({
-          error,
-          attributes: {
-            status: 'failed',
-          },
+        // Use hook for error handling - allows Inngest to throw RetryAfterError
+        const errorResult = this.handleStepError(e, {
+          workflowId,
+          runId,
+          stepId: step.id,
+          stepSpan,
+          delay,
         });
 
-        const errorInstance = getErrorFromUnknown(error, {
-          includeStack: false,
-          fallbackMessage: 'Unknown step execution error',
-        });
-        execResults = {
-          status: 'failed',
-          error: `Error: ${errorInstance.message}`,
-          endedAt: Date.now(),
-        };
+        if (errorResult) {
+          execResults = errorResult;
+        }
       }
     }
 
     delete executionContext.activeStepsPath[step.id];
 
     if (!skipEmits) {
-      if (execResults.status === 'suspended') {
-        await emitter.emit('watch', {
-          type: 'workflow-step-suspended',
-          payload: {
-            id: step.id,
-            stepCallId,
-            ...execResults,
-          },
-        });
-      } else {
-        await emitter.emit('watch', {
-          type: 'workflow-step-result',
-          payload: {
-            id: step.id,
-            stepCallId,
-            ...execResults,
-          },
-        });
-
-        await emitter.emit('watch', {
-          type: 'workflow-step-finish',
-          payload: {
-            id: step.id,
-            stepCallId,
-            metadata: {},
-          },
-        });
-      }
+      await this.emitStepResultEvents({
+        stepId: step.id,
+        stepCallId,
+        execResults: execResults as StepResult<any, any, any, any>,
+        emitter,
+      });
     }
 
     if (execResults.status != 'failed') {
@@ -1309,6 +1346,36 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           tracingContext,
         });
       }
+    }
+  }
+
+  /**
+   * Emit step result events (suspended, result, finish).
+   * Shared between Default and Inngest execution engines.
+   */
+  protected async emitStepResultEvents(params: {
+    stepId: string;
+    stepCallId?: string;
+    execResults: StepResult<any, any, any, any>;
+    emitter: Emitter;
+  }): Promise<void> {
+    const { stepId, stepCallId, execResults, emitter } = params;
+    const payloadBase = stepCallId ? { id: stepId, stepCallId } : { id: stepId };
+
+    if (execResults.status === 'suspended') {
+      await emitter.emit('watch', {
+        type: 'workflow-step-suspended',
+        payload: { ...payloadBase, ...execResults },
+      });
+    } else {
+      await emitter.emit('watch', {
+        type: 'workflow-step-result',
+        payload: { ...payloadBase, ...execResults },
+      });
+      await emitter.emit('watch', {
+        type: 'workflow-step-finish',
+        payload: { ...payloadBase, metadata: {} },
+      });
     }
   }
 
@@ -2201,7 +2268,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }) {
     const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate`;
 
-    await this.wrapPersistence(operationId, async () => {
+    await this.wrapDurableOperation(operationId, async () => {
       const shouldPersistSnapshot = this.options?.shouldPersistSnapshot?.({ stepResults, workflowStatus });
 
       if (!shouldPersistSnapshot) {
