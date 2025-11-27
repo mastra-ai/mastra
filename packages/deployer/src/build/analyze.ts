@@ -90,15 +90,26 @@ function validateError(
         id: 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND',
         messagePrefix: `Mastra wasn't able to build your project, We couldn't load "${missingModule}" from "${moduleName}". Please add`,
       };
+
+      // if they are the same, the feedback we give to our user is not really useful and probably something else went wrong
+      if (moduleName === missingModule) {
+        return;
+      }
     }
   }
 
   if (err.message.includes('No native build was found')) {
-    moduleName = binaryMapData[file.fileName]?.[0] ?? getPackageNameFromBundledModuleName(basename(file.name));
+    const pkgName = getPackageNameFromBundledModuleName(basename(file.name));
+    moduleName = binaryMapData[file.fileName]?.[0] ?? pkgName;
     errorConfig = {
       id: 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD',
       messagePrefix: 'We found a binary dependency in your bundle but we cannot bundle it yet. Please add',
     };
+
+    // if they are the same, the feedback we give to our user is not really useful and probably something else went wrong
+    if (moduleName === pkgName) {
+      return;
+    }
   }
 
   if (errorConfig && moduleName) {
