@@ -159,7 +159,9 @@ export class MastraLLMVNext extends MastraBase {
     _internal,
     agentId,
     toolCallId,
+    requestContext,
     methodType,
+    includeRawChunks,
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     let stopWhenToUse;
 
@@ -223,7 +225,9 @@ export class MastraLLMVNext extends MastraBase {
         modelSpanTracker,
         requireToolApproval,
         agentId,
+        requestContext,
         methodType,
+        includeRawChunks,
         options: {
           ...options,
           onStepFinish: async props => {

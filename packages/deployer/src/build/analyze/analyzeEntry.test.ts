@@ -237,6 +237,7 @@ describe('analyzeEntry', () => {
       },
       '',
       {
+        shouldCheckTransitiveDependencies: true,
         logger: noopLogger,
         sourcemapEnabled: false,
         workspaceMap,

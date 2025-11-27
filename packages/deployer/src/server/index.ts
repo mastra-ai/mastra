@@ -448,8 +448,8 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       logger.info(` Mastra API running on port ${protocol}://${host}:${port}/api`);
       if (options?.playground) {
         const basePath = normalizeServerBase(serverOptions?.base ?? '/');
-        const playgroundUrl = `${protocol}://${host}:${port}${basePath}`;
-        logger.info(`👨‍💻 Playground available at ${playgroundUrl}`);
+        const studioUrl = `${protocol}://${host}:${port}${basePath}`;
+        logger.info(`👨‍💻 Studio available at ${studioUrl}`);
       }
 
       if (process.send) {

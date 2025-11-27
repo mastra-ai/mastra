@@ -9,7 +9,6 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { MastraModelOutput, OutputSchema } from '@mastra/core/stream';
 import { Memory } from '@mastra/memory';
-import { TokenLimiter } from '@mastra/memory/processors';
 import { AgentBuilderDefaults } from '../defaults';
 import { ToolSummaryProcessor } from '../processors/tool-summary';
 import type { AgentBuilderConfig, GenerateAgentOptions } from '../types';
@@ -54,6 +53,7 @@ export class AgentBuilder extends Agent {
     const combinedInstructions = additionalInstructions + AgentBuilderDefaults.DEFAULT_INSTRUCTIONS(config.projectPath);
 
     const agentConfig = {
+      id: 'agent-builder',
       name: 'agent-builder',
       description:
         'An AI agent specialized in generating Mastra agents, tools, and workflows from natural language requirements.',
@@ -67,14 +67,13 @@ export class AgentBuilder extends Agent {
       },
       memory: new Memory({
         options: AgentBuilderDefaults.DEFAULT_MEMORY_CONFIG,
-        processors: [
-          // use the write to disk processor to debug the agent's context
-          // new WriteToDiskProcessor({ prefix: 'before-filter' }),
-          new ToolSummaryProcessor({ summaryModel: config.summaryModel || config.model }),
-          new TokenLimiter(100000),
-          // new WriteToDiskProcessor({ prefix: 'after-filter' }),
-        ],
       }),
+      inputProcessors: [
+        // use the write to disk processor to debug the agent's context
+        // new WriteToDiskProcessor({ prefix: 'before-filter' }),
+        new ToolSummaryProcessor({ summaryModel: config.summaryModel || config.model }),
+        // new WriteToDiskProcessor({ prefix: 'after-filter' }),
+      ],
     };
 
     super(agentConfig);

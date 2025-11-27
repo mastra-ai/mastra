@@ -2,6 +2,7 @@ import { MastraError } from '@mastra/core/error';
 import { describe, it, expect } from 'vitest';
 import { SamplingStrategyType } from './config';
 import { Observability } from './default';
+import { TestExporter } from './exporters';
 
 describe('Observability Config Validation', () => {
   describe('ObservabilityRegistryConfig validation', () => {
@@ -28,6 +29,7 @@ describe('Observability Config Validation', () => {
             myTracing: {
               serviceName: 'my-service',
               sampling: { type: SamplingStrategyType.ALWAYS },
+              exporters: [new TestExporter()],
             },
           },
         });
@@ -45,6 +47,7 @@ describe('Observability Config Validation', () => {
             myTracing: {
               serviceName: 'my-service',
               sampling: { type: SamplingStrategyType.ALWAYS },
+              exporters: [new TestExporter()],
             },
           },
         });
@@ -72,6 +75,7 @@ describe('Observability Config Validation', () => {
             myTracing: {
               serviceName: 'my-service',
               sampling: { type: SamplingStrategyType.ALWAYS },
+              exporters: [new TestExporter()],
             },
           },
         });
@@ -90,12 +94,12 @@ describe('Observability Config Validation', () => {
       }).not.toThrow();
     });
 
-    it('should accept config with only configSelector', () => {
+    it('should reject config with only configSelector', () => {
       expect(() => {
         new Observability({
           configSelector: () => 'default',
         });
-      }).not.toThrow();
+      }).toThrow();
     });
 
     it('should accept single config without configSelector', () => {
@@ -105,6 +109,7 @@ describe('Observability Config Validation', () => {
             myTracing: {
               serviceName: 'my-service',
               sampling: { type: SamplingStrategyType.ALWAYS },
+              exporters: [new TestExporter()],
             },
           },
         });
@@ -118,10 +123,12 @@ describe('Observability Config Validation', () => {
             config1: {
               serviceName: 'service-1',
               sampling: { type: SamplingStrategyType.ALWAYS },
+              exporters: [new TestExporter()],
             },
             config2: {
               serviceName: 'service-2',
               sampling: { type: SamplingStrategyType.ALWAYS },
+              exporters: [new TestExporter()],
             },
           },
         });
@@ -145,10 +152,12 @@ describe('Observability Config Validation', () => {
             config1: {
               serviceName: 'service-1',
               sampling: { type: SamplingStrategyType.ALWAYS },
+              exporters: [new TestExporter()],
             },
             config2: {
               serviceName: 'service-2',
               sampling: { type: SamplingStrategyType.ALWAYS },
+              exporters: [new TestExporter()],
             },
           },
           configSelector: () => 'config1',
@@ -165,6 +174,7 @@ describe('Observability Config Validation', () => {
             myTracing: {
               serviceName: 'my-service',
               sampling: { type: SamplingStrategyType.RATIO, probability: 0.5 },
+              exporters: [new TestExporter()],
             },
           },
         });
@@ -178,6 +188,7 @@ describe('Observability Config Validation', () => {
             myTracing: {
               serviceName: 'my-service',
               sampling: { type: SamplingStrategyType.RATIO, probability: 1.5 },
+              exporters: [new TestExporter()],
             },
           },
         });
@@ -201,6 +212,7 @@ describe('Observability Config Validation', () => {
             myTracing: {
               serviceName: 'my-service',
               sampling: { type: SamplingStrategyType.RATIO, probability: -0.5 },
+              exporters: [new TestExporter()],
             },
           },
         });
@@ -221,6 +233,7 @@ describe('Observability Config Validation', () => {
             myTracing: {
               serviceName: 'my-service',
               sampling: { type: SamplingStrategyType.ALWAYS },
+              exporters: [new TestExporter()],
             },
           },
         });
@@ -234,6 +247,7 @@ describe('Observability Config Validation', () => {
             myTracing: {
               serviceName: 'my-service',
               sampling: { type: SamplingStrategyType.NEVER },
+              exporters: [new TestExporter()],
             },
           },
         });
@@ -250,6 +264,7 @@ describe('Observability Config Validation', () => {
                 type: SamplingStrategyType.CUSTOM,
                 sampler: () => true,
               },
+              exporters: [new TestExporter()],
             },
           },
         });
@@ -265,6 +280,7 @@ describe('Observability Config Validation', () => {
             myTracing: {
               serviceName: 'my-service',
               sampling: { type: SamplingStrategyType.ALWAYS },
+              exporters: [new TestExporter()],
               includeInternalSpans: true,
               requestContextKeys: ['userId', 'sessionId'],
             },
@@ -293,6 +309,29 @@ describe('Observability Config Validation', () => {
           expect(error.message).toContain('myTracing');
           expect(error.message).toContain('serviceName');
           expect(error.message).toContain('Required');
+        }
+      }
+    });
+
+    it('should reject config without exporters', () => {
+      try {
+        new Observability({
+          configs: {
+            myTracing: {
+              serviceName: 'my-service',
+              sampling: { type: SamplingStrategyType.ALWAYS },
+            },
+          },
+        });
+        expect.fail('Should have thrown an error');
+      } catch (error) {
+        expect(error).toBeInstanceOf(MastraError);
+        if (error instanceof MastraError) {
+          expect(error.id).toBe('OBSERVABILITY_INVALID_INSTANCE_CONFIG');
+          expect(error.domain).toBe('MASTRA_OBSERVABILITY');
+          expect(error.category).toBe('USER');
+          expect(error.message).toContain('myTracing');
+          expect(error.message).toContain('At least one exporter or a bridge is required');
         }
       }
     });

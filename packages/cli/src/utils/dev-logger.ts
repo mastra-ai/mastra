@@ -68,8 +68,8 @@ export class DevLogger {
     const timing = startTime ? `${Date.now() - startTime} ms` : 'XXX ms';
     console.info(pc.inverse(pc.green(' mastra ')) + ` ${pc.green(version)} ${pc.gray('ready in')} ${timing}`);
     console.info('');
-    console.info(`${pc.dim('│')} ${pc.bold('Playground:')} ${pc.cyan(`${protocol}://${host}:${port}${basePath}`)}`);
-    console.info(`${pc.dim('│')} ${pc.bold('API:')}        ${`${protocol}://${host}:${port}/api`}`);
+    console.info(`${pc.dim('│')} ${pc.bold('Studio:')} ${pc.cyan(`${protocol}://${host}:${port}${basePath}`)}`);
+    console.info(`${pc.dim('│')} ${pc.bold('API:')}    ${`${protocol}://${host}:${port}/api`}`);
     console.info('');
   }
 
