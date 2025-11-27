@@ -16818,4 +16818,395 @@ describe('Workflow', () => {
       expect(typedStep).toBeDefined();
     });
   });
+
+  describe('Global State in Workflows (Issue #7122)', () => {
+    describe('Basic Global State Usage', () => {
+      it('should allow steps to read and update global state via state/setState', async () => {
+        const stateUpdates: Array<{ step: string; before: any; after: any }> = [];
+
+        const step1 = createStep({
+          id: 'step-1',
+          inputSchema: z.object({ message: z.string() }),
+          outputSchema: z.object({ processed: z.string() }),
+          stateSchema: z.object({ counter: z.number() }),
+          execute: async ({ inputData, state, setState }) => {
+            stateUpdates.push({ step: 'step-1', before: { ...state }, after: null });
+            setState({ ...state, counter: state.counter + 1 });
+            stateUpdates[stateUpdates.length - 1]!.after = { counter: state.counter + 1 };
+            return { processed: inputData.message.toUpperCase() };
+          },
+        });
+
+        const step2 = createStep({
+          id: 'step-2',
+          inputSchema: z.object({ processed: z.string() }),
+          outputSchema: z.object({ result: z.string(), counterValue: z.number() }),
+          stateSchema: z.object({ counter: z.number() }),
+          execute: async ({ inputData, state, setState }) => {
+            stateUpdates.push({ step: 'step-2', before: { ...state }, after: null });
+            setState({ ...state, counter: state.counter + 1 });
+            stateUpdates[stateUpdates.length - 1]!.after = { counter: state.counter + 1 };
+            return { result: inputData.processed, counterValue: state.counter };
+          },
+        });
+
+        const workflow = createWorkflow({
+          id: 'state-test-workflow',
+          inputSchema: z.object({ message: z.string() }),
+          outputSchema: z.object({ result: z.string(), counterValue: z.number() }),
+          stateSchema: z.object({ counter: z.number() }),
+          steps: [step1, step2],
+          mastra: new Mastra({ logger: false }),
+        })
+          .then(step1)
+          .then(step2)
+          .commit();
+
+        const run = await workflow.createRun();
+        const result = await run.start({
+          inputData: { message: 'hello' },
+          initialState: { counter: 0 },
+        });
+
+        expect(result.status).toBe('success');
+        // Verify state was updated across steps
+        expect(stateUpdates).toHaveLength(2);
+        expect(stateUpdates[0]?.before.counter).toBe(0); // Initial state
+        expect(stateUpdates[0]?.after.counter).toBe(1); // After step-1
+        expect(stateUpdates[1]?.before.counter).toBe(1); // step-2 sees updated state
+        expect(stateUpdates[1]?.after.counter).toBe(2); // After step-2
+      });
+
+      it('should pass initialState when starting a workflow run', async () => {
+        let capturedState: any = null;
+
+        const step = createStep({
+          id: 'capture-state-step',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ stateValue: z.string() }),
+          stateSchema: z.object({
+            userId: z.string(),
+            sessionData: z.object({ token: z.string() }),
+          }),
+          execute: async ({ state }) => {
+            capturedState = state;
+            return { stateValue: state.userId };
+          },
+        });
+
+        const workflow = createWorkflow({
+          id: 'initial-state-workflow',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ stateValue: z.string() }),
+          stateSchema: z.object({
+            userId: z.string(),
+            sessionData: z.object({ token: z.string() }),
+          }),
+          steps: [step],
+          mastra: new Mastra({ logger: false }),
+        })
+          .then(step)
+          .commit();
+
+        const run = await workflow.createRun();
+        await run.start({
+          inputData: {},
+          initialState: {
+            userId: 'user-123',
+            sessionData: { token: 'secret-token' },
+          },
+        });
+
+        expect(capturedState).toEqual({
+          userId: 'user-123',
+          sessionData: { token: 'secret-token' },
+        });
+      });
+    });
+
+    describe('State vs Step Input/Output Flow', () => {
+      it('should demonstrate that state is separate from step-to-step data flow', async () => {
+        // This test documents the difference between:
+        // 1. State (global, accessed via `state` parameter)
+        // 2. Step input/output (flows between steps via inputData/return value)
+
+        const step1Observations: { inputData: any; state: any } = { inputData: null, state: null };
+        const step2Observations: { inputData: any; state: any } = { inputData: null, state: null };
+
+        const step1 = createStep({
+          id: 'step-1',
+          inputSchema: z.object({ workflowInput: z.string() }),
+          outputSchema: z.object({ step1Output: z.string() }),
+          stateSchema: z.object({ sharedValue: z.string() }),
+          execute: async ({ inputData, state, setState }) => {
+            step1Observations.inputData = inputData;
+            step1Observations.state = state;
+            // Update state
+            setState({ ...state, sharedValue: 'modified-by-step-1' });
+            // Return output that flows to next step
+            return { step1Output: 'output-from-step-1' };
+          },
+        });
+
+        const step2 = createStep({
+          id: 'step-2',
+          inputSchema: z.object({ step1Output: z.string() }),
+          outputSchema: z.object({ finalResult: z.string() }),
+          stateSchema: z.object({ sharedValue: z.string() }),
+          execute: async ({ inputData, state }) => {
+            step2Observations.inputData = inputData;
+            step2Observations.state = state;
+            return { finalResult: `${inputData.step1Output} + ${state.sharedValue}` };
+          },
+        });
+
+        const workflow = createWorkflow({
+          id: 'state-vs-output-workflow',
+          inputSchema: z.object({ workflowInput: z.string() }),
+          outputSchema: z.object({ finalResult: z.string() }),
+          stateSchema: z.object({ sharedValue: z.string() }),
+          steps: [step1, step2],
+          mastra: new Mastra({ logger: false }),
+        })
+          .then(step1)
+          .then(step2)
+          .commit();
+
+        const run = await workflow.createRun();
+        const result = await run.start({
+          inputData: { workflowInput: 'initial-input' },
+          initialState: { sharedValue: 'initial-state-value' },
+        });
+
+        // Step 1 receives workflow input via inputData
+        expect(step1Observations.inputData).toEqual({ workflowInput: 'initial-input' });
+        // Step 1 receives initial state via state
+        expect(step1Observations.state).toEqual({ sharedValue: 'initial-state-value' });
+
+        // Step 2 receives step1's OUTPUT via inputData (not state!)
+        expect(step2Observations.inputData).toEqual({ step1Output: 'output-from-step-1' });
+        // Step 2 sees the MODIFIED state (updated by step1)
+        expect(step2Observations.state).toEqual({ sharedValue: 'modified-by-step-1' });
+
+        expect(result.status).toBe('success');
+        if (result.status === 'success') {
+          expect(result.result).toEqual({ finalResult: 'output-from-step-1 + modified-by-step-1' });
+        }
+      });
+
+      it('should document that step output superset passes extra keys to next step inputData (Issue #7122 behavior)', async () => {
+        // This test documents the current behavior where:
+        // - step1 outputs { length: number, text: string }
+        // - step2 expects only { length: number }
+        // - step2 actually receives { length: number, text: string } (the superset)
+
+        let step2ReceivedInput: any = null;
+
+        const step1 = createStep({
+          id: 'step-1',
+          inputSchema: z.string(),
+          outputSchema: z.object({ length: z.number(), text: z.string() }),
+          execute: async ({ inputData }) => {
+            return { length: inputData.length, text: inputData };
+          },
+        });
+
+        const step2 = createStep({
+          id: 'step-2',
+          inputSchema: z.object({ length: z.number() }),
+          outputSchema: z.object({ length: z.number() }),
+          execute: async ({ inputData }) => {
+            step2ReceivedInput = inputData;
+            return inputData;
+          },
+        });
+
+        const workflow = createWorkflow({
+          id: 'superset-test-workflow',
+          inputSchema: step1.inputSchema,
+          outputSchema: step2.outputSchema,
+          steps: [step1, step2],
+          mastra: new Mastra({ logger: false }),
+        })
+          .then(step1)
+          .then(step2)
+          .commit();
+
+        const run = await workflow.createRun();
+        const result = await run.start({ inputData: 'hello' });
+
+        expect(result.status).toBe('success');
+
+        // Document the current behavior: step2 receives the FULL output from step1,
+        // including keys not in step2's inputSchema
+        expect(step2ReceivedInput).toEqual({ length: 5, text: 'hello' });
+
+        // The step output also includes the extra keys (since inputData passes through)
+        if (result.status === 'success') {
+          expect(result.steps['step-2']).toMatchObject({
+            status: 'success',
+            payload: { length: 5, text: 'hello' }, // Full superset is passed as payload
+            output: { length: 5, text: 'hello' }, // And returned as output
+          });
+        }
+      });
+    });
+
+    describe('State Persistence Across Suspend/Resume', () => {
+      it('should preserve state across suspend and resume cycles', async () => {
+        const stateValuesObserved: any[] = [];
+
+        const step1 = createStep({
+          id: 'step-1',
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          stateSchema: z.object({ count: z.number(), items: z.array(z.string()) }),
+          execute: async ({ state, setState, suspend, resumeData }) => {
+            stateValuesObserved.push({ step: 'step-1', state: { ...state } });
+
+            if (!resumeData) {
+              // First run: update state and suspend
+              setState({ ...state, count: state.count + 1, items: [...state.items, 'item-1'] });
+              await suspend({});
+              return {};
+            }
+
+            // After resume: state should be preserved
+            return {};
+          },
+          resumeSchema: z.object({ proceed: z.boolean() }),
+        });
+
+        const step2 = createStep({
+          id: 'step-2',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ finalCount: z.number(), itemCount: z.number() }),
+          stateSchema: z.object({ count: z.number(), items: z.array(z.string()) }),
+          execute: async ({ state }) => {
+            stateValuesObserved.push({ step: 'step-2', state: { ...state } });
+            return { finalCount: state.count, itemCount: state.items.length };
+          },
+        });
+
+        const workflow = createWorkflow({
+          id: 'state-persistence-workflow',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ finalCount: z.number(), itemCount: z.number() }),
+          stateSchema: z.object({ count: z.number(), items: z.array(z.string()) }),
+          steps: [step1, step2],
+          mastra: new Mastra({ logger: false, storage: testStorage }),
+        })
+          .then(step1)
+          .then(step2)
+          .commit();
+
+        const run = await workflow.createRun();
+
+        // Start workflow with initial state
+        const startResult = await run.start({
+          inputData: {},
+          initialState: { count: 0, items: [] },
+        });
+
+        expect(startResult.status).toBe('suspended');
+        expect(stateValuesObserved).toHaveLength(1);
+        expect(stateValuesObserved[0]).toEqual({
+          step: 'step-1',
+          state: { count: 0, items: [] },
+        });
+
+        // Resume workflow
+        const resumeResult = await run.resume({
+          step: 'step-1',
+          resumeData: { proceed: true },
+        });
+
+        expect(resumeResult.status).toBe('success');
+        // After resume, step-1 runs again and step-2 runs
+        expect(stateValuesObserved.length).toBeGreaterThanOrEqual(2);
+
+        // Step-2 should see the updated state
+        const step2Observation = stateValuesObserved.find(o => o.step === 'step-2');
+        expect(step2Observation?.state).toEqual({
+          count: 1,
+          items: ['item-1'],
+        });
+      });
+    });
+
+    describe('State with Nested Workflows', () => {
+      it('should propagate state to nested workflows', async () => {
+        const stateObservations: Array<{ workflow: string; step: string; state: any }> = [];
+
+        const nestedStep = createStep({
+          id: 'nested-step',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ result: z.string() }),
+          stateSchema: z.object({ sharedValue: z.string() }),
+          execute: async ({ state }) => {
+            stateObservations.push({
+              workflow: 'nested',
+              step: 'nested-step',
+              state: { ...state },
+            });
+            return { result: `nested-received: ${state.sharedValue}` };
+          },
+        });
+
+        const nestedWorkflow = createWorkflow({
+          id: 'nested-workflow',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ result: z.string() }),
+          stateSchema: z.object({ sharedValue: z.string() }),
+          steps: [nestedStep],
+        })
+          .then(nestedStep)
+          .commit();
+
+        const parentStep = createStep({
+          id: 'parent-step',
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          stateSchema: z.object({ sharedValue: z.string() }),
+          execute: async ({ state, setState }) => {
+            stateObservations.push({
+              workflow: 'parent',
+              step: 'parent-step',
+              state: { ...state },
+            });
+            setState({ ...state, sharedValue: 'modified-by-parent' });
+            return {};
+          },
+        });
+
+        const parentWorkflow = createWorkflow({
+          id: 'parent-workflow',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ result: z.string() }),
+          stateSchema: z.object({ sharedValue: z.string() }),
+          steps: [parentStep, nestedWorkflow],
+          mastra: new Mastra({ logger: false }),
+        })
+          .then(parentStep)
+          .then(nestedWorkflow)
+          .commit();
+
+        const run = await parentWorkflow.createRun();
+        const result = await run.start({
+          inputData: {},
+          initialState: { sharedValue: 'initial-value' },
+        });
+
+        expect(result.status).toBe('success');
+
+        // Parent step receives initial state
+        const parentObs = stateObservations.find(o => o.workflow === 'parent');
+        expect(parentObs?.state.sharedValue).toBe('initial-value');
+
+        // Nested workflow step receives the modified state from parent
+        const nestedObs = stateObservations.find(o => o.workflow === 'nested');
+        expect(nestedObs?.state.sharedValue).toBe('modified-by-parent');
+      });
+    });
+  });
 });
