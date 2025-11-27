@@ -1,116 +1,189 @@
-import { describe, it, expect } from 'vitest';
+import type { HonoRequest } from 'hono';
+import { describe, expect, it } from 'vitest';
 import { SimpleAuth } from './simple-auth';
 
-// Helper to create mock request
-function mockRequest(headers: Record<string, string> = {}): any {
-  return {
-    header: (name: string) => headers[name],
-    path: '/test',
+const mockRequest = (headers: Record<string, string | string[]> = {}) =>
+  ({
+    url: 'http://localhost/test',
     method: 'GET',
-  };
-}
+    header: (name: string) => headers[name],
+  }) as HonoRequest;
 
 describe('SimpleAuth', () => {
+  describe('constructor', () => {
+    it('should accept token-to-user mapping', () => {
+      const auth = new SimpleAuth({
+        tokens: { token1: { id: 1, name: 'user1' }, token2: { id: 2, name: 'user2' } },
+      });
+      expect(auth).toBeInstanceOf(SimpleAuth);
+    });
+
+    it('should use default headers when not specified', () => {
+      const auth = new SimpleAuth({ tokens: { secret: 'user' } });
+      expect(auth).toBeInstanceOf(SimpleAuth);
+    });
+
+    it('should accept custom headers as string', () => {
+      const auth = new SimpleAuth({
+        tokens: { secret: 'user' },
+        headers: 'X-API-Key',
+      });
+      expect(auth).toBeInstanceOf(SimpleAuth);
+    });
+
+    it('should accept custom headers as array', () => {
+      const auth = new SimpleAuth({
+        tokens: { secret: 'user' },
+        headers: ['X-API-Key', 'X-Custom'],
+      });
+      expect(auth).toBeInstanceOf(SimpleAuth);
+    });
+
+    it('should concatenate custom headers with default headers', () => {
+      const auth = new SimpleAuth({
+        tokens: { secret: 'user' },
+        headers: ['X-API-Key'],
+      });
+      expect(auth).toBeInstanceOf(SimpleAuth);
+    });
+  });
+
   describe('authenticateToken', () => {
-    it('should authenticate valid token directly', async () => {
-      const user = { id: 'user-1', name: 'Test User' };
-      const auth = new SimpleAuth({ tokens: { 'test-token': user } });
-
-      const result = await auth.authenticateToken('test-token', mockRequest());
+    it('should authenticate valid token', async () => {
+      const user = { id: 1, name: 'John' };
+      const auth = new SimpleAuth({ tokens: { 'valid-token': user } });
+      const result = await auth.authenticateToken('valid-token', mockRequest());
       expect(result).toEqual(user);
     });
 
-    it('should authenticate Bearer token directly', async () => {
-      const user = { id: 'user-1', name: 'Test User' };
-      const auth = new SimpleAuth({ tokens: { 'test-token': user } });
-
-      const result = await auth.authenticateToken('Bearer test-token', mockRequest());
-      expect(result).toEqual(user);
-    });
-
-    it('should return null for invalid token', async () => {
-      const auth = new SimpleAuth({ tokens: { 'valid-token': { id: 'user' } } });
-
+    it('should reject invalid token', async () => {
+      const auth = new SimpleAuth({ tokens: { 'valid-token': { id: 1 } } });
       const result = await auth.authenticateToken('invalid-token', mockRequest());
       expect(result).toBeNull();
     });
 
-    it('should find token in Authorization header', async () => {
-      const user = { id: 'user-1' };
+    it('should authenticate multiple tokens', async () => {
+      const user1 = { id: 1, role: 'admin' };
+      const user2 = { id: 2, role: 'user' };
+      const auth = new SimpleAuth({
+        tokens: {
+          'admin-token': user1,
+          'user-token': user2,
+        },
+      });
+
+      const result1 = await auth.authenticateToken('admin-token', mockRequest());
+      expect(result1).toEqual(user1);
+
+      const result2 = await auth.authenticateToken('user-token', mockRequest());
+      expect(result2).toEqual(user2);
+    });
+
+    it('should check tokens from headers', async () => {
+      const user = { id: 1, name: 'User' };
       const auth = new SimpleAuth({ tokens: { 'header-token': user } });
       const request = mockRequest({ Authorization: 'Bearer header-token' });
 
-      const result = await auth.authenticateToken('wrong-token', request);
+      const result = await auth.authenticateToken('some-other-token', request);
       expect(result).toEqual(user);
     });
 
-    it('should find token in custom header', async () => {
-      const user = { id: 'user-1' };
+    it('should strip Bearer prefix from header tokens', async () => {
+      const user = { id: 1, name: 'User' };
+      const auth = new SimpleAuth({ tokens: { 'clean-token': user } });
+      const request = mockRequest({ Authorization: 'Bearer clean-token' });
+
+      const result = await auth.authenticateToken('different-token', request);
+      expect(result).toEqual(user);
+    });
+
+    it('should check X-Playground-Access header', async () => {
+      const user = { id: 1, name: 'User' };
+      const auth = new SimpleAuth({ tokens: { 'playground-token': user } });
+      const request = mockRequest({ 'X-Playground-Access': 'playground-token' });
+
+      const result = await auth.authenticateToken('different-token', request);
+      expect(result).toEqual(user);
+    });
+
+    it('should check custom headers', async () => {
+      const user = { id: 1, name: 'User' };
       const auth = new SimpleAuth({
-        tokens: { 'api-key-123': user },
+        tokens: { 'api-token': user },
         headers: 'X-API-Key',
       });
-      const request = mockRequest({ 'X-API-Key': 'api-key-123' });
+      const request = mockRequest({ 'X-API-Key': 'api-token' });
 
-      const result = await auth.authenticateToken('wrong-token', request);
+      const result = await auth.authenticateToken('different-token', request);
       expect(result).toEqual(user);
     });
 
     it('should check multiple custom headers', async () => {
-      const user = { id: 'user-1' };
+      const user = { id: 1, name: 'User' };
       const auth = new SimpleAuth({
-        tokens: { 'my-token': user },
-        headers: ['X-API-Key', 'X-Auth-Token'],
+        tokens: { 'custom-token': user },
+        headers: ['X-Primary', 'X-Secondary'],
       });
+      const request = mockRequest({ 'X-Secondary': 'custom-token' });
 
-      // Token in second header
-      const request = mockRequest({ 'X-Auth-Token': 'my-token' });
-      const result = await auth.authenticateToken('wrong', request);
+      const result = await auth.authenticateToken('different-token', request);
       expect(result).toEqual(user);
     });
 
-    it('should prefer direct token over header token', async () => {
-      const user1 = { id: 'user-1' };
-      const user2 = { id: 'user-2' };
+    it('should prioritize first matching token', async () => {
+      const user1 = { id: 1, name: 'User1' };
+      const user2 = { id: 2, name: 'User2' };
       const auth = new SimpleAuth({
         tokens: {
-          'direct-token': user1,
-          'header-token': user2,
+          token1: user1,
+          token2: user2,
         },
       });
-      const request = mockRequest({ Authorization: 'Bearer header-token' });
+      const request = mockRequest({
+        Authorization: 'token2',
+        'X-Playground-Access': 'token1',
+      });
 
-      const result = await auth.authenticateToken('direct-token', request);
+      const result = await auth.authenticateToken('token1', request);
       expect(result).toEqual(user1);
     });
   });
 
   describe('authorizeUser', () => {
-    it('should authorize authenticated user', async () => {
-      const user = { id: 'user-1' };
-      const auth = new SimpleAuth({ tokens: { 'test-token': user } });
-
+    it('should authorize valid user', async () => {
+      const user = { id: 1, name: 'John' };
+      const auth = new SimpleAuth({ tokens: { token: user } });
       const result = await auth.authorizeUser(user, mockRequest());
       expect(result).toBe(true);
     });
 
-    it('should not authorize unknown user', async () => {
-      const validUser = { id: 'user-1' };
-      const unknownUser = { id: 'user-2' };
-      const auth = new SimpleAuth({ tokens: { 'test-token': validUser } });
-
-      const result = await auth.authorizeUser(unknownUser, mockRequest());
+    it('should reject invalid user', async () => {
+      const validUser = { id: 1, name: 'John' };
+      const invalidUser = { id: 2, name: 'Jane' };
+      const auth = new SimpleAuth({ tokens: { token: validUser } });
+      const result = await auth.authorizeUser(invalidUser, mockRequest());
       expect(result).toBe(false);
     });
 
-    it('should authorize with custom authorizeUser function', async () => {
+    it('should authorize any valid user from tokens', async () => {
+      const user1 = { id: 1, role: 'admin' };
+      const user2 = { id: 2, role: 'user' };
       const auth = new SimpleAuth({
         tokens: {
-          'token-1': 'user1',
-          'token-2': 'user2',
+          'admin-token': user1,
+          'user-token': user2,
         },
-        authorizeUser: user => user === 'user1',
       });
+
+      const result1 = await auth.authorizeUser(user1, mockRequest());
+      expect(result1).toBe(true);
+
+      const result2 = await auth.authorizeUser(user2, mockRequest());
+      expect(result2).toBe(true);
+    });
+
+    it('should handle string users', async () => {
+      const auth = new SimpleAuth({ tokens: { token1: 'user1', token2: 'user2' } });
 
       const result1 = await auth.authorizeUser('user1', mockRequest());
       expect(result1).toBe(true);

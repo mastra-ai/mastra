@@ -10,25 +10,24 @@ export function getAuthEntrypoint() {
 
   return `
   import { SimpleAuth, CompositeAuth } from '@mastra/core/server';
-
   class MastraCloudAuth extends SimpleAuth {
     constructor() {
       super({
         tokens: ${JSON.stringify(tokensObject)}
       });
     }
-
-    async authorizeUser (...args) {
-      if (args[1] && args[1].path === '/api') {
-        return true
+    async authorizeUser(user, request) {
+      // Allow access to /api path
+      if (request && request.url && new URL(request.url).pathname === '/api') {
+        return true;
       }
-      if (args[0] && args[0].id === 'business-api') {
-        return true
+      // Allow access for business-api users
+      if (user && user.id === 'business-api') {
+        return true;
       }
-      return super.authorizeUser(...args)
+      return false;
     }
   }
-
   const serverConfig = mastra.getServer()
   if (serverConfig && serverConfig.auth) {
     const existingAuth = serverConfig.auth
