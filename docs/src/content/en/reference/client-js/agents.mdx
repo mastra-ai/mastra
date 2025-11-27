@@ -190,18 +190,21 @@ The network stream is a `ReadableStream<NetworkChunkType>` that you can iterate 
 
 #### AI SDK compatible format
 
-To stream AI SDK-formatted parts on the client from an `agent.stream(...)` response, use the `fullStream` directly:
+To stream AI SDK-formatted parts on the client from an `agent.stream(...)` response, wrap `response.processDataStream` into a `ReadableStream<ChunkType>` and use `toAISdkStream`:
 
 ```typescript title="client-ai-sdk-transform.ts" copy
 import { createUIMessageStream } from "ai";
 import { toAISdkStream } from "@mastra/ai-sdk";
-import type { ChunkType } from "@mastra/core/stream";
+import type { ChunkType, MastraModelOutput } from "@mastra/core/stream";
 
 const result = await agent.stream({ messages: "Tell me a story" });
 
 const uiMessageStream = createUIMessageStream({
   execute: async ({ writer }) => {
-    for await (const part of toAISdkStream(result.fullStream, { from: "agent" })) {
+    for await (const part of toAISdkStream(
+      chunkStream as unknown as MastraModelOutput,
+      { from: "agent" },
+    )) {
       writer.write(part);
     }
   },

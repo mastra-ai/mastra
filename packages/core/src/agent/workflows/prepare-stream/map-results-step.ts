@@ -7,7 +7,6 @@ import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
-import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
@@ -23,7 +22,6 @@ interface MapResultsStepOptions<
   requestContext: RequestContext;
   memory?: MastraMemory;
   memoryConfig?: MemoryConfig;
-  saveQueueManager: SaveQueueManager;
   agentSpan: Span<SpanType.AGENT_RUN>;
   agentId: string;
   methodType: AgentMethodType;
@@ -40,7 +38,6 @@ export function createMapResultsStep<
   requestContext,
   memory,
   memoryConfig,
-  saveQueueManager,
   agentSpan,
   agentId,
   methodType,
@@ -87,11 +84,8 @@ export function createMapResultsStep<
           }
 
           await capabilities.saveStepMessages({
-            saveQueueManager,
             result: props,
             messageList: memoryData.messageList!,
-            threadId: memoryData.thread?.id,
-            memoryConfig,
             runId,
           });
         }
@@ -156,6 +150,7 @@ export function createMapResultsStep<
       stopWhen: result.stopWhen,
       maxSteps: result.maxSteps,
       providerOptions: result.providerOptions,
+      includeRawChunks: options.includeRawChunks,
       options: {
         ...(options.prepareStep && { prepareStep: options.prepareStep }),
         onFinish: async (payload: any) => {
@@ -187,7 +182,6 @@ export function createMapResultsStep<
               messageList,
               threadExists: memoryData.threadExists,
               structuredOutput: !!options.structuredOutput?.schema,
-              saveQueueManager,
               overrideScorers: options.scorers,
             });
           } catch (e) {
