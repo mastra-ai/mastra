@@ -632,7 +632,6 @@ describe('Corrupted JSON recovery', () => {
   const originalExistsSync = fs.existsSync.bind(fs);
   const originalMkdirSync = fs.mkdirSync.bind(fs);
   const originalRmSync = fs.rmSync.bind(fs);
-  const originalUnlinkSync = fs.unlinkSync.bind(fs);
 
   beforeEach(() => {
     vi.restoreAllMocks();
