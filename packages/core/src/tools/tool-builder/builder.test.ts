@@ -868,7 +868,7 @@ describe('Tool Input Validation', () => {
 
     expect(result).toHaveProperty('error', true);
     expect(result).toHaveProperty('message');
-    expect(result.message).toContain('Tool validation failed');
+    expect(result.message).toContain('Tool input validation failed');
     expect(result.message).toContain('Name must be at least 3 characters');
     expect(result.message).toContain('- name:');
   });
@@ -882,7 +882,7 @@ describe('Tool Input Validation', () => {
 
     expect(result).toHaveProperty('error', true);
     expect(result).toHaveProperty('message');
-    expect(result.message).toContain('Tool validation failed');
+    expect(result.message).toContain('Tool input validation failed');
     expect(result.message).toContain('Age must be positive');
     expect(result.message).toContain('- age:');
   });
@@ -897,7 +897,7 @@ describe('Tool Input Validation', () => {
 
     expect(result).toHaveProperty('error', true);
     expect(result).toHaveProperty('message');
-    expect(result.message).toContain('Tool validation failed');
+    expect(result.message).toContain('Tool input validation failed');
     expect(result.message).toContain('Invalid email format');
     expect(result.message).toContain('- email:');
   });
@@ -912,7 +912,7 @@ describe('Tool Input Validation', () => {
 
     expect(result).toHaveProperty('error', true);
     expect(result).toHaveProperty('message');
-    expect(result.message).toContain('Tool validation failed');
+    expect(result.message).toContain('Tool input validation failed');
     expect(result.message).toContain('Required');
     expect(result.message).toContain('- name:');
   });
@@ -927,7 +927,7 @@ describe('Tool Input Validation', () => {
 
     expect(result).toHaveProperty('error', true);
     expect(result).toHaveProperty('message');
-    expect(result.message).toContain('Tool validation failed');
+    expect(result.message).toContain('Tool input validation failed');
     expect(result.message).toContain('At least one tag required');
     expect(result.message).toContain('- tags:');
   });
