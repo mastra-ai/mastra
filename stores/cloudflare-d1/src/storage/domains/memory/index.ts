@@ -859,13 +859,10 @@ export class MemoryStorageD1 extends MemoryStorage {
         return processedMsg;
       });
 
-      // For last N functionality, sort messages chronologically
-      if (selectBy?.last) {
-        processedMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-      }
-
       const list = new MessageList().add(processedMessages as MastraMessageV1[] | MastraMessageV2[], 'memory');
       messages.push(...(format === `v2` ? list.get.all.v2() : list.get.all.v1()));
+
+      messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
       return {
         messages,

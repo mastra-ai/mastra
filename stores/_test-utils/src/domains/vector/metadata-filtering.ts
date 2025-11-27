@@ -1,6 +1,10 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import type { VectorTestConfig } from '../../vector-factory';
-import { createUnitVector, createVector } from './test-helpers';
+import {
+  createUnitVector as createUnitVectorWithDimension,
+  createVector as createVectorWithDimension,
+  DEFAULT_VECTOR_DIMENSION,
+} from './test-helpers';
 
 /**
  * Shared test suite for metadata field filtering in vector stores.
@@ -15,7 +19,12 @@ export function createMetadataFilteringTest(config: VectorTestConfig) {
     createIndex,
     deleteIndex,
     waitForIndexing = () => new Promise(resolve => setTimeout(resolve, 5000)),
+    dimension = DEFAULT_VECTOR_DIMENSION,
   } = config;
+
+  // Helpers that use the configured dimension
+  const createVector = (seed: number) => createVectorWithDimension(seed, dimension);
+  const createUnitVector = (activeIndex: number) => createUnitVectorWithDimension(activeIndex, dimension);
 
   describe('Metadata Field Filtering for Memory System', () => {
     const testIndexName = `metadata_filter_test_${Date.now()}`;

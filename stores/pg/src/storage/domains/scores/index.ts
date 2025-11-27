@@ -2,26 +2,31 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/scores';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import { safelyParseJSON, ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
+import { safelyParseJSON, SCORERS_SCHEMA, ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
 import { getTableName } from '../utils';
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  return {
+  const data = {
     ...row,
-    input: safelyParseJSON(row.input),
-    scorer: safelyParseJSON(row.scorer),
-    preprocessStepResult: safelyParseJSON(row.preprocessStepResult),
-    analyzeStepResult: safelyParseJSON(row.analyzeStepResult),
-    metadata: safelyParseJSON(row.metadata),
-    output: safelyParseJSON(row.output),
-    additionalContext: safelyParseJSON(row.additionalContext),
-    runtimeContext: safelyParseJSON(row.runtimeContext),
-    entity: safelyParseJSON(row.entity),
+    input: row.input !== null ? safelyParseJSON(row.input) : undefined,
+    scorer: row.scorer !== null ? safelyParseJSON(row.scorer) : undefined,
+    preprocessStepResult: row.preprocessStepResult !== null ? safelyParseJSON(row.preprocessStepResult) : undefined,
+    analyzeStepResult: row.analyzeStepResult !== null ? safelyParseJSON(row.analyzeStepResult) : undefined,
+    output: row.output !== null ? safelyParseJSON(row.output) : undefined,
+    additionalContext: row.additionalContext !== null ? safelyParseJSON(row.additionalContext) : undefined,
+    runtimeContext: row.runtimeContext !== null ? safelyParseJSON(row.runtimeContext) : undefined,
+    entity: row.entity !== null ? safelyParseJSON(row.entity) : undefined,
     createdAt: row.createdAtZ || row.createdAt,
     updatedAt: row.updatedAtZ || row.updatedAt,
-  } as ScoreRowData;
+  };
+
+  const result: Record<string, any> = {};
+  for (const key in SCORERS_SCHEMA) {
+    result[key] = data[key as keyof typeof data];
+  }
+  return result as ScoreRowData;
 }
 
 export class ScoresPG extends ScoresStorage {
