@@ -18,6 +18,7 @@ import type {
   IndexStats,
   CreateIndexParams,
   UpsertVectorParams,
+  DeleteVectorsParams,
   QueryVectorParams,
   DescribeIndexParams,
   DeleteIndexParams,
@@ -404,6 +405,16 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
    * S3 Vectors `PutVectors` is replace-all; we `Get` the current item, merge, then `Put`.
    */
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+    if (!id) {
+      throw new MastraError({
+        id: 'STORAGE_S3VECTORS_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'id is required for S3Vectors updateVector',
+        details: { indexName },
+      });
+    }
+
     indexName = normalizeIndexName(indexName);
     try {
       if (!update.vector && !update.metadata) {
@@ -444,7 +455,10 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
           id: 'STORAGE_S3VECTORS_VECTOR_UPDATE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
         },
         error,
       );
@@ -474,11 +488,28 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
           id: 'STORAGE_S3VECTORS_VECTOR_DELETE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
         },
         error,
       );
     }
+  }
+
+  async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams): Promise<void> {
+    throw new MastraError({
+      id: 'STORAGE_S3VECTORS_VECTOR_DELETE_VECTORS_NOT_SUPPORTED',
+      text: 'deleteVectors is not yet implemented for S3Vectors vector store',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      details: {
+        indexName,
+        ...(filter && { filter: JSON.stringify(filter) }),
+        ...(ids && { idsCount: ids.length }),
+      },
+    });
   }
 
   // -------- internal helpers --------

@@ -1,4 +1,4 @@
-import { openai } from '@ai-sdk/openai';
+import { openai } from '@ai-sdk/openai-v5';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
