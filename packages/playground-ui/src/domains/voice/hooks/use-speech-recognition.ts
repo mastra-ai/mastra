@@ -155,7 +155,7 @@ const useMastraSpeechToText = ({ agent }: { agent: Agent | null }) => {
   }
 
   const handleFinish = (file: File) => {
-    agent.voice?.listen(file as any).then(res => {
+    agent.voice.listen(file as any).then(res => {
       setTranscript((res as unknown as { text: string }).text);
     });
   };
