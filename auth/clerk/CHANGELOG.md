@@ -1,5 +1,16 @@
 # @mastra/auth-clerk
 
+## 0.11.0-alpha.0
+
+### Minor Changes
+
+- remove organization requirement from default authorization ([#10554](https://github.com/mastra-ai/mastra/pull/10554))
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mastra/auth@0.1.6
+
 ## 0.10.8
 
 ### Patch Changes

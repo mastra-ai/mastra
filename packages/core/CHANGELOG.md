@@ -1,5 +1,311 @@
 # @mastra/core
 
+## 0.24.6-alpha.0
+
+### Patch Changes
+
+- Fix base64 encoded images with threads - issue #10480 ([#10566](https://github.com/mastra-ai/mastra/pull/10566))
+
+  Fixed "Invalid URL" error when using base64 encoded images (without `data:` prefix) in agent calls with threads and resources. Raw base64 strings are now automatically converted to proper data URIs before being processed.
+
+  **Changes:**
+  - Updated `attachments-to-parts.ts` to detect and convert raw base64 strings to data URIs
+  - Fixed `MessageList` image processing to handle raw base64 in two locations:
+    - Image part conversion in `aiV4CoreMessageToV1PromptMessage`
+    - File part to experimental_attachments conversion in `mastraDBMessageToAIV4UIMessage`
+  - Added comprehensive tests for base64 images, data URIs, and HTTP URLs with threads
+
+  **Breaking Change:** None - this is a bug fix that maintains backward compatibility while adding support for raw base64 strings.
+
+- SimpleAuth and improved CloudAuth ([#10569](https://github.com/mastra-ai/mastra/pull/10569))
+
+- Fixed OpenAI schema compatibility when using `agent.generate()` or `agent.stream()` with `structuredOutput`. ([#10454](https://github.com/mastra-ai/mastra/pull/10454))
+
+  ## Changes
+  - **Automatic transformation**: Zod schemas are now automatically transformed for OpenAI strict mode compatibility when using OpenAI models (including reasoning models like o1, o3, o4)
+  - **Optional field handling**: `.optional()` fields are converted to `.nullable()` with a transform that converts `null` → `undefined`, preserving optional semantics while satisfying OpenAI's strict mode requirements
+  - **Preserves nullable fields**: Intentionally `.nullable()` fields remain unchanged
+  - **Deep transformation**: Handles `.optional()` fields at any nesting level (objects, arrays, unions, etc.)
+  - **JSON Schema objects**: Not transformed, only Zod schemas
+
+  ## Example
+
+  ```typescript
+  const agent = new Agent({
+    name: 'data-extractor',
+    model: { provider: 'openai', modelId: 'gpt-4o' },
+    instructions: 'Extract user information',
+  });
+
+  const schema = z.object({
+    name: z.string(),
+    age: z.number().optional(),
+    deletedAt: z.date().nullable(),
+  });
+
+  // Schema is automatically transformed for OpenAI compatibility
+  const result = await agent.generate('Extract: John, deleted yesterday', {
+    structuredOutput: { schema },
+  });
+
+  // Result: { name: 'John', age: undefined, deletedAt: null }
+  ```
+
+- deleteVectors, deleteFilter when upserting, updateVector filter (#10244) ([#10526](https://github.com/mastra-ai/mastra/pull/10526))
+
+- Fix generateTitle model type to accept AI SDK LanguageModelV2 ([#10567](https://github.com/mastra-ai/mastra/pull/10567))
+
+  Updated the `generateTitle.model` config option to accept `MastraModelConfig` instead of `MastraLanguageModel`. This allows users to pass raw AI SDK `LanguageModelV2` models (e.g., `anthropic.languageModel('claude-3-5-haiku-20241022')`) directly without type errors.
+
+  Previously, passing a standard `LanguageModelV2` would fail because `MastraLanguageModelV2` has different `doGenerate`/`doStream` return types. Now `MastraModelConfig` is used consistently across:
+  - `memory/types.ts` - `generateTitle.model` config
+  - `agent.ts` - `genTitle`, `generateTitleFromUserMessage`, `resolveTitleGenerationConfig`
+  - `agent-legacy.ts` - `AgentLegacyCapabilities` interface
+
+- Fix message metadata not persisting when using simple message format. Previously, custom metadata passed in messages (e.g., `{role: 'user', content: 'text', metadata: {userId: '123'}}`) was not being saved to the database. This occurred because the CoreMessage conversion path didn't preserve metadata fields. ([#10571](https://github.com/mastra-ai/mastra/pull/10571))
+
+  Now metadata is properly preserved for all message input formats:
+  - Simple CoreMessage format: `{role, content, metadata}`
+  - Full UIMessage format: `{role, content, parts, metadata}`
+  - AI SDK v5 ModelMessage format with metadata
+
+  Fixes #8556
+
+- feat: Composite auth implementation ([#10486](https://github.com/mastra-ai/mastra/pull/10486))
+
+- Fix requireApproval property being ignored for tools passed via toolsets, clientTools, and memoryTools parameters. The requireApproval flag now correctly propagates through all tool conversion paths, ensuring tools requiring approval will properly request user approval before execution. ([#10562](https://github.com/mastra-ai/mastra/pull/10562))
+
+- Fix Azure Foundry rate limit handling for -1 values ([#10411](https://github.com/mastra-ai/mastra/pull/10411))
+
+- Fix model headers not being passed through gateway system ([#10564](https://github.com/mastra-ai/mastra/pull/10564))
+
+  Previously, custom headers specified in `MastraModelConfig` were not being passed through the gateway system to model providers. This affected:
+  - OpenRouter (preventing activity tracking with `HTTP-Referer` and `X-Title`)
+  - Custom providers using custom URLs (headers not passed to `createOpenAICompatible`)
+  - Custom gateway implementations (headers not available in `resolveLanguageModel`)
+
+  Now headers are correctly passed through the entire gateway system:
+  - Base `MastraModelGateway` interface updated to accept headers
+  - `ModelRouterLanguageModel` passes headers from config to all gateways
+  - OpenRouter receives headers for activity tracking
+  - Custom URL providers receive headers via `createOpenAICompatible`
+  - Custom gateways can access headers in their `resolveLanguageModel` implementation
+
+  Example usage:
+
+  ```typescript
+  // Works with OpenRouter
+  const agent = new Agent({
+    name: 'my-agent',
+    instructions: 'You are a helpful assistant.',
+    model: {
+      id: 'openrouter/anthropic/claude-3-5-sonnet',
+      headers: {
+        'HTTP-Referer': 'https://myapp.com',
+        'X-Title': 'My Application',
+      },
+    },
+  });
+
+  // Also works with custom providers
+  const customAgent = new Agent({
+    name: 'custom-agent',
+    instructions: 'You are a helpful assistant.',
+    model: {
+      id: 'custom-provider/model',
+      url: 'https://api.custom.com/v1',
+      apiKey: 'key',
+      headers: {
+        'X-Custom-Header': 'custom-value',
+      },
+    },
+  });
+  ```
+
+  Fixes https://github.com/mastra-ai/mastra/issues/9760
+
+- fix(agent): persist messages before tool suspension ([#10542](https://github.com/mastra-ai/mastra/pull/10542))
+
+  Fixes issues where thread and messages were not saved before suspension when tools require approval or call suspend() during execution. This caused conversation history to be lost if users refreshed during tool approval or suspension.
+
+  **Backend changes (@mastra/core):**
+  - Add assistant messages to messageList immediately after LLM execution
+  - Flush messages synchronously before suspension to persist state
+  - Create thread if it doesn't exist before flushing
+  - Add metadata helpers to persist and remove tool approval state
+  - Pass saveQueueManager and memory context through workflow for immediate persistence
+
+  **Frontend changes (@mastra/react):**
+  - Extract runId from pending approvals to enable resumption after refresh
+  - Convert `pendingToolApprovals` (DB format) to `requireApprovalMetadata` (runtime format)
+  - Handle both `dynamic-tool` and `tool-{NAME}` part types for approval state
+  - Change runId from hardcoded `agentId` to unique `uuid()`
+
+  **UI changes (@mastra/playground-ui):**
+  - Handle tool calls awaiting approval in message initialization
+  - Convert approval metadata format when loading initial messages
+
+  Fixes #9745, #9906
+
+- Fix race condition in parallel tool stream writes ([#10481](https://github.com/mastra-ai/mastra/pull/10481))
+
+  Introduces a write queue to ToolStream to serialize access to the underlying stream, preventing writer locked errors
+
+- Remove unneeded console warning when flushing messages and no threadId or saveQueueManager is found. ([#10542](https://github.com/mastra-ai/mastra/pull/10542))
+
+- Fixes GPT-5 reasoning which was failing on subsequent tool calls with the error: ([#10489](https://github.com/mastra-ai/mastra/pull/10489))
+
+  ```
+  Item 'fc_xxx' of type 'function_call' was provided without its required 'reasoning' item: 'rs_xxx'
+  ```
+
+- Add optional includeRawChunks parameter to agent execution options, ([#10459](https://github.com/mastra-ai/mastra/pull/10459))
+  allowing users to include raw chunks in stream output where supported
+  by the model provider.
+
+- When `mastra dev` runs, multiple processes can write to `provider-registry.json` concurrently (auto-refresh, syncGateways, syncGlobalCacheToLocal). This causes file corruption where the end of the JSON appears twice, making it unparseable. ([#10529](https://github.com/mastra-ai/mastra/pull/10529))
+
+  The fix uses atomic writes via the write-to-temp-then-rename pattern. Instead of:
+
+  ```ts
+  fs.writeFileSync(filePath, content, 'utf-8');
+  ```
+
+  We now do:
+
+  ```ts
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.${randomSuffix}.tmp`;
+  fs.writeFileSync(tempPath, content, 'utf-8');
+  fs.renameSync(tempPath, filePath); // atomic on POSIX
+  ```
+
+  `fs.rename()` is atomic on POSIX systems when both paths are on the same filesystem, so concurrent writes will each complete fully rather than interleaving.
+
+- Ensures that data chunks written via `writer.custom()` always bubble up directly to the top-level stream, even when nested in sub-agents. This allows tools to emit custom progress updates, metrics, and other data that can be consumed at any level of the agent hierarchy. ([#10523](https://github.com/mastra-ai/mastra/pull/10523))
+  - **Added bubbling logic in sub-agent execution**: When sub-agents execute, data chunks (chunks with type starting with `data-`) are detected and written via `writer.custom()` instead of `writer.write()`, ensuring they bubble up directly without being wrapped in `tool-output` chunks.
+  - **Added comprehensive tests**:
+    - Test for `writer.custom()` with direct tool execution
+    - Test for `writer.custom()` with sub-agent tools (nested execution)
+    - Test for mixed usage of `writer.write()` and `writer.custom()` in the same tool
+
+  When a sub-agent's tool uses `writer.custom()` to write data chunks, those chunks appear in the sub-agent's stream. The parent agent's execution logic now detects these chunks and uses `writer.custom()` to bubble them up directly, preserving their structure and making them accessible at the top level.
+
+  This ensures that:
+  - Data chunks from tools always appear directly in the stream (not wrapped)
+  - Data chunks bubble up correctly through nested agent hierarchies
+  - Regular chunks continue to be wrapped in `tool-output` as expected
+
+- Adds ability to create custom `MastraModelGateway`'s that can be added to the `Mastra` class instance under the `gateways` property. Giving you typescript autocompletion in any model picker string. ([#10535](https://github.com/mastra-ai/mastra/pull/10535))
+
+  ```typescript
+  import { MastraModelGateway, type ProviderConfig } from '@mastra/core/llm';
+  import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+  import type { LanguageModelV2 } from '@ai-sdk/provider';
+
+  class MyCustomGateway extends MastraModelGateway {
+    readonly id = 'custom';
+    readonly name = 'My Custom Gateway';
+
+    async fetchProviders(): Promise<Record<string, ProviderConfig>> {
+      return {
+        'my-provider': {
+          name: 'My Provider',
+          models: ['model-1', 'model-2'],
+          apiKeyEnvVar: 'MY_API_KEY',
+          gateway: this.id,
+        },
+      };
+    }
+
+    buildUrl(modelId: string, envVars?: Record<string, string>): string {
+      return 'https://api.my-provider.com/v1';
+    }
+
+    async getApiKey(modelId: string): Promise<string> {
+      const apiKey = process.env.MY_API_KEY;
+      if (!apiKey) throw new Error('MY_API_KEY not set');
+      return apiKey;
+    }
+
+    async resolveLanguageModel({
+      modelId,
+      providerId,
+      apiKey,
+    }: {
+      modelId: string;
+      providerId: string;
+      apiKey: string;
+    }): Promise<LanguageModelV2> {
+      const baseURL = this.buildUrl(`${providerId}/${modelId}`);
+      return createOpenAICompatible({
+        name: providerId,
+        apiKey,
+        baseURL,
+      }).chatModel(modelId);
+    }
+  }
+
+  new Mastra({
+    gateways: {
+      myGateway: new MyCustomGateway(),
+    },
+  });
+  ```
+
+- Support AI SDK voice models ([#10558](https://github.com/mastra-ai/mastra/pull/10558))
+
+  Mastra now supports AI SDK's transcription and speech models directly in `CompositeVoice`, enabling seamless integration with a wide range of voice providers through the AI SDK ecosystem. This allows you to use models from OpenAI, ElevenLabs, Groq, Deepgram, LMNT, Hume, and many more for both speech-to-text (transcription) and text-to-speech capabilities.
+
+  AI SDK models are automatically wrapped when passed to `CompositeVoice`, so you can mix and match AI SDK models with existing Mastra voice providers for maximum flexibility.
+
+  ## Usage Example
+
+  ```typescript
+  import { CompositeVoice } from '@mastra/core/voice';
+  import { openai } from '@ai-sdk/openai';
+  import { elevenlabs } from '@ai-sdk/elevenlabs';
+
+  // Use AI SDK models directly with CompositeVoice
+  const voice = new CompositeVoice({
+    input: openai.transcription('whisper-1'), // AI SDK transcription model
+    output: elevenlabs.speech('eleven_turbo_v2'), // AI SDK speech model
+  });
+
+  // Convert text to speech
+  const audioStream = await voice.speak('Hello from AI SDK!');
+
+  // Convert speech to text
+  const transcript = await voice.listen(audioStream);
+  console.log(transcript);
+  ```
+
+  Fixes #9947
+
+- Fix network data step formatting in AI SDK stream transformation ([#10525](https://github.com/mastra-ai/mastra/pull/10525))
+
+  Previously, network execution steps were not being tracked correctly in the AI SDK stream transformation. Steps were being duplicated rather than updated, and critical metadata like step IDs, iterations, and task information was missing or incorrectly structured.
+
+  **Changes:**
+  - Enhanced step tracking in `AgentNetworkToAISDKTransformer` to properly maintain step state throughout execution lifecycle
+  - Steps are now identified by unique IDs and updated in place rather than creating duplicates
+  - Added proper iteration and task metadata to each step in the network execution flow
+  - Fixed agent, workflow, and tool execution events to correctly populate step data
+  - Updated network stream event types to include `networkId`, `workflowId`, and consistent `runId` tracking
+  - Added test coverage for network custom data chunks with comprehensive validation
+
+  This ensures the AI SDK correctly represents the full execution flow of agent networks with accurate step sequencing and metadata.
+
+- Fix generating provider-registry.json ([#10535](https://github.com/mastra-ai/mastra/pull/10535))
+
+- Fix message-list conversion issues when persisting messages before tool suspension: filter internal metadata fields (`__originalContent`) from UI messages, keep reasoning field empty for consistent cache keys during message deduplication, and only include providerMetadata on parts when defined. ([#10552](https://github.com/mastra-ai/mastra/pull/10552))
+
+- Fix agent.generate() to use model's doGenerate method instead of doStream ([#10572](https://github.com/mastra-ai/mastra/pull/10572))
+
+  When calling `agent.generate()`, the model's `doGenerate` method is now correctly invoked instead of always using `doStream`. This aligns the non-streaming generation path with the intended behavior where providers can implement optimized non-streaming responses.
+
+- Updated dependencies [[`33a607a`](https://github.com/mastra-ai/mastra/commit/33a607a1f716c2029d4a1ff1603dd756129a33b3)]:
+  - @mastra/schema-compat@0.11.8-alpha.0
+
 ## 0.24.5
 
 ### Patch Changes
