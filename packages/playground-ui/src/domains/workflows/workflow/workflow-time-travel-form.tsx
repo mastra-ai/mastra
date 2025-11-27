@@ -10,7 +10,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Braces, ChevronDown, CopyIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { formatJSON, isValidJson } from '@/lib/formatting';
-import jsonSchemaToZod from 'json-schema-to-zod';
+import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { parse } from 'superjson';
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
 import { z } from 'zod';

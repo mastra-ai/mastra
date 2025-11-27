@@ -21,7 +21,7 @@ describe('Tool Input Validation Integration Tests', () => {
       // Test missing required fields - pass raw data as first arg
       const result = await tool.execute({} as any);
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
       expect(result.message).toContain('- name: Required');
       expect(result.message).toContain('- age: Required');
     });
@@ -45,7 +45,7 @@ describe('Tool Input Validation Integration Tests', () => {
       } as any);
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
       expect(result.validationErrors).toBeDefined();
     });
 
@@ -202,7 +202,7 @@ describe('Tool Input Validation Integration Tests', () => {
       const result = await tool.execute({ username: 'ab' });
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed for user-registration');
+      expect(result.message).toContain('Tool input validation failed for user-registration');
     });
   });
 
@@ -376,7 +376,7 @@ describe('Tool Input Validation Integration Tests', () => {
       });
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
       expect(result.message).toContain('Expected string, received number');
     });
 
@@ -401,7 +401,7 @@ describe('Tool Input Validation Integration Tests', () => {
       });
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
       expect(result.message).toContain('Expected object, received string');
     });
   });
@@ -436,7 +436,7 @@ describe('Tool Input Validation Integration Tests', () => {
 
       const result = await tool.execute({} as any);
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
       expect(result.message).toContain('Required');
     });
 
@@ -716,7 +716,7 @@ describe('Tool Output Validation Tests', () => {
     const invalidInputResult = await tool.execute({ email: 'not-an-email' });
     if ('error' in invalidInputResult) {
       expect(invalidInputResult.error).toBe(true);
-      expect(invalidInputResult.message).toContain('Tool validation failed');
+      expect(invalidInputResult.message).toContain('Tool input validation failed');
     } else {
       throw new Error('Result is not a validation error');
     }

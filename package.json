@@ -12,6 +12,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.1.6",
     "npm-run-all2": "^8.0.4",
+    "path-to-regexp": "^8.3.0",
     "prettier": "^3.6.2",
     "semver": "^7.7.2",
     "turbo": "^2.5.8",
