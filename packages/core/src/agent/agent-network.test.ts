@@ -604,7 +604,7 @@ describe.skip('Agent - network', () => {
 }, 120e3);
 
 describe('Agent - network - updateWorkingMemory', () => {
-  it.only('Should forward memory context (threadId, resourceId) to sub-agents when using same memory template', async () => {
+  it('Should forward memory context (threadId, resourceId) to sub-agents when using same memory template', async () => {
     // Create a shared memory instance with working memory enabled
     // This is the scenario from issue #9873 where sub-agents share the same memory template
     const sharedMemory = new MockMemory({
