@@ -177,7 +177,8 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 55+ AI providers and 1117+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 57+ AI providers and 1154+ models through Mastra's model router.
+- [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
 - [Alibaba | Models | Mastra](https://mastra.ai/en/models/providers/alibaba): Use Alibaba models with Mastra. 39 models available.
@@ -204,6 +205,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Inception | Models | Mastra](https://mastra.ai/en/models/providers/inception): Use Inception models with Mastra. 2 models available.
 - [Providers](https://mastra.ai/en/models/providers): Direct access to AI model providers.
 - [Inference | Models | Mastra](https://mastra.ai/en/models/providers/inference): Use Inference models with Mastra. 9 models available.
+- [IO Intelligence | Models | Mastra](https://mastra.ai/en/models/providers/io-intelligence): Use IO Intelligence models with Mastra. 17 models available.
 - [Llama | Models | Mastra](https://mastra.ai/en/models/providers/llama): Use Llama models with Mastra. 7 models available.
 - [LMStudio | Models | Mastra](https://mastra.ai/en/models/providers/lmstudio): Use LMStudio models with Mastra. 3 models available.
 - [LucidQuery AI | Models | Mastra](https://mastra.ai/en/models/providers/lucidquery): Use LucidQuery AI models with Mastra. 2 models available.
