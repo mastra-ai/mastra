@@ -40,12 +40,19 @@ export class NetlifyDeployer extends Deployer {
     const result = await this._bundle(
       this.getEntry(),
       entryFile,
-      { outputDirectory, projectRoot, enableEsmShim: false },
+      { outputDirectory, projectRoot, enableEsmShim: true },
       toolsPaths,
       join(outputDirectory, this.outputDir),
     );
 
+    // Use Netlify Frameworks API config.json
+    // https://docs.netlify.com/build/frameworks/frameworks-api/
     await writeJson(join(outputDirectory, '.netlify', 'v1', 'config.json'), {
+      functions: {
+        directory: '.netlify/v1/functions',
+        node_bundler: 'none', // Mastra pre-bundles, don't re-bundle
+        included_files: ['.netlify/v1/functions/**'],
+      },
       redirects: [
         {
           force: true,
@@ -83,7 +90,5 @@ export class NetlifyDeployer extends Deployer {
 
   async lint(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     await super.lint(entryFile, outputDirectory, toolsPaths);
-
-    // Lint for netlify support
   }
 }
