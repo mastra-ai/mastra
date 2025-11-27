@@ -12,7 +12,7 @@ import { init } from '../init/init';
 import type { Editor } from '../init/mcp-docs-server-install';
 import type { Component, LLMProvider } from '../init/utils';
 import { LLM_PROVIDERS } from '../init/utils';
-import { getPackageManager } from '../utils.js';
+import { getPackageManager, gitInit } from '../utils.js';
 
 import { createMastraProject } from './utils';
 
@@ -310,6 +310,17 @@ async function createFromTemplate(args: {
     llmProvider = providerResponse as LLMProvider;
   }
 
+  // Handle git initialization for templates
+  let initGit = false;
+  const gitConfirmResult = await p.confirm({
+    message: 'Initialize a new git repository?',
+    initialValue: true,
+  });
+
+  if (!p.isCancel(gitConfirmResult)) {
+    initGit = Boolean(gitConfirmResult);
+  }
+
   let projectPath: string | null = null;
 
   try {
@@ -345,33 +356,16 @@ async function createFromTemplate(args: {
     // Install dependencies
     await installDependencies(projectPath);
 
-    // Handle git initialization for templates
-    let shouldInitGit = false;
-    const gitConfirmResult = await p.confirm({
-      message: 'Initialize a new git repository?',
-      initialValue: true,
-    });
-
-    if (!p.isCancel(gitConfirmResult)) {
-      shouldInitGit = Boolean(gitConfirmResult);
-    }
-
-    if (shouldInitGit) {
+    if (initGit) {
       const s = p.spinner();
-      s.start('Initializing git repository');
       try {
-        // Change to project directory and initialize git
-        const originalCwd = process.cwd();
-        process.chdir(projectPath);
-        await execAsync('git init');
-        await execAsync('git add -A');
-        await execAsync('git commit -m "Initial commit"');
-        process.chdir(originalCwd);
+        s.start('Initializing git repository');
+
+        await gitInit({ cwd: projectPath });
+
         s.stop('Git repository initialized');
-      } catch (error) {
+      } catch {
         s.stop();
-        p.log.warn(`Failed to initialize git repository: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        p.log.info('You can initialize git manually by running: git init && git add -A && git commit -m "Initial commit"');
       }
     }
 
