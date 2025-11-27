@@ -30,14 +30,12 @@ export function getAuthEntrypoint() {
   }
 
   const serverConfig = mastra.getServer()
-  if (serverConfig && serverConfig.experimental_auth) {
-    const auth = serverConfig.experimental_auth
-    serverConfig.experimental_auth = new CompositeAuth([new MastraCloudAuth(), auth])
-  } else {
-    if (!serverConfig) {
-      mastra.setServer({})
-    }
-    mastra.getServer().experimental_auth = new MastraCloudAuth()
+  if (serverConfig && serverConfig.auth) {
+    const existingAuth = serverConfig.auth
+    const cloudAuth = new MastraCloudAuth()
+    
+    // Use CompositeAuth to combine cloud auth with existing auth
+    serverConfig.auth = new CompositeAuth([cloudAuth, existingAuth])
   }
   `;
 }
