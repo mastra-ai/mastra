@@ -12,10 +12,19 @@ Use the following workflow:
 
 1. The issue description and requirements
 2. Comments and discussion threads
+3. Labels
 
 ## Stage 2 "Research"
 
 Given the information you gathered, research the code impacted. If unclear ask the user.
+
+If the issue is a FEATURE then go to:
+
+## Stage 3 "Understand user wants"
+
+We need to understand what the user is asking for. We need to see if it makes sense to add to Mastra
+
+All other issues go to:
 
 ## Stage 3 "Prove it"
 

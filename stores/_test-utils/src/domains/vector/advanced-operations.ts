@@ -423,6 +423,156 @@ export function createAdvancedOperationsTest(config: VectorTestConfig) {
       });
     }, 50000);
 
+    describe('upsert() with deleteFilter', () => {
+      it('should delete matching vectors before upserting new ones', async () => {
+        // Initial upsert
+        await config.vector.upsert({
+          indexName: testIndexName,
+          vectors: [createVector(1), createVector(4), createVector(7)],
+          metadata: [
+            { source_id: 'doc.pdf', chunk: 0, content: 'old content 1' },
+            { source_id: 'doc.pdf', chunk: 1, content: 'old content 2' },
+            { source_id: 'doc.pdf', chunk: 2, content: 'old content 3' },
+          ],
+        });
+
+        await waitForIndexing(testIndexName);
+
+        const stats1 = await config.vector.describeIndex({ indexName: testIndexName });
+        expect(stats1.count).toBe(3);
+
+        // Re-upsert with deleteFilter - should delete old vectors and insert new ones atomically
+        await config.vector.upsert({
+          indexName: testIndexName,
+          vectors: [createVector(2), createVector(5)],
+          metadata: [
+            { source_id: 'doc.pdf', chunk: 0, content: 'new content 1' },
+            { source_id: 'doc.pdf', chunk: 1, content: 'new content 2' },
+          ],
+          deleteFilter: { source_id: 'doc.pdf' },
+        });
+
+        await waitForIndexing(testIndexName);
+
+        // Should only have 2 vectors now (deleted 3 old, inserted 2 new)
+        const stats2 = await config.vector.describeIndex({ indexName: testIndexName });
+        expect(stats2.count).toBe(2);
+
+        // Verify new content
+        const results = await config.vector.query({
+          indexName: testIndexName,
+          queryVector: createVector(3),
+          topK: 10,
+        });
+        expect(results.length).toBe(2);
+        expect(results.every(r => r.metadata?.content?.startsWith('new content'))).toBe(true);
+      });
+
+      it('should only delete vectors matching the filter, not others', async () => {
+        // Insert vectors for two different sources
+        await config.vector.upsert({
+          indexName: testIndexName,
+          vectors: [createVector(1), createVector(4), createVector(7)],
+          metadata: [
+            { source_id: 'doc1.pdf', chunk: 0 },
+            { source_id: 'doc2.pdf', chunk: 0 },
+            { source_id: 'doc2.pdf', chunk: 1 },
+          ],
+        });
+
+        await waitForIndexing(testIndexName);
+
+        // Re-upsert doc1.pdf only
+        await config.vector.upsert({
+          indexName: testIndexName,
+          vectors: [createVector(2), createVector(5)],
+          metadata: [
+            { source_id: 'doc1.pdf', chunk: 0, updated: true },
+            { source_id: 'doc1.pdf', chunk: 1, updated: true },
+          ],
+          deleteFilter: { source_id: 'doc1.pdf' },
+        });
+
+        await waitForIndexing(testIndexName);
+
+        // Should have 4 vectors: 2 new doc1.pdf + 2 original doc2.pdf
+        const stats = await config.vector.describeIndex({ indexName: testIndexName });
+        expect(stats.count).toBe(4);
+
+        const results = await config.vector.query({
+          indexName: testIndexName,
+          queryVector: createVector(3),
+          topK: 10,
+        });
+
+        const doc1Vectors = results.filter(r => r.metadata?.source_id === 'doc1.pdf');
+        const doc2Vectors = results.filter(r => r.metadata?.source_id === 'doc2.pdf');
+
+        expect(doc1Vectors.length).toBe(2);
+        expect(doc1Vectors.every(r => r.metadata?.updated === true)).toBe(true);
+        expect(doc2Vectors.length).toBe(2);
+        expect(doc2Vectors.every(r => r.metadata?.updated)).toBe(false);
+      });
+
+      it('should work when deleteFilter matches no vectors', async () => {
+        await config.vector.upsert({
+          indexName: testIndexName,
+          vectors: [createVector(1)],
+          metadata: [{ source_id: 'existing.pdf' }],
+        });
+
+        await waitForIndexing(testIndexName);
+
+        // Upsert with deleteFilter that matches nothing
+        await config.vector.upsert({
+          indexName: testIndexName,
+          vectors: [createVector(4)],
+          metadata: [{ source_id: 'new.pdf' }],
+          deleteFilter: { source_id: 'nonexistent.pdf' },
+        });
+
+        await waitForIndexing(testIndexName);
+
+        // Should have 2 vectors (original + new)
+        const stats = await config.vector.describeIndex({ indexName: testIndexName });
+        expect(stats.count).toBe(2);
+      });
+
+      it('should handle message content update scenario (issue #6195)', async () => {
+        const messageId = 'msg-12345';
+
+        // Initial message embedding
+        await config.vector.upsert({
+          indexName: testIndexName,
+          vectors: [createVector(1)],
+          metadata: [{ message_id: messageId, content: 'I love pizza' }],
+        });
+
+        await waitForIndexing(testIndexName);
+
+        // Update message with new content - should replace old embedding
+        await config.vector.upsert({
+          indexName: testIndexName,
+          vectors: [createVector(9)], // Different vector for different content
+          metadata: [{ message_id: messageId, content: 'I prefer salads' }],
+          deleteFilter: { message_id: messageId },
+        });
+
+        await waitForIndexing(testIndexName);
+
+        // Should only have 1 vector with new content
+        const stats = await config.vector.describeIndex({ indexName: testIndexName });
+        expect(stats.count).toBe(1);
+
+        const results = await config.vector.query({
+          indexName: testIndexName,
+          queryVector: createVector(9),
+          topK: 1,
+        });
+        expect(results[0]?.metadata?.content).toBe('I prefer salads');
+      });
+    }, 50000);
+
     describe('Real-world scenarios', () => {
       it('should handle document re-indexing workflow', async () => {
         const docId = 'user-guide.pdf';

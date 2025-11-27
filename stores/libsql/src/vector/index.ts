@@ -206,10 +206,32 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     }
   }
 
-  private async doUpsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
+  private async doUpsert({
+    indexName,
+    vectors,
+    metadata,
+    ids,
+    deleteFilter,
+  }: UpsertVectorParams<LibSQLVectorFilter>): Promise<string[]> {
     const tx = await this.turso.transaction('write');
     try {
       const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+
+      // Step 1: If deleteFilter is provided, delete matching vectors first
+      if (deleteFilter) {
+        const translatedFilter = this.transformFilter(deleteFilter);
+        const { sql: filterSql, values: filterValues } = buildFilterQuery(translatedFilter);
+
+        if (filterSql && filterSql.trim() !== '') {
+          const deleteQuery = `DELETE FROM ${parsedIndexName} ${filterSql}`;
+          await tx.execute({
+            sql: deleteQuery,
+            args: filterValues,
+          });
+        }
+      }
+
+      // Step 2: Insert/update new vectors
       const vectorIds = ids || vectors.map(() => crypto.randomUUID());
 
       for (let i = 0; i < vectors.length; i++) {

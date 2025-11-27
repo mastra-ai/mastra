@@ -974,20 +974,94 @@ ${
   }
 
   /**
-   * Updates the metadata of a list of messages
-   * @param messages - The list of messages to update
+   * Updates messages in storage and syncs vector embeddings if content changed.
+   * @param messages - The list of messages to update (partial updates with required id)
    * @returns The list of updated messages
    */
   public async updateMessages({
     messages,
   }: {
-    messages: Partial<MastraDBMessage> & { id: string }[];
+    messages: (Partial<MastraDBMessage> & { id: string })[];
   }): Promise<MastraDBMessage[]> {
     if (messages.length === 0) return [];
 
-    // TODO: Possibly handle updating the vector db here when a message is updated.
+    // First, update storage
+    const updatedMessages = await this.storage.updateMessages({ messages });
 
-    return this.storage.updateMessages({ messages });
+    // Get config from memory instance
+    const config = this.getMergedThreadConfig();
+
+    // Skip vector update if vector store not configured or semanticRecall not enabled
+    if (!this.vector || !config.semanticRecall) {
+      return updatedMessages;
+    }
+
+    // Find messages that had content updates
+    const messagesWithContentUpdates = messages.filter(m => m.content !== undefined);
+
+    if (messagesWithContentUpdates.length === 0) {
+      return updatedMessages;
+    }
+
+    // Get the full updated messages for those with content changes
+    // We need threadId and resourceId for vector metadata
+    const messageIdsWithContentUpdates = new Set(messagesWithContentUpdates.map(m => m.id));
+    const fullUpdatedMessages = updatedMessages.filter(m => messageIdsWithContentUpdates.has(m.id));
+
+    // Re-embed messages with content changes
+    let indexName: Promise<string> | undefined;
+
+    for (const message of fullUpdatedMessages) {
+      let textForEmbedding: string | null = null;
+
+      // Extract text content from the message
+      if (
+        message.content?.content &&
+        typeof message.content.content === 'string' &&
+        message.content.content.trim() !== ''
+      ) {
+        textForEmbedding = message.content.content;
+      } else if (message.content?.parts && message.content.parts.length > 0) {
+        // Extract text from all text parts, concatenate
+        const joined = message.content.parts
+          .filter((part: any) => part.type === 'text')
+          .map((part: any) => (part as TextPart).text)
+          .join(' ')
+          .trim();
+        if (joined) textForEmbedding = joined;
+      }
+
+      if (!textForEmbedding) continue;
+
+      if (typeof this.vector === 'undefined') {
+        throw new Error(
+          `Tried to upsert embeddings to index ${await indexName} but this Memory instance doesn't have an attached vector db.`,
+        );
+      }
+
+      const { embeddings, chunks, dimension } = await this.embedMessageContent(textForEmbedding);
+
+      if (typeof indexName === 'undefined') {
+        indexName = this.createEmbeddingIndex(dimension, config).then(result => result.indexName);
+      }
+
+      const resolvedIndexName = await indexName;
+
+      // Delete old vectors and insert new ones atomically using deleteFilter
+      // This ensures stale embeddings are removed when content changes
+      await this.vector.upsert({
+        indexName: resolvedIndexName,
+        vectors: embeddings,
+        metadata: chunks.map(() => ({
+          message_id: message.id,
+          thread_id: message.threadId,
+          resource_id: message.resourceId,
+        })),
+        deleteFilter: { message_id: message.id },
+      });
+    }
+
+    return updatedMessages;
   }
 
   /**

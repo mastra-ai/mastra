@@ -10,6 +10,7 @@
     "test:working-memory": "vitest run ./src/working-memory.test.ts",
     "test:processors": "vitest run ./src/processors.test.ts",
     "test:fastembed": "vitest run ./src/fastembed.test.ts",
+    "test:vector-sync": "vitest run ./src/update-messages-vector-sync.test.ts",
     "dev": "mastra dev"
   },
   "dependencies": {
