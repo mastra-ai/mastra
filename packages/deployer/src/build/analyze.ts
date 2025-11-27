@@ -220,6 +220,7 @@ If you think your configuration is valid, please open an issue.`);
       sourcemapEnabled: bundlerOptions?.sourcemap ?? false,
       workspaceMap,
       projectRoot,
+      shouldCheckTransitiveDependencies: isDev,
     });
 
     // Write the entry file to the output dir so that we can use it for workspace resolution stuff
