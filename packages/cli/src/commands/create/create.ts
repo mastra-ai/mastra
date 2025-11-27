@@ -318,7 +318,7 @@ async function createFromTemplate(args: {
   });
 
   if (!p.isCancel(gitConfirmResult)) {
-    initGit = Boolean(gitConfirmResult);
+    initGit = gitConfirmResult;
   }
 
   let projectPath: string | null = null;
