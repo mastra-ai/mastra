@@ -5,9 +5,6 @@
     <link rel="icon" type="image/svg+xml" href="%%MASTRA_BASE_PATH%%/mastra.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mastra Studio</title>
-  </head>
-
-  <body class="overflow-hidden">
     <script>
       window.MASTRA_TELEMETRY_DISABLED = '%%MASTRA_TELEMETRY_DISABLED%%';
       window.MASTRA_SERVER_HOST = '%%MASTRA_SERVER_HOST%%';
@@ -37,6 +34,9 @@
 
       connectSSE();
     </script>
+  </head>
+
+  <body class="overflow-hidden">
     <div id="root" class="dark"></div>
     <script type="module">
       // Use relative import to work with any base path
