@@ -553,9 +553,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       // Check that reasoning was stored in messageList even though deltas were empty
       const responseMessages = messageList.get.response.db();
-      const reasoningMessage = responseMessages.find(
-        msg => msg.content.parts?.some(p => p.type === 'reasoning'),
-      );
+      const reasoningMessage = responseMessages.find(msg => msg.content.parts?.some(p => p.type === 'reasoning'));
 
       expect(reasoningMessage).toBeDefined();
       const reasoningPart = reasoningMessage?.content.parts?.find(p => p.type === 'reasoning');
