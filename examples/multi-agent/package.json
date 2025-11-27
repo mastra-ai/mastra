@@ -1,0 +1,44 @@
+{
+  "name": "examples-multi-agent",
+  "type": "module",
+  "private": true,
+  "description": "",
+  "main": "index.js",
+  "version": "0.0.1",
+  "dependencies": {
+    "@ai-sdk/google": "latest",
+    "@ai-sdk/openai": "latest",
+    "@ai-sdk/provider": "latest",
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "ai": "latest",
+    "fetch-to-node": "^2.1.0",
+    "mastra": "latest",
+    "typescript": "latest",
+    "zod": "^3.25.76"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/loggers": "link:../../packages/loggers",
+      "@mastra/memory": "link:../../packages/memory",
+      "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/observability": "link:../../observability/mastra",
+      "mastra": "link:../../packages/cli"
+    }
+  },
+  "scripts": {
+    "mastra:build": "mastra build",
+    "mastra:dev": "mastra dev"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.9.0+sha512.0486e394640d3c1fb3c9d43d49cf92879ff74f8516959c235308f5a8f62e2e19528a65cdc2a3058f587cde71eba3d5b56327c8c33a97e4c4051ca48a10ca2d5f",
+  "devDependencies": {
+    "msw": "^2.12.2"
+  }
+}
