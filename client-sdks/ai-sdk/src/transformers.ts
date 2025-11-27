@@ -1,7 +1,7 @@
 import type { LLMStepResult } from '@mastra/core/agent';
 import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
 import type { WorkflowRunStatus, WorkflowStepStatus, WorkflowStreamEvent } from '@mastra/core/workflows';
-import type { InferUIMessageChunk, UIMessage } from 'ai';
+import type { InferUIMessageChunk, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai';
 import type { ZodType } from 'zod';
 import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from './helpers';
 import type { ToolAgentChunkType, ToolWorkflowChunkType, ToolNetworkChunkType } from './helpers';
@@ -175,12 +175,16 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>({
   sendFinish,
   sendReasoning,
   sendSources,
+  messageMetadata,
+  onError,
 }: {
   lastMessageId?: string;
   sendStart?: boolean;
   sendFinish?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
+  messageMetadata?: UIMessageStreamOptions<UIMessage>['messageMetadata'];
+  onError?: UIMessageStreamOptions<UIMessage>['onError'];
 }) {
   let bufferedSteps = new Map<string, any>();
   let tripwireOccurred = false;
@@ -204,11 +208,12 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>({
         part: part as any,
         sendReasoning,
         sendSources,
+        messageMetadataValue: messageMetadata?.({ part: part as TextStreamPart<ToolSet> }),
         sendStart,
         sendFinish,
         responseMessageId: lastMessageId,
-        onError() {
-          return 'Error';
+        onError(error) {
+          return onError ? onError(error) : safeParseErrorObject(error);
         },
       });
 
