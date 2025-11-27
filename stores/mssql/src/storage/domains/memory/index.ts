@@ -652,7 +652,12 @@ export class MemoryMSSQL extends MemoryStorage {
       rows.sort((a, b) => a.seq_id - b.seq_id);
       messages.push(...rows);
 
-      const parsed = this._parseAndFormatMessages(messages, format);
+      let parsed = this._parseAndFormatMessages(messages, format);
+
+      // Always sort messages by createdAt to ensure correct chronological order
+      // This is critical when `include` parameter brings in messages from semantic recall
+      parsed = parsed.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
       return {
         messages: parsed,
         total,
