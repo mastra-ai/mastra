@@ -561,6 +561,45 @@ export type ExecutionContext = {
   state: Record<string, any>;
 };
 
+/**
+ * Mutable context that can change during step execution.
+ * This is a subset of ExecutionContext containing only the fields that
+ * can be modified by step execution (via setState, suspend, etc.)
+ */
+export type MutableContext = {
+  state: Record<string, any>;
+  suspendedPaths: Record<string, number[]>;
+  resumeLabels: Record<
+    string,
+    {
+      stepId: string;
+      foreachIndex?: number;
+    }
+  >;
+};
+
+/**
+ * Result returned from step execution methods.
+ * Wraps the StepResult with additional context needed for durable execution engines.
+ */
+export type StepExecutionResult = {
+  result: StepResult<any, any, any, any>;
+  stepResults: Record<string, StepResult<any, any, any, any>>;
+  mutableContext: MutableContext;
+  requestContext: Record<string, any>;
+};
+
+/**
+ * Result returned from entry execution methods.
+ * Similar to StepExecutionResult but for top-level entry execution in executeEntry.
+ */
+export type EntryExecutionResult = {
+  result: StepResult<any, any, any, any>;
+  stepResults: Record<string, StepResult<any, any, any, any>>;
+  mutableContext: MutableContext;
+  requestContext: Record<string, any>;
+};
+
 // =============================================================================
 // Execution Engine Hook Types
 // =============================================================================

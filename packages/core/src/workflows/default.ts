@@ -27,9 +27,12 @@ import { getStepResult } from './step';
 import type {
   DefaultEngineType,
   Emitter,
+  EntryExecutionResult,
   ExecutionContext,
+  MutableContext,
   RestartExecutionParams,
   SerializedStepFlowEntry,
+  StepExecutionResult,
   StepFailure,
   StepFlowEntry,
   StepResult,
@@ -317,6 +320,51 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     return base as TOutput;
   }
 
+  // =============================================================================
+  // Context Serialization Helpers
+  // =============================================================================
+
+  /**
+   * Serialize a RequestContext Map to a plain object for JSON serialization.
+   * Used by durable execution engines to persist context across step replays.
+   */
+  protected serializeRequestContext(requestContext: RequestContext): Record<string, any> {
+    const obj: Record<string, any> = {};
+    requestContext.forEach((value, key) => {
+      obj[key] = value;
+    });
+    return obj;
+  }
+
+  /**
+   * Deserialize a plain object back to a RequestContext Map.
+   * Used to restore context after durable execution replay.
+   */
+  protected deserializeRequestContext(obj: Record<string, any>): RequestContext {
+    return new Map(Object.entries(obj)) as unknown as RequestContext;
+  }
+
+  /**
+   * Build MutableContext from current execution state.
+   * This extracts only the fields that can change during step execution.
+   */
+  protected buildMutableContext(executionContext: ExecutionContext): MutableContext {
+    return {
+      state: executionContext.state,
+      suspendedPaths: executionContext.suspendedPaths,
+      resumeLabels: executionContext.resumeLabels,
+    };
+  }
+
+  /**
+   * Apply mutable context changes back to the execution context.
+   */
+  protected applyMutableContext(executionContext: ExecutionContext, mutableContext: MutableContext): void {
+    executionContext.state = mutableContext.state;
+    Object.assign(executionContext.suspendedPaths, mutableContext.suspendedPaths);
+    Object.assign(executionContext.resumeLabels, mutableContext.resumeLabels);
+  }
+
   /**
    * Executes a workflow run with the provided execution graph and input
    * @param graph The execution graph to execute
@@ -407,6 +455,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       resume?.stepResults || { input };
     let lastOutput: any;
     let lastState: Record<string, any> = timeTravel?.state ?? restart?.state ?? initialState ?? {};
+    let lastExecutionContext: ExecutionContext | undefined;
     for (let i = startIdx; i < steps.length; i++) {
       const entry = steps[i]!;
 
@@ -421,6 +470,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         format: params.format,
         state: lastState ?? initialState,
       };
+      lastExecutionContext = executionContext;
 
       try {
         lastOutput = await this.executeEntry({
@@ -445,9 +495,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           disableScorers,
         });
 
-        if (lastOutput.executionContext?.state) {
-          lastState = lastOutput.executionContext.state;
-        }
+        // Apply mutable context changes from entry execution
+        this.applyMutableContext(executionContext, lastOutput.mutableContext);
+        lastState = lastOutput.mutableContext.state;
 
         // if step result is not success, stop and return
         if (lastOutput.result.status !== 'success') {
@@ -460,9 +510,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             workflowId,
             runId,
             resourceId,
-            stepResults: lastOutput.stepResults as any,
+            stepResults: lastOutput.stepResults,
             serializedStepGraph: params.serializedStepGraph,
-            executionContext: lastOutput.executionContext as ExecutionContext,
+            executionContext,
             workflowStatus: result.status,
             result: result.result,
             error: result.error,
@@ -485,7 +535,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             });
           }
           if (lastOutput.result.status === 'suspended' && params.outputOptions?.includeResumeLabels) {
-            return { ...result, resumeLabels: lastOutput.executionContext?.resumeLabels };
+            return { ...result, resumeLabels: lastOutput.mutableContext.resumeLabels };
           }
           return result;
         }
@@ -502,14 +552,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           'Error executing step: ',
         );
-        const result = (await this.fmtReturnValue(params.emitter, stepResults, lastOutput.result, e as Error)) as any;
+        const result = (await this.fmtReturnValue(params.emitter, stepResults, lastOutput?.result, e as Error)) as any;
         await this.persistStepUpdate({
           workflowId,
           runId,
           resourceId,
-          stepResults: lastOutput.stepResults as any,
+          stepResults: lastOutput?.stepResults ?? stepResults,
           serializedStepGraph: params.serializedStepGraph,
-          executionContext: lastOutput.executionContext as ExecutionContext,
+          executionContext,
           workflowStatus: result.status,
           result: result.result,
           error: result.error,
@@ -533,9 +583,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       workflowId,
       runId,
       resourceId,
-      stepResults: lastOutput.stepResults as any,
+      stepResults: lastOutput.stepResults,
       serializedStepGraph: params.serializedStepGraph,
-      executionContext: lastOutput.executionContext as ExecutionContext,
+      executionContext: lastExecutionContext!,
       workflowStatus: result.status,
       result: result.result,
       error: result.error,
@@ -847,7 +897,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     serializedStepGraph: SerializedStepFlowEntry[];
     tracingContext: TracingContext;
     iterationCount?: number;
-  }): Promise<StepResult<any, any, any, any>> {
+  }): Promise<StepExecutionResult> {
     const stepCallId = randomUUID();
 
     const { inputData, validationError } = await validateStepInput({
@@ -943,9 +993,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         stepSpan,
       });
 
-      // If executeWorkflowStep returns a result, use it; otherwise continue with default execution
+      // If executeWorkflowStep returns a result, wrap it in StepExecutionResult
       if (workflowResult !== null) {
-        return { ...stepInfo, ...workflowResult };
+        const stepResult = { ...stepInfo, ...workflowResult } as StepResult<any, any, any, any>;
+        return {
+          result: stepResult,
+          stepResults: { [step.id]: stepResult },
+          mutableContext: this.buildMutableContext(executionContext),
+          requestContext: this.serializeRequestContext(requestContext),
+        };
       }
     }
 
@@ -1174,7 +1230,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
     }
 
-    return { ...stepInfo, ...execResults };
+    const stepResult = { ...stepInfo, ...execResults } as StepResult<any, any, any, any>;
+
+    return {
+      result: stepResult,
+      stepResults: { [step.id]: stepResult },
+      mutableContext: this.buildMutableContext(executionContext),
+      requestContext: this.serializeRequestContext(requestContext),
+    };
   }
 
   protected async runScorers({
@@ -1338,7 +1401,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         if (currStepResult && currStepResult.status !== 'running') {
           return currStepResult;
         }
-        const result = await this.executeStep({
+        const stepExecResult = await this.executeStep({
           workflowId,
           runId,
           resourceId,
@@ -1368,8 +1431,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           writableStream,
           disableScorers,
         });
-        stepResults[step.step.id] = result;
-        return result;
+        // Apply context changes from parallel step execution
+        this.applyMutableContext(executionContext, stepExecResult.mutableContext);
+        Object.assign(stepResults, stepExecResult.stepResults);
+        return stepExecResult.result;
       }),
     );
     const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any, any>;
@@ -1588,7 +1653,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           return currStepResult;
         }
 
-        const result = await this.executeStep({
+        const stepExecResult = await this.executeStep({
           workflowId,
           runId,
           resourceId,
@@ -1619,8 +1684,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           disableScorers,
         });
 
-        stepResults[step.step.id] = result;
-        return result;
+        // Apply context changes from conditional step execution
+        this.applyMutableContext(executionContext, stepExecResult.mutableContext);
+        Object.assign(stepResults, stepExecResult.stepResults);
+        return stepExecResult.result;
       }),
     );
 
@@ -1734,7 +1801,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     let currentTimeTravel = timeTravel;
 
     do {
-      result = await this.executeStep({
+      const stepExecResult = await this.executeStep({
         workflowId,
         runId,
         resourceId,
@@ -1756,6 +1823,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         serializedStepGraph,
         iterationCount: iteration + 1,
       });
+
+      // Apply context changes from loop step execution
+      this.applyMutableContext(executionContext, stepExecResult.mutableContext);
+      Object.assign(stepResults, stepExecResult.stepResults);
+      result = stepExecResult.result;
 
       //Clear restart & time travel for next iteration
       currentRestart = undefined;
@@ -1947,7 +2019,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     for (let i = 0; i < prevOutput.length; i += concurrency) {
       const items = prevOutput.slice(i, i + concurrency);
       const itemsResults = await Promise.all(
-        items.map((item: any, j: number) => {
+        items.map(async (item: any, j: number) => {
           const k = i + j;
           const prevItemResult = prevForeachOutput[k];
           if (
@@ -1966,7 +2038,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             }
           }
 
-          return this.executeStep({
+          const stepExecResult = await this.executeStep({
             workflowId,
             runId,
             resourceId,
@@ -1986,6 +2058,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             disableScorers,
             serializedStepGraph,
           });
+
+          // Apply context changes from foreach step execution
+          this.applyMutableContext(executionContext, stepExecResult.mutableContext);
+          Object.assign(stepResults, stepExecResult.stepResults);
+          return stepExecResult.result;
         }),
       );
 
@@ -2197,17 +2274,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     requestContext: RequestContext;
     writableStream?: WritableStream<ChunkType>;
     disableScorers?: boolean;
-  }): Promise<{
-    result: StepResult<any, any, any, any>;
-    stepResults?: Record<string, StepResult<any, any, any, any>>;
-    executionContext?: ExecutionContext;
-  }> {
+  }): Promise<EntryExecutionResult> {
     const prevOutput = this.getStepOutput(stepResults, prevStep);
     let execResults: any;
 
     if (entry.type === 'step') {
       const { step } = entry;
-      execResults = await this.executeStep({
+      const stepExecResult = await this.executeStep({
         workflowId,
         runId,
         resourceId,
@@ -2226,6 +2299,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         disableScorers,
         serializedStepGraph,
       });
+
+      // Extract result and apply context changes
+      execResults = stepExecResult.result;
+      this.applyMutableContext(executionContext, stepExecResult.mutableContext);
+      Object.assign(stepResults, stepExecResult.stepResults);
+      // Note: requestContext updates are handled at the execute() loop level
     } else if (resume?.resumePath?.length && entry.type === 'parallel') {
       const idx = resume.resumePath.shift();
       const resumedStepResult = await this.executeEntry({
@@ -2256,10 +2335,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
 
       // After resuming one parallel step, check if ALL parallel steps are complete
-      // Update stepResults with the resumed step's result
-      if (resumedStepResult.stepResults) {
-        Object.assign(stepResults, resumedStepResult.stepResults);
-      }
+      // Apply context changes from resumed step
+      this.applyMutableContext(executionContext, resumedStepResult.mutableContext);
+      Object.assign(stepResults, resumedStepResult.stepResults);
 
       // Check the status of all parallel steps in this block
       const allParallelStepsComplete = entry.steps.every(parallelStep => {
@@ -2300,16 +2378,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         };
       }
 
-      // Ensure execution context includes suspended paths for non-resumed steps
-      const updatedExecutionContext: ExecutionContext = {
-        ...executionContext,
-        ...resumedStepResult.executionContext,
-        suspendedPaths: {
-          ...executionContext.suspendedPaths,
-          ...resumedStepResult.executionContext?.suspendedPaths,
-        },
-      };
-
       // For suspended parallel blocks, maintain suspended paths for non-resumed steps
       if (execResults.status === 'suspended') {
         entry.steps.forEach((parallelStep, stepIndex) => {
@@ -2317,10 +2385,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             const stepResult = stepResults[parallelStep.step.id];
             if (stepResult && stepResult.status === 'suspended') {
               // Ensure this step remains in suspendedPaths
-              updatedExecutionContext.suspendedPaths[parallelStep.step.id] = [
-                ...executionContext.executionPath,
-                stepIndex,
-              ];
+              executionContext.suspendedPaths[parallelStep.step.id] = [...executionContext.executionPath, stepIndex];
             }
           }
         });
@@ -2328,8 +2393,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
       return {
         result: execResults,
-        stepResults: resumedStepResult.stepResults,
-        executionContext: updatedExecutionContext,
+        stepResults,
+        mutableContext: this.buildMutableContext(executionContext),
+        requestContext: resumedStepResult.requestContext,
       };
     } else if (entry.type === 'parallel') {
       execResults = await this.executeParallel({
@@ -2608,6 +2674,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
     }
 
-    return { result: execResults, stepResults, executionContext };
+    return {
+      result: execResults,
+      stepResults,
+      mutableContext: this.buildMutableContext(executionContext),
+      requestContext: this.serializeRequestContext(requestContext),
+    };
   }
 }

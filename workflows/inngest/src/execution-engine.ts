@@ -17,6 +17,7 @@ import type {
   ExecutionContext,
   Step,
   StepResult,
+  StepExecutionResult,
   StepFailure,
   Emitter,
   ChunkType,
@@ -393,7 +394,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     tracingContext?: TracingContext;
     writableStream?: WritableStream<ChunkType>;
     disableScorers?: boolean;
-  }): Promise<StepResult<any, any, any, any>> {
+  }): Promise<StepExecutionResult> {
     const stepSpan = tracingContext?.currentSpan?.createChildSpan({
       name: `workflow step: '${step.id}'`,
       type: SpanType.WORKFLOW_STEP,
@@ -441,12 +442,17 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         startedAt,
       });
 
-      // If executeWorkflowStep returns a result, use it
+      // If executeWorkflowStep returns a result, wrap it in StepExecutionResult
       if (workflowResult !== null) {
-        return workflowResult;
+        return {
+          result: workflowResult,
+          stepResults: { [step.id]: workflowResult },
+          mutableContext: this.buildMutableContext(executionContext),
+          requestContext: this.serializeRequestContext(requestContext),
+        };
       }
     }
-    let stepRes: {
+    type InngestStepRes = {
       result: {
         status: 'success' | 'failed' | 'suspended' | 'bailed';
         output?: any;
@@ -459,15 +465,19 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         suspendPayload?: any;
         suspendedAt?: number;
       };
-      stepResults: Record<
-        string,
-        StepResult<any, any, any, any> | (Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string })
-      >;
-      executionContext: ExecutionContext;
+      stepResults: Record<string, any>;
+      mutableContext: {
+        state: Record<string, any>;
+        suspendedPaths: Record<string, number[]>;
+        resumeLabels: Record<string, { stepId: string; foreachIndex?: number }>;
+      };
+      requestContext: Record<string, any>;
     };
 
+    let stepRes: InngestStepRes;
+
     try {
-      stepRes = await this.inngestStep.run(`workflow.${executionContext.workflowId}.step.${step.id}`, async () => {
+      stepRes = (await this.inngestStep.run(`workflow.${executionContext.workflowId}.step.${step.id}`, async () => {
         let execResults: {
           status: 'success' | 'failed' | 'suspended' | 'bailed';
           output?: any;
@@ -649,8 +659,24 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
         stepSpan?.end({ output: execResults });
 
-        return { result: execResults, executionContext, stepResults };
-      });
+        // Serialize mutable context and requestContext for Inngest durability
+        const mutableContext = {
+          state: executionContext.state,
+          suspendedPaths: executionContext.suspendedPaths,
+          resumeLabels: executionContext.resumeLabels,
+        };
+        const serializedRequestContext: Record<string, any> = {};
+        requestContext.forEach((value, key) => {
+          serializedRequestContext[key] = value;
+        });
+
+        return {
+          result: execResults,
+          stepResults: { [step.id]: execResults },
+          mutableContext,
+          requestContext: serializedRequestContext,
+        };
+      })) as InngestStepRes;
     } catch (e) {
       const stepFailure: Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string } =
         e instanceof Error
@@ -663,13 +689,21 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               endedAt: Date.now(),
             };
 
+      // Serialize requestContext for failure case
+      const serializedRequestContext: Record<string, any> = {};
+      requestContext.forEach((value, key) => {
+        serializedRequestContext[key] = value;
+      });
+
       stepRes = {
         result: stepFailure,
-        executionContext,
-        stepResults: {
-          ...stepResults,
-          [step.id]: stepFailure,
+        stepResults: { [step.id]: stepFailure },
+        mutableContext: {
+          state: executionContext.state,
+          suspendedPaths: executionContext.suspendedPaths,
+          resumeLabels: executionContext.resumeLabels,
         },
+        requestContext: serializedRequestContext,
       };
     }
 
@@ -691,9 +725,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       });
     }
 
-    Object.assign(executionContext.suspendedPaths, stepRes.executionContext.suspendedPaths);
-    executionContext.state = stepRes.executionContext.state;
+    // Apply mutable context changes from the memoized result
+    this.applyMutableContext(executionContext, stepRes.mutableContext);
 
-    return stepRes.result as StepResult<any, any, any, any>;
+    return {
+      result: stepRes.result as StepResult<any, any, any, any>,
+      stepResults: stepRes.stepResults as Record<string, StepResult<any, any, any, any>>,
+      mutableContext: stepRes.mutableContext,
+      requestContext: stepRes.requestContext,
+    };
   }
 }
