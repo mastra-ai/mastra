@@ -1,7 +1,21 @@
+import type { TranscriptionModel, SpeechModel } from 'ai-v5';
+
 import type { ToolsInput } from '../agent';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+
+import { AISDKSpeech } from './aisdk/speech';
+import { AISDKTranscription } from './aisdk/transcription';
 import { MastraVoice } from './voice';
 import type { VoiceEventType, VoiceEventMap } from '.';
+
+// Helper to check if something is an AI SDK model
+function isTranscriptionModel(obj: any): obj is TranscriptionModel {
+  return obj && typeof obj === 'object' && obj.modelId && obj.specificationVersion === 'v2';
+}
+
+function isSpeechModel(obj: any): obj is SpeechModel {
+  return obj && typeof obj === 'object' && obj.modelId && obj.specificationVersion === 'v2';
+}
 
 export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, ToolsInput, VoiceEventMap> {
   protected speakProvider?: MastraVoice;
@@ -23,13 +37,25 @@ export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, Tools
     /** @deprecated use realtime instead */
     realtimeProvider?: MastraVoice;
 
-    input?: MastraVoice;
-    output?: MastraVoice;
+    input?: MastraVoice | TranscriptionModel;
+    output?: MastraVoice | SpeechModel;
     realtime?: MastraVoice;
   }) {
     super();
-    this.speakProvider = output || speakProvider;
-    this.listenProvider = input || listenProvider;
+
+    // Handle deprecated params for backward compatibility
+    const inputProvider = input || listenProvider;
+    const outputProvider = output || speakProvider;
+
+    // Auto-wrap AI SDK models
+    if (inputProvider) {
+      this.listenProvider = isTranscriptionModel(inputProvider) ? new AISDKTranscription(inputProvider) : inputProvider;
+    }
+
+    if (outputProvider) {
+      this.speakProvider = isSpeechModel(outputProvider) ? new AISDKSpeech(outputProvider) : outputProvider;
+    }
+
     this.realtimeProvider = realtime || realtimeProvider;
   }
 

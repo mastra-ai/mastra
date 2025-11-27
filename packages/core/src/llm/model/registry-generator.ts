@@ -8,6 +8,44 @@ import path from 'path';
 import type { MastraModelGateway, ProviderConfig } from './gateways/base.js';
 
 /**
+ * Write a file atomically using the write-to-temp-then-rename pattern.
+ * This prevents file corruption when multiple processes write to the same file concurrently.
+ *
+ * The rename operation is atomic on POSIX systems when source and destination
+ * are on the same filesystem.
+ *
+ * @param filePath - The target file path
+ * @param content - The content to write
+ * @param encoding - The encoding to use (default: 'utf-8')
+ */
+export async function atomicWriteFile(
+  filePath: string,
+  content: string,
+  encoding: BufferEncoding = 'utf-8',
+): Promise<void> {
+  // Create a unique temp file name using PID, timestamp, and random suffix to avoid collisions
+  const randomSuffix = Math.random().toString(36).substring(2, 15);
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.${randomSuffix}.tmp`;
+
+  try {
+    // Write to temp file first
+    await fs.writeFile(tempPath, content, encoding);
+
+    // Atomically rename temp file to target path
+    // This is atomic on POSIX when both paths are on the same filesystem
+    await fs.rename(tempPath, filePath);
+  } catch (error) {
+    // Clean up temp file if it exists
+    try {
+      await fs.unlink(tempPath);
+    } catch {
+      // Ignore cleanup errors
+    }
+    throw error;
+  }
+}
+
+/**
  * Fetch providers from all gateways with retry logic
  * @param gateways - Array of gateway instances to fetch from
  * @returns Object containing providers and models records
@@ -27,10 +65,22 @@ export async function fetchProvidersFromGateways(
       try {
         const providers = await gateway.fetchProviders();
 
+        // models.dev is a provider registry, not a true gateway - don't prefix its providers
+        const isProviderRegistry = gateway.id === 'models.dev';
+
         for (const [providerId, config] of Object.entries(providers)) {
-          allProviders[providerId] = config;
+          // For true gateways, use gateway.id as prefix (e.g., "netlify/anthropic")
+          // Special case: if providerId matches gateway.id, it's a unified gateway (e.g., netlify returning {netlify: {...}})
+          // In this case, use just the gateway ID to avoid duplication (netlify, not netlify/netlify)
+          const typeProviderId = isProviderRegistry
+            ? providerId
+            : providerId === gateway.id
+              ? gateway.id
+              : `${gateway.id}/${providerId}`;
+
+          allProviders[typeProviderId] = config;
           // Sort models alphabetically for consistent ordering
-          allModels[providerId] = config.models.sort();
+          allModels[typeProviderId] = config.models.sort();
         }
 
         lastError = null;
@@ -146,16 +196,16 @@ export async function writeRegistryFiles(
   await fs.mkdir(jsonDir, { recursive: true });
   await fs.mkdir(typesDir, { recursive: true });
 
-  // 1. Write JSON file
+  // 1. Write JSON file atomically to prevent corruption from concurrent writes
   const registryData = {
     providers,
     models,
     version: '1.0.0',
   };
 
-  await fs.writeFile(jsonPath, JSON.stringify(registryData, null, 2), 'utf-8');
+  await atomicWriteFile(jsonPath, JSON.stringify(registryData, null, 2), 'utf-8');
 
-  // 2. Generate .d.ts file with type-only declarations
+  // 2. Generate .d.ts file with type-only declarations (also atomic)
   const typeContent = generateTypesContent(models);
-  await fs.writeFile(typesPath, typeContent, 'utf-8');
+  await atomicWriteFile(typesPath, typeContent, 'utf-8');
 }

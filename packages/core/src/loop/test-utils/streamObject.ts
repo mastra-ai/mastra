@@ -992,7 +992,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   {
                     "id": "1234",
                     "metadata": {
-                      "createdAt": 2024-01-01T00:00:00.000Z,
+                      "createdAt": 2024-01-01T00:00:00.001Z,
                       "structuredOutput": {
                         "content": "Hello, world!",
                       },
@@ -1035,12 +1035,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "id-0",
                     "messages": [
                       {
-                        "content": [
-                          {
-                            "text": "{ "content": "Hello, world!" }",
-                            "type": "text",
-                          },
-                        ],
+                        "content": "{ "content": "Hello, world!" }",
                         "role": "assistant",
                       },
                     ],
@@ -1055,7 +1050,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       {
                         "id": "1234",
                         "metadata": {
-                          "createdAt": 2024-01-01T00:00:00.000Z,
+                          "createdAt": 2024-01-01T00:00:00.001Z,
                           "structuredOutput": {
                             "content": "Hello, world!",
                           },
@@ -1213,7 +1208,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   {
                     "id": "1234",
                     "metadata": {
-                      "createdAt": 2024-01-01T00:00:00.000Z,
+                      "createdAt": 2024-01-01T00:00:00.001Z,
                     },
                     "parts": [
                       {
@@ -1249,12 +1244,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "id-0",
                     "messages": [
                       {
-                        "content": [
-                          {
-                            "text": "{ "invalid": "Hello, world!" }",
-                            "type": "text",
-                          },
-                        ],
+                        "content": "{ "invalid": "Hello, world!" }",
                         "role": "assistant",
                       },
                     ],
@@ -1269,7 +1259,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       {
                         "id": "1234",
                         "metadata": {
-                          "createdAt": 2024-01-01T00:00:00.000Z,
+                          "createdAt": 2024-01-01T00:00:00.001Z,
                         },
                         "parts": [
                           {
@@ -1424,7 +1414,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   {
                     "id": "1234",
                     "metadata": {
-                      "createdAt": 2024-01-01T00:00:00.000Z,
+                      "createdAt": 2024-01-01T00:00:00.001Z,
                     },
                     "parts": [
                       {
@@ -1460,12 +1450,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "id-0",
                     "messages": [
                       {
-                        "content": [
-                          {
-                            "text": "{ "invalid": "Hello, world!" }",
-                            "type": "text",
-                          },
-                        ],
+                        "content": "{ "invalid": "Hello, world!" }",
                         "role": "assistant",
                       },
                     ],
@@ -1480,7 +1465,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       {
                         "id": "1234",
                         "metadata": {
-                          "createdAt": 2024-01-01T00:00:00.000Z,
+                          "createdAt": 2024-01-01T00:00:00.001Z,
                         },
                         "parts": [
                           {

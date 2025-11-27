@@ -77,6 +77,11 @@ const sidebars = {
           id: "core/getScorerByName",
           label: ".getScorerByName()",
         },
+        {
+          type: "doc",
+          id: "core/mastra-model-gateway",
+          label: "MastraModelGateway",
+        },
       ],
     },
     {

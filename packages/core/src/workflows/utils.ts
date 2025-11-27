@@ -32,7 +32,8 @@ export async function validateStepInput({
 
       validationError = new Error('Step input validation failed: \n' + errorMessages);
     } else {
-      inputData = isEmpty(validatedInput.data) ? prevOutput : validatedInput.data;
+      const isEmptyData = isEmpty(validatedInput.data);
+      inputData = isEmptyData ? prevOutput : validatedInput.data;
     }
   }
 

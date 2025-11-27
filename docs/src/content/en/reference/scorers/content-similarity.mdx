@@ -78,116 +78,46 @@ The scorer evaluates textual similarity through character-level matching and con
 
 Final score: `similarity_value * scale`
 
-## Examples
+## Example
 
-### High similarity example
+Evaluate textual similarity between expected and actual agent outputs:
 
-In this example, the response closely resembles the query in both structure and meaning. Minor differences in tense and phrasing do not significantly affect the overall similarity.
-
-```typescript title="src/example-high-similarity.ts" showLineNumbers copy
-import { createContentSimilarityScorer } from "@mastra/evals/scorers/llm";
+```typescript title="src/example-content-similarity.ts" showLineNumbers copy
+import { runExperiment } from "@mastra/core/scores";
+import { createContentSimilarityScorer } from "@mastra/evals/scorers/code";
+import { myAgent } from "./agent";
 
 const scorer = createContentSimilarityScorer();
 
-const query = "The quick brown fox jumps over the lazy dog.";
-const response = "A quick brown fox jumped over a lazy dog.";
-
-const result = await scorer.run({
-  input: [{ role: "user", content: query }],
-  output: { text: response },
-});
-
-console.log(result);
-```
-
-#### High similarity output
-
-The output receives a high score because the response preserves the intent and content of the query with only subtle wording changes.
-
-```typescript
-{
-  score: 0.7761194029850746,
-  analyzeStepResult: {
-    similarity: 0.7761194029850746
+const result = await runExperiment({
+  data: [
+    {
+      input: "Summarize the benefits of TypeScript",
+      groundTruth:
+        "TypeScript provides static typing, better tooling support, and improved code maintainability.",
+    },
+    {
+      input: "What is machine learning?",
+      groundTruth:
+        "Machine learning is a subset of AI that enables systems to learn from data without explicit programming.",
+    },
+  ],
+  scorers: [scorer],
+  target: myAgent,
+  onItemComplete: ({ scorerResults }) => {
+    console.log({
+      score: scorerResults[scorer.name].score,
+      groundTruth: scorerResults[scorer.name].groundTruth,
+    });
   },
-}
-```
-
-### Moderate similarity example
-
-In this example, the response shares some conceptual overlap with the query but diverges in structure and wording. Key elements remain present, but the phrasing introduces moderate variation.
-
-```typescript title="src/example-moderate-similarity.ts" showLineNumbers copy
-import { createContentSimilarityScorer } from "@mastra/evals/scorers/llm";
-
-const scorer = createContentSimilarityScorer();
-
-const query = "A brown fox quickly leaps across a sleeping dog.";
-const response = "The quick brown fox jumps over the lazy dog.";
-
-const result = await scorer.run({
-  input: [{ role: "user", content: query }],
-  output: { text: response },
 });
 
-console.log(result);
+console.log(result.scores);
 ```
 
-#### Moderate similarity output
+For more details on `runExperiment`, see the [runExperiment reference](/reference/scorers/run-experiment).
 
-The output receives a mid-range score because the response captures the general idea of the query, though it differs enough in wording to reduce overall similarity.
-
-```typescript
-{
-  score: 0.40540540540540543,
-  analyzeStepResult: {
-    similarity: 0.40540540540540543
-  }
-}
-```
-
-### Low similarity example
-
-In this example, the response and query are unrelated in meaning, despite having a similar grammatical structure. There is little to no shared content overlap.
-
-```typescript title="src/example-low-similarity.ts" showLineNumbers copy
-import { createContentSimilarityScorer } from "@mastra/evals/scorers/llm";
-
-const scorer = createContentSimilarityScorer();
-
-const query = "The cat sleeps on the windowsill.";
-const response = "The quick brown fox jumps over the lazy dog.";
-
-const result = await scorer.run({
-  input: [{ role: "user", content: query }],
-  output: { text: response },
-});
-
-console.log(result);
-```
-
-#### Low similarity output
-
-The output receives a low score because the response does not align with the content or intent of the query.
-
-```typescript
-{
-  score: 0.25806451612903225,
-  analyzeStepResult: {
-    similarity: 0.25806451612903225
-  },
-}
-```
-
-### Score interpretation
-
-A similarity score between 0 and 1:
-
-- **1.0**: Perfect match – content is nearly identical.
-- **0.7–0.9**: High similarity – minor differences in word choice or structure.
-- **0.4–0.6**: Moderate similarity – general overlap with noticeable variation.
-- **0.1–0.3**: Low similarity – few common elements or shared meaning.
-- **0.0**: No similarity – completely different content.
+To add this scorer to an agent, see the [Scorers overview](/docs/scorers/overview#adding-scorers-to-agents) guide.
 
 ## Related
 

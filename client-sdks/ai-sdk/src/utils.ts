@@ -1,8 +1,58 @@
-import type { DataChunkType, NetworkChunkType } from '@mastra/core/stream';
+import type { ChunkType, DataChunkType, NetworkChunkType, OutputSchema } from '@mastra/core/stream';
 
 export const isDataChunkType = (chunk: any): chunk is DataChunkType => {
   return chunk && typeof chunk === 'object' && 'type' in chunk && chunk.type?.startsWith('data-');
 };
+
+export const isMastraTextStreamChunk = (chunk: any): chunk is ChunkType<OutputSchema> => {
+  return (
+    chunk &&
+    typeof chunk === 'object' &&
+    'type' in chunk &&
+    typeof chunk.type === 'string' &&
+    [
+      'text-start',
+      'text-delta',
+      'text-end',
+      'reasoning-start',
+      'reasoning-delta',
+      'reasoning-end',
+      'file',
+      'source',
+      'tool-input-start',
+      'tool-input-delta',
+      'tool-call',
+      'tool-result',
+      'tool-error',
+      'error',
+      'start-step',
+      'finish-step',
+      'start',
+      'finish',
+      'abort',
+      'tool-input-end',
+      'raw',
+    ].includes(chunk.type)
+  );
+};
+
+export function safeParseErrorObject(obj: unknown): string {
+  if (typeof obj !== 'object' || obj === null) {
+    return String(obj);
+  }
+
+  try {
+    const stringified = JSON.stringify(obj);
+    // If JSON.stringify returns "{}", fall back to String() for better representation
+    if (stringified === '{}') {
+      return String(obj);
+    }
+    return stringified;
+  } catch {
+    // Fallback to String() if JSON.stringify fails (e.g., circular references)
+    return String(obj);
+  }
+}
 
 export const isAgentExecutionDataChunkType = (
   chunk: any,
@@ -33,16 +83,3 @@ export const isWorkflowExecutionDataChunkType = (
     chunk.payload.type?.startsWith('data-')
   );
 };
-
-export function safeParseErrorObject(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message || error.name || 'Error';
-  }
-  if (typeof error === 'string') {
-    return error;
-  }
-  if (error && typeof error === 'object' && 'message' in error) {
-    return String(error.message);
-  }
-  return 'Error';
-}

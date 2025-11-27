@@ -12,6 +12,7 @@ import type {
   DeleteIndexParams,
   DeleteVectorParams,
   UpdateVectorParams,
+  DeleteVectorsParams,
 } from '@mastra/core/vector';
 import type { AstraVectorFilter } from './filter';
 import { AstraFilterTranslator } from './filter';
@@ -260,13 +261,26 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+    if (!id) {
+      throw new MastraError({
+        id: 'ASTRA_VECTOR_UPDATE_NO_ID',
+        text: 'id is required for Astra updateVector',
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     if (!update.vector && !update.metadata) {
       throw new MastraError({
         id: 'ASTRA_VECTOR_UPDATE_NO_PAYLOAD',
         text: 'No updates provided for vector',
         domain: ErrorDomain.MASTRA_VECTOR,
         category: ErrorCategory.USER,
-        details: { indexName, id },
+        details: {
+          indexName,
+          id,
+        },
       });
     }
 
@@ -290,7 +304,10 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
           id: 'ASTRA_VECTOR_UPDATE_FAILED_UNHANDLED',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
         },
         error,
       );
@@ -315,10 +332,27 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
           id: 'ASTRA_VECTOR_DELETE_FAILED',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
         },
         error,
       );
     }
+  }
+
+  async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams): Promise<void> {
+    throw new MastraError({
+      id: 'ASTRA_VECTOR_DELETE_VECTORS_NOT_SUPPORTED',
+      text: 'deleteVectors is not yet implemented for Astra vector store',
+      domain: ErrorDomain.MASTRA_VECTOR,
+      category: ErrorCategory.SYSTEM,
+      details: {
+        indexName,
+        ...(filter && { filter: JSON.stringify(filter) }),
+        ...(ids && { idsCount: ids.length }),
+      },
+    });
   }
 }

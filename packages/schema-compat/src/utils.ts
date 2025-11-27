@@ -38,7 +38,7 @@ type ZodType = ZodTypeV3 | ZodTypeV4;
  * ```
  */
 // mirrors https://github.com/vercel/ai/blob/main/packages/ui-utils/src/zod-schema.ts#L21 but with a custom target
-export function convertZodSchemaToAISDKSchema(zodSchema: ZodSchema, target: Targets = 'jsonSchema7') {
+export function convertZodSchemaToAISDKSchema(zodSchema: ZodSchema, target: Targets = 'jsonSchema7'): Schema<any> {
   const jsonSchemaToUse = zodToJsonSchema(zodSchema, target) as JSONSchema7;
 
   return jsonSchema(jsonSchemaToUse, {

@@ -815,9 +815,25 @@ export class MessageList {
     if (m.content.parts.length) {
       for (const part of m.content.parts) {
         if (part.type === `file`) {
+          // Normalize part.data to ensure it's a valid URL or data URI
+          let normalizedUrl: string;
+          if (typeof part.data === 'string') {
+            const categorized = categorizeFileData(part.data, part.mimeType);
+            if (categorized.type === 'raw') {
+              // Raw base64 - convert to data URI
+              normalizedUrl = createDataUri(part.data, part.mimeType || 'application/octet-stream');
+            } else {
+              // Already a URL or data URI
+              normalizedUrl = part.data;
+            }
+          } else {
+            // It's a non-string (shouldn't happen in practice for file parts, but handle it)
+            normalizedUrl = part.data;
+          }
+
           experimentalAttachments.push({
             contentType: part.mimeType,
-            url: part.data,
+            url: normalizedUrl,
           });
         } else if (
           part.type === 'tool-invocation' &&
@@ -1674,6 +1690,16 @@ export class MessageList {
 
     if (experimentalAttachments.length) content.experimental_attachments = experimentalAttachments;
 
+    // Preserve message-level providerOptions (e.g., for cache breakpoints)
+    if (coreMessage.providerOptions) {
+      content.providerMetadata = coreMessage.providerOptions;
+    }
+
+    // Preserve metadata field if present (matches aiV4UIMessageToMastraDBMessage behavior)
+    if ('metadata' in coreMessage && coreMessage.metadata !== null && coreMessage.metadata !== undefined) {
+      content.metadata = coreMessage.metadata as Record<string, unknown>;
+    }
+
     return {
       id,
       role: MessageList.getRole(coreMessage),
@@ -1998,14 +2024,30 @@ export class MessageList {
           if (role === `tool` || role === `assistant`) {
             throw new Error(incompatibleMessage);
           }
+
+          let processedImage: URL | Uint8Array;
+
+          if (part.image instanceof URL || part.image instanceof Uint8Array) {
+            processedImage = part.image;
+          } else if (Buffer.isBuffer(part.image) || part.image instanceof ArrayBuffer) {
+            processedImage = new Uint8Array(part.image);
+          } else {
+            // part.image is a string - could be a URL, data URI, or raw base64
+            const categorized = categorizeFileData(part.image, part.mimeType);
+
+            if (categorized.type === 'raw') {
+              // Raw base64 - convert to data URI before creating URL
+              const dataUri = createDataUri(part.image, part.mimeType || 'image/png');
+              processedImage = new URL(dataUri);
+            } else {
+              // It's already a URL or data URI
+              processedImage = new URL(part.image);
+            }
+          }
+
           roleContent[role].push({
             ...part,
-            image:
-              part.image instanceof URL || part.image instanceof Uint8Array
-                ? part.image
-                : Buffer.isBuffer(part.image) || part.image instanceof ArrayBuffer
-                  ? new Uint8Array(part.image)
-                  : new URL(part.image),
+            image: processedImage,
           });
           break;
         }
@@ -2280,15 +2322,19 @@ export class MessageList {
                   type: 'file',
                   mimeType: p.mediaType,
                   data: fileDataSource,
-                  providerMetadata: p.providerMetadata,
+                  ...(p.providerMetadata ? { providerMetadata: p.providerMetadata } : {}),
                 };
               }
               case 'reasoning':
-                if (p.text === '') return null;
+                // Skip empty reasoning parts that have no providerMetadata
+                // (but keep ones with providerMetadata for GPT-5 compatibility)
+                if (p.text === '' && !p.providerMetadata) return null;
                 return {
                   type: 'reasoning',
-                  reasoning: p.text,
-                  details: [{ type: 'text', text: p.text }],
+                  // Keep reasoning field empty to match the format used in llm-execution-step
+                  // This ensures cache keys match for deduplication when merging assistant messages
+                  reasoning: '',
+                  details: p.text ? [{ type: 'text', text: p.text }] : [],
                   providerMetadata: p.providerMetadata,
                 };
 
@@ -2493,7 +2539,12 @@ export class MessageList {
               return p;
             }, '') ??
               '');
-          if (text || part.details?.length) {
+          // IMPORTANT: Also include reasoning parts that have providerMetadata even if
+          // they have no text/details content. This is critical for OpenAI GPT-5 models
+          // (using the Responses API) which require reasoning items to be present with
+          // their itemId even when the reasoning content is empty.
+          // See GitHub issue #9005 for more details.
+          if (text || part.details?.length || part.providerMetadata) {
             parts.push({
               type: 'reasoning',
               text: text || '',
@@ -2516,7 +2567,7 @@ export class MessageList {
               type: 'file',
               url: part.data,
               mediaType: categorized.mimeType || 'image/png',
-              providerMetadata: part.providerMetadata,
+              ...(part.providerMetadata ? { providerMetadata: part.providerMetadata } : {}),
             });
             fileUrls.add(part.data);
           } else {
@@ -2560,7 +2611,7 @@ export class MessageList {
               type: 'file',
               url: dataUri, // Use url field with data URI
               mediaType: finalMimeType,
-              providerMetadata: part.providerMetadata,
+              ...(part.providerMetadata ? { providerMetadata: part.providerMetadata } : {}),
             });
           }
           fileUrls.add(part.data);
@@ -2623,7 +2674,9 @@ export class MessageList {
         } satisfies AIV5Type.ModelMessage;
       }
 
-      // Restore part-level providerOptions for tool-call parts
+      // Restore part-level providerOptions for tool-call and reasoning parts
+      // For tool-call: restore from callProviderMetadata
+      // For reasoning: restore from providerMetadata (required for OpenAI GPT-5 Responses API - see GitHub issue #9005)
       if (updatedMsg.role === 'assistant' && Array.isArray(updatedMsg.content)) {
         const updatedContent = updatedMsg.content.map((part, partIndex) => {
           if (part.type === 'tool-call') {
@@ -2632,7 +2685,18 @@ export class MessageList {
             if (uiPart && 'callProviderMetadata' in uiPart && uiPart.callProviderMetadata) {
               return {
                 ...part,
-                providerMetadata: uiPart.callProviderMetadata,
+                providerOptions: uiPart.callProviderMetadata,
+              };
+            }
+          }
+          if (part.type === 'reasoning') {
+            // Find corresponding UI part to get providerMetadata
+            // This is critical for OpenAI GPT-5 models which require itemId on reasoning parts
+            const uiPart = uiMsg?.parts[partIndex];
+            if (uiPart && 'providerMetadata' in uiPart && uiPart.providerMetadata) {
+              return {
+                ...part,
+                providerOptions: uiPart.providerMetadata,
               };
             }
           }
@@ -2702,8 +2766,10 @@ export class MessageList {
   }
 
   private static mastraMessageV3ToAIV5UIMessage(m: MastraMessageV3): AIV5Type.UIMessage {
+    // Filter out internal fields from metadata before creating UIMessage
+    const { __originalContent, ...cleanMetadata } = (m.content.metadata || {}) as any;
     const metadata: Record<string, any> = {
-      ...(m.content.metadata || {}),
+      ...cleanMetadata,
     };
     if (m.createdAt) metadata.createdAt = m.createdAt;
     if (m.threadId) metadata.threadId = m.threadId;
@@ -2992,6 +3058,14 @@ export class MessageList {
       format: 3,
       parts,
     };
+
+    // Preserve metadata from input message if present
+    if ('metadata' in coreMessage && coreMessage.metadata !== null && coreMessage.metadata !== undefined) {
+      content.metadata = {
+        ...(content.metadata || {}),
+        ...(coreMessage.metadata as Record<string, unknown>),
+      };
+    }
 
     // Preserve original string content for round-trip
     if (coreMessage.content) {

@@ -36,7 +36,7 @@ export function createSampleScore({
     },
     score: 0.8,
     analyzePrompt: 'Sample analyze prompt',
-    reasonPrompt: 'Sample reason prompt',
+    generateReasonPrompt: 'Sample reason prompt',
     scorer: {
       id: scorerId,
       name: 'my-eval',

@@ -68,8 +68,8 @@ export class DevLogger {
     const timing = startTime ? `${Date.now() - startTime} ms` : 'XXX ms';
     console.info(pc.inverse(pc.green(' mastra ')) + ` ${pc.green(version)} ${pc.gray('ready in')} ${timing}`);
     console.info('');
-    console.info(`${pc.dim('│')} ${pc.bold('Playground:')} ${pc.cyan(`${protocol}://${host}:${port}/`)}`);
-    console.info(`${pc.dim('│')} ${pc.bold('API:')}        ${`${protocol}://${host}:${port}/api`}`);
+    console.info(`${pc.dim('│')} ${pc.bold('Studio:')} ${pc.cyan(`${protocol}://${host}:${port}`)}`);
+    console.info(`${pc.dim('│')} ${pc.bold('API:')}    ${`${protocol}://${host}:${port}/api`}`);
     console.info('');
     console.info(pc.inverse(pc.yellowBright(' Important ')) + pc.yellowBright(' Mastra v1.0.0 will go stable soon.'));
     console.info(

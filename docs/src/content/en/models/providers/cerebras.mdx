@@ -74,18 +74,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
-    "model": "cerebras/qwen-3-coder-480b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131000,
-    "maxOutput": 32000,
-    "inputCost": 2,
-    "outputCost": 2
-  },
-  {
     "model": "cerebras/zai-glm-4.6",
     "imageInput": false,
     "audioInput": false,
@@ -126,7 +114,7 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced
-      ? "cerebras/qwen-3-coder-480b"
+      ? "cerebras/zai-glm-4.6"
       : "cerebras/gpt-oss-120b";
   }
 });

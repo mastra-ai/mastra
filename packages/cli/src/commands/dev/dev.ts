@@ -106,7 +106,7 @@ const startServer = async (
       currentServerProcess.stdout.on('data', (data: Buffer) => {
         const output = data.toString();
         if (
-          !output.includes('Playground available') &&
+          !output.includes('Studio available') &&
           !output.includes('👨‍💻') &&
           !output.includes('Mastra API running on port')
         ) {
@@ -119,7 +119,7 @@ const startServer = async (
       currentServerProcess.stderr.on('data', (data: Buffer) => {
         const output = data.toString();
         if (
-          !output.includes('Playground available') &&
+          !output.includes('Studio available') &&
           !output.includes('👨‍💻') &&
           !output.includes('Mastra API running on port')
         ) {

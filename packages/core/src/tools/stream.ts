@@ -3,6 +3,7 @@ import type { DataChunkType } from '../stream/types';
 
 export class ToolStream<T> extends WritableStream<T> {
   originalStream?: WritableStream;
+  private writeQueue: Promise<void> = Promise.resolve();
 
   constructor(
     {
@@ -59,11 +60,20 @@ export class ToolStream<T> extends WritableStream<T> {
   }
 
   async custom<T extends { type: string }>(data: T extends { type: `data-${string}` } ? DataChunkType : T) {
-    const writer = this.originalStream?.getWriter();
-    try {
-      await writer?.write(data);
-    } finally {
-      writer?.releaseLock();
-    }
+    // Queue the write operation to prevent concurrent access to the writer
+    this.writeQueue = this.writeQueue.then(async () => {
+      if (!this.originalStream) {
+        return;
+      }
+
+      const writer = this.originalStream.getWriter();
+      try {
+        await writer.write(data);
+      } finally {
+        writer.releaseLock();
+      }
+    });
+
+    return this.writeQueue;
   }
 }

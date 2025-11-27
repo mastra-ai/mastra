@@ -59,7 +59,9 @@ export class ScoresUpstash extends ScoresStorage {
           id: 'STORAGE_UPSTASH_STORAGE_GET_SCORE_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { id },
+          details: {
+            ...(id && { id }),
+          },
         },
         error,
       );

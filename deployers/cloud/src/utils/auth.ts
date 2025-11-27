@@ -1,25 +1,21 @@
 export function getAuthEntrypoint() {
+  const tokensObject: Record<string, { id: string }> = {};
+
+  if (process.env.PLAYGROUND_JWT_TOKEN) {
+    tokensObject[process.env.PLAYGROUND_JWT_TOKEN] = { id: 'business-api' };
+  }
+  if (process.env.BUSINESS_JWT_TOKEN) {
+    tokensObject[process.env.BUSINESS_JWT_TOKEN] = { id: 'business-api' };
+  }
+
   return `
-  import { MastraAuthProvider } from '@mastra/core/server';
+  import { SimpleAuth, CompositeAuth } from '@mastra/core/server';
 
-  class MastraCloudAuth extends MastraAuthProvider {
-    constructor (auth) {
-      super()
-      this.auth = auth
-    }
-
-    async authenticateToken (...args) {
-      if (typeof args[0] === 'string') {
-        const token = args[0].replace('Bearer ', '');
-        const validTokens = [];
-        ${process.env.PLAYGROUND_JWT_TOKEN ? `validTokens.push('${process.env.PLAYGROUND_JWT_TOKEN}');` : ''}
-        ${process.env.BUSINESS_JWT_TOKEN ? `validTokens.push('${process.env.BUSINESS_JWT_TOKEN}');` : ''}
-        
-        if (validTokens.includes(token)) {
-          return { id: 'business-api' }
-        }
-      }
-      return this.auth.authenticateToken(...args)
+  class MastraCloudAuth extends SimpleAuth {
+    constructor() {
+      super({
+        tokens: ${JSON.stringify(tokensObject)}
+      });
     }
 
     async authorizeUser (...args) {
@@ -29,14 +25,19 @@ export function getAuthEntrypoint() {
       if (args[0] && args[0].id === 'business-api') {
         return true
       }
-      return this.auth.authorizeUser(...args)
+      return super.authorizeUser(...args)
     }
   }
 
   const serverConfig = mastra.getServer()
   if (serverConfig && serverConfig.experimental_auth) {
     const auth = serverConfig.experimental_auth
-    serverConfig.experimental_auth = new MastraCloudAuth(auth)
+    serverConfig.experimental_auth = new CompositeAuth([new MastraCloudAuth(), auth])
+  } else {
+    if (!serverConfig) {
+      mastra.setServer({})
+    }
+    mastra.getServer().experimental_auth = new MastraCloudAuth()
   }
   `;
 }

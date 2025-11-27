@@ -83,118 +83,45 @@ A textual difference score between 0 and 1:
 - **0.1–0.3**: Major differences – extensive changes needed.
 - **0.0**: Completely different texts.
 
-## Examples
+## Example
 
-### No differences example
+Measure textual differences between expected and actual agent outputs:
 
-In this example, the texts are exactly the same. The scorer identifies complete similarity with a perfect score and no detected changes.
-
-```typescript title="src/example-no-differences.ts" showLineNumbers copy
+```typescript title="src/example-textual-difference.ts" showLineNumbers copy
+import { runExperiment } from "@mastra/core/scores";
 import { createTextualDifferenceScorer } from "@mastra/evals/scorers/code";
+import { myAgent } from "./agent";
 
 const scorer = createTextualDifferenceScorer();
 
-const input = "The quick brown fox jumps over the lazy dog";
-const output = "The quick brown fox jumps over the lazy dog";
-
-const result = await scorer.run({
-  input: [{ role: "user", content: input }],
-  output: { role: "assistant", text: output },
-});
-
-console.log("Score:", result.score);
-console.log("AnalyzeStepResult:", result.analyzeStepResult);
-```
-
-#### No differences output
-
-The scorer returns a high score, indicating the texts are identical. The detailed info confirms zero changes and no length difference.
-
-```typescript
-{
-  score: 1,
-  analyzeStepResult: {
-    confidence: 1,
-    ratio: 1,
-    changes: 0,
-    lengthDiff: 0,
+const result = await runExperiment({
+  data: [
+    {
+      input: "Summarize the concept of recursion",
+      groundTruth:
+        "Recursion is when a function calls itself to solve a problem by breaking it into smaller subproblems.",
+    },
+    {
+      input: "What is the capital of France?",
+      groundTruth: "The capital of France is Paris.",
+    },
+  ],
+  scorers: [scorer],
+  target: myAgent,
+  onItemComplete: ({ scorerResults }) => {
+    console.log({
+      score: scorerResults[scorer.name].score,
+      groundTruth: scorerResults[scorer.name].groundTruth,
+    });
   },
-}
-```
-
-### Minor differences example
-
-In this example, the texts have small variations. The scorer detects these minor differences and returns a moderate similarity score.
-
-```typescript title="src/example-minor-differences.ts" showLineNumbers copy
-import { createTextualDifferenceScorer } from "@mastra/evals/scorers/code";
-
-const scorer = createTextualDifferenceScorer();
-
-const input = "Hello world! How are you?";
-const output = "Hello there! How is it going?";
-
-const result = await scorer.run({
-  input: [{ role: "user", content: input }],
-  output: { role: "assistant", text: output },
 });
 
-console.log("Score:", result.score);
-console.log("AnalyzeStepResult:", result.analyzeStepResult);
+console.log(result.scores);
 ```
 
-#### Minor differences output
+For more details on `runExperiment`, see the [runExperiment reference](/reference/scorers/run-experiment).
 
-The scorer returns a moderate score reflecting the small variations between the texts. The detailed info includes the number of changes and length difference observed.
-
-```typescript
-{
-  score: 0.5925925925925926,
-  analyzeStepResult: {
-    confidence: 0.8620689655172413,
-    ratio: 0.5925925925925926,
-    changes: 5,
-    lengthDiff: 0.13793103448275862
-  }
-}
-```
-
-### Major differences example
-
-In this example, the texts differ significantly. The scorer detects extensive changes and returns a low similarity score.
-
-```typescript title="src/example-major-differences.ts" showLineNumbers copy
-import { createTextualDifferenceScorer } from "@mastra/evals/scorers/code";
-
-const scorer = createTextualDifferenceScorer();
-
-const input = "Python is a high-level programming language";
-const output = "JavaScript is used for web development";
-
-const result = await scorer.run({
-  input: [{ role: "user", content: input }],
-  output: { role: "assistant", text: output },
-});
-
-console.log("Score:", result.score);
-console.log("AnalyzeStepResult:", result.analyzeStepResult);
-```
-
-#### Major differences output
-
-The scorer returns a low score due to significant differences between the texts. The detailed `analyzeStepResult` shows numerous changes and a notable length difference.
-
-```typescript
-{
-  score: 0.3170731707317073,
-  analyzeStepResult: {
-    confidence: 0.8636363636363636,
-    ratio: 0.3170731707317073,
-    changes: 8,
-    lengthDiff: 0.13636363636363635
-  }
-}
-```
+To add this scorer to an agent, see the [Scorers overview](/docs/scorers/overview#adding-scorers-to-agents) guide.
 
 ## Related
 

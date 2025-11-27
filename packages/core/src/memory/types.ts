@@ -5,7 +5,7 @@ import type { JSONSchema7 } from 'json-schema';
 export type { MastraMessageV2 } from '../agent';
 import type { ZodObject } from 'zod';
 import type { EmbeddingModelId } from '../llm/model/index.js';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { MastraStorage } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraVector } from '../vector';
@@ -312,8 +312,9 @@ export type MemoryConfig = {
           /**
            * Language model to use for title generation.
            * Can be static or a function that receives runtime context for dynamic selection.
+           * Accepts both Mastra models and standard AI SDK LanguageModelV1/V2.
            */
-          model: DynamicArgument<MastraLanguageModel>;
+          model: DynamicArgument<MastraModelConfig>;
           /**
            * Custom instructions for title generation.
            * Can be static or a function that receives runtime context for dynamic customization.

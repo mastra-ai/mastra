@@ -604,11 +604,6 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     return this.getRange(orderKey, -n, -1);
   }
 
-  private async getFullOrder(orderKey: string): Promise<string[]> {
-    // Get the full range in ascending order (oldest to newest)
-    return this.getRange(orderKey, 0, -1);
-  }
-
   private async getIncludedMessagesWithContext(
     threadId: string,
     include: { id: string; threadId?: string; withPreviousMessages?: number; withNextMessages?: number }[],
@@ -753,36 +748,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       );
       if (!messages.length) return [];
 
-      // Sort messages
-      try {
-        const threadMessagesKey = this.getThreadMessagesKey(threadId);
-        const messageOrder = await this.getFullOrder(threadMessagesKey);
-        const orderMap = new Map(messageOrder.map((id, index) => [id, index]));
-
-        messages.sort((a, b) => {
-          const indexA = orderMap.get(a.id);
-          const indexB = orderMap.get(b.id);
-
-          if (indexA !== undefined && indexB !== undefined) return orderMap.get(a.id)! - orderMap.get(b.id)!;
-          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-        });
-      } catch (error) {
-        const mastraError = new MastraError(
-          {
-            id: 'CLOUDFLARE_STORAGE_SORT_MESSAGES_FAILED',
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.THIRD_PARTY,
-            text: `Error sorting messages for thread ${threadId} falling back to creation time`,
-            details: {
-              threadId,
-            },
-          },
-          error,
-        );
-        this.logger?.trackException(mastraError);
-        this.logger?.error(mastraError.toString());
-        messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-      }
+      // Always sort messages by createdAt to ensure correct chronological ordering
+      // This is critical when `include` parameter brings in messages from semantic recall
+      // (messages from different save batches or threads must be interleaved by time, not storage order)
+      messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
       // Remove _index and ensure dates before returning, just like Upstash
       const prepared = messages.map(({ _index, ...message }) => ({
@@ -890,17 +859,29 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     try {
       if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
-      // Get all messages for the thread
-      const messages =
+      // Get included messages separately (not subject to pagination)
+      const includedMessages: (MastraMessageV1 | MastraMessageV2)[] = [];
+      if (selectBy?.include?.length) {
+        const includeOnlySelectBy = { ...selectBy, last: 0 }; // Only get included, no recent
+        const included =
+          format === 'v2'
+            ? await this.getMessages({ threadId, selectBy: includeOnlySelectBy, format: 'v2' })
+            : await this.getMessages({ threadId, selectBy: includeOnlySelectBy, format: 'v1' });
+        includedMessages.push(...included);
+      }
+
+      // Get thread messages without include (for pagination)
+      const threadOnlySelectBy = selectBy ? { ...selectBy, include: undefined } : undefined;
+      const threadMessages =
         format === 'v2'
-          ? await this.getMessages({ threadId, selectBy, format: 'v2' })
-          : await this.getMessages({ threadId, selectBy, format: 'v1' });
+          ? await this.getMessages({ threadId, selectBy: threadOnlySelectBy, format: 'v2' })
+          : await this.getMessages({ threadId, selectBy: threadOnlySelectBy, format: 'v1' });
 
       // Apply date filtering if specified
-      let filteredMessages = messages;
+      let filteredMessages = threadMessages;
       if (selectBy?.pagination?.dateRange) {
         const { start: dateStart, end: dateEnd } = selectBy.pagination.dateRange;
-        filteredMessages = messages.filter(message => {
+        filteredMessages = threadMessages.filter(message => {
           const messageDate = new Date(message.createdAt);
           if (dateStart && messageDate < dateStart) return false;
           if (dateEnd && messageDate > dateEnd) return false;
@@ -908,17 +889,40 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         }) as MastraMessageV1[] | MastraMessageV2[];
       }
 
-      // Apply pagination
+      const total = filteredMessages.length;
+
+      // Apply pagination to thread messages only
       const start = page * perPage;
       const end = start + perPage;
       const paginatedMessages = filteredMessages.slice(start, end);
 
+      // Combine paginated + included, deduplicate by id
+      const seenIds = new Set<string>();
+      const combinedMessages: (MastraMessageV1 | MastraMessageV2)[] = [];
+
+      for (const msg of paginatedMessages) {
+        if (!seenIds.has(msg.id)) {
+          combinedMessages.push(msg);
+          seenIds.add(msg.id);
+        }
+      }
+
+      for (const msg of includedMessages) {
+        if (!seenIds.has(msg.id)) {
+          combinedMessages.push(msg);
+          seenIds.add(msg.id);
+        }
+      }
+
+      // Sort combined messages by createdAt to ensure correct chronological ordering
+      combinedMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
       return {
         page,
         perPage,
-        total: filteredMessages.length,
-        hasMore: start + perPage < filteredMessages.length,
-        messages: paginatedMessages as MastraMessageV1[] | MastraMessageV2[],
+        total,
+        hasMore: start + perPage < total,
+        messages: combinedMessages as MastraMessageV1[] | MastraMessageV2[],
       };
     } catch (error) {
       const mastraError = new MastraError(

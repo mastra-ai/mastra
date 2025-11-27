@@ -1567,8 +1567,8 @@ describe('Chroma Metadata Filtering', () => {
 
   createVectorTestSuite({
     vector: chromaVector,
+    dimension: 4,
     createIndex: async (indexName: string) => {
-      // Using dimension 4 as required by the metadata filtering test vectors
       await chromaVector.createIndex({ indexName, dimension: 4 });
     },
     deleteIndex: async (indexName: string) => {

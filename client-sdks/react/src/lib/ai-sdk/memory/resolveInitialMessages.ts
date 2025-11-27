@@ -1,4 +1,4 @@
-import { MastraUIMessage } from '../types';
+import { ExtendedMastraUIMessage, MastraUIMessage } from '../types';
 
 // Type definitions for parsing network execution data
 interface ToolCallPayload {
@@ -121,9 +121,6 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
           };
 
           // Return the transformed message with dynamic-tool part
-
-          console.log('json', json);
-
           const nextMessage = {
             role: 'assistant' as const,
             parts: [
@@ -152,6 +149,21 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
         // If parsing fails, return the original message
         return message;
       }
+    }
+
+    const extendedMessage = message as ExtendedMastraUIMessage;
+
+    // Convert pendingToolApprovals from DB format to stream format
+    const pendingToolApprovals = extendedMessage.metadata?.pendingToolApprovals as Record<string, any> | undefined;
+    if (pendingToolApprovals && typeof pendingToolApprovals === 'object') {
+      return {
+        ...message,
+        metadata: {
+          ...message.metadata,
+          mode: 'stream' as const,
+          requireApprovalMetadata: pendingToolApprovals,
+        },
+      };
     }
 
     // Return original message if it's not a network message

@@ -133,6 +133,9 @@ export type AgentExecutionOptions<
 
   /** Structured output generation with enhanced developer experience  */
   structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
+
+  /** Whether to include raw chunks in the stream output (not available on all model providers) */
+  includeRawChunks?: boolean;
 };
 
 export type DeprecatedOutputOptions<OUTPUT extends OutputSchema = undefined> = {
