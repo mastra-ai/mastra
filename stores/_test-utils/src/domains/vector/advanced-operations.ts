@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import type { VectorTestConfig } from '../../vector-factory';
-import { createVector } from './test-helpers';
+import { createVector as createVectorWithDimension, DEFAULT_VECTOR_DIMENSION } from './test-helpers';
 
 /**
  * Shared test suite for advanced vector operations (deleteVectors and updateVector with filters).
@@ -13,7 +13,11 @@ export function createAdvancedOperationsTest(config: VectorTestConfig) {
     createIndex,
     deleteIndex,
     waitForIndexing = (indexName: string) => new Promise(resolve => setTimeout(resolve, 100)),
+    dimension = DEFAULT_VECTOR_DIMENSION,
   } = config;
+
+  // Helper that uses the configured dimension
+  const createVector = (seed: number) => createVectorWithDimension(seed, dimension);
 
   describe('Advanced Vector Operations', () => {
     let testIndexName: string;
