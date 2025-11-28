@@ -139,12 +139,12 @@ export class InternalMastraMCPClient extends MastraBase {
     this._roots = server.roots ?? [];
 
     // Build client capabilities, automatically enabling roots if configured
-    const hasRoots = this._roots.length > 0 || capabilities.roots;
+    const hasRoots = this._roots.length > 0 || !!capabilities.roots;
     const clientCapabilities = {
       ...capabilities,
       elicitation: {},
       // Auto-enable roots capability if roots are provided
-      ...(hasRoots ? { roots: { listChanged: true, ...capabilities.roots } } : {}),
+      ...(hasRoots ? { roots: { listChanged: true, ...(capabilities.roots ?? {}) } } : {}),
     };
 
     this.client = new Client(

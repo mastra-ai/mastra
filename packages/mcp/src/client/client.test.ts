@@ -1,8 +1,8 @@
+import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { spawn } from 'node:child_process';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
