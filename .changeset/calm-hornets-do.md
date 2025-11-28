@@ -1,5 +1,6 @@
 ---
 '@mastra/playground-ui': patch
+'@mastra/ai-sdk': patch
 '@mastra/client-js': minor
 ---
 
@@ -21,12 +22,12 @@ Three new output classes provide consistent APIs for all streaming operations:
 - `Agent.stream()` → Returns `MastraClientModelOutput` (was `Response`)
 - `Agent.network()` → Returns `MastraClientNetworkOutput` (was `Response`)
 
-**Workflow Methods:**
-- `Workflow.stream()` → Returns `MastraClientWorkflowOutput` (was raw `ReadableStream`)
-- `Workflow.observeStream()` → Returns `MastraClientWorkflowOutput` (was raw `ReadableStream`)
-- `Workflow.streamVNext()` → Returns `MastraClientWorkflowOutput` (was raw `ReadableStream`)
-- `Workflow.observeStreamVNext()` → Returns `MastraClientWorkflowOutput` (was raw `ReadableStream`)
-- `Workflow.resumeStream()` → Returns `MastraClientWorkflowOutput` (was raw `ReadableStream`)
+**Workflow Methods (all on Run object returned by `createRun()`):**
+- `run.stream()` → Returns `MastraClientWorkflowOutput` (was raw `ReadableStream`)
+- `run.observeStream()` → Returns `MastraClientWorkflowOutput` (was raw `ReadableStream`)
+- `run.streamVNext()` → Returns `MastraClientWorkflowOutput` (was raw `ReadableStream`)
+- `run.observeStreamVNext()` → Returns `MastraClientWorkflowOutput` (was raw `ReadableStream`)
+- `run.resumeStreamVNext()` → Returns `MastraClientWorkflowOutput` (was raw `ReadableStream`)
 
 ### New Promise-Based Properties
 

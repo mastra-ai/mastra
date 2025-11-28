@@ -27,14 +27,9 @@ import { MastraClient } from './client';
       },
     });
 
-    // Process data stream
-    response.processDataStream({
-      onChunk: async chunk => {
-        if (chunk.type === 'text-delta') {
-          console.log(chunk.payload.text);
-        }
-      },
-    });
+    for await (const chunk of response.fullStream) {
+      console.log(chunk);
+    }
 
     // read the response body directly
 
