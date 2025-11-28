@@ -398,11 +398,14 @@ export async function executeStep(
   delete executionContext.activeStepsPath[step.id];
 
   if (!skipEmits) {
-    await emitStepResultEvents({
-      stepId: step.id,
-      stepCallId,
-      execResults: { ...stepInfo, ...execResults } as StepResult<any, any, any, any>,
-      emitter,
+    const emitOperationId = `workflow.${workflowId}.run.${runId}.step.${step.id}.emit_result`;
+    await engine.wrapDurableOperation(emitOperationId, async () => {
+      await emitStepResultEvents({
+        stepId: step.id,
+        stepCallId,
+        execResults: { ...stepInfo, ...execResults } as StepResult<any, any, any, any>,
+        emitter,
+      });
     });
   }
 

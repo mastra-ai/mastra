@@ -336,14 +336,17 @@ export async function executeEntry(
     });
   } else if (entry.type === 'sleep') {
     const startedAt = Date.now();
-    await emitter.emit('watch', {
-      type: 'workflow-step-waiting',
-      payload: {
-        id: entry.id,
-        payload: prevOutput,
-        startedAt,
-        status: 'waiting',
-      },
+    const sleepWaitingOperationId = `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.waiting_ev`;
+    await engine.wrapDurableOperation(sleepWaitingOperationId, async () => {
+      await emitter.emit('watch', {
+        type: 'workflow-step-waiting',
+        payload: {
+          id: entry.id,
+          payload: prevOutput,
+          startedAt,
+          status: 'waiting',
+        },
+      });
     });
     stepResults[entry.id] = {
       status: 'waiting',
@@ -401,33 +404,39 @@ export async function executeEntry(
 
     execResults = { ...stepInfo, status: 'success', output: prevOutput };
     stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
-    await emitter.emit('watch', {
-      type: 'workflow-step-result',
-      payload: {
-        id: entry.id,
-        endedAt,
-        status: 'success',
-        output: prevOutput,
-      },
-    });
+    const sleepResultOperationId = `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.result_ev`;
+    await engine.wrapDurableOperation(sleepResultOperationId, async () => {
+      await emitter.emit('watch', {
+        type: 'workflow-step-result',
+        payload: {
+          id: entry.id,
+          endedAt,
+          status: 'success',
+          output: prevOutput,
+        },
+      });
 
-    await emitter.emit('watch', {
-      type: 'workflow-step-finish',
-      payload: {
-        id: entry.id,
-        metadata: {},
-      },
+      await emitter.emit('watch', {
+        type: 'workflow-step-finish',
+        payload: {
+          id: entry.id,
+          metadata: {},
+        },
+      });
     });
   } else if (entry.type === 'sleepUntil') {
     const startedAt = Date.now();
-    await emitter.emit('watch', {
-      type: 'workflow-step-waiting',
-      payload: {
-        id: entry.id,
-        payload: prevOutput,
-        startedAt,
-        status: 'waiting',
-      },
+    const sleepUntilWaitingOperationId = `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.waiting_ev`;
+    await engine.wrapDurableOperation(sleepUntilWaitingOperationId, async () => {
+      await emitter.emit('watch', {
+        type: 'workflow-step-waiting',
+        payload: {
+          id: entry.id,
+          payload: prevOutput,
+          startedAt,
+          status: 'waiting',
+        },
+      });
     });
 
     stepResults[entry.id] = {
@@ -488,22 +497,25 @@ export async function executeEntry(
     execResults = { ...stepInfo, status: 'success', output: prevOutput };
     stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
 
-    await emitter.emit('watch', {
-      type: 'workflow-step-result',
-      payload: {
-        id: entry.id,
-        endedAt,
-        status: 'success',
-        output: prevOutput,
-      },
-    });
+    const sleepUntilResultOperationId = `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.result_ev`;
+    await engine.wrapDurableOperation(sleepUntilResultOperationId, async () => {
+      await emitter.emit('watch', {
+        type: 'workflow-step-result',
+        payload: {
+          id: entry.id,
+          endedAt,
+          status: 'success',
+          output: prevOutput,
+        },
+      });
 
-    await emitter.emit('watch', {
-      type: 'workflow-step-finish',
-      payload: {
-        id: entry.id,
-        metadata: {},
-      },
+      await emitter.emit('watch', {
+        type: 'workflow-step-finish',
+        payload: {
+          id: entry.id,
+          metadata: {},
+        },
+      });
     });
   }
 
