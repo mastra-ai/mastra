@@ -1,3 +1,5 @@
+import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
+
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
@@ -12,7 +14,7 @@ export interface ProcessorContext {
   /** Optional tracing context for observability */
   tracingContext?: TracingContext;
   /** Optional runtime context with execution metadata */
-  runtimeContext?: RequestContext;
+  requestContext?: RequestContext;
 }
 
 /**
@@ -26,6 +28,14 @@ export interface ProcessorMessageContext extends ProcessorContext {
 }
 
 /**
+ * Return type for processInput that includes modified system messages
+ */
+export interface ProcessInputResultWithSystemMessages {
+  messages: MastraDBMessage[];
+  systemMessages: CoreMessageV4[];
+}
+
+/**
  * Return type for message-based processor methods
  * - MessageList: Return the same messageList instance passed in (indicates you've mutated it)
  * - MastraDBMessage[]: Return transformed messages array (for simple transformations)
@@ -33,9 +43,17 @@ export interface ProcessorMessageContext extends ProcessorContext {
 export type ProcessorMessageResult = Promise<MessageList | MastraDBMessage[]> | MessageList | MastraDBMessage[];
 
 /**
+ * Possible return types from processInput
+ */
+export type ProcessInputResult = MessageList | MastraDBMessage[] | ProcessInputResultWithSystemMessages;
+
+/**
  * Arguments for processInput method
  */
-export interface ProcessInputArgs extends ProcessorMessageContext {}
+export interface ProcessInputArgs extends ProcessorMessageContext {
+  /** All system messages (agent instructions, user-provided, memory) for read/modify access */
+  systemMessages: CoreMessageV4[];
+}
 
 /**
  * Arguments for processOutputResult method
@@ -74,8 +92,9 @@ export interface Processor<TId extends string = string> {
    * @returns Either:
    *  - MessageList: The same messageList instance passed in (indicates you've mutated it)
    *  - MastraDBMessage[]: Transformed messages array (for simple transformations)
+   *  - { messages, systemMessages }: Object with both messages and modified system messages
    */
-  processInput?(args: ProcessInputArgs): ProcessorMessageResult;
+  processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInputResult;
 
   /**
    * Process output stream chunks with built-in state management

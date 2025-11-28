@@ -76,12 +76,12 @@ export class WorkingMemory implements Processor {
     messages: MastraDBMessage[];
     messageList: MessageList;
     abort: (reason?: string) => never;
-    runtimeContext?: RequestContext;
+    requestContext?: RequestContext;
   }): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, runtimeContext } = args;
+    const { messageList, requestContext } = args;
 
     // Get threadId and resourceId from runtime context
-    const memoryContext = parseMemoryRuntimeContext(runtimeContext);
+    const memoryContext = parseMemoryRuntimeContext(requestContext);
     const threadId = memoryContext?.thread?.id;
     const resourceId = memoryContext?.resourceId;
 

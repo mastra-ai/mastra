@@ -379,12 +379,6 @@ article a:hover {
   color: var(--mastra-green-accent-2);
 }
 
-/* Pre with title above - remove top border radius */
-div[class*="codeBlockTitle"] + div[class*="codeBlockContent"] pre {
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
-}
-
 #docs-search-results {
   scrollbar-width: none;
 }
@@ -539,6 +533,12 @@ pre,
   overflow-x: auto !important;
   overflow-y: hidden !important;
   font-family: var(--ifm-font-family-monospace) !important;
+}
+
+/* Pre with title above - remove top border radius */
+div[class*="codeBlockTitle"] + div[class*="codeBlockContent"] pre {
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
 }
 
 .copilotKitCodeBlock div * {
@@ -1005,6 +1005,7 @@ ol {
     padding-inline: 0.38rem;
     padding-block: 0.2rem;
     display: flex;
+    font-size: 10px;
   }
 
   [data-theme="dark"] kbd {

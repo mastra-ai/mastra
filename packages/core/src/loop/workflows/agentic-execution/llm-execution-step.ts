@@ -522,7 +522,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
                   messageList,
                   stepNumber: inputData.output?.steps?.length || 0,
                   tracingContext,
-                  runtimeContext: requestContext,
+                  requestContext,
                 });
 
                 // Re-fetch messages after processors have modified them
