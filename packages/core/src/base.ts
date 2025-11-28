@@ -4,7 +4,7 @@ import { ConsoleLogger } from './logger/default-logger';
 
 export class MastraBase {
   component: RegisteredLogger = RegisteredLogger.LLM;
-  logger: IMastraLogger;
+  protected logger: IMastraLogger;
   name?: string;
 
   constructor({ component, name }: { component?: RegisteredLogger; name?: string }) {

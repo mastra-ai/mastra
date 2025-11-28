@@ -101,7 +101,7 @@ export async function executeStep(
   if (timeTravelResumeData && !timeTravelResumeValidationError) {
     resumeDataToUse = timeTravelResumeData;
   } else if (timeTravelResumeData && timeTravelResumeValidationError) {
-    engine.logger.warn('Time travel resume data validation failed', {
+    engine.getLogger().warn('Time travel resume data validation failed', {
       stepId: step.id,
       error: timeTravelResumeValidationError.message,
     });
@@ -195,7 +195,7 @@ export async function executeStep(
     const proxiedData = createDeprecationProxy(data, {
       paramName: 'runCount',
       deprecationMessage: runCountDeprecationMessage,
-      logger: engine.logger,
+      logger: engine.getLogger(),
     });
 
     return step.execute(proxiedData);

@@ -320,7 +320,7 @@ export async function executeConditional(
           {
             paramName: 'runCount',
             deprecationMessage: runCountDeprecationMessage,
-            logger: engine.logger,
+            logger: engine.getLogger(),
           },
         );
 
@@ -638,7 +638,7 @@ export async function executeLoop(
         {
           paramName: 'runCount',
           deprecationMessage: runCountDeprecationMessage,
-          logger: engine.logger,
+          logger: engine.getLogger(),
         },
       ),
     );
