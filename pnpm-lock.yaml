@@ -1013,7 +1013,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.35
-        version: 2.0.53(zod@3.25.76)
+        version: 2.0.69(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -1779,8 +1779,8 @@ importers:
         specifier: npm:@ai-sdk/ui-utils@1.2.11
         version: '@ai-sdk/ui-utils@1.2.11(zod@3.25.76)'
       '@isaacs/ttlcache':
-        specifier: ^1.4.1
-        version: 1.4.1
+        specifier: ^2.1.1
+        version: 2.1.2
       '@lukeed/uuid':
         specifier: ^2.0.1
         version: 2.0.1
@@ -5062,12 +5062,6 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/openai@2.0.53':
-    resolution: {integrity: sha512-GIkR3+Fyif516ftXv+YPSPstnAHhcZxNoR2s8uSHhQ1yBT7I7aQYTVwpjAuYoT3GR+TeP50q7onj2/nDRbT2FQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
   '@ai-sdk/openai@2.0.69':
     resolution: {integrity: sha512-UF9qZ1qiVOpWdbj/FGf8jz+PciMI2zxt8ZNKjsvyFtUfk1E5PIG8GYR65maGblVhwKrRR5zAAJ5BumNyDt2v4Q==}
     engines: {node: '>=18'}
@@ -7607,6 +7601,10 @@ packages:
 
   '@isaacs/ttlcache@1.4.1':
     resolution: {integrity: sha512-RQgQ4uQ+pLbqXfOmieB91ejmLwvSgv9nLx6sT6sD83s7umBypgg+OIBOBbEUiJXrfpnp9j0mRhYYdzp9uqq3lA==}
+    engines: {node: '>=12'}
+
+  '@isaacs/ttlcache@2.1.2':
+    resolution: {integrity: sha512-lmG2ZHXBo7tgF1I3vGvBMnUJYhaNE25fmx+tUfotvE3vsARzxiiDXmCBI6Ch8qEHeHmfunr+eVPgIaIc8xIkbg==}
     engines: {node: '>=12'}
 
   '@joshwooding/vite-plugin-react-docgen-typescript@0.6.1':
@@ -17568,12 +17566,6 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.10(zod@3.25.76)
       zod: 3.25.76
 
-  '@ai-sdk/openai@2.0.53(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.12(zod@3.25.76)
-      zod: 3.25.76
-
   '@ai-sdk/openai@2.0.69(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
@@ -20762,6 +20754,8 @@ snapshots:
       minipass: 7.1.2
 
   '@isaacs/ttlcache@1.4.1': {}
+
+  '@isaacs/ttlcache@2.1.2': {}
 
   '@joshwooding/vite-plugin-react-docgen-typescript@0.6.1(typescript@5.9.3)(vite@7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1))':
     dependencies:
