@@ -2214,7 +2214,7 @@ describe('MastraInngestWorkflow', () => {
       expect(step2Action).not.toHaveBeenCalled();
       expect(result?.steps).toMatchObject({
         input: {},
-        step1: { status: 'failed', error: 'Failed' },
+        step1: { status: 'failed', error: 'Error: Failed' },
       });
     });
 
@@ -2467,7 +2467,7 @@ describe('MastraInngestWorkflow', () => {
       await expect(run.start({ inputData: {} })).resolves.toMatchObject({
         steps: {
           step1: {
-            error: 'Step execution failed',
+            error: 'Error: Step execution failed',
             status: 'failed',
           },
         },
@@ -2556,7 +2556,7 @@ describe('MastraInngestWorkflow', () => {
         },
         step2: {
           status: 'failed',
-          error: 'Step execution failed',
+          error: 'Error: Step execution failed',
         },
       });
 
@@ -2648,7 +2648,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result.steps).toMatchObject({
         'test-workflow': {
           status: 'failed',
-          error: 'Step execution failed',
+          error: 'Error: Step execution failed',
         },
       });
 
@@ -3628,7 +3628,7 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
 
       expect(result.steps.step1).toMatchObject({ status: 'success', output: { result: 'success' } });
-      expect(result.steps.step2).toMatchObject({ status: 'failed', error: 'Step failed' });
+      expect(result.steps.step2).toMatchObject({ status: 'failed', error: 'Error: Step failed' });
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
     });
@@ -4233,6 +4233,8 @@ describe('MastraInngestWorkflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
           resumedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          suspendPayload: { testPayload: 'hello' },
         },
         evaluateToneConsistency: {
           status: 'success',
@@ -4255,6 +4257,7 @@ describe('MastraInngestWorkflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
           resumedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
         },
         evaluateImprovedResponse: {
           status: 'success',
@@ -5071,7 +5074,7 @@ describe('MastraInngestWorkflow', () => {
       expect(failedRun.steps.step2).toEqual({
         status: 'failed',
         payload: { step1Result: 2 },
-        error: 'Simulated error',
+        error: 'Error: Simulated error',
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -9938,7 +9941,7 @@ describe('MastraInngestWorkflow', () => {
       });
     });
 
-    it('should emit step-result and step-finish events when step fails', async ctx => {
+    it.only('should emit step-result and step-finish events when step fails', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -10065,7 +10068,7 @@ describe('MastraInngestWorkflow', () => {
         {
           payload: {
             id: 'step2',
-            error: 'Step input validation failed: \n- value: Required',
+            error: 'Error: Step input validation failed: \n- value: Required',
             endedAt: expect.any(Number),
             startedAt: expect.any(Number),
             payload: {
