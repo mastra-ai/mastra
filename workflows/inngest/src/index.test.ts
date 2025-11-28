@@ -9941,7 +9941,7 @@ describe('MastraInngestWorkflow', () => {
       });
     });
 
-    it.only('should emit step-result and step-finish events when step fails', async ctx => {
+    it('should emit step-result and step-finish events when step fails', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -10106,7 +10106,7 @@ describe('MastraInngestWorkflow', () => {
       });
       expect(executionResult.steps.step2).toMatchObject({
         status: 'failed',
-        error: 'Step input validation failed: \n- value: Required',
+        error: 'Error: Step input validation failed: \n- value: Required',
         payload: {
           result: 'success1',
         },
