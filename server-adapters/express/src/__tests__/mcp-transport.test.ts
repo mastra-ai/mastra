@@ -11,9 +11,6 @@ import { MastraServer } from '../index';
  * Tests MCP protocol transport endpoints (HTTP and SSE) using MCPClient.
  * These tests require a real HTTP server for the full protocol handshake.
  *
- * IMPORTANT: MCP transport routes must NOT have body-parsing middleware applied
- * because the MCP SDK needs to read the raw request body directly from the stream.
- * Express.json() would consume the body before the MCP server can read it.
  */
 describe('Express MCP Transport Routes Integration', () => {
   createMCPTransportTestSuite({
@@ -23,15 +20,7 @@ describe('Express MCP Transport Routes Integration', () => {
       // Create Express app
       const app = express();
 
-      // Apply JSON body parsing only to non-MCP routes
-      // MCP transport routes need raw body access - the SDK reads the body directly
-      app.use((req, res, next) => {
-        // // Skip body parsing for MCP transport routes
-        if (req.path.match(/\/api\/mcp\/[^/]+\/(mcp|sse|messages)$/)) {
-          return next();
-        }
-        return express.json()(req, res, next);
-      });
+      app.use(express.json());
 
       // Create adapter
       const adapter = new MastraServer({
