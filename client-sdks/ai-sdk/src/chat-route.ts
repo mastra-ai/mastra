@@ -14,7 +14,6 @@ export type ChatStreamHandlerParams<
 > = AgentExecutionOptions<OUTPUT, 'mastra'> & {
   messages: UI_MESSAGE[];
   resumeData?: Record<string, any>;
-  runId?: string;
 };
 
 export type ChatStreamHandlerOptions<UI_MESSAGE extends UIMessage, OUTPUT extends OutputSchema = undefined> = {
