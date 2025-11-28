@@ -1,5 +1,5 @@
 import type { AgentExecutionOptions } from '@mastra/core/agent';
-import type { MessageInput } from '@mastra/core/agent/message-list';
+
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
