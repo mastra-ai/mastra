@@ -1,4 +1,4 @@
-import { dirname, extname } from 'path';
+import { dirname, extname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import resolveFrom from 'resolve-from';
 import type { Plugin } from 'rollup';

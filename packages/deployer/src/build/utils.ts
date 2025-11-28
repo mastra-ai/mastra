@@ -1,8 +1,8 @@
-import { execSync } from 'child_process';
-import { existsSync, mkdirSync } from 'fs';
-import { basename, join, relative } from 'path';
+import { execSync } from 'node:child_process';
+import { existsSync, mkdirSync } from 'node:fs';
+import { basename, join, relative } from 'node:path';
 import { getPackageInfo } from 'local-pkg';
-import { pathToFileURL } from 'url';
+import { pathToFileURL } from 'node:url';
 
 export function upsertMastraDir({ dir = process.cwd() }: { dir?: string }) {
   const dirPath = join(dir, '.mastra');

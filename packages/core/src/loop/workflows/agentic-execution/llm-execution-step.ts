@@ -1,4 +1,4 @@
-import type { ReadableStream } from 'stream/web';
+import type { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import type { ToolSet } from 'ai-v5';

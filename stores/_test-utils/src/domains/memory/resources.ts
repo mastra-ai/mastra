@@ -1,7 +1,7 @@
 import type { MastraStorage } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 import { createSampleResource } from './data';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 
 export function createResourcesTest({ storage }: { storage: MastraStorage }) {
   describe('Resources', () => {

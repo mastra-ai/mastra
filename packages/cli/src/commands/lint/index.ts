@@ -1,5 +1,5 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { getDeployer } from '@mastra/deployer';
 import { FileService } from '../../services/service.file.js';
 import { logger } from '../../utils/logger.js';

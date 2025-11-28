@@ -42,6 +42,7 @@ export const createConfig = async () =>
     {
       plugins: {
         import: (await import('eslint-plugin-import-x')).default,
+        unicorn: (await import('eslint-plugin-unicorn')).default,
       },
       languageOptions: {
         globals: {
@@ -54,6 +55,7 @@ export const createConfig = async () =>
         'no-unexpected-multiline': ERROR,
         'no-warning-comments': [ERROR, { terms: ['FIXME'], location: 'anywhere' }],
         'import/no-duplicates': [ERROR, { 'prefer-inline': false }],
+        'unicorn/prefer-node-protocol': ERROR,
         'import/order': [
           ERROR,
           {

@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createSampleScore } from './data';
 import type { ScoreRowData } from '@mastra/core/evals';

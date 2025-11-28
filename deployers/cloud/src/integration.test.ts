@@ -1,6 +1,6 @@
-import { mkdtempSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { ensureDir, writeFile, readFile } from 'fs-extra';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
@@ -50,7 +50,7 @@ describe('CloudDeployer Integration Tests', () => {
       await deployer.prepare(outputDir);
 
       // Verify output directories are created
-      const fs = await import('fs');
+      const fs = await import('node:fs');
       expect(fs.existsSync(join(outputDir, '.build'))).toBe(true);
       expect(fs.existsSync(join(outputDir, 'output'))).toBe(true);
     });
