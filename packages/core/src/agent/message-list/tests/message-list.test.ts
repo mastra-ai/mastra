@@ -87,11 +87,11 @@ describe('MessageList', () => {
   });
 
   describe('add message', () => {
-    it('should not filter out reasoning items from OpenAi that contain no content when the message id is the same', async () => {
+    it('should not filter out reasoning items from OpenAi that contain no content when the message id is the same', () => {
       // Additional fix for bug detailed in https://github.com/mastra-ai/mastra/issues/9005 
       // pushNewMessagePart calls cacheKeyFromAIV4Parts to check if new message parts need to be appended.
       // cacheKeyFromAIV4Parts failed to account for 'providerMetadata/openai/itemId' 
-      // (which is not part of the UIMessageV4 type), thus filtering out subesequent messages
+      // (which is not part of the UIMessageV4 type), thus filtering out subsequent messages
 
       const list = new MessageList().add(
         {

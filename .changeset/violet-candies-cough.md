@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fix reasoning merge bug caused by missing openai.itemId - fixes #9005
+Fixed OpenAI reasoning message merging so distinct reasoning items are no longer dropped when they share a message ID. Prevents downstream errors where a function call is missing its required "reasoning" item. See #9005.
