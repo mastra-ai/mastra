@@ -347,8 +347,7 @@ describe('ProcessorRunner', () => {
               if (systemMessages) {
                 const modifiedSystemMessages = systemMessages.map((msg: any) => ({
                   ...msg,
-                  content:
-                    typeof msg.content === 'string' ? msg.content.substring(0, 20) + '...' : msg.content,
+                  content: typeof msg.content === 'string' ? msg.content.substring(0, 20) + '...' : msg.content,
                 }));
                 // Return modified system messages somehow (this is what the fix should enable)
                 return { messages, systemMessages: modifiedSystemMessages };

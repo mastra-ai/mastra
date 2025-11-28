@@ -16,10 +16,7 @@ export interface ProcessInputResultWithSystemMessages {
 /**
  * Possible return types from processInput
  */
-export type ProcessInputResult =
-  | MessageList
-  | MastraDBMessage[]
-  | ProcessInputResultWithSystemMessages;
+export type ProcessInputResult = MessageList | MastraDBMessage[] | ProcessInputResultWithSystemMessages;
 
 export interface Processor<TId extends string = string> {
   readonly id: TId;
