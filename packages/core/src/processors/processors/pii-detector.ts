@@ -3,6 +3,7 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { TracingContext } from '../../observability';
 import type { ChunkType } from '../../stream';
@@ -126,6 +127,19 @@ export interface PIIDetectorOptions {
      */
     jsonPromptInjection?: boolean;
   };
+
+  /**
+   * Provider-specific options passed to the internal detection agent.
+   * Use this to control model behavior like reasoning effort for thinking models.
+   *
+   * @example
+   * ```ts
+   * providerOptions: {
+   *   openai: { reasoningEffort: 'low' }
+   * }
+   * ```
+   */
+  providerOptions?: ProviderOptions;
 }
 
 /**
@@ -147,6 +161,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
   private includeDetections: boolean;
   private preserveFormat: boolean;
   private structuredOutputOptions?: PIIDetectorOptions['structuredOutputOptions'];
+  private providerOptions?: ProviderOptions;
 
   // Default PII types based on common privacy regulations and comprehensive PII detection
   private static readonly DEFAULT_DETECTION_TYPES = [
@@ -173,6 +188,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
     this.includeDetections = options.includeDetections ?? false;
     this.preserveFormat = options.preserveFormat ?? true;
     this.structuredOutputOptions = options.structuredOutputOptions;
+    this.providerOptions = options.providerOptions;
 
     // Create internal detection agent
     this.detectionAgent = new Agent({
@@ -299,12 +315,14 @@ export class PIIDetector implements Processor<'pii-detector'> {
           modelSettings: {
             temperature: 0,
           },
+          providerOptions: this.providerOptions,
           tracingContext,
         });
       } else {
         response = await this.detectionAgent.generateLegacy(prompt, {
           output: schema,
           temperature: 0,
+          providerOptions: this.providerOptions,
           tracingContext,
         });
       }
