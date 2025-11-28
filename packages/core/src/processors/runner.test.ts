@@ -322,9 +322,12 @@ describe('ProcessorRunner', () => {
         expect(receivedSystemMessages).toHaveLength(3);
 
         // Verify system messages content
-        const systemTexts = receivedSystemMessages!.map((m: any) =>
-          typeof m.content === 'string' ? m.content : m.content,
-        );
+        const systemTexts = receivedSystemMessages!.map((m: any) => {
+          if (typeof m.content === 'string') return m.content;
+          // Handle structured content format with parts array
+          if (m.content?.parts?.[0]?.text) return m.content.parts[0].text;
+          return m.content;
+        });
         expect(systemTexts).toContain('You are a helpful assistant.');
         expect(systemTexts).toContain('Remember the user prefers formal language.');
         expect(systemTexts).toContain('Relevant context from previous conversations.');
