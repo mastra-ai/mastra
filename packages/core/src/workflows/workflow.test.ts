@@ -11290,6 +11290,86 @@ describe('Workflow', () => {
 
       expect(thridResume.status).toBe('suspended');
     });
+
+    it('should preserve state across suspend and resume cycles', async () => {
+      const stateValuesObserved: any[] = [];
+
+      const step1 = createStep({
+        id: 'step-1',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema: z.object({ count: z.number(), items: z.array(z.string()) }),
+        execute: async ({ state, setState, suspend, resumeData }) => {
+          stateValuesObserved.push({ step: 'step-1', state: { ...state } });
+
+          if (!resumeData) {
+            // First run: update state and suspend
+            setState({ ...state, count: state.count + 1, items: [...state.items, 'item-1'] });
+            await suspend({});
+            return {};
+          }
+
+          // After resume: state should be preserved
+          return {};
+        },
+        resumeSchema: z.object({ proceed: z.boolean() }),
+      });
+
+      const step2 = createStep({
+        id: 'step-2',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ finalCount: z.number(), itemCount: z.number() }),
+        stateSchema: z.object({ count: z.number(), items: z.array(z.string()) }),
+        execute: async ({ state }) => {
+          stateValuesObserved.push({ step: 'step-2', state: { ...state } });
+          return { finalCount: state.count, itemCount: state.items.length };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'state-persistence-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ finalCount: z.number(), itemCount: z.number() }),
+        stateSchema: z.object({ count: z.number(), items: z.array(z.string()) }),
+        steps: [step1, step2],
+        mastra: new Mastra({ logger: false, storage: testStorage }),
+      })
+        .then(step1)
+        .then(step2)
+        .commit();
+
+      const run = await workflow.createRunAsync();
+
+      // Start workflow with initial state
+      const startResult = await run.start({
+        inputData: {},
+        initialState: { count: 0, items: [] },
+      });
+
+      expect(startResult.status).toBe('suspended');
+      expect(stateValuesObserved).toHaveLength(1);
+      expect(stateValuesObserved[0]).toEqual({
+        step: 'step-1',
+        state: { count: 0, items: [] },
+      });
+
+      // Resume workflow
+      const resumeResult = await run.resume({
+        step: 'step-1',
+        resumeData: { proceed: true },
+      });
+
+      expect(resumeResult.status).toBe('success');
+      // After resume, step-1 runs again and step-2 runs
+      expect(stateValuesObserved.length).toBeGreaterThanOrEqual(2);
+
+      // Step-2 should see the updated state
+      const step2Observation = stateValuesObserved.find(o => o.step === 'step-2');
+      expect(step2Observation?.state).toEqual({
+        count: 1,
+        items: ['item-1'],
+      });
+    });
   });
 
   it('should auto-resume simple suspended step without specifying step parameter', async () => {

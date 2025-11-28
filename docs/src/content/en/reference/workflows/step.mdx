@@ -125,6 +125,12 @@ const step1 = createStep({
       description: "Function to pause workflow execution",
     },
     {
+      name: "state",
+      type: "z.infer<TState>",
+      description:
+        "The current workflow state. Contains shared values that persist across all steps and suspend/resume cycles. The structure is defined by the step's stateSchema.",
+    },
+    {
       name: "setState",
       type: "(state: z.infer<TState>) => void",
       description:
@@ -154,5 +160,6 @@ const step1 = createStep({
 
 ## Related
 
+- [Workflow state](/docs/workflows/workflow-state)
 - [Control flow](/docs/workflows/control-flow)
 - [Using agents and tools](/docs/workflows/agents-and-tools)
