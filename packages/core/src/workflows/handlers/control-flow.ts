@@ -419,6 +419,7 @@ export async function executeConditional(
       // Apply context changes from conditional step execution
       engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
       Object.assign(stepResults, stepExecResult.stepResults);
+
       return stepExecResult.result;
     }),
   );

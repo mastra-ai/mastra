@@ -4484,8 +4484,9 @@ describe('MastraInngestWorkflow', () => {
       expect(initialResult.steps['branch-step-2'].suspendOutput).toBeUndefined();
       if (initialResult.status === 'suspended') {
         expect(initialResult.suspended).toHaveLength(2);
-        expect(initialResult.suspended[0]).toContain('branch-step-1');
-        expect(initialResult.suspended[1]).toContain('branch-step-2');
+        const suspendedStepIds = initialResult.suspended.map(s => s[0]);
+        expect(suspendedStepIds).toContain('branch-step-1');
+        expect(suspendedStepIds).toContain('branch-step-2');
       }
 
       const resumedResult1 = await run.resume({

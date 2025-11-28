@@ -198,6 +198,7 @@ export class InngestRun<
     }
     const runOutput = await this.getRunOutput(eventId);
     const result = runOutput?.output?.result;
+
     if (result.status === 'failed') {
       result.error = new Error(result.error);
     }
