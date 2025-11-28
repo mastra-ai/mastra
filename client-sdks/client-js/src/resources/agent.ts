@@ -17,6 +17,12 @@ import type { OutputSchema, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodType } from 'zod';
+import {
+  MastraClientModelOutput,
+  MastraClientNetworkOutput,
+  createChunkStreamFromResponse,
+  createNetworkChunkStreamFromResponse,
+} from '../output';
 import type {
   GenerateLegacyParams,
   GetAgentResponse,
@@ -32,7 +38,7 @@ import type {
 
 import { parseClientRequestContext, requestContextQueryString } from '../utils';
 import { processClientTools } from '../utils/process-client-tools';
-import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
+import { processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
 
@@ -1277,15 +1283,7 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async network(params: NetworkStreamParams): Promise<
-    Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
-      }) => Promise<void>;
-    }
-  > {
+  async network(params: NetworkStreamParams): Promise<MastraClientNetworkOutput> {
     const response: Response = await this.request(`/api/agents/${this.agentId}/network`, {
       method: 'POST',
       body: params,
@@ -1300,63 +1298,24 @@ export class Agent extends BaseResource {
       status: response.status,
       statusText: response.statusText,
       headers: response.headers,
-    }) as Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
-      }) => Promise<void>;
-    };
+    });
 
-    streamResponse.processDataStream = async ({
-      onChunk,
-    }: {
-      onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
-    }) => {
-      await processMastraNetworkStream({
-        stream: streamResponse.body as ReadableStream<Uint8Array>,
-        onChunk,
-      });
-    };
-
-    return streamResponse;
+    // Convert the response to a typed chunk stream and wrap in MastraClientNetworkOutput
+    const chunkStream = createNetworkChunkStreamFromResponse(streamResponse);
+    return new MastraClientNetworkOutput({ stream: chunkStream });
   }
   async stream<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
     options?: Omit<StreamParams<OUTPUT>, 'messages'>,
-  ): Promise<
-    Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
-      }) => Promise<void>;
-    }
-  >;
+  ): Promise<MastraClientModelOutput<OUTPUT>>;
   // Backward compatibility overload
   async stream<OUTPUT extends OutputSchema = undefined>(
     params: StreamParams<OUTPUT>,
-  ): Promise<
-    Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
-      }) => Promise<void>;
-    }
-  >;
+  ): Promise<MastraClientModelOutput<OUTPUT>>;
   async stream<OUTPUT extends OutputSchema = undefined>(
     messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
     options?: Omit<StreamParams<OUTPUT>, 'messages'>,
-  ): Promise<
-    Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
-      }) => Promise<void>;
-    }
-  > {
+  ): Promise<MastraClientModelOutput<OUTPUT>> {
     // Handle both new signature (messages, options) and old signature (single param object)
     let params: StreamParams<OUTPUT>;
     if (typeof messagesOrParams === 'object' && 'messages' in messagesOrParams) {
@@ -1398,31 +1357,18 @@ export class Agent extends BaseResource {
       status: response.status,
       statusText: response.statusText,
       headers: response.headers,
-    }) as Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
-      }) => Promise<void>;
-    };
+    });
 
-    // Add the processDataStream method to the response
-    streamResponse.processDataStream = async ({
-      onChunk,
-    }: {
-      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
-    }) => {
-      await processMastraStream({
-        stream: streamResponse.body as ReadableStream<Uint8Array>,
-        onChunk,
-      });
-    };
-
-    return streamResponse;
+    // Convert the response to a typed chunk stream and wrap in MastraClientModelOutput
+    const chunkStream = createChunkStreamFromResponse<OUTPUT>(streamResponse);
+    return new MastraClientModelOutput<OUTPUT>({ stream: chunkStream });
   }
 
   async approveToolCall(params: { runId: string; toolCallId: string }): Promise<
     Response & {
+      /**
+       * @deprecated The processDataStream method on the response is deprecated. Please use the stream's body directly or alternative streaming methods.
+       */
       processDataStream: ({
         onChunk,
       }: {

@@ -1,5 +1,6 @@
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
+import { MastraClientWorkflowOutput } from '../output';
 import type {
   ClientOptions,
   GetWorkflowResponse,
@@ -8,10 +9,8 @@ import type {
   WorkflowRunResult,
   GetWorkflowRunByIdResponse,
   GetWorkflowRunExecutionResultResponse,
-  StreamVNextChunkType,
   TimeTravelParams,
 } from '../types';
-
 import { parseClientRequestContext, base64RequestContext, requestContextQueryString } from '../utils';
 import { BaseResource } from './base';
 
@@ -134,7 +133,7 @@ export class Workflow extends BaseResource {
     stream: (params: {
       inputData: Record<string, any>;
       requestContext?: RequestContext | Record<string, any>;
-    }) => Promise<ReadableStream>;
+    }) => Promise<MastraClientWorkflowOutput>;
     startAsync: (params: {
       inputData: Record<string, any>;
       requestContext?: RequestContext | Record<string, any>;
@@ -150,7 +149,15 @@ export class Workflow extends BaseResource {
       step?: string | string[];
       resumeData?: Record<string, any>;
       requestContext?: RequestContext | Record<string, any>;
-    }) => Promise<ReadableStream<StreamVNextChunkType>>;
+    }) => Promise<MastraClientWorkflowOutput>;
+    observeStream: () => Promise<MastraClientWorkflowOutput>;
+    streamVNext: (params: {
+      inputData?: Record<string, any>;
+      requestContext?: RequestContext | Record<string, any>;
+      closeOnSuspend?: boolean;
+      tracingOptions?: TracingOptions;
+    }) => Promise<MastraClientWorkflowOutput>;
+    observeStreamVNext: () => Promise<MastraClientWorkflowOutput>;
   }> {
     const searchParams = new URLSearchParams();
 
@@ -235,6 +242,26 @@ export class Workflow extends BaseResource {
           resumeData: p.resumeData,
           requestContext: p.requestContext,
         });
+      },
+      observeStream: async () => {
+        return this.observeStream({ runId });
+      },
+      streamVNext: async (p: {
+        inputData?: Record<string, any>;
+        requestContext?: RequestContext | Record<string, any>;
+        closeOnSuspend?: boolean;
+        tracingOptions?: TracingOptions;
+      }) => {
+        return this.streamVNext({
+          runId,
+          inputData: p.inputData,
+          requestContext: p.requestContext,
+          closeOnSuspend: p.closeOnSuspend,
+          tracingOptions: p.tracingOptions,
+        });
+      },
+      observeStreamVNext: async () => {
+        return this.observeStreamVNext({ runId });
       },
     };
   }
@@ -322,7 +349,7 @@ export class Workflow extends BaseResource {
     inputData: Record<string, any>;
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
-  }) {
+  }): Promise<MastraClientWorkflowOutput> {
     const searchParams = new URLSearchParams();
 
     if (!!params?.runId) {
@@ -343,45 +370,7 @@ export class Workflow extends BaseResource {
       throw new Error(`Failed to stream workflow: ${response.statusText}`);
     }
 
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    //using undefined instead of empty string to avoid parsing errors
-    let failedChunk: string | undefined = undefined;
-
-    // Create a transform stream that processes the response body
-    const transformStream = new TransformStream<ArrayBuffer, { type: string; payload: any }>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
-
-    // Pipe the response body through the transform stream
-    return response.body.pipeThrough(transformStream);
+    return MastraClientWorkflowOutput.fromResponse(response, RECORD_SEPARATOR);
   }
 
   /**
@@ -389,7 +378,7 @@ export class Workflow extends BaseResource {
    * @param params - Object containing the runId
    * @returns Promise containing the workflow execution results
    */
-  async observeStream(params: { runId: string }) {
+  async observeStream(params: { runId: string }): Promise<MastraClientWorkflowOutput> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', params.runId);
     const response: Response = await this.request(
@@ -404,45 +393,7 @@ export class Workflow extends BaseResource {
       throw new Error(`Failed to observe workflow stream: ${response.statusText}`);
     }
 
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    //using undefined instead of empty string to avoid parsing errors
-    let failedChunk: string | undefined = undefined;
-
-    // Create a transform stream that processes the response body
-    const transformStream = new TransformStream<ArrayBuffer, { type: string; payload: any }>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
-
-    // Pipe the response body through the transform stream
-    return response.body.pipeThrough(transformStream);
+    return MastraClientWorkflowOutput.fromResponse(response, RECORD_SEPARATOR);
   }
 
   /**
@@ -453,10 +404,10 @@ export class Workflow extends BaseResource {
   async streamVNext(params: {
     runId?: string;
     inputData?: Record<string, any>;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext | Record<string, any>;
     closeOnSuspend?: boolean;
     tracingOptions?: TracingOptions;
-  }) {
+  }): Promise<MastraClientWorkflowOutput> {
     const searchParams = new URLSearchParams();
 
     if (!!params?.runId) {
@@ -482,45 +433,7 @@ export class Workflow extends BaseResource {
       throw new Error(`Failed to stream vNext workflow: ${response.statusText}`);
     }
 
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    //using undefined instead of empty string to avoid parsing errors
-    let failedChunk: string | undefined = undefined;
-
-    // Create a transform stream that processes the response body
-    const transformStream = new TransformStream<ArrayBuffer, StreamVNextChunkType>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
-
-    // Pipe the response body through the transform stream
-    return response.body.pipeThrough(transformStream);
+    return MastraClientWorkflowOutput.fromResponse(response, RECORD_SEPARATOR);
   }
 
   /**
@@ -528,7 +441,7 @@ export class Workflow extends BaseResource {
    * @param params - Object containing the runId
    * @returns Promise containing the workflow execution results
    */
-  async observeStreamVNext(params: { runId: string }) {
+  async observeStreamVNext(params: { runId: string }): Promise<MastraClientWorkflowOutput> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', params.runId);
 
@@ -544,45 +457,7 @@ export class Workflow extends BaseResource {
       throw new Error(`Failed to observe stream vNext workflow: ${response.statusText}`);
     }
 
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    //using undefined instead of empty string to avoid parsing errors
-    let failedChunk: string | undefined = undefined;
-
-    // Create a transform stream that processes the response body
-    const transformStream = new TransformStream<ArrayBuffer, StreamVNextChunkType>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
-
-    // Pipe the response body through the transform stream
-    return response.body.pipeThrough(transformStream);
+    return MastraClientWorkflowOutput.fromResponse(response, RECORD_SEPARATOR);
   }
 
   /**
@@ -620,7 +495,7 @@ export class Workflow extends BaseResource {
     resumeData?: Record<string, any>;
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
-  }) {
+  }): Promise<MastraClientWorkflowOutput> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', params.runId);
     const requestContext = parseClientRequestContext(params.requestContext);
@@ -642,45 +517,7 @@ export class Workflow extends BaseResource {
       throw new Error(`Failed to stream vNext workflow: ${response.statusText}`);
     }
 
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    //using undefined instead of empty string to avoid parsing errors
-    let failedChunk: string | undefined = undefined;
-
-    // Create a transform stream that processes the response body
-    const transformStream = new TransformStream<ArrayBuffer, StreamVNextChunkType>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
-
-    // Pipe the response body through the transform stream
-    return response.body.pipeThrough(transformStream);
+    return MastraClientWorkflowOutput.fromResponse(response, RECORD_SEPARATOR);
   }
 
   /**
@@ -830,44 +667,6 @@ export class Workflow extends BaseResource {
       throw new Error(`Failed to time travel workflow: ${response.statusText}`);
     }
 
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    //using undefined instead of empty string to avoid parsing errors
-    let failedChunk: string | undefined = undefined;
-
-    // Create a transform stream that processes the response body
-    const transformStream = new TransformStream<ArrayBuffer, StreamVNextChunkType>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
-
-    // Pipe the response body through the transform stream
-    return response.body.pipeThrough(transformStream);
+    return MastraClientWorkflowOutput.fromResponse(response, RECORD_SEPARATOR);
   }
 }

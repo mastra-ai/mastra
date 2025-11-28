@@ -1,10 +1,12 @@
-import { StreamVNextChunkType, TimeTravelParams } from '@mastra/client-js';
+import type { ChunkType as StreamVNextChunkType } from '@mastra/core/stream';
+import type { TimeTravelParams } from '@mastra/client-js';
 import { RequestContext } from '@mastra/core/request-context';
 import { WorkflowStreamResult as CoreWorkflowStreamResult } from '@mastra/core/workflows';
 import { useMutation } from '@tanstack/react-query';
 import { useState, useRef, useEffect } from 'react';
 import { mapWorkflowStreamChunkToWatchResult, useMastraClient } from '@mastra/react';
-import type { ReadableStreamDefaultReader } from 'stream/web';
+import type { StreamChunk } from '@/types';
+
 import { toast } from '@/lib/toast';
 
 export const useExecuteWorkflow = () => {
@@ -202,7 +204,7 @@ export const useStreamWorkflow = () => {
           // Only update state if component is still mounted
           if (isMountedRef.current) {
             setStreamResult(prev => {
-              const newResult = mapWorkflowStreamChunkToWatchResult(prev, value);
+              const newResult = mapWorkflowStreamChunkToWatchResult(prev, value as StreamChunk);
               return newResult;
             });
 
@@ -278,7 +280,7 @@ export const useStreamWorkflow = () => {
           // Only update state if component is still mounted
           if (isMountedRef.current) {
             setStreamResult(prev => {
-              const newResult = mapWorkflowStreamChunkToWatchResult(prev, value);
+              const newResult = mapWorkflowStreamChunkToWatchResult(prev, value as StreamChunk);
               return newResult;
             });
 
@@ -356,7 +358,7 @@ export const useStreamWorkflow = () => {
           // Only update state if component is still mounted
           if (isMountedRef.current) {
             setStreamResult(prev => {
-              const newResult = mapWorkflowStreamChunkToWatchResult(prev, value);
+              const newResult = mapWorkflowStreamChunkToWatchResult(prev, value as StreamChunk);
               return newResult;
             });
 
@@ -429,7 +431,7 @@ export const useStreamWorkflow = () => {
           // Only update state if component is still mounted
           if (isMountedRef.current) {
             setStreamResult(prev => {
-              const newResult = mapWorkflowStreamChunkToWatchResult(prev, value);
+              const newResult = mapWorkflowStreamChunkToWatchResult(prev, value as StreamChunk);
               return newResult;
             });
 

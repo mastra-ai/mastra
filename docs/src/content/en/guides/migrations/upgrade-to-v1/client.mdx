@@ -9,6 +9,29 @@ Client SDK changes align with server-side API updates including renamed utilitie
 
 ## Changed
 
+### Streaming API changes
+
+Streaming methods now return output classes with promise-based properties. Update code that uses `processDataStream()` or iterates directly over streams:
+
+```diff
+  // Agent streaming
+  const stream = await agent.stream({ messages: [...] });
+- response.processDataStream({ onChunk: async (chunk) => { ... } });
++ for await (const chunk of stream.fullStream) { ... }
++ const text = await stream.text;
+
+  // Network streaming
+  const networkStream = await agent.network("...");
+- for await (const chunk of networkStream) { ... }
++ for await (const chunk of networkStream.fullStream) { ... }
+
+  // Workflow streaming (stream is directly iterable)
+  const stream = await run.stream({ inputData: {...} });
+  for await (const chunk of stream) { ... }
+```
+
+All streaming methods provide `fullStream` for iteration and promise-based properties like `status`, `result`, and `usage`.
+
 ### Client SDK types from `Get*` to `List*`
 
 Client SDK types have been renamed from `Get*` to `List*` pattern. This change aligns type names with the method naming convention.

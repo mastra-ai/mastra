@@ -39,6 +39,7 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/client-js": "workspace:*",
     "@types/json-schema": "^7.0.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
