@@ -9,13 +9,13 @@ import { MessageHistory } from './message-history.js';
 
 // Helper to create RequestContext with memory context
 function createRuntimeContextWithMemory(threadId: string, resourceId?: string): RequestContext {
-  const runtimeContext = new RequestContext();
+  const requestContext = new RequestContext();
   const memoryContext: MemoryRuntimeContext = {
     thread: { id: threadId },
     resourceId,
   };
-  runtimeContext.set('MastraMemory', memoryContext);
-  return runtimeContext;
+  requestContext.set('MastraMemory', memoryContext);
+  return requestContext;
 }
 
 // Mock storage implementation
@@ -142,7 +142,7 @@ describe('MessageHistory', () => {
         },
       ];
 
-      const runtimeContext = createRuntimeContextWithMemory('thread-1');
+      const requestContext = createRuntimeContextWithMemory('thread-1');
       const messageList = new MessageList();
       messageList.add(newMessages, 'input');
 
@@ -150,7 +150,7 @@ describe('MessageHistory', () => {
         messages: newMessages,
         messageList,
         abort: mockAbort,
-        runtimeContext,
+        requestContext,
       });
 
       // Should have last 2 historical messages + 1 new message
@@ -195,7 +195,7 @@ describe('MessageHistory', () => {
         messages: newMessages,
         messageList,
         abort: mockAbort,
-        runtimeContext: createRuntimeContextWithMemory('thread-1'),
+        requestContext: createRuntimeContextWithMemory('thread-1'),
       });
 
       const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
@@ -253,7 +253,7 @@ describe('MessageHistory', () => {
         messages: newMessages,
         messageList,
         abort: mockAbort,
-        runtimeContext: createRuntimeContextWithMemory('thread-1'),
+        requestContext: createRuntimeContextWithMemory('thread-1'),
       });
 
       const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
@@ -287,7 +287,7 @@ describe('MessageHistory', () => {
         messages: newMessages,
         messageList,
         abort: mockAbort,
-        runtimeContext: createRuntimeContextWithMemory('thread-1'),
+        requestContext: createRuntimeContextWithMemory('thread-1'),
       });
 
       const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
@@ -322,7 +322,7 @@ describe('MessageHistory', () => {
           messages: newMessages,
           messageList,
           abort: mockAbort,
-          runtimeContext: createRuntimeContextWithMemory('thread-1'),
+          requestContext: createRuntimeContextWithMemory('thread-1'),
         }),
       ).rejects.toThrow('Storage error');
     });
@@ -346,7 +346,7 @@ describe('MessageHistory', () => {
       const messageList = new MessageList();
       messageList.add(newMessages, 'input');
 
-      // Don't pass runtimeContext to simulate no threadId
+      // Don't pass requestContext to simulate no threadId
       const result = await processor.processInput({
         messages: newMessages,
         messageList,
@@ -394,7 +394,7 @@ describe('MessageHistory', () => {
         messages: [],
         messageList: messageList1,
         abort: mockAbort,
-        runtimeContext: createRuntimeContextWithMemory('thread-1'),
+        requestContext: createRuntimeContextWithMemory('thread-1'),
       });
 
       const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
@@ -441,7 +441,7 @@ describe('MessageHistory', () => {
         messages: [],
         messageList: messageList2,
         abort: mockAbort,
-        runtimeContext: createRuntimeContextWithMemory('thread-1'),
+        requestContext: createRuntimeContextWithMemory('thread-1'),
       });
 
       const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
@@ -510,7 +510,7 @@ describe('MessageHistory', () => {
         abort: ((reason?: string) => {
           throw new Error(reason || 'Aborted');
         }) as (reason?: string) => never,
-        runtimeContext: createRuntimeContextWithMemory('thread-1'),
+        requestContext: createRuntimeContextWithMemory('thread-1'),
       });
 
       expect(result.get.response.db()).toEqual(messages);
@@ -588,7 +588,7 @@ describe('MessageHistory', () => {
         abort: ((reason?: string) => {
           throw new Error(reason || 'Aborted');
         }) as (reason?: string) => never,
-        runtimeContext: createRuntimeContextWithMemory('thread-1'),
+        requestContext: createRuntimeContextWithMemory('thread-1'),
       });
 
       const savedMessages = (mockStorage.saveMessages as any).mock.calls[0][0].messages;
@@ -627,7 +627,7 @@ describe('MessageHistory', () => {
         abort: ((reason?: string) => {
           throw new Error(reason || 'Aborted');
         }) as (reason?: string) => never,
-        runtimeContext: createRuntimeContextWithMemory('thread-1'),
+        requestContext: createRuntimeContextWithMemory('thread-1'),
         messageList,
       });
 
@@ -666,7 +666,7 @@ describe('MessageHistory', () => {
         abort: ((reason?: string) => {
           throw new Error(reason || 'Aborted');
         }) as (reason?: string) => never,
-        // No runtimeContext, so no threadId
+        // No requestContext, so no threadId
       });
 
       expect(result.get.input.db()).toEqual(messages);
@@ -689,7 +689,7 @@ describe('MessageHistory', () => {
         abort: ((reason?: string) => {
           throw new Error(reason || 'Aborted');
         }) as (reason?: string) => never,
-        runtimeContext: createRuntimeContextWithMemory('thread-1'),
+        requestContext: createRuntimeContextWithMemory('thread-1'),
       });
 
       expect(mockStorage.saveMessages).not.toHaveBeenCalled();
@@ -727,7 +727,7 @@ describe('MessageHistory', () => {
         abort: ((reason?: string) => {
           throw new Error(reason || 'Aborted');
         }) as (reason?: string) => never,
-        runtimeContext: createRuntimeContextWithMemory('thread-1'),
+        requestContext: createRuntimeContextWithMemory('thread-1'),
       });
 
       const savedMessages = (mockStorage.saveMessages as any).mock.calls[0][0].messages;

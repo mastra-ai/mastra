@@ -1138,7 +1138,7 @@ describe('ProcessorRunner', () => {
         },
         processorStates,
         undefined, // tracingContext
-        undefined, // runtimeContext
+        undefined, // requestContext
         testMessageList, // messageList - this parameter needs to be added to processPart
       );
 

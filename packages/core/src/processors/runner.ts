@@ -86,7 +86,7 @@ export class ProcessorRunner {
   async runOutputProcessors(
     messageList: MessageList,
     tracingContext?: TracingContext,
-    runtimeContext?: RequestContext,
+    requestContext?: RequestContext,
   ): Promise<MessageList> {
     for (const [index, processor] of this.outputProcessors.entries()) {
       const allNewMessages = messageList.get.response.db();
@@ -136,7 +136,7 @@ export class ProcessorRunner {
         messageList,
         abort: ctx.abort,
         tracingContext: { currentSpan: processorSpan },
-        runtimeContext,
+        requestContext,
       });
 
       // Stop recording and get mutations for this processor
@@ -185,7 +185,7 @@ export class ProcessorRunner {
     part: ChunkType<OUTPUT>,
     processorStates: Map<string, ProcessorState<OUTPUT>>,
     tracingContext?: TracingContext,
-    runtimeContext?: RequestContext,
+    requestContext?: RequestContext,
     messageList?: MessageList,
   ): Promise<{
     part: ChunkType<OUTPUT> | null | undefined;
@@ -225,7 +225,7 @@ export class ProcessorRunner {
                 throw new TripWire(reason || `Stream part blocked by ${processor.id}`);
               },
               tracingContext: { currentSpan: state.span },
-              runtimeContext,
+              requestContext,
               messageList,
             });
 
@@ -334,7 +334,7 @@ export class ProcessorRunner {
   async runInputProcessors(
     messageList: MessageList,
     tracingContext?: TracingContext,
-    runtimeContext?: RequestContext,
+    requestContext?: RequestContext,
   ): Promise<MessageList> {
     for (const [index, processor] of this.inputProcessors.entries()) {
       let processableMessages: MastraDBMessage[] = messageList.get.input.db();
@@ -381,7 +381,7 @@ export class ProcessorRunner {
         abort: ctx.abort,
         tracingContext: { currentSpan: processorSpan },
         messageList,
-        runtimeContext,
+        requestContext,
       });
 
       // Handle MessageList, MastraDBMessage[], or { messages, systemMessages } return types

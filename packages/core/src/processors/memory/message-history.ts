@@ -37,12 +37,12 @@ export class MessageHistory implements Processor {
     messageList: MessageList;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-    runtimeContext?: RequestContext;
+    requestContext?: RequestContext;
   }): Promise<MessageList | MastraDBMessage[]> {
     const { messageList } = args;
 
     // Get memory context from RequestContext
-    const memoryContext = parseMemoryRuntimeContext(args.runtimeContext);
+    const memoryContext = parseMemoryRuntimeContext(args.requestContext);
     const threadId = memoryContext?.thread?.id;
 
     if (!threadId) {
@@ -122,12 +122,12 @@ export class MessageHistory implements Processor {
     messageList: MessageList;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-    runtimeContext?: RequestContext;
+    requestContext?: RequestContext;
   }): Promise<MessageList> {
     const { messageList } = args;
 
     // Get memory context from RequestContext
-    const memoryContext = parseMemoryRuntimeContext(args.runtimeContext);
+    const memoryContext = parseMemoryRuntimeContext(args.requestContext);
     const threadId = memoryContext?.thread?.id;
     const readOnly = memoryContext?.memoryConfig?.readOnly;
 
