@@ -48,30 +48,6 @@ To migrate, update processor message type imports and usage.
   };
 ```
 
-### New `systemMessages` parameter in `processInput`
-
-Input processors now receive a `systemMessages` parameter containing all system messages (agent instructions, memory context, user-provided system prompts). This allows processors to read and modify system messages.
-
-To modify system messages, return an object with both `messages` and `systemMessages`:
-
-```typescript
-const processor: InputProcessor = {
-  id: 'system-trimmer',
-  processInput: async ({ messages, systemMessages }) => {
-    // Trim system messages for smaller models
-    const trimmed = systemMessages.map(msg => ({
-      ...msg,
-      content: typeof msg.content === 'string'
-        ? msg.content.substring(0, 500)
-        : msg.content,
-    }));
-    return { messages, systemMessages: trimmed };
-  },
-};
-```
-
-This is useful for trimming verbose system prompts, filtering semantic recall content, or dynamically adjusting instructions.
-
 ## Removed
 
 ### Deprecated input processor exports
