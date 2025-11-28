@@ -4182,6 +4182,8 @@ describe('MastraInngestWorkflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
           resumedAt: expect.any(Number),
+          suspendPayload: { testPayload: 'hello' },
+          suspendedAt: expect.any(Number),
         },
         evaluateToneConsistency: {
           status: 'success',
@@ -5615,6 +5617,8 @@ describe('MastraInngestWorkflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
           resumedAt: expect.any(Number),
+          suspendPayload: { testPayload: 'hello' },
+          suspendedAt: expect.any(Number),
         },
         evaluateToneConsistency: {
           status: 'success',
@@ -5805,6 +5809,8 @@ describe('MastraInngestWorkflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
           resumedAt: expect.any(Number),
+          suspendPayload: { testPayload: 'hello' },
+          suspendedAt: expect.any(Number),
         },
         evaluateToneConsistency: {
           status: 'success',
@@ -5955,6 +5961,7 @@ describe('MastraInngestWorkflow', () => {
               value: 10,
             },
             endedAt: expect.any(Number),
+            metadata: { iterationCount: 5 },
           },
           final: {
             payload: {

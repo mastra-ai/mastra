@@ -387,6 +387,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }
 
   /**
+   * Whether this engine requires requestContext to be serialized for durable operations.
+   * Default engine passes by reference (no serialization needed).
+   * Inngest engine overrides to return true (serialization required for memoization).
+   */
+  protected requiresDurableContextSerialization(): boolean {
+    return false;
+  }
+
+  /**
    * Build MutableContext from current execution state.
    * This extracts only the fields that can change during step execution.
    */
@@ -541,8 +550,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         // Apply mutable context changes from entry execution
         this.applyMutableContext(executionContext, lastOutput.mutableContext);
         lastState = lastOutput.mutableContext.state;
-        // Update requestContext from step result (important for Inngest memoization)
-        if (lastOutput.requestContext) {
+        // Update requestContext from step result (only for engines that serialize context)
+        // Default engine keeps the original reference, Inngest deserializes from memoized result
+        if (this.requiresDurableContextSerialization() && lastOutput.requestContext) {
           currentRequestContext = this.deserializeRequestContext(lastOutput.requestContext);
         }
 
@@ -1094,10 +1104,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: Record<string, number[]>;
             resumeLabels: Record<string, { stepId: string; foreachIndex?: number }>;
             stateUpdate: any;
+            requestContextUpdate: Record<string, any> | null;
           } = {
             suspendedPaths: {},
             resumeLabels: {},
             stateUpdate: null,
+            requestContextUpdate: null,
           };
 
           const output = await runStep({
@@ -1197,6 +1209,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             validateInputs: this.options?.validateInputs,
           });
 
+          // Capture requestContext state after step execution (only for engines that need it)
+          if (this.requiresDurableContextSerialization()) {
+            contextMutations.requestContextUpdate = this.serializeRequestContext(requestContext);
+          }
+
           return { output, suspended, bailed, contextMutations };
         });
 
@@ -1207,6 +1224,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         Object.assign(executionContext.resumeLabels, durableResult.contextMutations.resumeLabels);
         if (durableResult.contextMutations.stateUpdate !== null) {
           executionContext.state = durableResult.contextMutations.stateUpdate;
+        }
+        // Restore requestContext from memoized result (only for engines that need it)
+        if (this.requiresDurableContextSerialization() && durableResult.contextMutations.requestContextUpdate) {
+          requestContext.clear();
+          for (const [key, value] of Object.entries(durableResult.contextMutations.requestContextUpdate)) {
+            requestContext.set(key, value);
+          }
         }
 
         if (step.scorers) {

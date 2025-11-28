@@ -64,6 +64,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }
 
   /**
+   * Inngest requires requestContext serialization for memoization.
+   * When steps are replayed, the original function doesn't re-execute,
+   * so requestContext modifications must be captured and restored.
+   */
+  protected requiresDurableContextSerialization(): boolean {
+    return true;
+  }
+
+  /**
    * Use Inngest's sleep primitive for durability
    */
   protected async executeSleepDuration(duration: number, sleepId: string, workflowId: string): Promise<void> {
