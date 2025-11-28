@@ -45,7 +45,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
   // Helper function to process a chunk through output processors and enqueue it
   async function processAndEnqueueChunk(chunk: ChunkType<OUTPUT>): Promise<void> {
     if (processorRunner && rest.processorStates) {
-      const { part: processed, blocked, reason } = await processorRunner.processPart(
+      const {
+        part: processed,
+        blocked,
+        reason,
+      } = await processorRunner.processPart(
         chunk,
         rest.processorStates as Map<string, ProcessorState<OUTPUT>>,
         tracingContext,
