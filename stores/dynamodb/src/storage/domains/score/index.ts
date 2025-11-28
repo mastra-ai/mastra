@@ -12,26 +12,33 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     this.service = service;
   }
 
-  // Helper function to parse score data (handle JSON fields)
+  /**
+   * DynamoDB-specific score row transformation.
+   *
+   * Note: This implementation does NOT use coreTransformScoreRow because:
+   * 1. ElectroDB already parses JSON fields via its entity getters
+   * 2. DynamoDB stores empty strings for null values (which need special handling)
+   * 3. 'entity' is a reserved ElectroDB key, so we use 'entityData' column
+   */
   private parseScoreData(data: any): ScoreRowData {
     const result: Record<string, any> = {};
+
+    // Map schema fields, handling DynamoDB's empty string for null convention
     for (const key of Object.keys(SCORERS_SCHEMA)) {
       if (['traceId', 'resourceId', 'threadId', 'spanId'].includes(key)) {
         result[key] = data[key] === '' ? null : data[key];
         continue;
       }
-
       result[key] = data[key];
     }
-    // Entity is a reserved key so we need to replace it with entityData
-    result.entity = data.entityData ? data.entityData : null;
+
+    // 'entity' is a reserved ElectroDB key, mapped from 'entityData'
+    result.entity = data.entityData ?? null;
 
     return {
       ...result,
-      // Convert date strings back to Date objects for consistency
       createdAt: data.createdAt ? new Date(data.createdAt) : new Date(),
       updatedAt: data.updatedAt ? new Date(data.updatedAt) : new Date(),
-      // JSON fields are already transformed by the entity's getters
     } as ScoreRowData;
   }
 
