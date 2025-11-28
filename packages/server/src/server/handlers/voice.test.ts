@@ -58,16 +58,15 @@ describe('Voice Handlers', () => {
       ).rejects.toThrow('Agent with id non-existent not found');
     });
 
-    it('should throw error when agent does not have voice capabilities', async () => {
+    it('should return empty array when agent does not have voice capabilities', async () => {
       const agentWithoutVoice = createAgentWithVoice();
-      await expect(
-        GET_SPEAKERS_ROUTE.handler({
-          ...createTestRuntimeContext({
-            mastra: new Mastra({ logger: false, agents: { 'test-agent': agentWithoutVoice } }),
-          }),
-          agentId: 'test-agent',
+      const result = await GET_SPEAKERS_ROUTE.handler({
+        ...createTestRuntimeContext({
+          mastra: new Mastra({ logger: false, agents: { 'test-agent': agentWithoutVoice } }),
         }),
-      ).rejects.toThrow('No voice provider configured');
+        agentId: 'test-agent',
+      });
+      expect(result).toEqual([]);
     });
 
     it('should get speakers successfully', async () => {

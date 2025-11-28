@@ -2,7 +2,6 @@ import fsSync from 'fs';
 import fs from 'fs/promises';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
-
 import pkgJson from '../../../package.json';
 import type { PosthogAnalytics } from '../../analytics/index';
 import { getAnalytics } from '../../analytics/index';
@@ -13,7 +12,7 @@ import { init } from '../init/init';
 import type { Editor } from '../init/mcp-docs-server-install';
 import type { Component, LLMProvider } from '../init/utils';
 import { LLM_PROVIDERS } from '../init/utils';
-import { getPackageManager } from '../utils.js';
+import { getPackageManager, gitInit } from '../utils.js';
 
 import { createMastraProject } from './utils';
 
@@ -311,6 +310,17 @@ async function createFromTemplate(args: {
     llmProvider = providerResponse as LLMProvider;
   }
 
+  // Handle git initialization for templates
+  let initGit = false;
+  const gitConfirmResult = await p.confirm({
+    message: 'Initialize a new git repository?',
+    initialValue: true,
+  });
+
+  if (!p.isCancel(gitConfirmResult)) {
+    initGit = gitConfirmResult;
+  }
+
   let projectPath: string | null = null;
 
   try {
@@ -345,6 +355,19 @@ async function createFromTemplate(args: {
 
     // Install dependencies
     await installDependencies(projectPath);
+
+    if (initGit) {
+      const s = p.spinner();
+      try {
+        s.start('Initializing git repository');
+
+        await gitInit({ cwd: projectPath });
+
+        s.stop('Git repository initialized');
+      } catch {
+        s.stop();
+      }
+    }
 
     p.note(`
       ${color.green('Mastra template installed!')}
