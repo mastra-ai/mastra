@@ -4,14 +4,10 @@ import { describe, expect, it } from 'vitest';
 import { createHonoServer } from './index';
 
 /**
- * Integration tests for GitHub Issue #8031: Allow users to access Mastra's server Hono app handle
- *
  * These tests verify that users can access the Hono app handle via mastra.getServerApp()
  * after calling createHonoServer().
- *
- * @see https://github.com/mastra-ai/mastra/issues/8031
  */
-describe('Server App Access via createHonoServer (Issue #8031)', () => {
+describe('Server App Access via createHonoServer', () => {
   it('should expose the Hono app via mastra.getServerApp() after createHonoServer()', async () => {
     const mastra = new Mastra({
       logger: false,
