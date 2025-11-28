@@ -28,6 +28,7 @@ import {
   PromptListChangedNotificationSchema,
   ElicitRequestSchema,
   ProgressNotificationSchema,
+  ListRootsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { asyncExitHook, gracefulExit } from 'exit-hook';
@@ -45,6 +46,7 @@ import type {
   ProgressHandler,
   MastraMCPServerDefinition,
   InternalMastraMCPClientOptions,
+  Root,
 } from './types';
 
 // Re-export types for convenience
@@ -56,6 +58,7 @@ export type {
   ProgressHandler,
   MastraMCPServerDefinition,
   InternalMastraMCPClientOptions,
+  Root,
 } from './types';
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
@@ -103,6 +106,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private currentOperationContext: RequestContext | null = null;
   private exitHookUnsubscribe?: () => void;
   private sigTermHandler?: () => void;
+  private _roots: Root[];
 
   /** Provides access to resource operations (list, read, subscribe, etc.) */
   public readonly resources: ResourceClientActions;
@@ -131,7 +135,17 @@ export class InternalMastraMCPClient extends MastraBase {
     this.serverConfig = server;
     this.enableProgressTracking = !!server.enableProgressTracking;
 
-    const clientCapabilities = { ...capabilities, elicitation: {} };
+    // Initialize roots from server config
+    this._roots = server.roots ?? [];
+
+    // Build client capabilities, automatically enabling roots if configured
+    const hasRoots = this._roots.length > 0 || !!capabilities.roots;
+    const clientCapabilities = {
+      ...capabilities,
+      elicitation: {},
+      // Auto-enable roots capability if roots are provided
+      ...(hasRoots ? { roots: { listChanged: true, ...(capabilities.roots ?? {}) } } : {}),
+    };
 
     this.client = new Client(
       {
@@ -145,6 +159,11 @@ export class InternalMastraMCPClient extends MastraBase {
 
     // Set up log message capturing
     this.setupLogging();
+
+    // Set up roots/list request handler if roots capability is enabled
+    if (hasRoots) {
+      this.setupRootsHandler();
+    }
 
     this.resources = new ResourceClientActions({ client: this, logger: this.logger });
     this.prompts = new PromptClientActions({ client: this, logger: this.logger });
@@ -197,6 +216,67 @@ export class InternalMastraMCPClient extends MastraBase {
         },
       );
     }
+  }
+
+  /**
+   * Set up handler for roots/list requests from the server.
+   *
+   * Per MCP spec (https://modelcontextprotocol.io/specification/2025-11-25/client/roots):
+   * When a server sends a roots/list request, the client responds with the configured roots.
+   */
+  private setupRootsHandler(): void {
+    this.log('debug', 'Setting up roots/list request handler');
+    this.client.setRequestHandler(ListRootsRequestSchema, async () => {
+      this.log('debug', `Responding to roots/list request with ${this._roots.length} roots`);
+      return { roots: this._roots };
+    });
+  }
+
+  /**
+   * Get the currently configured roots.
+   *
+   * @returns Array of configured filesystem roots
+   */
+  get roots(): Root[] {
+    return [...this._roots];
+  }
+
+  /**
+   * Update the list of filesystem roots and notify the server.
+   *
+   * Per MCP spec, when roots change, the client sends a `notifications/roots/list_changed`
+   * notification to inform the server that it should re-fetch the roots list.
+   *
+   * @param roots - New list of filesystem roots
+   *
+   * @example
+   * ```typescript
+   * await client.setRoots([
+   *   { uri: 'file:///home/user/projects', name: 'Projects' },
+   *   { uri: 'file:///tmp', name: 'Temp' }
+   * ]);
+   * ```
+   */
+  async setRoots(roots: Root[]): Promise<void> {
+    this.log('debug', `Updating roots to ${roots.length} entries`);
+    this._roots = [...roots];
+    await this.sendRootsListChanged();
+  }
+
+  /**
+   * Send a roots/list_changed notification to the server.
+   *
+   * Per MCP spec, clients that support `listChanged` MUST send this notification
+   * when the list of roots changes. The server will then call roots/list to get
+   * the updated list.
+   */
+  async sendRootsListChanged(): Promise<void> {
+    if (!this.transport) {
+      this.log('debug', 'Cannot send roots/list_changed: not connected');
+      return;
+    }
+    this.log('debug', 'Sending notifications/roots/list_changed');
+    await this.client.notification({ method: 'notifications/roots/list_changed' });
   }
 
   private async connectStdio(command: string) {
