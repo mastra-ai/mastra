@@ -1782,13 +1782,14 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     expect(agentContextObj.requestContext).toBeDefined();
     expect(typeof agentContextObj.requestContext.get).toBe('function');
 
-    const mcpExtra = agentContextObj.requestContext.get('mcp.extra');
-    expect(mcpExtra).toBeDefined();
-    expect(mcpExtra.authInfo).toBeDefined();
-    expect(mcpExtra.authInfo.token).toBe('test-auth-token-123');
-    expect(mcpExtra.authInfo.clientId).toBe('test-client-456');
-    expect(mcpExtra.sessionId).toBe('auth-test-session');
-    expect(mcpExtra.requestId).toBe('auth-test-request');
+    // All keys from extra are spread directly on the requestContext
+    const authInfo = agentContextObj.requestContext.get('authInfo');
+    expect(authInfo).toBeDefined();
+    expect(authInfo.token).toBe('test-auth-token-123');
+    expect(authInfo.clientId).toBe('test-client-456');
+    expect(authInfo.scopes).toEqual(['read', 'write']);
+    expect(agentContextObj.requestContext.get('sessionId')).toBe('auth-test-session');
+    expect(agentContextObj.requestContext.get('requestId')).toBe('auth-test-request');
     expect(agentExecOptions.mcp).toBeUndefined();
   });
 });
@@ -1919,6 +1920,106 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
       workflows: { unique_workflow_key_789: uniqueKeyWorkflow },
     });
     expect(server.tools()['run_unique_workflow_key_789']).toBeDefined();
+  });
+
+  it('should pass MCP context through requestContext to workflow steps', async () => {
+    const mockExtra: MCPRequestHandlerExtra = {
+      signal: new AbortController().signal,
+      sessionId: 'workflow-auth-test-session',
+      authInfo: {
+        token: 'workflow-auth-token-456',
+        clientId: 'workflow-client-789',
+        scopes: ['workflow:read', 'workflow:write'],
+      },
+      requestId: 'workflow-request-id',
+      sendNotification: vi.fn(),
+      sendRequest: vi.fn(),
+    };
+
+    let capturedRequestContext: any = null;
+
+    // Create a workflow with a step that captures the requestContext
+    const authCheckWorkflow = new Workflow({
+      id: 'authCheckWorkflow',
+      description: 'Workflow that checks for auth context in requestContext',
+      inputSchema: z.object({ message: z.string() }),
+      outputSchema: z.object({ message: z.string(), authInfo: z.any(), sessionId: z.string().optional() }),
+      steps: [],
+    });
+
+    const authCheckStep = createStep({
+      id: 'auth-check-step',
+      description: 'Step that captures auth context',
+      inputSchema: z.object({
+        message: z.string(),
+      }),
+      outputSchema: z.object({
+        message: z.string(),
+        authInfo: z.any(),
+        sessionId: z.string().optional(),
+      }),
+      execute: async ({ inputData, requestContext }) => {
+        capturedRequestContext = requestContext;
+        return {
+          message: inputData.message,
+          authInfo: requestContext?.get('authInfo') || null,
+          sessionId: requestContext?.get('sessionId') || null,
+        };
+      },
+    });
+
+    authCheckWorkflow.then(authCheckStep).commit();
+
+    server = new MCPServer({
+      name: 'WorkflowAuthContextServer',
+      version: '1.0.0',
+      tools: {},
+      workflows: { authCheckWorkflow },
+    });
+
+    const serverInstance = server.getServer();
+    // @ts-ignore - accessing private property for testing
+    const requestHandlers = serverInstance._requestHandlers;
+    const callToolHandler = requestHandlers.get('tools/call');
+
+    const result = await callToolHandler(
+      {
+        jsonrpc: '2.0' as const,
+        id: 'test-workflow-auth-1',
+        method: 'tools/call' as const,
+        params: {
+          name: 'run_authCheckWorkflow',
+          arguments: { message: 'test workflow auth' },
+        },
+      },
+      mockExtra,
+    );
+
+    // Verify the result
+    expect(result).toBeDefined();
+    expect(result.isError).toBe(false);
+    expect(result.content).toBeInstanceOf(Array);
+    expect(result.content.length).toBeGreaterThan(0);
+
+    const toolOutput = result.content[0];
+    expect(toolOutput.type).toBe('text');
+    const workflowResult = JSON.parse(toolOutput.text);
+
+    // Verify the workflow completed successfully
+    expect(workflowResult.status).toBe('success');
+
+    // Verify the requestContext was captured and all extra keys are set directly
+    expect(capturedRequestContext).toBeDefined();
+    expect(typeof capturedRequestContext.get).toBe('function');
+
+    // All keys from extra are spread directly on the context
+    const authInfo = capturedRequestContext.get('authInfo');
+    expect(authInfo).toBeDefined();
+    expect(authInfo.token).toBe('workflow-auth-token-456');
+    expect(authInfo.clientId).toBe('workflow-client-789');
+    expect(authInfo.scopes).toEqual(['workflow:read', 'workflow:write']);
+    expect(capturedRequestContext.get('sessionId')).toBe('workflow-auth-test-session');
+    expect(capturedRequestContext.get('requestId')).toBe('workflow-request-id');
   });
 });
 
