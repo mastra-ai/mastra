@@ -94,7 +94,7 @@ Custom processors implement the `InputProcessor` or `OutputProcessor` interface:
 ```typescript title="src/mastra/processors/custom-input.ts" showLineNumbers copy
 import type {
   InputProcessor,
-  MastraMessageV2,
+  MastraDBMessage,
   RuntimeContext,
 } from "@mastra/core";
 
@@ -106,10 +106,10 @@ export class CustomInputProcessor implements InputProcessor {
     systemMessages,
     context,
   }: {
-    messages: MastraMessageV2[];
+    messages: MastraDBMessage[];
     systemMessages: CoreMessage[];
     context: RuntimeContext;
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     // Transform messages before they reach the LLM
     return messages.map((msg) => ({
       ...msg,
@@ -130,8 +130,8 @@ The `processInput` method receives:
 - `runtimeContext`: Execution metadata like `threadId` and `resourceId`
 
 The method can return:
-- `MastraMessageV2[]` — Transformed messages array (backward compatible)
-- `{ messages: MastraMessageV2[]; systemMessages: CoreMessage[] }` — Both messages and modified system messages
+- `MastraDBMessage[]` — Transformed messages array (backward compatible)
+- `{ messages: MastraDBMessage[]; systemMessages: CoreMessage[] }` — Both messages and modified system messages
 
 The framework handles both return formats, so modifying system messages is optional and existing processors continue to work.
 
@@ -140,7 +140,7 @@ The framework handles both return formats, so modifying system messages is optio
 To modify system messages (e.g., trim verbose prompts for smaller models), return an object with both `messages` and `systemMessages`:
 
 ```typescript title="src/mastra/processors/system-trimmer.ts" showLineNumbers copy
-import type { InputProcessor, CoreMessage, MastraMessageV2 } from "@mastra/core";
+import type { InputProcessor, CoreMessage, MastraDBMessage } from "@mastra/core";
 
 export class SystemTrimmer implements InputProcessor {
   id = "system-trimmer";
@@ -148,7 +148,7 @@ export class SystemTrimmer implements InputProcessor {
   async processInput({
     messages,
     systemMessages,
-  }): Promise<{ messages: MastraMessageV2[]; systemMessages: CoreMessage[] }> {
+  }): Promise<{ messages: MastraDBMessage[]; systemMessages: CoreMessage[] }> {
     // Trim system messages for smaller models
     const trimmedSystemMessages = systemMessages.map((msg) => ({
       ...msg,
@@ -173,7 +173,7 @@ This is useful for:
 ```typescript title="src/mastra/processors/custom-output.ts" showLineNumbers copy
 import type {
   OutputProcessor,
-  MastraMessageV2,
+  MastraDBMessage,
   RuntimeContext,
 } from "@mastra/core";
 
@@ -184,9 +184,9 @@ export class CustomOutputProcessor implements OutputProcessor {
     messages,
     context,
   }: {
-    messages: MastraMessageV2[];
+    messages: MastraDBMessage[];
     context: RuntimeContext;
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     // Transform messages after the LLM generates them
     return messages.filter((msg) => msg.role !== "system");
   }
