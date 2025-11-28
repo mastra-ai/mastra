@@ -172,7 +172,7 @@ describe('transformRow', () => {
     expect(result.updatedAt).toBe('2024-01-15T11:00:00Z');
   });
 
-  it('should use timestamp fallback fields when provided', () => {
+  it('should use preferred timestamp fields when provided', () => {
     const row = {
       id: 'test-id',
       scorerId: 'scorer-1',
@@ -187,7 +187,7 @@ describe('transformRow', () => {
     };
 
     const result = transformRow(row, TABLE_SCORERS, {
-      timestampFallbackFields: {
+      preferredTimestampFields: {
         createdAt: 'createdAtZ',
         updatedAt: 'updatedAtZ',
       },
@@ -197,7 +197,7 @@ describe('transformRow', () => {
     expect(result.updatedAt).toBe('2024-01-15T11:00:00.000Z');
   });
 
-  it('should fall back to original field when fallback field is missing', () => {
+  it('should fall back to original field when preferred field is missing', () => {
     const row = {
       id: 'test-id',
       scorerId: 'scorer-1',
@@ -211,7 +211,7 @@ describe('transformRow', () => {
     };
 
     const result = transformRow(row, TABLE_SCORERS, {
-      timestampFallbackFields: {
+      preferredTimestampFields: {
         createdAt: 'createdAtZ',
       },
     });
@@ -306,7 +306,7 @@ describe('transformScoreRow', () => {
     };
 
     const result = transformScoreRow(row, {
-      timestampFallbackFields: {
+      preferredTimestampFields: {
         createdAt: 'createdAtZ',
         updatedAt: 'updatedAtZ',
       },

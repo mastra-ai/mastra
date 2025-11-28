@@ -23,9 +23,9 @@ export function safelyParseJSON(input: any): any {
  */
 export interface TransformRowOptions {
   /**
-   * Fields with fallback sources (e.g., { createdAt: 'createdAtZ' } means use createdAtZ if available)
+   * Preferred source fields for timestamps (e.g., { createdAt: 'createdAtZ' } means use createdAtZ if available, else createdAt)
    */
-  timestampFallbackFields?: Record<string, string>;
+  preferredTimestampFields?: Record<string, string>;
 
   /**
    * Convert timestamp strings to Date objects (default: false for backwards compatibility)
@@ -59,7 +59,7 @@ export function transformRow<T = Record<string, any>>(
   tableName: TABLE_NAMES,
   options: TransformRowOptions = {},
 ): T {
-  const { timestampFallbackFields = {}, convertTimestamps = false, nullValuePattern, fieldMappings = {} } = options;
+  const { preferredTimestampFields = {}, convertTimestamps = false, nullValuePattern, fieldMappings = {} } = options;
 
   const tableSchema = TABLE_SCHEMAS[tableName];
   const result: Record<string, any> = {};
@@ -69,9 +69,9 @@ export function transformRow<T = Record<string, any>>(
     const sourceKey = fieldMappings[key] ?? key;
     let value = row[sourceKey];
 
-    // Handle timestamp fallbacks (e.g., use createdAtZ if available, else createdAt)
-    if (timestampFallbackFields[key]) {
-      value = row[timestampFallbackFields[key]] ?? value;
+    // Handle preferred timestamp sources (e.g., use createdAtZ if available, else createdAt)
+    if (preferredTimestampFields[key]) {
+      value = row[preferredTimestampFields[key]] ?? value;
     }
 
     // Skip null/undefined values

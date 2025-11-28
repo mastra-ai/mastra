@@ -21,11 +21,11 @@ export interface D1Client {
 
 /**
  * Cloudflare D1-specific score row transformation.
- * Uses Z-suffix fallback for timestamps (createdAtZ, updatedAtZ).
+ * Uses Z-suffix timestamps (createdAtZ, updatedAtZ) when available.
  */
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
   return coreTransformScoreRow(row, {
-    timestampFallbackFields: {
+    preferredTimestampFields: {
       createdAt: 'createdAtZ',
       updatedAt: 'updatedAtZ',
     },

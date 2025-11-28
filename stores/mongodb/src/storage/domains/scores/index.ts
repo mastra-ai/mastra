@@ -6,6 +6,7 @@ import {
   TABLE_SCORERS,
   calculatePagination,
   normalizePerPage,
+  safelyParseJSON,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';

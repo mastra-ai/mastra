@@ -15,11 +15,11 @@ import { getTableName } from '../utils';
 
 /**
  * PostgreSQL-specific score row transformation.
- * Uses Z-suffix fallback for timestamps (createdAtZ, updatedAtZ).
+ * Uses Z-suffix timestamps (createdAtZ, updatedAtZ) when available.
  */
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
   return coreTransformScoreRow(row, {
-    timestampFallbackFields: {
+    preferredTimestampFields: {
       createdAt: 'createdAtZ',
       updatedAt: 'updatedAtZ',
     },

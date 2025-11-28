@@ -16,7 +16,7 @@ Unify transformScoreRow functions across storage adapters
 
 Added a unified `transformScoreRow` function in `@mastra/core/storage` that provides schema-driven row transformation for score data. This eliminates code duplication across 10 storage adapters while maintaining store-specific behavior through configurable options:
 
-- `timestampFallbackFields`: For Z-suffix fallback (PostgreSQL, Cloudflare D1)
+- `preferredTimestampFields`: Preferred source fields for timestamps (PostgreSQL, Cloudflare D1)
 - `convertTimestamps`: Convert timestamp strings to Date objects (MSSQL, MongoDB, ClickHouse)
 - `nullValuePattern`: Skip values matching pattern (ClickHouse's `'_null_'`)
 - `fieldMappings`: Map source column names to schema fields (LibSQL's `additionalLLMContext`)
