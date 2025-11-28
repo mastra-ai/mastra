@@ -140,7 +140,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
             error,
             input: value.input,
           });
-          toolCallInput = {};
+          toolCallInput = undefined;
         }
       }
 
