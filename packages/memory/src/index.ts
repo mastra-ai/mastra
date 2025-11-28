@@ -117,7 +117,9 @@ export class Memory extends MastraMemory {
     // 2. Reverse results to restore chronological order for the LLM
     // Without this fix, "lastMessages: 64" returns the OLDEST 64 messages, not the last 64.
     const shouldGetNewestAndReverse = !orderBy && perPage !== false;
-    const effectiveOrderBy = shouldGetNewestAndReverse ? { field: 'createdAt' as const, direction: 'DESC' as const } : orderBy;
+    const effectiveOrderBy = shouldGetNewestAndReverse
+      ? { field: 'createdAt' as const, direction: 'DESC' as const }
+      : orderBy;
 
     const vectorResults: {
       id: string;
