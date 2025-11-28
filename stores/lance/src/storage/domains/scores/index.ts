@@ -96,15 +96,21 @@ export class StoreScoresLance extends ScoresStorage {
     }
   }
 
+  /**
+   * LanceDB-specific score row transformation.
+   *
+   * Note: This implementation does NOT use coreTransformScoreRow because:
+   * 1. LanceDB stores schema information in the table itself (requires async fetch)
+   * 2. Uses processResultWithTypeConversion utility for LanceDB-specific type handling
+   */
   private async transformScoreRow(row: Record<string, any>): Promise<ScoreRowData> {
     const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
     const transformed = processResultWithTypeConversion(row, schema) as ScoreRowData;
-    const result = {
+    return {
       ...transformed,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
-    return result;
   }
 
   async listScoresByScorerId({

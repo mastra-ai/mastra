@@ -6,15 +6,19 @@ import {
   TABLE_SCORERS,
   calculatePagination,
   normalizePerPage,
-  safelyParseJSON,
+  transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsMongoDB } from '../operations';
-import { transformRow } from '../utils';
 
+/**
+ * MongoDB-specific score row transformation.
+ * Converts timestamp strings to Date objects.
+ */
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  const transformedRow = transformRow({ row, tableName: TABLE_SCORERS });
-  return transformedRow as ScoreRowData;
+  return coreTransformScoreRow(row, {
+    convertTimestamps: true,
+  });
 }
 
 export class ScoresStorageMongoDB extends ScoresStorage {
