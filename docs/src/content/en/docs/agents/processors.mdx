@@ -87,18 +87,18 @@ This ordering ensures that if your output guardrail calls `abort()`, memory proc
 
 ## Creating custom processors
 
-Custom processors implement the `InputProcessor` or `OutputProcessor` interface:
+Custom processors implement the `Processor` interface:
 
 ### Custom input processor
 
 ```typescript title="src/mastra/processors/custom-input.ts" showLineNumbers copy
 import type {
-  InputProcessor,
+  Processor,
   MastraDBMessage,
   RuntimeContext,
 } from "@mastra/core";
 
-export class CustomInputProcessor implements InputProcessor {
+export class CustomInputProcessor implements Processor {
   id = "custom-input";
 
   async processInput({
@@ -140,9 +140,9 @@ The framework handles both return formats, so modifying system messages is optio
 To modify system messages (e.g., trim verbose prompts for smaller models), return an object with both `messages` and `systemMessages`:
 
 ```typescript title="src/mastra/processors/system-trimmer.ts" showLineNumbers copy
-import type { InputProcessor, CoreMessage, MastraDBMessage } from "@mastra/core";
+import type { Processor, CoreMessage, MastraDBMessage } from "@mastra/core";
 
-export class SystemTrimmer implements InputProcessor {
+export class SystemTrimmer implements Processor {
   id = "system-trimmer";
 
   async processInput({
@@ -172,13 +172,13 @@ This is useful for:
 
 ```typescript title="src/mastra/processors/custom-output.ts" showLineNumbers copy
 import type {
-  OutputProcessor,
+  Processor,
   MastraDBMessage,
   RuntimeContext,
 } from "@mastra/core";
 
-export class CustomOutputProcessor implements OutputProcessor {
-  name = "custom-output";
+export class CustomOutputProcessor implements Processor {
+  id = "custom-output";
 
   async processOutputResult({
     messages,
