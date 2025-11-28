@@ -118,11 +118,6 @@ export interface Processor<TId extends string = string> {
    * Process input messages at each step of the agentic loop, before they are sent to the LLM.
    * Unlike processInput which runs once at the start, this runs at every step (including tool call continuations).
    *
-   * This is useful for:
-   * - Transforming message types between steps (e.g., AI SDK 'reasoning' -> Anthropic 'thinking')
-   * - Modifying messages based on step context
-   * - Implementing per-step message transformations
-   *
    * @returns Either:
    *  - MessageList: The same messageList instance passed in (indicates you've mutated it)
    *  - MastraDBMessage[]: Transformed messages array (for simple transformations)
