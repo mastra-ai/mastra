@@ -1,4 +1,5 @@
 import type { ConnectionOptions } from 'tls';
+import type { TABLE_NAMES } from '@mastra/core/storage';
 import type { ClientConfig } from 'pg';
 import type * as pg from 'pg';
 import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
@@ -12,6 +13,7 @@ export type PostgresConfig<SSLType = ISSLConfig | ConnectionOptions> = {
   schemaName?: string;
   max?: number;
   idleTimeoutMillis?: number;
+  tableMap?: Partial<Record<TABLE_NAMES, string>>;
 } & (
   | {
       host: string;

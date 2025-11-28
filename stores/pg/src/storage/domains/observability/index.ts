@@ -11,7 +11,7 @@ import type {
 } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
-import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
+import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow } from '../utils';
 
 export class ObservabilityPG extends ObservabilityStorage {
   public client: IDatabase<{}>;
@@ -78,10 +78,7 @@ export class ObservabilityPG extends ObservabilityStorage {
 
   async getTrace(traceId: string): Promise<TraceRecord | null> {
     try {
-      const tableName = getTableName({
-        indexName: TABLE_SPANS,
-        schemaName: getSchemaName(this.schema),
-      });
+      const tableName = this.operations.getQualifiedTableName(TABLE_SPANS);
 
       const spans = await this.client.manyOrNone<SpanRecord>(
         `SELECT
@@ -213,10 +210,7 @@ export class ObservabilityPG extends ObservabilityStorage {
       }
     }
 
-    const tableName = getTableName({
-      indexName: TABLE_SPANS,
-      schemaName: getSchemaName(this.schema),
-    });
+    const tableName = this.operations.getQualifiedTableName(TABLE_SPANS);
 
     try {
       // Get total count
@@ -358,10 +352,7 @@ export class ObservabilityPG extends ObservabilityStorage {
 
   async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
     try {
-      const tableName = getTableName({
-        indexName: TABLE_SPANS,
-        schemaName: getSchemaName(this.schema),
-      });
+      const tableName = this.operations.getQualifiedTableName(TABLE_SPANS);
 
       const placeholders = args.traceIds.map((_, i) => `$${i + 1}`).join(', ');
       await this.client.none(`DELETE FROM ${tableName} WHERE "traceId" IN (${placeholders})`, args.traceIds);

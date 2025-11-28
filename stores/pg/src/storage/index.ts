@@ -34,6 +34,7 @@ export class PostgresStore extends MastraStorage {
   #pgp?: pgPromise.IMain;
   #config: PostgresStoreConfig;
   private schema: string;
+  private tableMap: Partial<Record<TABLE_NAMES, string>> | undefined;
   private isConnected: boolean = false;
 
   stores: StorageDomains;
@@ -44,6 +45,7 @@ export class PostgresStore extends MastraStorage {
       validateConfig('PostgresStore', config);
       super({ id: config.id, name: 'PostgresStore' });
       this.schema = config.schemaName || 'public';
+      this.tableMap = config.tableMap;
       if (isConnectionStringConfig(config)) {
         this.#config = {
           id: config.id,
@@ -101,7 +103,7 @@ export class PostgresStore extends MastraStorage {
       this.#pgp = pgPromise();
       this.#db = this.#pgp(this.#config as any);
 
-      const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema });
+      const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema, tableMap: this.tableMap });
       const scores = new ScoresPG({ client: this.#db, operations, schema: this.schema });
       const workflows = new WorkflowsPG({ client: this.#db, operations, schema: this.schema });
       const memory = new MemoryPG({ client: this.#db, schema: this.schema, operations });
