@@ -12,8 +12,6 @@ import { useEffect, useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useChatbotSidebar } from "@site/src/theme/DocRoot/Layout/ChatbotSidebar/context";
 
-const SHORTCUT_OS_KEY = "shortcut-os-preference";
-
 export function Shortcut({ shortcut }: { shortcut: string }) {
   const [os, setOS] = useState<"mac" | "other" | null>(null);
 
