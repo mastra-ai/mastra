@@ -2,9 +2,9 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { MastraServerBase } from '@mastra/server/server-adapter';
-import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { Application, NextFunction, Request, Response } from 'express';
 
 import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
@@ -160,7 +160,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           res: response,
         });
         // Response handled by startHTTP
-      } catch (error: any) {
+      } catch {
         if (!response.headersSent) {
           response.status(500).json({
             jsonrpc: '2.0',
@@ -182,7 +182,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           res: response,
         });
         // Response handled by startSSE
-      } catch (error: any) {
+      } catch {
         if (!response.headersSent) {
           response.status(500).json({ error: 'Error handling MCP SSE request' });
         }

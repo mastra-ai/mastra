@@ -1,7 +1,4 @@
-import type { Mastra } from '@mastra/core/mastra';
 import type { MCPServerBase as MastraMCPServerImplementation, ServerInfo } from '@mastra/core/mcp';
-import type { RuntimeContext } from '../server-adapter';
-import { createRoute } from '../server-adapter';
 import { HTTPException } from '../http-exception';
 import {
   mcpServerDetailPathParams,
@@ -16,6 +13,8 @@ import {
   mcpToolInfoSchema,
   executeToolResponseSchema,
 } from '../schemas/mcp';
+import type { RuntimeContext } from '../server-adapter';
+import { createRoute } from '../server-adapter';
 
 // ============================================================================
 // Route Definitions (createRoute pattern for server adapters)

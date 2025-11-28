@@ -1,9 +1,9 @@
-import { describe } from 'vitest';
-import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
-import { Mastra } from '@mastra/core/mastra';
-import { MastraServer } from '../index';
 import { createMCPTransportTestSuite } from '@internal/server-adapter-test-utils';
+import type { Mastra } from '@mastra/core/mastra';
+import { Hono } from 'hono';
+import { describe } from 'vitest';
+import { MastraServer } from '../index';
 
 /**
  * Hono Integration Tests for MCP Transport Routes

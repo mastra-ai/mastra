@@ -1,9 +1,9 @@
 import type { Server } from 'http';
-import { describe } from 'vitest';
-import express from 'express';
-import { Mastra } from '@mastra/core/mastra';
-import { MastraServer } from '../index';
 import { createMCPTransportTestSuite } from '@internal/server-adapter-test-utils';
+import type { Mastra } from '@mastra/core/mastra';
+import express from 'express';
+import { describe } from 'vitest';
+import { MastraServer } from '../index';
 
 /**
  * Express Integration Tests for MCP Transport Routes
@@ -25,13 +25,14 @@ describe('Express MCP Transport Routes Integration', () => {
 
       // Apply JSON body parsing only to non-MCP routes
       // MCP transport routes need raw body access - the SDK reads the body directly
-      app.use((req, res, next) => {
-        // Skip body parsing for MCP transport routes
-        if (req.path.match(/\/api\/mcp\/[^/]+\/(mcp|sse|messages)$/)) {
-          return next();
-        }
-        return express.json()(req, res, next);
-      });
+      // app.use((req, res, next) => {
+      //   // // Skip body parsing for MCP transport routes
+      //   // if (req.path.match(/\/api\/mcp\/[^/]+\/(mcp|sse|messages)$/)) {
+      //   //   return next();
+      //   // }
+      //   return express.json()(req, res, next);
+      // });
+      app.use(express.json());
 
       // Create adapter
       const adapter = new MastraServer({

@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Mastra } from '@mastra/core/mastra';
-import { MCPServer, MCPClient } from '@mastra/mcp';
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
-import { createHonoServer } from '../../index';
-import type { Hono } from 'hono';
 import type { ServerType } from '@hono/node-server';
 import { serve } from '@hono/node-server';
+import { Mastra } from '@mastra/core/mastra';
+import { createTool } from '@mastra/core/tools';
+import { MCPServer, MCPClient } from '@mastra/mcp';
+import type { Hono } from 'hono';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { z } from 'zod';
+import { createHonoServer } from '../../index';
 
 /**
  * Deployer MCP Smoke Test

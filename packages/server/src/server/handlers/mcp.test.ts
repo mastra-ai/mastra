@@ -1,8 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Mastra } from '@mastra/core/mastra';
+import type { Mastra } from '@mastra/core/mastra';
 import type { MCPServerBase, ServerInfo, ServerDetailInfo } from '@mastra/core/mcp';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
-import { createTestRuntimeContext } from './test-utils';
 import {
   LIST_MCP_SERVERS_ROUTE,
   GET_MCP_SERVER_DETAIL_ROUTE,
@@ -10,6 +9,7 @@ import {
   GET_MCP_SERVER_TOOL_DETAIL_ROUTE,
   EXECUTE_MCP_SERVER_TOOL_ROUTE,
 } from './mcp';
+import { createTestRuntimeContext } from './test-utils';
 
 /**
  * MCP Registry Handler Tests

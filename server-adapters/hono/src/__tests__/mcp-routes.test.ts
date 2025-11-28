@@ -1,8 +1,8 @@
-import { describe } from 'vitest';
-import { Hono } from 'hono';
-import { MastraServer } from '../index';
 import { createMCPRouteTestSuite } from '@internal/server-adapter-test-utils';
 import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
+import { Hono } from 'hono';
+import { describe } from 'vitest';
+import { MastraServer } from '../index';
 
 /**
  * Hono Integration Tests for MCP Registry Routes

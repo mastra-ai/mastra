@@ -1,10 +1,10 @@
 import type { Server } from 'http';
-import { describe } from 'vitest';
-import express from 'express';
-import type { Application } from 'express';
-import { MastraServer } from '../index';
 import { createMCPRouteTestSuite } from '@internal/server-adapter-test-utils';
 import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
+import express from 'express';
+import type { Application } from 'express';
+import { describe } from 'vitest';
+import { MastraServer } from '../index';
 
 /**
  * Express Integration Tests for MCP Registry Routes

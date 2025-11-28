@@ -9,6 +9,7 @@ import { AGENT_BUILDER_ROUTES } from './agent-builder';
 import { AGENTS_ROUTES } from './agents';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
+import { MCP_ROUTES } from './mcp';
 import { MEMORY_ROUTES } from './memory';
 import { OBSERVABILITY_ROUTES } from './observability';
 import { SCORES_ROUTES } from './scorers';
@@ -16,7 +17,6 @@ import type { MastraStreamReturn } from './stream-types';
 import { TOOLS_ROUTES } from './tools';
 import { VECTORS_ROUTES } from './vectors';
 import { WORKFLOWS_ROUTES } from './workflows';
-import { MCP_ROUTES } from './mcp';
 
 /**
  * Runtime context fields that are available to route handlers.

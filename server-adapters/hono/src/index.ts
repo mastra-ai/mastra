@@ -2,13 +2,13 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import { MastraServerBase } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
-import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
+import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context, Env, Hono, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
-import { toReqRes, toFetchResponse } from 'fetch-to-node';
 
 import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
 
@@ -167,7 +167,7 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
           res,
         });
         return await toFetchResponse(res);
-      } catch (error: any) {
+      } catch {
         if (!res.headersSent) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(
@@ -192,7 +192,7 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
           messagePath,
           context: response,
         });
-      } catch (error: any) {
+      } catch {
         return response.json({ error: 'Error handling MCP SSE request' }, 500);
       }
     } else {
