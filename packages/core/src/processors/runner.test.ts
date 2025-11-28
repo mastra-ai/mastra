@@ -266,6 +266,169 @@ describe('ProcessorRunner', () => {
       expect((messages[1].content[0] as TextPart).text).toBe('from processor 1');
       expect((messages[2].content[0] as TextPart).text).toBe('from processor 3');
     });
+
+    /**
+     * Regression test for GitHub Issue #9969
+     * @see https://github.com/mastra-ai/mastra/issues/9969
+     *
+     * Users want to process system messages (including semantic recall, working memory,
+     * and user-provided system prompts) using InputProcessors. Currently, InputProcessors
+     * only receive user messages via the `messages` parameter.
+     *
+     * Use cases:
+     * - Manipulate system prompts for smaller models (trim markdown, reduce length)
+     * - Modify semantic recall to prevent context overflow ("prompt too long" errors)
+     */
+    describe('Issue #9969: System messages in InputProcessor', () => {
+      it('should provide systemMessages parameter to processInput for accessing system messages', async () => {
+        // Add system messages to the MessageList
+        messageList.addSystem('You are a helpful assistant.'); // untagged system message
+        messageList.addSystem('Remember the user prefers formal language.', 'user-provided'); // tagged system message
+        messageList.addSystem('Relevant context from previous conversations.', 'memory'); // memory tag (like semantic recall)
+
+        // Add a user message
+        messageList.add([createMessage('Hello, how are you?', 'user')], 'input');
+
+        let receivedMessages: any[] = [];
+        let receivedSystemMessages: any[] | undefined;
+
+        const inputProcessors: Processor[] = [
+          {
+            id: 'system-message-processor',
+            name: 'System Message Processor',
+            processInput: async ({ messages, systemMessages }) => {
+              receivedMessages = messages;
+              receivedSystemMessages = systemMessages;
+              return messages;
+            },
+          },
+        ];
+
+        runner = new ProcessorRunner({
+          inputProcessors,
+          outputProcessors: [],
+          logger: mockLogger,
+          agentName: 'test-agent',
+        });
+
+        await runner.runInputProcessors(messageList);
+
+        // The messages parameter should only contain user messages (current behavior)
+        expect(receivedMessages).toHaveLength(1);
+        expect(receivedMessages[0].role).toBe('user');
+
+        // NEW: systemMessages parameter should be provided and contain all system messages
+        expect(receivedSystemMessages).toBeDefined();
+        expect(receivedSystemMessages).toHaveLength(3);
+
+        // Verify system messages content
+        const systemTexts = receivedSystemMessages!.map((m: any) => {
+          if (typeof m.content === 'string') return m.content;
+          // Handle structured content format with parts array
+          if (m.content?.parts?.[0]?.text) return m.content.parts[0].text;
+          return m.content;
+        });
+        expect(systemTexts).toContain('You are a helpful assistant.');
+        expect(systemTexts).toContain('Remember the user prefers formal language.');
+        expect(systemTexts).toContain('Relevant context from previous conversations.');
+      });
+
+      it('should allow InputProcessor to modify system messages via return value', async () => {
+        // Add system messages
+        messageList.addSystem('Original system prompt with verbose instructions.');
+        messageList.addSystem('Memory context that is too long and needs trimming.', 'memory');
+
+        // Add a user message
+        messageList.add([createMessage('Hello', 'user')], 'input');
+
+        const inputProcessors: Processor[] = [
+          {
+            id: 'system-trimmer',
+            name: 'System Trimmer',
+            processInput: async ({ messages, systemMessages }) => {
+              // Modify system messages - trim them for smaller models
+              if (systemMessages) {
+                const modifiedSystemMessages = systemMessages.map((msg: any) => ({
+                  ...msg,
+                  content: typeof msg.content === 'string' ? msg.content.substring(0, 20) + '...' : msg.content,
+                }));
+                // Return modified system messages somehow (this is what the fix should enable)
+                return { messages, systemMessages: modifiedSystemMessages };
+              }
+              return messages;
+            },
+          },
+        ];
+
+        runner = new ProcessorRunner({
+          inputProcessors,
+          outputProcessors: [],
+          logger: mockLogger,
+          agentName: 'test-agent',
+        });
+
+        const result = await runner.runInputProcessors(messageList);
+
+        // After processing, the system messages should be modified
+        const allMessages = await result.get.all.aiV5.prompt();
+        const systemMessages = allMessages.filter((m: any) => m.role === 'system');
+
+        // Verify system messages were trimmed
+        expect(systemMessages).toHaveLength(2);
+        systemMessages.forEach((msg: any) => {
+          const content = typeof msg.content === 'string' ? msg.content : msg.content[0]?.text;
+          expect(content.length).toBeLessThanOrEqual(24); // 20 chars + '...'
+        });
+      });
+
+      it('should continue to allow adding new system messages via return array (existing behavior)', async () => {
+        // This test verifies existing behavior that MUST NOT break
+        // Processors can currently add system messages by including them in the return array
+
+        messageList.add([createMessage('Hello', 'user')], 'input');
+
+        const inputProcessors: Processor[] = [
+          {
+            id: 'system-adder',
+            name: 'System Adder',
+            processInput: async ({ messages }) => {
+              // Add a new system message by including it in the return array
+              const newSystemMessage = {
+                id: `msg-${Math.random()}`,
+                role: 'system' as const,
+                content: {
+                  format: 2 as const,
+                  parts: [{ type: 'text' as const, text: 'New system instruction added by processor.' }],
+                },
+                createdAt: new Date(),
+                threadId: 'test-thread',
+              };
+              return [...messages, newSystemMessage];
+            },
+          },
+        ];
+
+        runner = new ProcessorRunner({
+          inputProcessors,
+          outputProcessors: [],
+          logger: mockLogger,
+          agentName: 'test-agent',
+        });
+
+        const result = await runner.runInputProcessors(messageList);
+
+        // Verify the system message was added
+        const allMessages = await result.get.all.aiV5.prompt();
+        const systemMessages = allMessages.filter((m: any) => m.role === 'system');
+
+        expect(systemMessages).toHaveLength(1);
+        const content =
+          typeof systemMessages[0].content === 'string'
+            ? systemMessages[0].content
+            : (systemMessages[0].content[0] as { text?: string })?.text;
+        expect(content).toBe('New system instruction added by processor.');
+      });
+    });
   });
 
   describe('Output Processors', () => {
