@@ -74,7 +74,7 @@ export default function SearchContainer({ locale }: { locale: string }) {
   }
   // Configure Algolia search options
   const searchOptions = {
-    indexName: "docs_crawler",
+    indexName: "docs_v1_crawler",
     hitsPerPage: 20,
     attributesToRetrieve: [
       "hierarchy",
