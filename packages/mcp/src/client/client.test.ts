@@ -121,7 +121,7 @@ describe('MastraMCPClient with Streamable HTTP', () => {
 
     it('should call a tool', async () => {
       const tools = await client.tools();
-      const result = await tools.greet.execute({ name: 'Stateless' });
+      const result = await tools.greet?.execute?.({ name: 'Stateless' });
       expect(result).toEqual({ content: [{ type: 'text', text: 'Hello, Stateless!' }] });
     });
 
@@ -199,7 +199,7 @@ describe('MastraMCPClient with Streamable HTTP', () => {
 
     it('should call a tool', async () => {
       const tools = await client.tools();
-      const result = await tools.greet.execute({ name: 'Stateful' });
+      const result = await tools.greet?.execute?.({ name: 'Stateful' });
       expect(result).toEqual({ content: [{ type: 'text', text: 'Hello, Stateful!' }] });
     });
   });
@@ -331,7 +331,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(collectUserInfoTool).toBeDefined();
 
     // Call the tool which will trigger elicitation
-    const result = await collectUserInfoTool.execute({ message: 'Please provide your information' }, {});
+    const result = await collectUserInfoTool?.execute?.({ message: 'Please provide your information' }, {});
 
     console.log('result', result);
 
@@ -368,7 +368,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(collectSensitiveInfoTool).toBeDefined();
 
     // Call the tool which will trigger elicitation
-    const result = await collectSensitiveInfoTool.execute({ message: 'Please provide sensitive information' }, {});
+    const result = await collectSensitiveInfoTool?.execute?.({ message: 'Please provide sensitive information' }, {});
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
     expect(result.content).toBeDefined();
@@ -398,7 +398,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(collectOptionalInfoTool).toBeDefined();
 
     // Call the tool which will trigger elicitation
-    const result = await collectOptionalInfoTool.execute({ message: 'Optional information request' }, {});
+    const result = await collectOptionalInfoTool?.execute?.({ message: 'Optional information request' }, {});
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
     expect(result.content).toBeDefined();
@@ -428,7 +428,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(collectUserInfoTool).toBeDefined();
 
     // Call the tool which will trigger elicitation, handler will throw error
-    const result = await collectUserInfoTool.execute({ message: 'This will cause handler to throw' }, {});
+    const result = await collectUserInfoTool?.execute?.({ message: 'This will cause handler to throw' }, {});
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
     expect(result.content).toBeDefined();
@@ -452,7 +452,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(collectUserInfoTool).toBeDefined();
 
     // Call the tool which will trigger elicitation, should fail gracefully
-    const result = await collectUserInfoTool.execute({ message: 'This should fail gracefully' }, {});
+    const result = await collectUserInfoTool?.execute?.({ message: 'This should fail gracefully' }, {});
 
     expect(result.content).toBeDefined();
     expect(result.isError).toBe(true);
@@ -489,7 +489,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(collectUserInfoTool).toBeDefined();
 
     // Call the tool which will trigger elicitation with schema validation
-    const result = await collectUserInfoTool.execute({ message: 'Schema validation test' }, {});
+    const result = await collectUserInfoTool?.execute?.({ message: 'Schema validation test' }, {});
 
     console.log('result', result);
 
@@ -573,7 +573,7 @@ describe('MastraMCPClient - Progress Tests', () => {
     const longTask = tools['longTask'];
     expect(longTask).toBeDefined();
 
-    await longTask.execute({ count: 3, delayMs: 1 });
+    await longTask?.execute?.({ count: 3, delayMs: 1 });
 
     expect(mockHandler).toHaveBeenCalled();
     const calls = mockHandler.mock.calls.map(call => call[0]);
@@ -603,7 +603,7 @@ describe('MastraMCPClient - Progress Tests', () => {
     const longTask = tools['longTask'];
     expect(longTask).toBeDefined();
 
-    await longTask.execute({ count: 3, delayMs: 1 });
+    await longTask?.execute?.({ count: 3, delayMs: 1 });
 
     // Should not receive any progress notifications when disabled
     expect(mockHandler).not.toHaveBeenCalled();
