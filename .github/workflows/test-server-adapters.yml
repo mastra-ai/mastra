@@ -1,4 +1,6 @@
 name: Server Adapter Tests
+permissions:
+  contents: read
 
 on:
   pull_request:
