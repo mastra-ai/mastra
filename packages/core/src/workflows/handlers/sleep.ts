@@ -6,6 +6,7 @@ import type { TracingContext } from '../../observability';
 import type { ChunkType } from '../../stream/types';
 import { ToolStream } from '../../tools/stream';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import type { DefaultExecutionEngine } from '../default';
 import type { ExecuteFunction } from '../step';
 import { getStepResult } from '../step';
 import type {
@@ -16,7 +17,6 @@ import type {
   StepFlowEntry,
   StepResult,
 } from '../types';
-import type { DefaultExecutionEngine } from '../default';
 
 export interface ExecuteSleepParams {
   workflowId: string;

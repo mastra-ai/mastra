@@ -7,6 +7,7 @@ import type { ChunkType } from '../../stream/types';
 import { ToolStream } from '../../tools/stream';
 import { selectFields } from '../../utils';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import type { DefaultExecutionEngine } from '../default';
 import type { ConditionFunction, LoopConditionFunction, Step } from '../step';
 import { getStepResult } from '../step';
 import type {
@@ -23,7 +24,6 @@ import type {
   TimeTravelExecutionParams,
 } from '../types';
 import { createDeprecationProxy, runCountDeprecationMessage, getResumeLabelsByStepId } from '../utils';
-import type { DefaultExecutionEngine } from '../default';
 
 export interface ExecuteParallelParams {
   workflowId: string;

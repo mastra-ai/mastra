@@ -2,19 +2,18 @@ import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
 import type { RequestContext } from '../../di';
 import { ErrorDomain, ErrorCategory } from '../../error';
-import { getErrorFromUnknown } from '../../error/utils.js';
 import type { MastraScorers } from '../../evals';
 import { runScorer } from '../../evals/hooks';
 import { SpanType, wrapMastra } from '../../observability';
-import type { Span, TracingContext } from '../../observability';
+import type { TracingContext } from '../../observability';
 import type { ChunkType } from '../../stream/types';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import type { DefaultExecutionEngine } from '../default';
 import type { Step, SuspendOptions } from '../step';
 import { getStepResult } from '../step';
 import type {
-  DefaultEngineType,
   Emitter,
   ExecutionContext,
   RestartExecutionParams,
@@ -30,7 +29,6 @@ import {
   validateStepResumeData,
   validateStepSuspendData,
 } from '../utils';
-import type { DefaultExecutionEngine } from '../default';
 
 export interface ExecuteStepParams {
   workflowId: string;
