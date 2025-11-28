@@ -50,6 +50,28 @@ export type ElicitationHandler = (request: ElicitRequest['params']) => Promise<E
 export type ProgressHandler = (params: ProgressNotification['params']) => void;
 
 /**
+ * Represents a filesystem root that the client exposes to MCP servers.
+ *
+ * Per MCP spec (https://modelcontextprotocol.io/specification/2025-11-25/client/roots):
+ * Roots define the boundaries of where servers can operate within the filesystem,
+ * allowing them to understand which directories and files they have access to.
+ *
+ * @example
+ * ```typescript
+ * const root: Root = {
+ *   uri: 'file:///home/user/projects/myproject',
+ *   name: 'My Project'
+ * };
+ * ```
+ */
+export interface Root {
+  /** Unique identifier for the root. Must be a file:// URI. */
+  uri: string;
+  /** Optional human-readable name for display purposes. */
+  name?: string;
+}
+
+/**
  * Base options common to all MCP server definitions.
  */
 export type BaseServerOptions = {
@@ -63,6 +85,29 @@ export type BaseServerOptions = {
   enableServerLogs?: boolean;
   /** Whether to enable progress tracking (default: false) */
   enableProgressTracking?: boolean;
+  /**
+   * List of filesystem roots to expose to the MCP server.
+   *
+   * Per MCP spec (https://modelcontextprotocol.io/specification/2025-11-25/client/roots):
+   * Roots define the boundaries of where servers can operate within the filesystem.
+   *
+   * When configured, the client will:
+   * 1. Automatically advertise the `roots` capability to the server
+   * 2. Respond to `roots/list` requests with these roots
+   * 3. Send `notifications/roots/list_changed` when roots are updated via `setRoots()`
+   *
+   * @example
+   * ```typescript
+   * {
+   *   command: 'npx',
+   *   args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
+   *   roots: [
+   *     { uri: 'file:///tmp', name: 'Temp Directory' }
+   *   ]
+   * }
+   * ```
+   */
+  roots?: Root[];
 };
 
 /**
@@ -154,7 +199,7 @@ export type InternalMastraMCPClientOptions = {
   name: string;
   /** Server connection configuration */
   server: MastraMCPServerDefinition;
-  /** Optional client capabilities */
+  /** Optional client capabilities to advertise to the server */
   capabilities?: ClientCapabilities;
   /** Optional client version */
   version?: string;
