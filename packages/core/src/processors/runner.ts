@@ -185,6 +185,8 @@ export class ProcessorRunner {
     part: ChunkType<OUTPUT>,
     processorStates: Map<string, ProcessorState<OUTPUT>>,
     tracingContext?: TracingContext,
+    runtimeContext?: RequestContext,
+    messageList?: MessageList,
   ): Promise<{
     part: ChunkType<OUTPUT> | null | undefined;
     blocked: boolean;
@@ -223,6 +225,8 @@ export class ProcessorRunner {
                 throw new TripWire(reason || `Stream part blocked by ${processor.id}`);
               },
               tracingContext: { currentSpan: state.span },
+              runtimeContext,
+              messageList,
             });
 
             if (state.span && !state.span.isEvent) {

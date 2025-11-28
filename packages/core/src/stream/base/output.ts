@@ -250,7 +250,13 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 part: processed,
                 blocked,
                 reason,
-              } = await processorRunner.processPart(chunk, processorStates, options.tracingContext);
+              } = await processorRunner.processPart(
+                chunk,
+                processorStates,
+                options.tracingContext,
+                options.requestContext,
+                self.messageList,
+              );
               if (blocked) {
                 // Emit a tripwire chunk so downstream knows about the abort
                 controller.enqueue({

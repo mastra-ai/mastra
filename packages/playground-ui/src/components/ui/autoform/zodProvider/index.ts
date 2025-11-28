@@ -121,8 +121,22 @@ export class CustomZodProvider<T extends z.ZodObject> extends ZodProvider<T> {
 
   validateSchema(values: z.core.output<T>): SchemaValidation {
     const cleanedValues = removeEmptyValues(values);
-    const result = super.validateSchema(cleanedValues as z.core.output<T>);
-    return result;
+    try {
+      const validationResult = this._schema.safeParse(cleanedValues);
+      if (validationResult.success) {
+        return { success: true, data: validationResult.data } as const;
+      } else {
+        return {
+          success: false,
+          errors: validationResult.error.issues.map(error => ({
+            path: error.path as string[],
+            message: error.message,
+          })),
+        } as const;
+      }
+    } catch (error) {
+      throw error;
+    }
   }
 
   parseSchema(): ParsedSchema {

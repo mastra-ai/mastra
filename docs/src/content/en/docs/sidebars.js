@@ -95,6 +95,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "workflows/workflow-state",
+          label: "Workflow State",
+        },
+        {
+          type: "doc",
           id: "workflows/control-flow",
           label: "Control Flow",
         },

@@ -767,6 +767,12 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
 
         return editor;
       },
+      initGit: async () => {
+        return p.confirm({
+          message: 'Initialize a new git repository?',
+          initialValue: true,
+        });
+      },
     },
     {
       onCancel: () => {
