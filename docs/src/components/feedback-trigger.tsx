@@ -13,7 +13,7 @@ import {
 } from "@radix-ui/react-dialog";
 
 export const FeedbackTrigger: React.FC = () => {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
   const { siteConfig } = useDocusaurusContext();
   const { mastraWebsite } = siteConfig.customFields as {
     mastraWebsite?: string;
