@@ -249,7 +249,7 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
           try {
             params.body = await this.parseBody(route, params.body);
           } catch (error) {
-            console.error('Error parsing body', error);
+            console.error('Error parsing body:', error instanceof Error ? error.message : String(error));
             // Zod validation errors should return 400 Bad Request, not 500
             return c.json(
               {
