@@ -72,8 +72,8 @@ const sidebars = {
           id: "agents/networks",
           label: "Networks",
           customProps: {
-            tags: ["advanced"]
-          }
+            tags: ["advanced"],
+          },
         },
         {
           type: "doc",
@@ -147,8 +147,8 @@ const sidebars = {
           id: "streaming/overview",
           label: "Overview",
           customProps: {
-            tags: ["new"]
-          }
+            tags: ["new"],
+          },
         },
         {
           type: "doc",
@@ -575,8 +575,8 @@ const sidebars = {
           id: "voice/overview",
           label: "Overview",
           customProps: {
-            tags: ["new"]
-          }
+            tags: ["new"],
+          },
         },
         {
           type: "doc",
