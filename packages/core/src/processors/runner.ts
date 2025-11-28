@@ -452,4 +452,133 @@ export class ProcessorRunner {
 
     return messageList;
   }
+
+  /**
+   * Run processInputStep for all processors that implement it.
+   * Called at each step of the agentic loop, before the LLM is invoked.
+   *
+   * Unlike processInput which runs once at the start, this runs at every step
+   * (including tool call continuations). This is useful for:
+   * - Transforming message types between steps (e.g., AI SDK 'reasoning' -> Anthropic 'thinking')
+   * - Modifying messages based on step context
+   * - Implementing per-step message transformations
+   *
+   * @param args.messages - The current messages to be sent to the LLM (MastraDBMessage format)
+   * @param args.messageList - MessageList instance for managing message sources
+   * @param args.stepNumber - The current step number (0-indexed)
+   * @param args.tracingContext - Optional tracing context for observability
+   * @param args.runtimeContext - Optional runtime context with execution metadata
+   *
+   * @returns The processed MessageList
+   */
+  async runProcessInputStep(args: {
+    messages: MastraDBMessage[];
+    messageList: MessageList;
+    stepNumber: number;
+    tracingContext?: TracingContext;
+    runtimeContext?: RequestContext;
+  }): Promise<MessageList> {
+    const { messageList, stepNumber, tracingContext, runtimeContext } = args;
+
+    // Run through all input processors that have processInputStep
+    for (const [index, processor] of this.inputProcessors.entries()) {
+      const processMethod = processor.processInputStep?.bind(processor);
+
+      if (!processMethod) {
+        // Skip processors that don't implement processInputStep
+        continue;
+      }
+
+      const processableMessages: MastraDBMessage[] = messageList.get.all.db();
+      const idsBeforeProcessing = processableMessages.map(m => m.id);
+      const check = messageList.makeMessageSourceChecker();
+
+      const abort = (reason?: string): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`);
+      };
+
+      const currentSpan = tracingContext?.currentSpan;
+      const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+      const processorSpan = parentSpan?.createChildSpan({
+        type: SpanType.PROCESSOR_RUN,
+        name: `input step processor: ${processor.id}`,
+        attributes: {
+          processorName: processor.name ?? processor.id,
+          processorType: 'input',
+          processorIndex: index,
+        },
+        input: { messages: processableMessages, stepNumber },
+      });
+
+      // Start recording MessageList mutations for this processor
+      messageList.startRecording();
+
+      try {
+        const result = await processMethod({
+          messages: processableMessages,
+          messageList,
+          stepNumber,
+          abort,
+          tracingContext: { currentSpan: processorSpan },
+          runtimeContext,
+        });
+
+        // Stop recording and get mutations for this processor
+        const mutations = messageList.stopRecording();
+
+        // Handle the return type - MessageList or MastraDBMessage[]
+        if (result instanceof MessageList) {
+          if (result !== messageList) {
+            throw new MastraError({
+              category: 'USER',
+              domain: 'AGENT',
+              id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+              text: `Processor ${processor.id} returned a MessageList instance other than the one that was passed in as an argument. New external message list instances are not supported. Use the messageList argument instead.`,
+            });
+          }
+          // Processor returned the same messageList - mutations have been applied
+        } else if (result) {
+          // Processor returned an array - apply changes to messageList
+          const deletedIds = idsBeforeProcessing.filter(i => !result.some(m => m.id === i));
+          if (deletedIds.length) {
+            messageList.removeByIds(deletedIds);
+          }
+
+          // Re-add messages with correct sources
+          for (const message of result) {
+            messageList.removeByIds([message.id]);
+            if (message.role === 'system') {
+              const systemText =
+                (message.content.content as string | undefined) ??
+                message.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
+                '';
+              messageList.addSystem(systemText);
+            } else {
+              messageList.add(message, check.getSource(message) || 'input');
+            }
+          }
+        }
+
+        processorSpan?.end({
+          output: messageList.get.all.db(),
+          attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
+        });
+      } catch (error) {
+        // Stop recording on error
+        messageList.stopRecording();
+
+        if (error instanceof TripWire) {
+          processorSpan?.end({
+            metadata: { blocked: true, reason: error.message },
+          });
+          throw error;
+        }
+        processorSpan?.error({ error: error as Error, endSpan: true });
+        this.logger.error(`[Agent:${this.agentName}] - Input step processor ${processor.id} failed:`, error);
+        throw error;
+      }
+    }
+
+    return messageList;
+  }
 }

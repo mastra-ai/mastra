@@ -1,7 +1,7 @@
 import type { MastraDBMessage, MessageList } from '../../agent/message-list';
 import type { RequestContext } from '../../request-context';
 
-import type { InputProcessor } from '../index';
+import type { Processor } from '../index';
 
 /**
  * Type definition for tool invocation parts in MastraDBMessage format 2
@@ -22,7 +22,7 @@ type V2ToolInvocationPart = {
  * By default (with no arguments), excludes all tool calls and their results.
  * Can be configured to exclude only specific tools by name.
  */
-export class ToolCallFilter implements InputProcessor {
+export class ToolCallFilter implements Processor {
   readonly id = 'tool-call-filter';
   name = 'ToolCallFilter';
   private exclude: string[] | 'all';
