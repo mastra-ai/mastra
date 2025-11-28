@@ -7,16 +7,11 @@ import type { Tool } from '@mastra/core/tools';
 import { isZodType } from '@mastra/core/utils';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
-import type { SSEClientTransportOptions } from '@modelcontextprotocol/sdk/client/sse.js';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { StreamableHTTPClientTransportOptions } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type {
-  ClientCapabilities,
-  ElicitRequest,
-  ElicitResult,
   GetPromptResult,
   ListPromptsResult,
   LoggingLevel,
@@ -32,6 +27,7 @@ import {
   GetPromptResultSchema,
   PromptListChangedNotificationSchema,
   ElicitRequestSchema,
+  ProgressNotificationSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { asyncExitHook, gracefulExit } from 'exit-hook';
@@ -39,137 +35,30 @@ import { z } from 'zod';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import { convertJsonSchemaToZod as convertJsonSchemaToZodV3 } from 'zod-from-json-schema-v3';
 import type { JSONSchema } from 'zod-from-json-schema-v3';
-import { ElicitationClientActions } from './elicitationActions';
-import { PromptClientActions } from './promptActions';
-import { ResourceClientActions } from './resourceActions';
+import { ElicitationClientActions } from './actions/elicitation';
+import { PromptClientActions } from './actions/prompt';
+import { ResourceClientActions } from './actions/resource';
+import { ProgressClientActions } from './actions/progress';
+import type {
+  LogHandler,
+  ElicitationHandler,
+  ProgressHandler,
+  MastraMCPServerDefinition,
+  InternalMastraMCPClientOptions,
+} from './types';
 
-// Re-export MCP SDK LoggingLevel for convenience
-export type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
-
-/**
- * Log message structure for MCP client logging.
- */
-export interface LogMessage {
-  /** Logging level (debug, info, warning, error, etc.) */
-  level: LoggingLevel;
-  /** Log message content */
-  message: string;
-  /** Timestamp when the log was created */
-  timestamp: Date;
-  /** Name of the MCP server that generated the log */
-  serverName: string;
-  /** Optional additional details */
-  details?: Record<string, any>;
-  requestContext?: RequestContext | null;
-}
-
-/**
- * Handler function for processing log messages from MCP servers.
- */
-export type LogHandler = (logMessage: LogMessage) => void;
-
-/**
- * Handler function for processing elicitation requests from MCP servers.
- *
- * @param request - The elicitation request parameters including message and schema
- * @returns Promise resolving to the user's response (accept/decline/cancel with optional content)
- */
-export type ElicitationHandler = (request: ElicitRequest['params']) => Promise<ElicitResult>;
-
-/**
- * Base options common to all MCP server definitions.
- */
-type BaseServerOptions = {
-  /** Optional handler for server log messages */
-  logger?: LogHandler;
-  /** Optional timeout in milliseconds for server operations */
-  timeout?: number;
-  /** Optional client capabilities to advertise to the server */
-  capabilities?: ClientCapabilities;
-  /** Whether to enable server log forwarding (default: true) */
-  enableServerLogs?: boolean;
-};
-
-/**
- * Configuration for MCP servers using stdio (subprocess) transport.
- *
- * Used when the MCP server is spawned as a subprocess that communicates via stdin/stdout.
- */
-type StdioServerDefinition = BaseServerOptions & {
-  /** Command to execute (e.g., 'node', 'python', 'npx') */
-  command: string;
-  /** Optional arguments to pass to the command */
-  args?: string[];
-  /** Optional environment variables for the subprocess */
-  env?: Record<string, string>;
-
-  url?: never;
-  requestInit?: never;
-  eventSourceInit?: never;
-  authProvider?: never;
-  reconnectionOptions?: never;
-  sessionId?: never;
-  connectTimeout?: never;
-};
-
-/**
- * Configuration for MCP servers using HTTP-based transport (Streamable HTTP or SSE fallback).
- *
- * Used when connecting to remote MCP servers over HTTP. The client will attempt Streamable HTTP
- * transport first and fall back to SSE if that fails.
- */
-type HttpServerDefinition = BaseServerOptions & {
-  /** URL of the MCP server endpoint */
-  url: URL;
-
-  command?: never;
-  args?: never;
-  env?: never;
-
-  /** Optional request configuration for HTTP requests */
-  requestInit?: StreamableHTTPClientTransportOptions['requestInit'];
-  /** Optional configuration for SSE fallback (required when using custom headers with SSE) */
-  eventSourceInit?: SSEClientTransportOptions['eventSourceInit'];
-  /** Optional authentication provider for HTTP requests */
-  authProvider?: StreamableHTTPClientTransportOptions['authProvider'];
-  /** Optional reconnection configuration for Streamable HTTP */
-  reconnectionOptions?: StreamableHTTPClientTransportOptions['reconnectionOptions'];
-  /** Optional session ID for Streamable HTTP */
-  sessionId?: StreamableHTTPClientTransportOptions['sessionId'];
-  /** Optional timeout in milliseconds for the connection phase (default: 3000ms).
-   * This timeout allows the system to switch MCP streaming protocols during the setup phase.
-   * The default is set to 3s because the long default timeout would be extremely slow for SSE backwards compat (60s).
-   */
-  connectTimeout?: number;
-};
+// Re-export types for convenience
+export type {
+  LoggingLevel,
+  LogMessage,
+  LogHandler,
+  ElicitationHandler,
+  ProgressHandler,
+  MastraMCPServerDefinition,
+  InternalMastraMCPClientOptions,
+} from './types';
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
-
-/**
- * Configuration for connecting to an MCP server.
- *
- * Either stdio-based (subprocess) or HTTP-based (remote server). The transport type is
- * automatically detected based on whether `command` or `url` is provided.
- *
- * @example
- * ```typescript
- * // Stdio server
- * const stdioServer: MastraMCPServerDefinition = {
- *   command: 'npx',
- *   args: ['tsx', 'server.ts'],
- *   env: { API_KEY: 'secret' }
- * };
- *
- * // HTTP server
- * const httpServer: MastraMCPServerDefinition = {
- *   url: new URL('http://localhost:8080/mcp'),
- *   requestInit: {
- *     headers: { Authorization: 'Bearer token' }
- *   }
- * };
- * ```
- */
-export type MastraMCPServerDefinition = StdioServerDefinition | HttpServerDefinition;
 
 /**
  * Convert an MCP LoggingLevel to a logger method name that exists in our logger
@@ -195,24 +84,6 @@ function convertLogLevelToLoggerMethod(level: LoggingLevel): 'debug' | 'info' | 
 }
 
 /**
- * Options for creating an internal MCP client instance.
- *
- * @internal
- */
-export type InternalMastraMCPClientOptions = {
-  /** Name identifier for this client */
-  name: string;
-  /** Server connection configuration */
-  server: MastraMCPServerDefinition;
-  /** Optional client capabilities */
-  capabilities?: ClientCapabilities;
-  /** Optional client version */
-  version?: string;
-  /** Optional timeout in milliseconds */
-  timeout?: number;
-};
-
-/**
  * Internal MCP client implementation for connecting to a single MCP server.
  *
  * This class handles the low-level connection, transport management, and protocol
@@ -226,6 +97,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private readonly timeout: number;
   private logHandler?: LogHandler;
   private enableServerLogs?: boolean;
+  private enableProgressTracking?: boolean;
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
   private currentOperationContext: RequestContext | null = null;
@@ -238,6 +110,8 @@ export class InternalMastraMCPClient extends MastraBase {
   public readonly prompts: PromptClientActions;
   /** Provides access to elicitation operations (request handling) */
   public readonly elicitation: ElicitationClientActions;
+  /** Provides access to progress operations (notifications) */
+  public readonly progress: ProgressClientActions;
 
   /**
    * @internal
@@ -255,6 +129,7 @@ export class InternalMastraMCPClient extends MastraBase {
     this.logHandler = server.logger;
     this.enableServerLogs = server.enableServerLogs ?? true;
     this.serverConfig = server;
+    this.enableProgressTracking = !!server.enableProgressTracking;
 
     const clientCapabilities = { ...capabilities, elicitation: {} };
 
@@ -274,6 +149,7 @@ export class InternalMastraMCPClient extends MastraBase {
     this.resources = new ResourceClientActions({ client: this, logger: this.logger });
     this.prompts = new PromptClientActions({ client: this, logger: this.logger });
     this.elicitation = new ElicitationClientActions({ client: this, logger: this.logger });
+    this.progress = new ProgressClientActions({ client: this, logger: this.logger });
   }
 
   /**
@@ -604,6 +480,13 @@ export class InternalMastraMCPClient extends MastraBase {
     });
   }
 
+  setProgressNotificationHandler(handler: ProgressHandler): void {
+    this.log('debug', 'Setting progress notification handler');
+    this.client.setNotificationHandler(ProgressNotificationSchema, notification => {
+      handler(notification.params);
+    });
+  }
+
   private async convertInputSchema(
     inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'] | JSONSchema,
   ): Promise<z.ZodType> {
@@ -701,15 +584,17 @@ export class InternalMastraMCPClient extends MastraBase {
           description: tool.description || '',
           inputSchema: await this.convertInputSchema(tool.inputSchema),
           outputSchema: await this.convertOutputSchema(tool.outputSchema),
-          execute: async (input: any, context?: { requestContext?: RequestContext | null }) => {
+          execute: async (input: any, context?: { requestContext?: RequestContext | null, runId?: string }) => {
             const previousContext = this.currentOperationContext;
             this.currentOperationContext = context?.requestContext || null; // Set current context
             try {
-              this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input });
+              this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input, runId: context?.runId });
               const res = await this.client.callTool(
                 {
                   name: tool.name,
                   arguments: input,
+                  // Use runId as progress token if available, otherwise generate a random UUID
+                  ...(this.enableProgressTracking ? { _meta: { progressToken: context?.runId || crypto.randomUUID() } } : {}),
                 },
                 CallToolResultSchema,
                 {

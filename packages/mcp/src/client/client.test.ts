@@ -107,9 +107,9 @@ describe('MastraMCPClient with Streamable HTTP', () => {
     });
 
     afterEach(async () => {
-      await client?.disconnect().catch(() => {});
-      await testServer?.mcpServer.close().catch(() => {});
-      await testServer?.serverTransport.close().catch(() => {});
+      await client?.disconnect().catch(() => { });
+      await testServer?.mcpServer.close().catch(() => { });
+      await testServer?.serverTransport.close().catch(() => { });
       testServer?.httpServer.close();
     });
 
@@ -178,9 +178,9 @@ describe('MastraMCPClient with Streamable HTTP', () => {
     });
 
     afterEach(async () => {
-      await client?.disconnect().catch(() => {});
-      await testServer?.mcpServer.close().catch(() => {});
-      await testServer?.serverTransport.close().catch(() => {});
+      await client?.disconnect().catch(() => { });
+      await testServer?.mcpServer.close().catch(() => { });
+      await testServer?.serverTransport.close().catch(() => { });
       testServer?.httpServer.close();
     });
 
@@ -294,9 +294,9 @@ describe('MastraMCPClient - Elicitation Tests', () => {
   });
 
   afterEach(async () => {
-    await client?.disconnect().catch(() => {});
-    await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await client?.disconnect().catch(() => { });
+    await testServer?.mcpServer.close().catch(() => { });
+    await testServer?.serverTransport.close().catch(() => { });
     testServer?.httpServer.close();
   });
 
@@ -502,6 +502,114 @@ describe('MastraMCPClient - Elicitation Tests', () => {
   });
 });
 
+describe('MastraMCPClient - Progress Tests', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+
+    // Add a tool that emits progress notifications while running
+    testServer.mcpServer.tool(
+      'longTask',
+      'Emits progress notifications during execution',
+      {
+        count: z.number().describe('Number of notifications').default(3),
+        delayMs: z.number().describe('Delay between notifications (ms)').default(1),
+      },
+      async ({ count, delayMs }, extra): Promise<CallToolResult> => {
+        const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+        for (let i = 1; i <= count; i++) {
+          if (extra._meta?.progressToken) {
+            await testServer.mcpServer.server.notification({
+              method: 'notifications/progress',
+              params: {
+                progress: i,
+                total: count,
+                message: `Long task progress ${i}/${count}`,
+                // Use a fixed token for test assertions; server may also attach a token automatically
+                progressToken: extra._meta.progressToken,
+              },
+            });
+          }
+          await sleep(delayMs);
+        }
+
+        return {
+          content: [{ type: 'text', text: 'Long task completed.' }],
+        };
+      },
+    );
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => { });
+    await testServer?.mcpServer.close().catch(() => { });
+    await testServer?.serverTransport.close().catch(() => { });
+    testServer?.httpServer.close();
+  });
+
+  it('should receive progress notifications while executing a tool', async () => {
+    const mockHandler = vi.fn(params => params);
+
+    client = new InternalMastraMCPClient({
+      name: 'progress-client',
+      server: {
+        url: testServer.baseUrl,
+        enableProgressTracking: true,
+      },
+    });
+
+    client.progress.onUpdate(mockHandler);
+    await client.connect();
+
+    const tools = await client.tools();
+    const longTask = tools['longTask'];
+    expect(longTask).toBeDefined();
+
+    await longTask.execute({ context: { count: 3, delayMs: 1 } });
+
+    expect(mockHandler).toHaveBeenCalled();
+    const calls = mockHandler.mock.calls.map(call => call[0]);
+    // Expect at least 3 progress updates with increasing progress values
+    expect(calls.length).toBeGreaterThanOrEqual(3);
+    expect(calls[0].progress).toBe(1);
+    expect(calls[calls.length - 1].progress).toBeGreaterThanOrEqual(3);
+    // Ensure token is present (either fixed one or server-provided one) and fields exist
+    expect(calls.every(c => typeof c.total === 'number' && typeof c.progress === 'number')).toBe(true);
+  });
+
+  it('should not receive progress notifications when progress tracking is disabled', async () => {
+    const mockHandler = vi.fn(params => params);
+
+    client = new InternalMastraMCPClient({
+      name: 'progress-disabled-client',
+      server: {
+        url: testServer.baseUrl,
+        enableProgressTracking: false,
+      },
+    });
+
+    client.progress.onUpdate(mockHandler);
+    await client.connect();
+
+    const tools = await client.tools();
+    const longTask = tools['longTask'];
+    expect(longTask).toBeDefined();
+
+    await longTask.execute({ context: { count: 3, delayMs: 1 } });
+
+    // Should not receive any progress notifications when disabled
+    expect(mockHandler).not.toHaveBeenCalled();
+  });
+});
+
 describe('MastraMCPClient - AuthProvider Tests', () => {
   let testServer: {
     httpServer: HttpServer;
@@ -516,9 +624,9 @@ describe('MastraMCPClient - AuthProvider Tests', () => {
   });
 
   afterEach(async () => {
-    await client?.disconnect().catch(() => {});
-    await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await client?.disconnect().catch(() => { });
+    await testServer?.mcpServer.close().catch(() => { });
+    await testServer?.serverTransport.close().catch(() => { });
     testServer?.httpServer.close();
   });
 
@@ -581,9 +689,9 @@ describe('MastraMCPClient - Timeout Parameter Position Tests', () => {
   });
 
   afterEach(async () => {
-    await client?.disconnect().catch(() => {});
-    await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await client?.disconnect().catch(() => { });
+    await testServer?.mcpServer.close().catch(() => { });
+    await testServer?.serverTransport.close().catch(() => { });
     testServer?.httpServer.close();
   });
 
@@ -635,8 +743,8 @@ describe('MastraMCPClient - Resource Cleanup Tests', () => {
   });
 
   afterEach(async () => {
-    await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => { });
+    await testServer?.serverTransport.close().catch(() => { });
     testServer?.httpServer.close();
   });
 
