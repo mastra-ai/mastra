@@ -14,7 +14,7 @@ import {
   executeToolResponseSchema,
 } from '../schemas/mcp';
 import type { RuntimeContext } from '../server-adapter';
-import { createRoute } from '../server-adapter';
+import { createRoute } from '../server-adapter/routes/route-builder';
 
 // ============================================================================
 // Route Definitions (createRoute pattern for server adapters)
