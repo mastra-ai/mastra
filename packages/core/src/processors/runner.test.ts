@@ -911,4 +911,164 @@ describe('ProcessorRunner', () => {
       expect(chunks[2]).toEqual({ type: 'finish' });
     });
   });
+
+  /**
+   * Regression test for GitHub Issue #7933
+   * @see https://github.com/mastra-ai/mastra/issues/7933
+   *
+   * Users want access to remembered messages in OutputProcessor.processOutputStream,
+   * similar to how Scorers have access to them. This enables use cases like:
+   * - Checking if output is grounded on tool executions from previous messages
+   * - Using OutputProcessor as guardrails that need conversation context
+   */
+  describe('Issue #7933: Remembered messages in OutputProcessor', () => {
+    it('should provide messageList to processOutputStream for accessing remembered messages', async () => {
+      // Create a MessageList with some remembered messages (from memory)
+      const testMessageList = new MessageList({ threadId: 'test-thread' });
+
+      // Add input message (from user)
+      testMessageList.add([createMessage('current user message', 'user')], 'input');
+
+      // Add remembered messages (from memory - simulating conversation history)
+      const rememberedMsg1 = createMessage('previous user question', 'user');
+      const rememberedMsg2 = createMessage('previous assistant answer with tool call', 'assistant');
+      testMessageList.add([rememberedMsg1, rememberedMsg2], 'memory');
+
+      let receivedMessageList: MessageList | undefined;
+      let rememberedMessagesCount: number | undefined;
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'grounding-check-processor',
+          name: 'Grounding Check Processor',
+          processOutputStream: async ({ part, messageList }) => {
+            // Store the messageList received for assertion
+            receivedMessageList = messageList;
+
+            // Try to access remembered messages (this is what Issue #7933 requests)
+            if (messageList) {
+              const rememberedMessages = messageList.get.remembered.db();
+              rememberedMessagesCount = rememberedMessages.length;
+            }
+
+            return part;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+
+      // Process a stream chunk - this should pass the messageList
+      await runner.processPart(
+        {
+          type: 'text-delta',
+          payload: { text: 'test response', id: '1' },
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+        },
+        processorStates,
+        undefined, // tracingContext
+        undefined, // runtimeContext
+        testMessageList, // messageList - this parameter needs to be added to processPart
+      );
+
+      // Assert that messageList was passed to processOutputStream
+      expect(receivedMessageList).toBeDefined();
+      expect(receivedMessageList).toBe(testMessageList);
+
+      // Assert that remembered messages are accessible
+      expect(rememberedMessagesCount).toBe(2);
+    });
+
+    it('should allow processOutputStream to check if output is grounded on previous tool calls', async () => {
+      // This simulates the use case described in Issue #7933:
+      // "checking if the content of the answer is grounded on tool executions
+      // made on previous answers by the assistant"
+
+      const testMessageList = new MessageList({ threadId: 'test-thread' });
+
+      // Add a previous assistant message with tool call (remembered from memory)
+      const previousAssistantMessage = {
+        id: `msg-${Math.random()}`,
+        role: 'assistant' as const,
+        content: {
+          format: 2 as const,
+          parts: [{ type: 'text' as const, text: 'Let me search for that information.' }],
+          toolInvocations: [
+            {
+              state: 'result' as const,
+              toolCallId: 'tool-call-1',
+              toolName: 'search_documents',
+              args: { query: 'product pricing' },
+              result: { documents: [{ title: 'Pricing Guide', content: 'Product costs $99' }] },
+            },
+          ],
+        },
+        createdAt: new Date(),
+        threadId: 'test-thread',
+      };
+      testMessageList.add([previousAssistantMessage], 'memory');
+
+      // Add current user input
+      testMessageList.add([createMessage('What is the price?', 'user')], 'input');
+
+      let groundingCheckPassed = false;
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'grounding-validator',
+          name: 'Grounding Validator',
+          processOutputStream: async ({ part, messageList, abort }) => {
+            if (!messageList) {
+              abort('messageList not available - cannot verify grounding');
+            }
+
+            // Get remembered messages to find previous tool calls
+            const rememberedMessages = messageList!.get.remembered.db();
+            const previousToolCalls = rememberedMessages
+              .filter(m => m.role === 'assistant')
+              .flatMap(m => m.content.toolInvocations || []);
+
+            // Check if there are previous tool calls to ground the response
+            if (previousToolCalls.length > 0) {
+              groundingCheckPassed = true;
+            }
+
+            return part;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+
+      await runner.processPart(
+        {
+          type: 'text-delta',
+          payload: { text: 'The product costs $99', id: '1' },
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+        },
+        processorStates,
+        undefined,
+        undefined,
+        testMessageList,
+      );
+
+      expect(groundingCheckPassed).toBe(true);
+    });
+  });
 });

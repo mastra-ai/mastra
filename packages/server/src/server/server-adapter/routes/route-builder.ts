@@ -52,7 +52,7 @@ interface RouteConfig<
  *   handler: async ({ agentId, mastra, requestContext }) => {
  *     // agentId is typed as string
  *     // mastra, requestContext, tools, taskStore are always available
- *     return mastra.getAgent(agentId);
+ *     return mastra.getAgentById(agentId);
  *   },
  *   summary: 'Get agent by ID',
  *   description: 'Returns details for a specific agent',

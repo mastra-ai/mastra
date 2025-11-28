@@ -1,6 +1,6 @@
-import { randomUUID } from 'crypto';
-import * as path from 'path';
-import { Worker } from 'worker_threads';
+import { randomUUID } from 'node:crypto';
+import * as path from 'node:path';
+import { Worker } from 'node:worker_threads';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { SharedMemoryConfig } from '@mastra/core/memory';

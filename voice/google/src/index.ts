@@ -1,4 +1,4 @@
-import { PassThrough } from 'stream';
+import { PassThrough } from 'node:stream';
 
 import { SpeechClient } from '@google-cloud/speech';
 import type { google as SpeechTypes } from '@google-cloud/speech/build/protos/protos';

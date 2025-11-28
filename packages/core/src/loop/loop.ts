@@ -54,6 +54,12 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     now: _internal?.now || (() => Date.now()),
     generateId: _internal?.generateId || (() => generateId()),
     currentDate: _internal?.currentDate || (() => new Date()),
+    saveQueueManager: _internal?.saveQueueManager,
+    memoryConfig: _internal?.memoryConfig,
+    threadId: _internal?.threadId,
+    resourceId: _internal?.resourceId,
+    memory: _internal?.memory,
+    threadExists: _internal?.threadExists,
   };
 
   let startTimestamp = internalToUse.now?.();
@@ -131,6 +137,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       outputProcessors,
       returnScorerData,
       tracingContext: rest.modelSpanTracker?.getTracingContext(),
+      requestContext: rest.requestContext,
     },
     initialState: initialStreamState,
   });

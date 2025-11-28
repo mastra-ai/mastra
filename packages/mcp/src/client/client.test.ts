@@ -107,9 +107,9 @@ describe('MastraMCPClient with Streamable HTTP', () => {
     });
 
     afterEach(async () => {
-      await client?.disconnect().catch(() => {});
-      await testServer?.mcpServer.close().catch(() => {});
-      await testServer?.serverTransport.close().catch(() => {});
+      await client?.disconnect().catch(() => { });
+      await testServer?.mcpServer.close().catch(() => { });
+      await testServer?.serverTransport.close().catch(() => { });
       testServer?.httpServer.close();
     });
 
@@ -121,7 +121,7 @@ describe('MastraMCPClient with Streamable HTTP', () => {
 
     it('should call a tool', async () => {
       const tools = await client.tools();
-      const result = await tools.greet.execute({ name: 'Stateless' });
+      const result = await tools.greet?.execute?.({ name: 'Stateless' });
       expect(result).toEqual({ content: [{ type: 'text', text: 'Hello, Stateless!' }] });
     });
 
@@ -178,9 +178,9 @@ describe('MastraMCPClient with Streamable HTTP', () => {
     });
 
     afterEach(async () => {
-      await client?.disconnect().catch(() => {});
-      await testServer?.mcpServer.close().catch(() => {});
-      await testServer?.serverTransport.close().catch(() => {});
+      await client?.disconnect().catch(() => { });
+      await testServer?.mcpServer.close().catch(() => { });
+      await testServer?.serverTransport.close().catch(() => { });
       testServer?.httpServer.close();
     });
 
@@ -199,7 +199,7 @@ describe('MastraMCPClient with Streamable HTTP', () => {
 
     it('should call a tool', async () => {
       const tools = await client.tools();
-      const result = await tools.greet.execute({ name: 'Stateful' });
+      const result = await tools.greet?.execute?.({ name: 'Stateful' });
       expect(result).toEqual({ content: [{ type: 'text', text: 'Hello, Stateful!' }] });
     });
   });
@@ -294,9 +294,9 @@ describe('MastraMCPClient - Elicitation Tests', () => {
   });
 
   afterEach(async () => {
-    await client?.disconnect().catch(() => {});
-    await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await client?.disconnect().catch(() => { });
+    await testServer?.mcpServer.close().catch(() => { });
+    await testServer?.serverTransport.close().catch(() => { });
     testServer?.httpServer.close();
   });
 
@@ -331,7 +331,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(collectUserInfoTool).toBeDefined();
 
     // Call the tool which will trigger elicitation
-    const result = await collectUserInfoTool.execute({ message: 'Please provide your information' }, {});
+    const result = await collectUserInfoTool?.execute?.({ message: 'Please provide your information' }, {});
 
     console.log('result', result);
 
@@ -368,7 +368,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(collectSensitiveInfoTool).toBeDefined();
 
     // Call the tool which will trigger elicitation
-    const result = await collectSensitiveInfoTool.execute({ message: 'Please provide sensitive information' }, {});
+    const result = await collectSensitiveInfoTool?.execute?.({ message: 'Please provide sensitive information' }, {});
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
     expect(result.content).toBeDefined();
@@ -398,7 +398,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(collectOptionalInfoTool).toBeDefined();
 
     // Call the tool which will trigger elicitation
-    const result = await collectOptionalInfoTool.execute({ message: 'Optional information request' }, {});
+    const result = await collectOptionalInfoTool?.execute?.({ message: 'Optional information request' }, {});
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
     expect(result.content).toBeDefined();
@@ -428,7 +428,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(collectUserInfoTool).toBeDefined();
 
     // Call the tool which will trigger elicitation, handler will throw error
-    const result = await collectUserInfoTool.execute({ message: 'This will cause handler to throw' }, {});
+    const result = await collectUserInfoTool?.execute?.({ message: 'This will cause handler to throw' }, {});
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
     expect(result.content).toBeDefined();
@@ -452,7 +452,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(collectUserInfoTool).toBeDefined();
 
     // Call the tool which will trigger elicitation, should fail gracefully
-    const result = await collectUserInfoTool.execute({ message: 'This should fail gracefully' }, {});
+    const result = await collectUserInfoTool?.execute?.({ message: 'This should fail gracefully' }, {});
 
     expect(result.content).toBeDefined();
     expect(result.isError).toBe(true);
@@ -489,7 +489,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(collectUserInfoTool).toBeDefined();
 
     // Call the tool which will trigger elicitation with schema validation
-    const result = await collectUserInfoTool.execute({ message: 'Schema validation test' }, {});
+    const result = await collectUserInfoTool?.execute?.({ message: 'Schema validation test' }, {});
 
     console.log('result', result);
 
@@ -499,6 +499,114 @@ describe('MastraMCPClient - Elicitation Tests', () => {
 
     const elicitationResultText = result.content[0].text;
     expect(elicitationResultText).toContain('Elicitation response content does not match requested schema');
+  });
+});
+
+describe('MastraMCPClient - Progress Tests', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+
+    // Add a tool that emits progress notifications while running
+    testServer.mcpServer.tool(
+      'longTask',
+      'Emits progress notifications during execution',
+      {
+        count: z.number().describe('Number of notifications').default(3),
+        delayMs: z.number().describe('Delay between notifications (ms)').default(1),
+      },
+      async ({ count, delayMs }, extra): Promise<CallToolResult> => {
+        const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+        for (let i = 1; i <= count; i++) {
+          if (extra._meta?.progressToken) {
+            await testServer.mcpServer.server.notification({
+              method: 'notifications/progress',
+              params: {
+                progress: i,
+                total: count,
+                message: `Long task progress ${i}/${count}`,
+                // Use a fixed token for test assertions; server may also attach a token automatically
+                progressToken: extra._meta.progressToken,
+              },
+            });
+          }
+          await sleep(delayMs);
+        }
+
+        return {
+          content: [{ type: 'text', text: 'Long task completed.' }],
+        };
+      },
+    );
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => { });
+    await testServer?.mcpServer.close().catch(() => { });
+    await testServer?.serverTransport.close().catch(() => { });
+    testServer?.httpServer.close();
+  });
+
+  it('should receive progress notifications while executing a tool', async () => {
+    const mockHandler = vi.fn(params => params);
+
+    client = new InternalMastraMCPClient({
+      name: 'progress-client',
+      server: {
+        url: testServer.baseUrl,
+        enableProgressTracking: true,
+      },
+    });
+
+    client.progress.onUpdate(mockHandler);
+    await client.connect();
+
+    const tools = await client.tools();
+    const longTask = tools['longTask'];
+    expect(longTask).toBeDefined();
+
+    await longTask?.execute?.({ count: 3, delayMs: 1 });
+
+    expect(mockHandler).toHaveBeenCalled();
+    const calls = mockHandler.mock.calls.map(call => call[0]);
+    // Expect at least 3 progress updates with increasing progress values
+    expect(calls.length).toBeGreaterThanOrEqual(3);
+    expect(calls[0].progress).toBe(1);
+    expect(calls[calls.length - 1].progress).toBeGreaterThanOrEqual(3);
+    // Ensure token is present (either fixed one or server-provided one) and fields exist
+    expect(calls.every(c => typeof c.total === 'number' && typeof c.progress === 'number')).toBe(true);
+  });
+
+  it('should not receive progress notifications when progress tracking is disabled', async () => {
+    const mockHandler = vi.fn(params => params);
+
+    client = new InternalMastraMCPClient({
+      name: 'progress-disabled-client',
+      server: {
+        url: testServer.baseUrl,
+        enableProgressTracking: false,
+      },
+    });
+
+    client.progress.onUpdate(mockHandler);
+    await client.connect();
+
+    const tools = await client.tools();
+    const longTask = tools['longTask'];
+    expect(longTask).toBeDefined();
+
+    await longTask?.execute?.({ count: 3, delayMs: 1 });
+
+    // Should not receive any progress notifications when disabled
+    expect(mockHandler).not.toHaveBeenCalled();
   });
 });
 
@@ -516,9 +624,9 @@ describe('MastraMCPClient - AuthProvider Tests', () => {
   });
 
   afterEach(async () => {
-    await client?.disconnect().catch(() => {});
-    await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await client?.disconnect().catch(() => { });
+    await testServer?.mcpServer.close().catch(() => { });
+    await testServer?.serverTransport.close().catch(() => { });
     testServer?.httpServer.close();
   });
 
@@ -564,5 +672,151 @@ describe('MastraMCPClient - AuthProvider Tests', () => {
     await client.connect();
     const tools = await client.tools();
     expect(tools).toHaveProperty('greet');
+  });
+});
+
+describe('MastraMCPClient - Timeout Parameter Position Tests', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => { });
+    await testServer?.mcpServer.close().catch(() => { });
+    await testServer?.serverTransport.close().catch(() => { });
+    testServer?.httpServer.close();
+  });
+
+  it('should pass timeout in the options parameter (2nd arg), not params (1st arg) for listTools', async () => {
+    const customTimeout = 5000;
+
+    client = new InternalMastraMCPClient({
+      name: 'timeout-position-test',
+      server: {
+        url: testServer.baseUrl,
+      },
+      timeout: customTimeout,
+    });
+
+    await client.connect();
+
+    // Access the internal MCP SDK client to spy on listTools
+    const internalClient = (client as any).client;
+    const originalListTools = internalClient.listTools.bind(internalClient);
+
+    let capturedParams: any;
+    let capturedOptions: any;
+
+    internalClient.listTools = async (params?: any, options?: any) => {
+      capturedParams = params;
+      capturedOptions = options;
+      return originalListTools(params, options);
+    };
+
+    await client.tools();
+
+    // The timeout should be in the options (2nd argument), not in params (1st argument)
+    // If timeout is found in params, the bug exists
+    expect(capturedParams).not.toHaveProperty('timeout');
+    expect(capturedOptions).toHaveProperty('timeout', customTimeout);
+  });
+});
+
+describe('MastraMCPClient - Resource Cleanup Tests', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+  });
+
+  afterEach(async () => {
+    await testServer?.mcpServer.close().catch(() => { });
+    await testServer?.serverTransport.close().catch(() => { });
+    testServer?.httpServer.close();
+  });
+
+  it('should not accumulate SIGTERM listeners across multiple connect/disconnect cycles', async () => {
+    const initialListenerCount = process.listenerCount('SIGTERM');
+
+    // Perform multiple connect/disconnect cycles
+    for (let i = 0; i < 15; i++) {
+      const client = new InternalMastraMCPClient({
+        name: `cleanup-test-client-${i}`,
+        server: {
+          url: testServer.baseUrl,
+        },
+      });
+
+      await client.connect();
+      await client.disconnect();
+    }
+
+    const finalListenerCount = process.listenerCount('SIGTERM');
+
+    // The listener count should not have increased significantly
+    // (allowing for some tolerance in case other parts of the test framework add listeners)
+    expect(finalListenerCount).toBeLessThanOrEqual(initialListenerCount + 1);
+  });
+
+  it('should clean up exit hooks and SIGTERM listeners on disconnect', async () => {
+    const initialListenerCount = process.listenerCount('SIGTERM');
+
+    const client = new InternalMastraMCPClient({
+      name: 'cleanup-single-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+
+    await client.connect();
+
+    // After connect, there should be at most one additional SIGTERM listener
+    const afterConnectCount = process.listenerCount('SIGTERM');
+    expect(afterConnectCount).toBeLessThanOrEqual(initialListenerCount + 1);
+
+    await client.disconnect();
+
+    // After disconnect, the listener count should return to the initial value
+    const afterDisconnectCount = process.listenerCount('SIGTERM');
+    expect(afterDisconnectCount).toBe(initialListenerCount);
+  });
+
+  it('should not add duplicate listeners when connect is called multiple times on the same client', async () => {
+    const initialListenerCount = process.listenerCount('SIGTERM');
+
+    const client = new InternalMastraMCPClient({
+      name: 'duplicate-connect-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+
+    // Connect multiple times on the same client
+    await client.connect();
+    await client.connect();
+    await client.connect();
+
+    const afterMultipleConnects = process.listenerCount('SIGTERM');
+
+    // Should only have added one listener, not three
+    expect(afterMultipleConnects).toBeLessThanOrEqual(initialListenerCount + 1);
+
+    await client.disconnect();
+
+    const afterDisconnectCount = process.listenerCount('SIGTERM');
+    expect(afterDisconnectCount).toBe(initialListenerCount);
   });
 });

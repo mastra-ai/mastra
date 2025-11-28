@@ -1,6 +1,6 @@
-import { readFile } from 'fs/promises';
+import { readFile } from 'node:fs/promises';
 import * as https from 'node:https';
-import { join } from 'path/posix';
+import { join } from 'node:path/posix';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
@@ -356,8 +356,8 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       const logger = mastra.getLogger();
       logger.info(` Mastra API running on port ${protocol}://${host}:${port}/api`);
       if (options?.playground) {
-        const playgroundUrl = `${protocol}://${host}:${port}`;
-        logger.info(`👨‍💻 Playground available at ${playgroundUrl}`);
+        const studioUrl = `${protocol}://${host}:${port}`;
+        logger.info(`👨‍💻 Studio available at ${studioUrl}`);
       }
 
       if (process.send) {

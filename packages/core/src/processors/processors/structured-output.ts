@@ -1,4 +1,4 @@
-import type { TransformStreamDefaultController } from 'stream/web';
+import type { TransformStreamDefaultController } from 'node:stream/web';
 import { Agent } from '../../agent';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
@@ -25,7 +25,7 @@ export const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
  * - Configurable error handling strategies
  * - Automatic instruction generation based on schema
  */
-export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements Processor {
+export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements Processor<'structured-output'> {
   readonly id = STRUCTURED_OUTPUT_PROCESSOR_NAME;
   readonly name = 'Structured Output';
 

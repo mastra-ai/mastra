@@ -26,6 +26,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "gateways/azure-openai",
+          label: "Azure-openai",
+        },
+        {
+          type: "doc",
           id: "gateways/netlify",
           label: "Netlify",
         },
@@ -88,6 +93,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/agentrouter",
+          label: "AgentRouter",
+        },
+        {
+          type: "doc",
           id: "providers/aihubmix",
           label: "AIHubMix",
         },
@@ -113,6 +123,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/bailing",
+          label: "Bailing",
+        },
+        {
+          type: "doc",
           id: "providers/baseten",
           label: "Baseten",
         },
@@ -130,6 +145,11 @@ const sidebars = {
           type: "doc",
           id: "providers/cloudflare-workers-ai",
           label: "Cloudflare Workers AI",
+        },
+        {
+          type: "doc",
+          id: "providers/cohere",
+          label: "Cohere",
         },
         {
           type: "doc",
@@ -180,6 +200,11 @@ const sidebars = {
           type: "doc",
           id: "providers/inference",
           label: "Inference",
+        },
+        {
+          type: "doc",
+          id: "providers/io-intelligence",
+          label: "IO Intelligence",
         },
         {
           type: "doc",
@@ -253,6 +278,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/poe",
+          label: "Poe",
+        },
+        {
+          type: "doc",
           id: "providers/requesty",
           label: "Requesty",
         },
@@ -260,6 +290,11 @@ const sidebars = {
           type: "doc",
           id: "providers/scaleway",
           label: "Scaleway",
+        },
+        {
+          type: "doc",
+          id: "providers/siliconflow",
+          label: "SiliconFlow",
         },
         {
           type: "doc",

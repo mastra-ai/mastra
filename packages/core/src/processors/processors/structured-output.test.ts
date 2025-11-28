@@ -1,4 +1,4 @@
-import type { TransformStreamDefaultController } from 'stream/web';
+import type { TransformStreamDefaultController } from 'node:stream/web';
 import { openai } from '@ai-sdk/openai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';

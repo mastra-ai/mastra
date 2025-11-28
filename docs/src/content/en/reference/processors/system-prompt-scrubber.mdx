@@ -13,7 +13,7 @@ The `SystemPromptScrubber` is an **output processor** that detects and handles s
 import { SystemPromptScrubber } from "@mastra/core/processors";
 
 const processor = new SystemPromptScrubber({
-  model: "openai/gpt-4.1-nano",
+  model: "openrouter/openai/gpt-oss-safeguard-20b",
   strategy: "redact",
   redactionMethod: "mask",
   includeDetections: true
@@ -138,7 +138,7 @@ export const agent = new Agent({
     }),
     // Then apply system prompt detection on batched content
     new SystemPromptScrubber({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       strategy: "redact",
       customPatterns: ["system prompt", "internal instructions"],
       includeDetections: true,
