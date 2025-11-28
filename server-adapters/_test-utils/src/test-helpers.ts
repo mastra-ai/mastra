@@ -25,7 +25,6 @@ vi.mock('zod', async importOriginal => {
     ...actual,
     object: vi.fn(() => ({
       parse: vi.fn(input => input),
-      safeParse: vi.fn(input => ({ success: true, data: input })),
     })),
     string: vi.fn(() => ({
       parse: vi.fn(input => input),
