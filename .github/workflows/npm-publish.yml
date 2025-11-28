@@ -85,7 +85,7 @@ jobs:
           fi
 
       - name: Publish packages
-        run: pnpm publish -r --tag ${{ steps.determine-tag.outputs.tag }} --access public
+        run: pnpm publish -r --tag ${{ steps.determine-tag.outputs.tag }} --access public --no-git-checks
         env:
           NPM_CONFIG_PROVENANCE: true
 
@@ -174,7 +174,7 @@ jobs:
 
       - name: Publish packages
         if: ${{ !inputs.dry_run }}
-        run: pnpm publish -r --access public
+        run: pnpm publish -r --access public --no-git-checks
         env:
           NPM_CONFIG_PROVENANCE: true
 
@@ -184,7 +184,7 @@ jobs:
 
       - name: Publish packages - dry run
         if: ${{ inputs.dry_run }}
-        run: pnpm publish -r --dry-run --access public
+        run: pnpm publish -r --dry-run --access public --no-git-checks
 
       - name: Add tags
         run: |
