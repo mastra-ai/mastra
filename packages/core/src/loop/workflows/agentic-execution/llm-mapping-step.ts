@@ -1,7 +1,7 @@
 import type { ToolSet } from 'ai-v5';
 import z from 'zod';
 import type { MastraDBMessage } from '../../../memory';
-import { ProcessorRunner, ProcessorState } from '../../../processors';
+import type { ProcessorRunner, ProcessorState } from '../../../processors';
 import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type { ChunkType } from '../../../stream/types';
