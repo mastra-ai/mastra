@@ -73,6 +73,70 @@ describe('A2A', () => {
       expect(bodyText).toContain('completed');
     });
 
+    it('should allow reading the stream chunk by chunk', async () => {
+      // Arrange: Set up server with multiple streaming chunks using record separator
+      const chunks = [
+        { jsonrpc: '2.0', result: { state: 'working', message: { text: 'Processing...' } } },
+        { jsonrpc: '2.0', result: { state: 'working', message: { text: 'Almost done...' } } },
+        { jsonrpc: '2.0', result: { state: 'completed', message: { text: 'Done!' } } },
+      ];
+
+      server.on('request', (_req, res) => {
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+
+        // Send chunks with record separator (0x1E) as delimiter
+        for (const chunk of chunks) {
+          res.write(JSON.stringify(chunk) + '\x1E');
+        }
+        res.end();
+      });
+
+      const a2a = new A2A({ baseUrl: serverUrl }, 'test-agent');
+      const params: MessageSendParams = {
+        message: {
+          messageId: 'msg-1',
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'text', text: 'Hello' }],
+        },
+      };
+
+      // Act: Call sendStreamingMessage and read the stream
+      const response = (await a2a.sendStreamingMessage(params)) as unknown as Response;
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+
+      const receivedChunks: any[] = [];
+      let buffer = '';
+
+      // Read chunks from the stream
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse chunks separated by record separator (0x1E)
+        const parts = buffer.split('\x1E');
+        buffer = parts.pop() || ''; // Keep incomplete chunk in buffer
+
+        for (const part of parts) {
+          if (part.trim()) {
+            receivedChunks.push(JSON.parse(part));
+          }
+        }
+      }
+
+      // Assert: We should have received all chunks in order
+      expect(receivedChunks).toHaveLength(3);
+      expect(receivedChunks[0].result.state).toBe('working');
+      expect(receivedChunks[0].result.message.text).toBe('Processing...');
+      expect(receivedChunks[1].result.state).toBe('working');
+      expect(receivedChunks[1].result.message.text).toBe('Almost done...');
+      expect(receivedChunks[2].result.state).toBe('completed');
+      expect(receivedChunks[2].result.message.text).toBe('Done!');
+    });
+
     it('should not throw JSON parse error for streaming responses', async () => {
       // Arrange: Set up server to return non-JSON streaming response
       server.on('request', (_req, res) => {
