@@ -82,5 +82,8 @@
     "@mastra/voice-speechify": "0.11.12",
     "@mastra/inngest": "0.18.5"
   },
-  "changesets": []
+  "changesets": [
+    "moody-donkeys-argue",
+    "petite-flies-dream"
+  ]
 }
