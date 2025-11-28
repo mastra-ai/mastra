@@ -305,35 +305,39 @@ async function runSingleToolSchemaTest(
 const SUITE_TIMEOUT = 300000; // 5 minutes
 const TEST_TIMEOUT = 300000; // 5 minutes
 
-if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY environment variable is required');
-const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
+const hasLLMApiKeys = !!(process.env.OPENROUTER_API_KEY && process.env.OPENAI_API_KEY);
+const openrouter = hasLLMApiKeys ? createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY! }) : null;
 
-const modelsToTestV1 = [
-  // openrouter('anthropic/claude-3.7-sonnet'),
-  // openrouter('anthropic/claude-sonnet-4.5'),
-  openrouter('anthropic/claude-haiku-4.5'),
-  // openrouter('openai/gpt-4o-mini'),
-  // openrouter('openai/gpt-4.1-mini'),
-  // openrouter_v5('openai/o3-mini'),
-  // openai('o3-mini'),
-  openai('o4-mini'),
-  // openrouter('google/gemini-2.5-pro'),
-  // openrouter('google/gemini-2.5-flash'),
-  openrouter('google/gemini-2.0-flash-lite-001'),
-];
-const modelsToTestV2 = [
-  // openrouter_v5('anthropic/claude-3.7-sonnet'),
-  // openrouter_v5('anthropic/claude-sonnet-4.5'),
-  openrouter_v5('anthropic/claude-haiku-4.5'),
-  // openrouter_v5('openai/gpt-4o-mini'),
-  // openrouter_v5('openai/gpt-4.1-mini'),
-  // openrouter_v5('openai/o3-mini'),
-  // openai_v5('o3-mini'),
-  openai_v5('o4-mini'),
-  // openrouter_v5('google/gemini-2.5-pro'),
-  // openrouter_v5('google/gemini-2.5-flash'),
-  openrouter_v5('google/gemini-2.0-flash-lite-001'),
-];
+const modelsToTestV1 = hasLLMApiKeys
+  ? [
+      // openrouter!('anthropic/claude-3.7-sonnet'),
+      // openrouter!('anthropic/claude-sonnet-4.5'),
+      openrouter!('anthropic/claude-haiku-4.5'),
+      // openrouter!('openai/gpt-4o-mini'),
+      // openrouter!('openai/gpt-4.1-mini'),
+      // openrouter_v5('openai/o3-mini'),
+      // openai('o3-mini'),
+      openai('o4-mini'),
+      // openrouter!('google/gemini-2.5-pro'),
+      // openrouter!('google/gemini-2.5-flash'),
+      openrouter!('google/gemini-2.0-flash-lite-001'),
+    ]
+  : [];
+const modelsToTestV2 = hasLLMApiKeys
+  ? [
+      // openrouter_v5('anthropic/claude-3.7-sonnet'),
+      // openrouter_v5('anthropic/claude-sonnet-4.5'),
+      openrouter_v5('anthropic/claude-haiku-4.5'),
+      // openrouter_v5('openai/gpt-4o-mini'),
+      // openrouter_v5('openai/gpt-4.1-mini'),
+      // openrouter_v5('openai/o3-mini'),
+      // openai_v5('o3-mini'),
+      openai_v5('o4-mini'),
+      // openrouter_v5('google/gemini-2.5-pro'),
+      // openrouter_v5('google/gemini-2.5-flash'),
+      openrouter_v5('google/gemini-2.0-flash-lite-001'),
+    ]
+  : [];
 
 // Specify which schemas to test - empty array means test all
 // To test specific schemas, add their names to this array
