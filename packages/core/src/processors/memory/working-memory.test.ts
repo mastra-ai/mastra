@@ -9,7 +9,7 @@ import { WorkingMemory } from './working-memory';
 
 describe('WorkingMemory', () => {
   let mockStorage: MemoryStorage;
-  let runtimeContext: RequestContext;
+  let requestContext: RequestContext;
 
   beforeEach(() => {
     mockStorage = {
@@ -17,7 +17,7 @@ describe('WorkingMemory', () => {
       getResourceById: vi.fn(),
     } as any;
 
-    runtimeContext = new RequestContext();
+    requestContext = new RequestContext();
   });
 
   describe('Input Processing', () => {
@@ -30,7 +30,7 @@ describe('WorkingMemory', () => {
       const threadId = 'thread-123';
       const workingMemoryData = '# User Info\n- Name: John\n- Preference: Dark mode';
 
-      runtimeContext.set('MastraMemory', {
+      requestContext.set('MastraMemory', {
         thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
         resourceId: 'resource-1',
       });
@@ -62,7 +62,7 @@ describe('WorkingMemory', () => {
         abort: () => {
           throw new Error('Aborted');
         },
-        runtimeContext,
+        requestContext,
       });
 
       const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
@@ -83,7 +83,7 @@ describe('WorkingMemory', () => {
       const resourceId = 'resource-456';
       const workingMemoryData = '# Project Context\n- Status: In Progress\n- Deadline: Friday';
 
-      runtimeContext.set('MastraMemory', {
+      requestContext.set('MastraMemory', {
         thread: { id: 'thread-1', resourceId, title: 'Test', createdAt: new Date(), updatedAt: new Date() },
         resourceId,
       });
@@ -113,7 +113,7 @@ describe('WorkingMemory', () => {
         abort: () => {
           throw new Error('Aborted');
         },
-        runtimeContext,
+        requestContext,
       });
 
       const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
@@ -132,7 +132,7 @@ describe('WorkingMemory', () => {
 
       const threadId = 'thread-123';
 
-      runtimeContext.set('MastraMemory', {
+      requestContext.set('MastraMemory', {
         thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
         resourceId: 'resource-1',
       });
@@ -163,7 +163,7 @@ describe('WorkingMemory', () => {
         abort: () => {
           throw new Error('Aborted');
         },
-        runtimeContext,
+        requestContext,
       });
 
       const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
@@ -187,7 +187,7 @@ describe('WorkingMemory', () => {
 
       const threadId = 'thread-123';
 
-      runtimeContext.set('MastraMemory', {
+      requestContext.set('MastraMemory', {
         thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
         resourceId: 'resource-1',
       });
@@ -218,7 +218,7 @@ describe('WorkingMemory', () => {
         abort: () => {
           throw new Error('Aborted');
         },
-        runtimeContext,
+        requestContext,
       });
 
       const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
@@ -235,7 +235,7 @@ describe('WorkingMemory', () => {
 
       const threadId = 'thread-123';
 
-      runtimeContext.set('MastraMemory', {
+      requestContext.set('MastraMemory', {
         thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
         resourceId: 'resource-1',
       });
@@ -266,7 +266,7 @@ describe('WorkingMemory', () => {
         abort: () => {
           throw new Error('Aborted');
         },
-        runtimeContext,
+        requestContext,
       });
 
       const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
@@ -297,7 +297,7 @@ describe('WorkingMemory', () => {
         abort: () => {
           throw new Error('Aborted');
         },
-        runtimeContext: new RequestContext(),
+        requestContext: new RequestContext(),
       });
 
       const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
@@ -315,7 +315,7 @@ describe('WorkingMemory', () => {
 
       const threadId = 'thread-123';
 
-      runtimeContext.set('MastraMemory', {
+      requestContext.set('MastraMemory', {
         thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
         resourceId: 'resource-1',
       });
@@ -344,7 +344,7 @@ describe('WorkingMemory', () => {
         abort: () => {
           throw new Error('Aborted');
         },
-        runtimeContext,
+        requestContext,
       });
 
       const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
@@ -370,7 +370,7 @@ describe('WorkingMemory', () => {
 
       const threadId = 'thread-123';
 
-      runtimeContext.set('MastraMemory', {
+      requestContext.set('MastraMemory', {
         thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
         resourceId: 'resource-1',
       });
@@ -401,7 +401,7 @@ describe('WorkingMemory', () => {
         abort: () => {
           throw new Error('Aborted');
         },
-        runtimeContext,
+        requestContext,
       });
 
       const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
@@ -417,7 +417,7 @@ describe('WorkingMemory', () => {
 
       const threadId = 'thread-123';
 
-      runtimeContext.set('MastraMemory', {
+      requestContext.set('MastraMemory', {
         thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
         resourceId: 'resource-1',
       });
@@ -454,7 +454,7 @@ describe('WorkingMemory', () => {
         abort: () => {
           throw new Error('Aborted');
         },
-        runtimeContext,
+        requestContext,
       });
 
       const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
@@ -472,7 +472,7 @@ describe('WorkingMemory', () => {
 
       const threadId = 'thread-123';
 
-      runtimeContext.set('MastraMemory', {
+      requestContext.set('MastraMemory', {
         thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
         resourceId: 'resource-1',
       });
@@ -503,7 +503,7 @@ describe('WorkingMemory', () => {
         abort: () => {
           throw new Error('Aborted');
         },
-        runtimeContext,
+        requestContext,
       });
 
       const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;

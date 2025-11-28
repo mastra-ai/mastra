@@ -1,26 +1,27 @@
-import React, { type ComponentProps } from "react";
 import Head from "@docusaurus/Head";
-import MDXCode from "@theme/MDXComponents/Code";
+import Admonition from "@theme/Admonition";
 import MDXA from "@theme/MDXComponents/A";
-import MDXPre from "@theme/MDXComponents/Pre";
+import MDXCode from "@theme/MDXComponents/Code";
 import MDXDetails from "@theme/MDXComponents/Details";
 import MDXHeading from "@theme/MDXComponents/Heading";
-import MDXUl from "@theme/MDXComponents/Ul";
-import MDXLi from "@theme/MDXComponents/Li";
 import MDXImg from "@theme/MDXComponents/Img";
-import Admonition from "@theme/Admonition";
+import MDXLi from "@theme/MDXComponents/Li";
+import MDXPre from "@theme/MDXComponents/Pre";
+import MDXUl from "@theme/MDXComponents/Ul";
 import Mermaid from "@theme/Mermaid";
+import { type ComponentProps } from "react";
 
-import type { MDXComponentsObject } from "@theme/MDXComponents";
-import { CopyPageButton } from "@site/src/components/copy-page-button";
 import BrowserOnly from "@docusaurus/BrowserOnly";
+import { useDoc } from "@docusaurus/plugin-content-docs/lib/client/doc.js";
+import { CardGrid, CardGridItem } from "@site/src/components/CardGrid";
+import { CopyPageButton } from "@site/src/components/copy-page-button";
 import GithubLink from "@site/src/components/GithubLink";
 import NetlifyLogo from "@site/src/components/NetlifyLogo";
 import OperatorsTable from "@site/src/components/OperatorsTable";
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
 import PropertiesTable from "@site/src/components/PropertiesTable";
-import { CardGrid, CardGridItem } from "@site/src/components/CardGrid";
+import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
 import YouTube from "@site/src/components/YouTube-player";
+import type { MDXComponentsObject } from "@theme/MDXComponents";
 
 const MDXComponents: MDXComponentsObject = {
   Head,
@@ -32,18 +33,24 @@ const MDXComponents: MDXComponentsObject = {
   ul: MDXUl,
   li: MDXLi,
   img: MDXImg,
-  h1: (props: ComponentProps<"h1">) => (
-    <div className="flex justify-between items-start">
-      <MDXHeading as="h1" {...props} />
-      <BrowserOnly fallback={<div />}>
-        {() => (
-          <div className="relative hidden @[600px]:block">
-            <CopyPageButton />
-          </div>
-        )}
-      </BrowserOnly>
-    </div>
-  ),
+  h1: (props: ComponentProps<"h1">) => {
+    const { frontMatter } = useDoc();
+    const showCopyButton = (frontMatter as any)?.showCopyButton !== false;
+    return (
+      <div className="flex justify-between items-start">
+        <MDXHeading as="h1" {...props} />
+        {showCopyButton ? (
+          <BrowserOnly fallback={<div />}>
+            {() => (
+              <div className="relative hidden @[600px]:block">
+                <CopyPageButton />
+              </div>
+            )}
+          </BrowserOnly>
+        ) : null}
+      </div>
+    );
+  },
   h2: (props: ComponentProps<"h2">) => <MDXHeading as="h2" {...props} />,
   h3: (props: ComponentProps<"h3">) => <MDXHeading as="h3" {...props} />,
   h4: (props: ComponentProps<"h4">) => <MDXHeading as="h4" {...props} />,

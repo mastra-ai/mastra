@@ -46,7 +46,7 @@ export class ToolCallFilter implements InputProcessor {
     messages: MastraDBMessage[];
     messageList: MessageList;
     abort: (reason?: string) => never;
-    runtimeContext?: RequestContext;
+    requestContext?: RequestContext;
   }): Promise<MessageList | MastraDBMessage[]> {
     const { messageList } = args;
     // Use messages from messageList to respect consolidation

@@ -713,6 +713,7 @@ export type ProviderModelsMap = {
     'text-embedding-ada-002',
   ];
   readonly 'zhipuai-coding-plan': readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6'];
+  readonly 'minimax-cn': readonly ['MiniMax-M2'];
   readonly perplexity: readonly ['sonar', 'sonar-pro', 'sonar-reasoning', 'sonar-reasoning-pro'];
   readonly openrouter: readonly [
     'anthropic/claude-3.5-haiku',

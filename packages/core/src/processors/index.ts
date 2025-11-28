@@ -1,7 +1,22 @@
+import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
+
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
+
+/**
+ * Return type for processInput that includes modified system messages
+ */
+export interface ProcessInputResultWithSystemMessages {
+  messages: MastraDBMessage[];
+  systemMessages: CoreMessageV4[];
+}
+
+/**
+ * Possible return types from processInput
+ */
+export type ProcessInputResult = MessageList | MastraDBMessage[] | ProcessInputResultWithSystemMessages;
 
 export interface Processor<TId extends string = string> {
   readonly id: TId;
@@ -10,23 +25,26 @@ export interface Processor<TId extends string = string> {
   /**
    * Process input messages before they are sent to the LLM
    *
-   * @param args.messages - The current messages being processed
-   * @param args.messageList - Optional MessageList instance for managing message sources (used by memory processors)
+   * @param args.messages - The current messages being processed (user/assistant messages, not system)
+   * @param args.systemMessages - All system messages (agent instructions, user-provided, memory) for read/modify access
+   * @param args.messageList - MessageList instance for managing message sources (used by memory processors)
    * @param args.abort - Function to abort processing with an optional reason
    * @param args.tracingContext - Optional tracing context for observability
-   * @param args.runtimeContext - Optional runtime context with execution metadata (used by memory processors)
+   * @param args.requestContext - Optional runtime context with execution metadata (used by memory processors)
    *
    * @returns Either:
    *  - MessageList: The same messageList instance passed in (indicates you've mutated it)
    *  - MastraDBMessage[]: Transformed messages array (for simple transformations)
+   *  - { messages, systemMessages }: Object with both messages and modified system messages
    */
   processInput?(args: {
     messages: MastraDBMessage[];
+    systemMessages: CoreMessageV4[];
     messageList: MessageList;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-    runtimeContext?: RequestContext;
-  }): Promise<MessageList | MastraDBMessage[]> | MessageList | MastraDBMessage[];
+    requestContext?: RequestContext;
+  }): Promise<ProcessInputResult> | ProcessInputResult;
 
   /**
    * Process output stream chunks with built-in state management
@@ -38,7 +56,7 @@ export interface Processor<TId extends string = string> {
    * @param args.state - Mutable state object that persists across chunks
    * @param args.abort - Function to abort processing with an optional reason
    * @param args.tracingContext - Optional tracing context for observability
-   * @param args.runtimeContext - Optional runtime context with execution metadata
+   * @param args.requestContext - Optional runtime context with execution metadata
    * @param args.messageList - Optional MessageList instance for accessing conversation history including remembered messages
    */
   processOutputStream?(args: {
@@ -47,7 +65,7 @@ export interface Processor<TId extends string = string> {
     state: Record<string, any>;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-    runtimeContext?: RequestContext;
+    requestContext?: RequestContext;
     messageList?: MessageList;
   }): Promise<ChunkType | null | undefined>;
 
@@ -58,7 +76,7 @@ export interface Processor<TId extends string = string> {
    * @param args.messageList - Optional MessageList instance for managing message sources (used by memory processors)
    * @param args.abort - Function to abort processing with an optional reason
    * @param args.tracingContext - Optional tracing context for observability
-   * @param args.runtimeContext - Optional runtime context with execution metadata (used by memory processors)
+   * @param args.requestContext - Optional runtime context with execution metadata (used by memory processors)
    *
    * @returns Either:
    *  - MessageList: The same messageList instance passed in (indicates you've mutated it)
@@ -69,7 +87,7 @@ export interface Processor<TId extends string = string> {
     messageList: MessageList;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-    runtimeContext?: RequestContext;
+    requestContext?: RequestContext;
   }): Promise<MessageList | MastraDBMessage[]> | MessageList | MastraDBMessage[];
 }
 
