@@ -1,8 +1,8 @@
-import fsSync from 'fs';
-import fs from 'fs/promises';
 import child_process from 'node:child_process';
+import fsSync from 'node:fs';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import util from 'node:util';
-import path from 'path';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
 
@@ -148,7 +148,7 @@ export const createMastraProject = async ({
     process.exit(0);
   }
 
-  let result;
+  let result: Awaited<ReturnType<typeof interactivePrompt>> | undefined = undefined;
 
   if (needsInteractive) {
     result = await interactivePrompt({

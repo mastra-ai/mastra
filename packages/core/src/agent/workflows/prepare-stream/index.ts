@@ -32,8 +32,8 @@ interface CreatePrepareStreamWorkflowOptions<
   instructions: SystemMessage;
   memoryConfig?: MemoryConfig;
   memory?: MastraMemory;
-  saveQueueManager: SaveQueueManager;
   returnScorerData?: boolean;
+  saveQueueManager?: SaveQueueManager;
   requireToolApproval?: boolean;
   resumeContext?: {
     resumeData: any;
@@ -58,8 +58,8 @@ export function createPrepareStreamWorkflow<
   instructions,
   memoryConfig,
   memory,
-  saveQueueManager,
   returnScorerData,
+  saveQueueManager,
   requireToolApproval,
   resumeContext,
   agentId,
@@ -114,7 +114,6 @@ export function createPrepareStreamWorkflow<
     requestContext,
     memory,
     memoryConfig,
-    saveQueueManager,
     agentSpan,
     agentId,
     methodType,

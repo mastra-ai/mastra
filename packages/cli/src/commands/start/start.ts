@@ -1,6 +1,6 @@
-import { spawn } from 'child_process';
-import fs from 'fs';
-import { join } from 'path';
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import { join } from 'node:path';
 import { config } from 'dotenv';
 import { logger } from '../../utils/logger';
 import { shouldSkipDotenvLoading } from '../utils';

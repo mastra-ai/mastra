@@ -1,4 +1,4 @@
-import type { TransformCallback } from 'stream';
+import type { TransformCallback } from 'node:stream';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 import { LoggerTransport } from '@mastra/core/logger';
 import { PinoLogger } from '@mastra/loggers';

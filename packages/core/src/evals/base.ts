@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { Agent } from '../agent';
 import { tryGenerateWithJsonFallback } from '../agent/utils';

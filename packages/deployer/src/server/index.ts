@@ -1,6 +1,6 @@
-import { readFile } from 'fs/promises';
+import { readFile } from 'node:fs/promises';
 import * as https from 'node:https';
-import { join } from 'path/posix';
+import { join } from 'node:path/posix';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';

@@ -26,8 +26,8 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     additionalContext: safelyParseJSON(row.additionalContext),
     requestContext: safelyParseJSON(row.requestContext),
     entity: safelyParseJSON(row.entity),
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    createdAt: new Date(row.createdAt),
+    updatedAt: new Date(row.updatedAt),
   } as ScoreRowData;
 }
 

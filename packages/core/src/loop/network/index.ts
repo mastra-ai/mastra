@@ -317,10 +317,15 @@ export async function createNetworkLoop({
           memory: {
             thread: initData?.threadId ?? runId,
             resource: initData?.threadResourceId ?? networkName,
-            readOnly: true,
+            options: {
+              readOnly: true,
+              workingMemory: {
+                enabled: false,
+              },
+            },
           },
           ...routingAgentOptions,
-        };
+        } satisfies AgentExecutionOptions<any>;
 
         // Try streaming with structured output
         let completionStream = await routingAgent.stream(completionPrompt, streamOptions);
@@ -499,7 +504,12 @@ export async function createNetworkLoop({
         memory: {
           thread: initData?.threadId ?? runId,
           resource: initData?.threadResourceId ?? networkName,
-          readOnly: true,
+          options: {
+            readOnly: true,
+            workingMemory: {
+              enabled: false,
+            },
+          },
         },
         ...routingAgentOptions,
       };
@@ -585,9 +595,25 @@ export async function createNetworkLoop({
         runId,
       });
 
+      // Get memory context from initData to pass to sub-agents
+      // This ensures sub-agents can access the same thread/resource for memory operations
+      const initData = await getInitData();
+      const threadId = initData?.threadId || runId;
+      const resourceId = initData?.threadResourceId || networkName;
+
+      const agentHasOwnMemory = agentForStep.hasOwnMemory();
+
       const result = await agentForStep.stream(inputData.prompt, {
         requestContext: requestContext,
         runId,
+        ...(agentHasOwnMemory
+          ? {
+              memory: {
+                thread: threadId,
+                resource: resourceId,
+              },
+            }
+          : {}),
       });
 
       for await (const chunk of result.fullStream) {
@@ -604,7 +630,6 @@ export async function createNetworkLoop({
 
       const memory = await agent.getMemory({ requestContext: requestContext });
 
-      const initData = await getInitData();
       const messages = result.messageList.get.all.v1();
 
       await memory?.saveMessages({

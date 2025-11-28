@@ -5,13 +5,13 @@ description: "Send traces to any OpenTelemetry-compatible observability platform
 
 # OpenTelemetry Exporter
 
-:::warning
+The OpenTelemetry (OTEL) exporter sends your traces to any OTEL-compatible observability platform using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, SigNoz, MLflow, Dash0, Traceloop, Laminar, and more.
 
-The OpenTelemetry exporter is currently **experimental**. APIs and configuration options may change in future releases.
+:::info Looking for bidirectional OTEL integration?
+
+If you have existing OpenTelemetry instrumentation and want Mastra traces to inherit context from active OTEL spans, see the [OpenTelemetry Bridge](/docs/v1/observability/tracing/bridges/otel) instead.
 
 :::
-
-The OpenTelemetry (OTEL) exporter sends your traces to any OTEL-compatible observability platform using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, SigNoz, MLflow, Dash0, Traceloop, Laminar, and more.
 
 ## Installation
 
@@ -269,5 +269,6 @@ Install the suggested package for your provider.
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
+- [OpenTelemetry Bridge](/docs/v1/observability/tracing/bridges/otel) - For bidirectional OTEL context integration
 - [OpenTelemetry GenAI Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
 - [OTEL Exporter Reference](/reference/v1/observability/tracing/exporters/otel)

@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { ReadableStream, WritableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
@@ -553,15 +553,15 @@ export class InngestRun<
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
     const writer = writable.getWriter();
+    void writer.write({
+      // @ts-ignore
+      type: 'start',
+      // @ts-ignore
+      payload: { runId: this.runId },
+    });
+
     const unwatch = this.watch(async event => {
       try {
-        await writer.write({
-          // @ts-ignore
-          type: 'start',
-          // @ts-ignore
-          payload: { runId: this.runId },
-        });
-
         const e: any = {
           ...event,
           type: event.type.replace('workflow-', ''),
@@ -1380,6 +1380,7 @@ export function init(inngest: Inngest) {
         outputSchema: workflow.outputSchema,
         steps: workflow.stepDefs,
         mastra: workflow.mastra,
+        options: workflow.options,
       });
 
       wf.setStepFlow(workflow.stepGraph);
@@ -2151,6 +2152,22 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               startedAt,
               endedAt: Date.now(),
             };
+
+      await emitter.emit('watch', {
+        type: 'workflow-step-result',
+        payload: {
+          id: step.id,
+          ...stepFailure,
+        },
+      });
+
+      await emitter.emit('watch', {
+        type: 'workflow-step-finish',
+        payload: {
+          id: step.id,
+          metadata: {},
+        },
+      });
 
       stepRes = {
         result: stepFailure,

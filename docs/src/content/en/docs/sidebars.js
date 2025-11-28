@@ -59,8 +59,8 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "agents/human-in-the-loop-with-tools",
-          label: "Human in the Loop with Tools",
+          id: "agents/agent-approval",
+          label: "Agent Approval",
         },
         {
           type: "doc",
@@ -92,6 +92,11 @@ const sidebars = {
           type: "doc",
           id: "workflows/overview",
           label: "Overview",
+        },
+        {
+          type: "doc",
+          id: "workflows/workflow-state",
+          label: "Workflow State",
         },
         {
           type: "doc",
@@ -158,7 +163,7 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Tools & MCP",
+      label: "MCP",
       collapsed: true,
       items: [
         {
@@ -420,6 +425,17 @@ const sidebars = {
               id: "observability/tracing/overview",
               key: "observability.tracing.overview",
               label: "Overview",
+            },
+            {
+              type: "category",
+              label: "Bridges",
+              items: [
+                {
+                  type: "doc",
+                  id: "observability/tracing/bridges/otel",
+                  label: "OpenTelemetry",
+                },
+              ],
             },
             {
               type: "category",
