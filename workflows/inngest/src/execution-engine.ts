@@ -59,7 +59,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   /**
    * Detect InngestWorkflow instances for special nested workflow handling
    */
-  protected isNestedWorkflowStep(step: Step<any, any, any>): boolean {
+  isNestedWorkflowStep(step: Step<any, any, any>): boolean {
     return step instanceof InngestWorkflow;
   }
 
@@ -68,7 +68,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
    * When steps are replayed, the original function doesn't re-execute,
    * so requestContext modifications must be captured and restored.
    */
-  protected requiresDurableContextSerialization(): boolean {
+  requiresDurableContextSerialization(): boolean {
     return true;
   }
 
@@ -77,7 +77,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
    * Retries are handled via step-level retry (RetryAfterError thrown INSIDE step.run()).
    * After retries exhausted, error propagates here and we return a failed result.
    */
-  protected async executeStepWithRetry<T>(
+  async executeStepWithRetry<T>(
     stepId: string,
     runStep: () => Promise<T>,
     params: {
@@ -123,14 +123,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   /**
    * Use Inngest's sleep primitive for durability
    */
-  protected async executeSleepDuration(duration: number, sleepId: string, workflowId: string): Promise<void> {
+  async executeSleepDuration(duration: number, sleepId: string, workflowId: string): Promise<void> {
     await this.inngestStep.sleep(`workflow.${workflowId}.sleep.${sleepId}`, duration < 0 ? 0 : duration);
   }
 
   /**
    * Use Inngest's sleepUntil primitive for durability
    */
-  protected async executeSleepUntilDate(date: Date, sleepUntilId: string, workflowId: string): Promise<void> {
+  async executeSleepUntilDate(date: Date, sleepUntilId: string, workflowId: string): Promise<void> {
     await this.inngestStep.sleepUntil(`workflow.${workflowId}.sleepUntil.${sleepUntilId}`, date);
   }
 
@@ -139,7 +139,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
    * If retryConfig is provided, throws RetryAfterError INSIDE step.run() to trigger
    * Inngest's step-level retry mechanism (not function-level retry).
    */
-  protected async wrapDurableOperation<T>(
+  async wrapDurableOperation<T>(
     operationId: string,
     operationFn: () => Promise<T>,
     retryConfig?: { delay: number },
@@ -167,7 +167,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   /**
    * Provide Inngest step primitive in engine context
    */
-  protected getEngineContext(): Record<string, any> {
+  getEngineContext(): Record<string, any> {
     return { step: this.inngestStep };
   }
 
@@ -175,7 +175,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
    * Execute nested InngestWorkflow using inngestStep.invoke() for durability.
    * This MUST be called directly (not inside step.run()) due to Inngest constraints.
    */
-  protected async executeWorkflowStep(params: {
+  async executeWorkflowStep(params: {
     step: Step<string, any, any>;
     stepResults: Record<string, StepResult<any, any, any, any>>;
     executionContext: ExecutionContext;

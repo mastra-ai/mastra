@@ -30,7 +30,7 @@ export interface ExecutionEngineOptions {
  * Providers will implement this class to provide their own execution logic
  */
 export abstract class ExecutionEngine extends MastraBase {
-  protected mastra?: Mastra;
+  public mastra?: Mastra;
   public options: ExecutionEngineOptions;
   constructor({ mastra, options }: { mastra?: Mastra; options: ExecutionEngineOptions }) {
     super({ name: 'ExecutionEngine', component: RegisteredLogger.WORKFLOW });
