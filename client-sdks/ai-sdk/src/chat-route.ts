@@ -1,12 +1,111 @@
 import type { AgentExecutionOptions } from '@mastra/core/agent';
+import type { MessageInput } from '@mastra/core/agent/message-list';
+import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import type { OutputSchema } from '@mastra/core/stream';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
+import type { InferUIMessageChunk, UIMessage } from 'ai';
 import { toAISdkV5Stream } from './convert-streams';
 
+export type ChatStreamHandlerParams<
+  UI_MESSAGE extends UIMessage,
+  OUTPUT extends OutputSchema = undefined,
+> = AgentExecutionOptions<OUTPUT, 'mastra'> & {
+  messages: UI_MESSAGE[];
+  resumeData?: Record<string, any>;
+  runId?: string;
+};
+
+export type ChatStreamHandlerOptions<UI_MESSAGE extends UIMessage, OUTPUT extends OutputSchema = undefined> = {
+  mastra: Mastra;
+  agentId: string;
+  params: ChatStreamHandlerParams<UI_MESSAGE, OUTPUT>;
+  defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'>;
+  sendStart?: boolean;
+  sendFinish?: boolean;
+  sendReasoning?: boolean;
+  sendSources?: boolean;
+};
+
+/**
+ * Framework-agnostic handler for streaming agent chat in AI SDK format.
+ * Use this function directly when you need to handle chat streaming outside of Hono/registerApiRoute.
+ *
+ * @example
+ * // Next.js App Router
+ * export async function POST(req: Request) {
+ *   const params = await req.json();
+ *   return handleChatStream({
+ *     mastra,
+ *     agentId: 'my-agent',
+ *     params,
+ *   });
+ * }
+ */
+export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT extends OutputSchema = undefined>({
+  mastra,
+  agentId,
+  params,
+  defaultOptions,
+  sendStart = true,
+  sendFinish = true,
+  sendReasoning = false,
+  sendSources = false,
+}: ChatStreamHandlerOptions<UI_MESSAGE, OUTPUT>): Promise<ReadableStream<InferUIMessageChunk<UI_MESSAGE>>> {
+  const { messages, resumeData, runId, requestContext, ...rest } = params;
+
+  if (resumeData && !runId) {
+    throw new Error('runId is required when resumeData is provided');
+  }
+
+  const agentObj = mastra.getAgentById(agentId);
+  if (!agentObj) {
+    throw new Error(`Agent ${agentId} not found`);
+  }
+
+  if (!Array.isArray(messages)) {
+    throw new Error('Messages must be an array of UIMessage objects');
+  }
+
+  const mergedOptions = {
+    ...defaultOptions,
+    ...rest,
+    ...(runId && { runId }),
+    requestContext: requestContext || defaultOptions?.requestContext,
+  };
+
+  const result = resumeData
+    ? await agentObj.resumeStream<OUTPUT>(resumeData, mergedOptions)
+    : await agentObj.stream<OUTPUT>(messages, mergedOptions);
+
+  let lastMessageId: string | undefined;
+  if (messages.length) {
+    const lastMessage = messages[messages.length - 1]!;
+    if (lastMessage?.role === 'assistant') {
+      lastMessageId = lastMessage.id;
+    }
+  }
+
+  return createUIMessageStream<UI_MESSAGE>({
+    originalMessages: messages,
+    execute: async ({ writer }) => {
+      for await (const part of toAISdkV5Stream(result, {
+        from: 'agent',
+        lastMessageId,
+        sendStart,
+        sendFinish,
+        sendReasoning,
+        sendSources,
+      })!) {
+        writer.write(part as InferUIMessageChunk<UI_MESSAGE>);
+      }
+    },
+  });
+}
+
 export type chatRouteOptions<OUTPUT extends OutputSchema = undefined> = {
-  defaultOptions?: AgentExecutionOptions<OUTPUT, 'aisdk'>;
+  defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'>;
 } & (
   | {
       path: `${string}:agentId${string}`;
@@ -183,13 +282,9 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
       },
     },
     handler: async c => {
-      const { messages, resumeData, runId, ...rest } = await c.req.json();
+      const params = (await c.req.json()) as ChatStreamHandlerParams<UIMessage, OUTPUT>;
       const mastra = c.get('mastra');
-      const requestContext = (c as any).get('requestContext') as RequestContext | undefined;
-
-      if (resumeData && !runId) {
-        throw new Error('runId is required when resumeData is provided');
-      }
+      const contextRequestContext = (c as any).get('requestContext') as RequestContext | undefined;
 
       let agentToUse: string | undefined = agent;
       if (!agent) {
@@ -205,7 +300,7 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
           );
       }
 
-      if (requestContext && defaultOptions?.requestContext) {
+      if (contextRequestContext && defaultOptions?.requestContext) {
         mastra
           .getLogger()
           ?.warn(`"requestContext" set in the route options will be overridden by the request's "requestContext".`);
@@ -215,41 +310,18 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
         throw new Error('Agent ID is required');
       }
 
-      const agentObj = mastra.getAgentById(agentToUse);
-      if (!agentObj) {
-        throw new Error(`Agent ${agentToUse} not found`);
-      }
-
-      const mergedOptions = {
-        ...defaultOptions,
-        ...rest,
-        ...(runId && { runId }),
-        requestContext: requestContext || defaultOptions?.requestContext,
-      };
-
-      const result = resumeData
-        ? await agentObj.resumeStream<OUTPUT>(resumeData, mergedOptions)
-        : await agentObj.stream<OUTPUT>(messages, mergedOptions);
-
-      let lastMessageId: string | undefined;
-      if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
-        lastMessageId = messages[messages.length - 1].id;
-      }
-
-      const uiMessageStream = createUIMessageStream({
-        originalMessages: messages,
-        execute: async ({ writer }) => {
-          for await (const part of toAISdkV5Stream(result, {
-            from: 'agent',
-            lastMessageId,
-            sendStart,
-            sendFinish,
-            sendReasoning,
-            sendSources,
-          })!) {
-            writer.write(part);
-          }
+      const uiMessageStream = await handleChatStream<UIMessage, OUTPUT>({
+        mastra,
+        agentId: agentToUse,
+        params: {
+          ...params,
+          requestContext: contextRequestContext || params.requestContext,
         },
+        defaultOptions,
+        sendStart,
+        sendFinish,
+        sendReasoning,
+        sendSources,
       });
 
       return createUIMessageStreamResponse({
