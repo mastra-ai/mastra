@@ -18634,59 +18634,27 @@ Workflows can be composed using a number of different methods. The method you ch
 
 ## Workflow state
 
-Workflow state lets you share values across steps without passing them through every step’s inputSchema and outputSchema. All state values are defined in the workflow’s stateSchema, but each step only declares the values it needs. To set initial values, use initialState when running the workflow.
+Workflow state lets you share values across steps without passing them through every step's inputSchema and outputSchema. Use state for tracking progress, accumulating results, or sharing configuration across the entire workflow.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
-  // ...
-  stateSchema: z.object({
-    processedItems: z.array(z.string()),
-  }),
+  id: "step-1",
+  inputSchema: z.object({ message: z.string() }),
+  outputSchema: z.object({ formatted: z.string() }),
+  stateSchema: z.object({ counter: z.number() }),
   execute: async ({ inputData, state, setState }) => {
-    const { message } = inputData;
-    const { processedItems } = state;
+    // Read from state
+    console.log(state.counter);
 
-    setState({
-      ...state,
-      processedItems: [...processedItems, "item-1", "item-2"],
-    });
+    // Update state for subsequent steps
+    setState({ ...state, counter: state.counter + 1 });
 
-    return {
-      formatted: message.toUpperCase(),
-    };
+    return { formatted: inputData.message.toUpperCase() };
   },
 });
-
-const step2 = createStep({
-  // ...
-  stateSchema: z.object({
-    metadata: z.object({
-      processedBy: z.string(),
-    }),
-  }),
-  execute: async ({ inputData, state }) => {
-    const { formatted } = inputData;
-    const { metadata } = state;
-
-    return {
-      emphasized: `${formatted}!! ${metadata.processedBy}`,
-    };
-  },
-});
-
-export const testWorkflow = createWorkflow({
-  // ...
-  stateSchema: z.object({
-    processedItems: z.array(z.string()),
-    metadata: z.object({
-      processedBy: z.string(),
-    }),
-  }),
-})
-  .then(step1)
-  .then(step2)
-  .commit();
 ```
+
+> See [Workflow State](/docs/v1/workflows/workflow-state) for complete documentation on state schemas, initial state, persistence across suspend/resume, and nested workflows.
 
 ## Workflows as steps
 
@@ -18922,6 +18890,7 @@ Use [Studio](/docs/v1/getting-started/studio) to easily run workflows with diffe
 
 For a closer look at workflows, see our [Workflow Guide](/guides/v1/guide/ai-recruiter), which walks through the core concepts with a practical example.
 
+- [Workflow State](/docs/v1/workflows/workflow-state)
 - [Control Flow](/docs/v1/workflows/control-flow)
 - [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
 - [Error Handling](/docs/v1/workflows/error-handling)
@@ -19343,6 +19312,200 @@ Sleep and event methods can be used to pause execution at the workflow level, wh
 
 - [Control Flow](/docs/v1/workflows/control-flow)
 - [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)
+
+
+---
+title: "Workflow state | Workflows"
+description: "Share values across workflow steps using global state that persists through the entire workflow run."
+---
+
+# Workflow State
+[EN] Source: https://mastra.ai/en/docs/workflows/workflow-state
+
+Workflow state lets you share values across steps without passing them through every step's inputSchema and outputSchema. This is useful for tracking progress, accumulating results, or sharing configuration across the entire workflow.
+
+## State vs step input/output
+
+It's important to understand the difference between **state** and **step input/output**:
+
+- **Step input/output**: Data flows sequentially between steps. Each step receives the previous step's output as its `inputData`, and returns an output for the next step.
+- **State**: A shared store that all steps can read and update via `state` and `setState`. State persists across the entire workflow run, including suspend/resume cycles.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  id: "step-1",
+  inputSchema: z.object({ workflowInput: z.string() }),
+  outputSchema: z.object({ step1Output: z.string() }),
+  stateSchema: z.object({ sharedCounter: z.number() }),
+  execute: async ({ inputData, state, setState }) => {
+    // inputData comes from workflow input or previous step's output
+    console.log(inputData.workflowInput);
+
+    // state is the shared workflow state
+    console.log(state.sharedCounter);
+
+    // Update state for subsequent steps
+    setState({ ...state, sharedCounter: state.sharedCounter + 1 });
+
+    // Return output that flows to next step's inputData
+    return { step1Output: "processed" };
+  },
+});
+```
+
+## Defining state schemas
+
+Define a `stateSchema` on both the workflow and individual steps. The workflow's stateSchema is the master schema containing all possible state values, while each step declares only the subset it needs:
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  // ...
+  stateSchema: z.object({
+    processedItems: z.array(z.string()),
+  }),
+  execute: async ({ inputData, state, setState }) => {
+    const { message } = inputData;
+    const { processedItems } = state;
+
+    setState({
+      ...state,
+      processedItems: [...processedItems, "item-1", "item-2"],
+    });
+
+    return {
+      formatted: message.toUpperCase(),
+    };
+  },
+});
+
+const step2 = createStep({
+  // ...
+  stateSchema: z.object({
+    metadata: z.object({
+      processedBy: z.string(),
+    }),
+  }),
+  execute: async ({ inputData, state }) => {
+    const { formatted } = inputData;
+    const { metadata } = state;
+
+    return {
+      emphasized: `${formatted}!! ${metadata.processedBy}`,
+    };
+  },
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+  stateSchema: z.object({
+    processedItems: z.array(z.string()),
+    metadata: z.object({
+      processedBy: z.string(),
+    }),
+  }),
+})
+  .then(step1)
+  .then(step2)
+  .commit();
+```
+
+## Setting initial state
+
+Pass `initialState` when starting a workflow run to set the starting values:
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+
+const result = await run.start({
+  inputData: { message: "Hello" },
+  initialState: {
+    processedItems: [],
+    metadata: { processedBy: "system" },
+  },
+});
+```
+
+The `initialState` object should match the structure defined in the workflow's `stateSchema`.
+
+## State persistence across suspend/resume
+
+State automatically persists across suspend and resume cycles. When a workflow suspends and later resumes, all state updates made before the suspension are preserved:
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  id: "step-1",
+  inputSchema: z.object({}),
+  outputSchema: z.object({}),
+  stateSchema: z.object({ count: z.number(), items: z.array(z.string()) }),
+  resumeSchema: z.object({ proceed: z.boolean() }),
+  execute: async ({ state, setState, suspend, resumeData }) => {
+    if (!resumeData) {
+      // First run: update state and suspend
+      setState({ ...state, count: state.count + 1, items: [...state.items, "item-1"] });
+      await suspend({});
+      return {};
+    }
+    // After resume: state changes are preserved (count: 1, items: ["item-1"])
+    return {};
+  },
+});
+```
+
+## State in nested workflows
+
+When using nested workflows, state propagates from parent to child. Changes made by the parent workflow before calling a nested workflow are visible to steps inside the nested workflow:
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const nestedStep = createStep({
+  id: "nested-step",
+  inputSchema: z.object({}),
+  outputSchema: z.object({ result: z.string() }),
+  stateSchema: z.object({ sharedValue: z.string() }),
+  execute: async ({ state }) => {
+    // Receives state modified by parent workflow
+    return { result: `Received: ${state.sharedValue}` };
+  },
+});
+
+const nestedWorkflow = createWorkflow({
+  id: "nested-workflow",
+  inputSchema: z.object({}),
+  outputSchema: z.object({ result: z.string() }),
+  stateSchema: z.object({ sharedValue: z.string() }),
+})
+  .then(nestedStep)
+  .commit();
+
+const parentStep = createStep({
+  id: "parent-step",
+  inputSchema: z.object({}),
+  outputSchema: z.object({}),
+  stateSchema: z.object({ sharedValue: z.string() }),
+  execute: async ({ state, setState }) => {
+    // Modify state before nested workflow runs
+    setState({ ...state, sharedValue: "modified-by-parent" });
+    return {};
+  },
+});
+
+const parentWorkflow = createWorkflow({
+  id: "parent-workflow",
+  inputSchema: z.object({}),
+  outputSchema: z.object({ result: z.string() }),
+  stateSchema: z.object({ sharedValue: z.string() }),
+})
+  .then(parentStep)
+  .then(nestedWorkflow)
+  .commit();
+```
+
+## Related
+
+- [Workflows overview](/docs/v1/workflows/overview)
+- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+- [Step Class](/reference/v1/workflows/step)
+- [Workflow Class](/reference/v1/workflows/workflow)
+
 
 
 ---
@@ -33617,7 +33780,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 57+ AI providers and 1154+ models through Mastra's model router."
+description: "Access 57+ AI providers and 1155+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -33630,7 +33793,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1154 models from 57 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1155 models from 57 providers through a single API.
 
 ## Features
 
@@ -35685,7 +35848,7 @@ npm install @ai-sdk/amazon-bedrock
 
 ---
 title: "Anthropic | Models | Mastra"
-description: "Use Anthropic models with Mastra. 20 models available."
+description: "Use Anthropic models with Mastra. 21 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -35696,7 +35859,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/anthropic.svg" alt="Anthropic logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Anthropic
 [EN] Source: https://mastra.ai/en/models/providers/anthropic
 
-Access 20 Anthropic models through Mastra's model router. Authentication is handled automatically using the `ANTHROPIC_API_KEY` environment variable.
+Access 21 Anthropic models through Mastra's model router. Authentication is handled automatically using the `ANTHROPIC_API_KEY` environment variable.
 
 Learn more in the [Anthropic documentation](https://docs.anthropic.com/en/docs/about-claude/models).
 
@@ -35910,6 +36073,18 @@ for await (const chunk of stream) {
   },
   {
     "model": "anthropic/claude-opus-4-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 5,
+    "outputCost": 25
+  },
+  {
+    "model": "anthropic/claude-opus-4-5-20251101",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -40494,7 +40669,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/openai.svg"
     />    <CardGridItem
       title="Anthropic"
-      description="20 models"
+      description="21 models"
       href="/models/v1/providers/anthropic"
       logo="https://models.dev/logos/anthropic.svg"
     />    <CardGridItem
@@ -44243,7 +44418,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.45,
+    "inputCost": 0.4,
     "outputCost": 2.5
   },
   {
@@ -44255,7 +44430,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.6,
+    "inputCost": 0.4,
     "outputCost": 2.5
   },
   {
@@ -92075,6 +92250,12 @@ const step1 = createStep({
       description: "Function to pause workflow execution",
     },
     {
+      name: "state",
+      type: "z.infer<TState>",
+      description:
+        "The current workflow state. Contains shared values that persist across all steps and suspend/resume cycles. The structure is defined by the step's stateSchema.",
+    },
+    {
       name: "setState",
       type: "(state: z.infer<TState>) => void",
       description:
@@ -92104,6 +92285,7 @@ const step1 = createStep({
 
 ## Related
 
+- [Workflow state](/docs/v1/workflows/workflow-state)
 - [Control flow](/docs/v1/workflows/control-flow)
 - [Using agents and tools](/docs/v1/workflows/agents-and-tools)
 
@@ -93005,6 +93187,24 @@ export const workflow = createWorkflow({
   ]}
 />
 
+## Running with initial state
+
+When starting a workflow run, you can pass `initialState` to set the starting values for the workflow's state:
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+
+const result = await run.start({
+  inputData: { value: "hello" },
+  initialState: {
+    counter: 0,
+    items: [],
+  },
+});
+```
+
+The `initialState` object should match the structure defined in the workflow's `stateSchema`. See [Workflow State](/docs/v1/workflows/workflow-state) for more details.
+
 ## Workflow status
 
 A workflow's `status` indicates its current execution state. The possible values are:
@@ -93035,4 +93235,5 @@ A workflow's `status` indicates its current execution state. The possible values
 ## Related
 
 - [Step Class](./step)
+- [Workflow State](/docs/v1/workflows/workflow-state)
 - [Control flow](/docs/v1/workflows/control-flow)

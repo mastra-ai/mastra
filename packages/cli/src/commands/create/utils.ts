@@ -148,7 +148,7 @@ export const createMastraProject = async ({
     process.exit(0);
   }
 
-  let result;
+  let result: Awaited<ReturnType<typeof interactivePrompt>> | undefined = undefined;
 
   if (needsInteractive) {
     result = await interactivePrompt({

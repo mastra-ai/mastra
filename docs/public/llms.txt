@@ -111,6 +111,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Workflows overview | Workflows](https://mastra.ai/en/docs/workflows/overview): Workflows in Mastra help you orchestrate complex sequences of tasks with features like branching, parallel execution, resource suspension, and more.
 - [Snapshots | Workflows](https://mastra.ai/en/docs/workflows/snapshots): Learn how to save and resume workflow execution state with snapshots in Mastra
 - [Suspend & Resume | Workflows](https://mastra.ai/en/docs/workflows/suspend-and-resume): Suspend and resume in Mastra workflows allows you to pause execution while waiting for external input or resources.
+- [Workflow state | Workflows](https://mastra.ai/en/docs/workflows/workflow-state): Share values across workflow steps using global state that persists through the entire workflow run.
 
 ## EN - examples
 - [Example: Request Context | Agents](https://mastra.ai/en/examples/agents/request-context): Learn how to create and configure dynamic agents using request context to adapt behavior based on user subscription tiers.
@@ -177,13 +178,13 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 57+ AI providers and 1154+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 57+ AI providers and 1155+ models through Mastra's model router.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
 - [Alibaba | Models | Mastra](https://mastra.ai/en/models/providers/alibaba): Use Alibaba models with Mastra. 39 models available.
 - [Amazon Bedrock](https://mastra.ai/en/models/providers/amazon-bedrock): Use Amazon Bedrock models via the AI SDK.
-- [Anthropic | Models | Mastra](https://mastra.ai/en/models/providers/anthropic): Use Anthropic models with Mastra. 20 models available.
+- [Anthropic | Models | Mastra](https://mastra.ai/en/models/providers/anthropic): Use Anthropic models with Mastra. 21 models available.
 - [Azure](https://mastra.ai/en/models/providers/azure): Use Azure models via the AI SDK.
 - [Bailing | Models | Mastra](https://mastra.ai/en/models/providers/bailing): Use Bailing models with Mastra. 2 models available.
 - [Baseten | Models | Mastra](https://mastra.ai/en/models/providers/baseten): Use Baseten models with Mastra. 4 models available.

@@ -998,6 +998,7 @@ export type ProviderModelsMap = {
     'claude-opus-4-1-20250805',
     'claude-opus-4-20250514',
     'claude-opus-4-5',
+    'claude-opus-4-5-20251101',
     'claude-sonnet-4-0',
     'claude-sonnet-4-20250514',
     'claude-sonnet-4-5',
