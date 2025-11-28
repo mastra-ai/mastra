@@ -150,6 +150,14 @@ export class Workflow extends BaseResource {
       resumeData?: Record<string, any>;
       requestContext?: RequestContext | Record<string, any>;
     }) => Promise<MastraClientWorkflowOutput>;
+    observeStream: () => Promise<MastraClientWorkflowOutput>;
+    streamVNext: (params: {
+      inputData?: Record<string, any>;
+      requestContext?: RequestContext | Record<string, any>;
+      closeOnSuspend?: boolean;
+      tracingOptions?: TracingOptions;
+    }) => Promise<MastraClientWorkflowOutput>;
+    observeStreamVNext: () => Promise<MastraClientWorkflowOutput>;
   }> {
     const searchParams = new URLSearchParams();
 
@@ -234,6 +242,26 @@ export class Workflow extends BaseResource {
           resumeData: p.resumeData,
           requestContext: p.requestContext,
         });
+      },
+      observeStream: async () => {
+        return this.observeStream({ runId });
+      },
+      streamVNext: async (p: {
+        inputData?: Record<string, any>;
+        requestContext?: RequestContext | Record<string, any>;
+        closeOnSuspend?: boolean;
+        tracingOptions?: TracingOptions;
+      }) => {
+        return this.streamVNext({
+          runId,
+          inputData: p.inputData,
+          requestContext: p.requestContext,
+          closeOnSuspend: p.closeOnSuspend,
+          tracingOptions: p.tracingOptions,
+        });
+      },
+      observeStreamVNext: async () => {
+        return this.observeStreamVNext({ runId });
       },
     };
   }
@@ -376,7 +404,7 @@ export class Workflow extends BaseResource {
   async streamVNext(params: {
     runId?: string;
     inputData?: Record<string, any>;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext | Record<string, any>;
     closeOnSuspend?: boolean;
     tracingOptions?: TracingOptions;
   }): Promise<MastraClientWorkflowOutput> {

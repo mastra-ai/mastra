@@ -340,12 +340,35 @@ export class MastraClientModelOutput<OUTPUT extends OutputSchema = undefined> {
         this.#bufferedFiles.push(chunk.payload as any);
         break;
 
-      case 'step-finish':
+      case 'step-finish': {
+        const stepFinishPayload = chunk.payload as any;
+        // Extract providerMetadata, request, and response from step-finish
+        const metadata = stepFinishPayload.metadata || {};
+        const providerMetadata = metadata.providerMetadata;
+        const request = metadata.request;
+
+        // Construct response from step-finish payload
+        const response = {
+          id: stepFinishPayload.id || '',
+          timestamp: (metadata.timestamp as Date) || new Date(),
+          modelId: (metadata.modelId as string) || (metadata.model as string) || '',
+          messages: [],
+        };
+
+        // Resolve promises if data is available
+        if (providerMetadata !== undefined) {
+          this.#delayedPromises.providerMetadata.resolve(providerMetadata);
+        }
+        if (request !== undefined) {
+          this.#delayedPromises.request.resolve(request);
+        }
+        this.#delayedPromises.response.resolve(response);
+
         // Save current step
         this.#bufferedSteps.push({
           ...this.#currentStepBuffer,
-          finishReason: (chunk.payload as any).stepResult?.reason,
-          usage: (chunk.payload as any).stepResult?.usage || this.#bufferedUsage,
+          finishReason: stepFinishPayload.stepResult?.reason,
+          usage: stepFinishPayload.stepResult?.usage || this.#bufferedUsage,
         } as LLMStepResult);
 
         // Reset step buffer
@@ -359,6 +382,15 @@ export class MastraClientModelOutput<OUTPUT extends OutputSchema = undefined> {
           content: [],
         };
         break;
+      }
+
+      case 'tool-call-suspended': {
+        const suspendPayload = (chunk.payload as any).suspendPayload;
+        if (suspendPayload !== undefined) {
+          this.#delayedPromises.suspendPayload.resolve(suspendPayload);
+        }
+        break;
+      }
 
       case 'finish': {
         const finishPayload = chunk.payload as any;
@@ -432,6 +464,31 @@ export class MastraClientModelOutput<OUTPUT extends OutputSchema = undefined> {
     // Resolve with empty/undefined if not already resolved
     try {
       this.#delayedPromises.finishReason.resolve(undefined);
+    } catch {}
+    try {
+      // Ensure suspendPayload promise exists and resolve it
+      void this.#delayedPromises.suspendPayload.promise;
+      this.#delayedPromises.suspendPayload.resolve(undefined);
+    } catch {}
+    try {
+      // Ensure providerMetadata promise exists and resolve it
+      void this.#delayedPromises.providerMetadata.promise;
+      this.#delayedPromises.providerMetadata.resolve(undefined);
+    } catch {}
+    try {
+      // Ensure request promise exists and resolve it
+      void this.#delayedPromises.request.promise;
+      this.#delayedPromises.request.resolve({});
+    } catch {}
+    try {
+      // Ensure response promise exists and resolve it
+      void this.#delayedPromises.response.promise;
+      this.#delayedPromises.response.resolve({
+        id: '',
+        timestamp: new Date(),
+        modelId: '',
+        messages: [],
+      });
     } catch {}
   }
 

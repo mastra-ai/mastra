@@ -321,6 +321,139 @@ describe('Workflow (fetch-mocked)', () => {
     const body = JSON.parse(options.body);
     expect(body.tracingOptions).toEqual(tracingOptions);
   });
+
+  describe('Run object streaming methods', () => {
+    beforeEach(() => {
+      fetchMock = vi.fn((input: any) => {
+        const url = String(input);
+        if (url.includes('/create-run')) return Promise.resolve(createJsonResponse({ runId: 'r-123' }));
+        if (url.includes('/observe-stream?runId=')) {
+          const body = Workflow.createRecordStream([
+            { type: 'workflow-start', payload: { workflowId: 'wf-1' } },
+            { type: 'workflow-finish', payload: { workflowStatus: 'success', output: {} } },
+          ]);
+          return Promise.resolve(new Response(body as unknown as ReadableStream, { status: 200 }));
+        }
+        if (url.includes('/streamVNext?')) {
+          const body = Workflow.createRecordStream([
+            { type: 'workflow-start', payload: { workflowId: 'wf-1' } },
+            { type: 'workflow-finish', payload: { workflowStatus: 'success', output: {} } },
+          ]);
+          return Promise.resolve(new Response(body as unknown as ReadableStream, { status: 200 }));
+        }
+        if (url.includes('/observe-streamVNext?runId=')) {
+          const body = Workflow.createRecordStream([
+            { type: 'workflow-start', payload: { workflowId: 'wf-1' } },
+            { type: 'workflow-finish', payload: { workflowStatus: 'success', output: {} } },
+          ]);
+          return Promise.resolve(new Response(body as unknown as ReadableStream, { status: 200 }));
+        }
+        if (url.includes('/resume-stream?runId=')) {
+          const body = Workflow.createRecordStream([
+            { type: 'workflow-start', payload: { workflowId: 'wf-1' } },
+            { type: 'workflow-finish', payload: { workflowStatus: 'success', output: {} } },
+          ]);
+          return Promise.resolve(new Response(body as unknown as ReadableStream, { status: 200 }));
+        }
+        return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+      });
+      globalThis.fetch = fetchMock as any;
+    });
+
+    it('run.observeStream() should return MastraClientWorkflowOutput', async () => {
+      const run = await wf.createRun();
+      const stream = await run.observeStream();
+
+      expect(stream).toBeDefined();
+      expect(stream.fullStream).toBeDefined();
+      expect(typeof stream.status).toBe('object'); // Promise
+      expect(typeof stream.result).toBe('object'); // Promise
+      expect(typeof stream.usage).toBe('object'); // Promise
+
+      // Verify it calls the correct endpoint
+      const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/observe-stream?runId=r-123'));
+      expect(call).toBeTruthy();
+    });
+
+    it('run.streamVNext() should return MastraClientWorkflowOutput', async () => {
+      const run = await wf.createRun();
+      const stream = await run.streamVNext({ inputData: { test: 'data' } });
+
+      expect(stream).toBeDefined();
+      expect(stream.fullStream).toBeDefined();
+      expect(typeof stream.status).toBe('object'); // Promise
+      expect(typeof stream.result).toBe('object'); // Promise
+      expect(typeof stream.usage).toBe('object'); // Promise
+
+      // Verify it calls the correct endpoint with runId
+      const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/streamVNext?runId=r-123'));
+      expect(call).toBeTruthy();
+      const options = call[1];
+      const body = JSON.parse(options.body);
+      expect(body.inputData).toEqual({ test: 'data' });
+    });
+
+    it('run.observeStreamVNext() should return MastraClientWorkflowOutput', async () => {
+      const run = await wf.createRun();
+      const stream = await run.observeStreamVNext();
+
+      expect(stream).toBeDefined();
+      expect(stream.fullStream).toBeDefined();
+      expect(typeof stream.status).toBe('object'); // Promise
+      expect(typeof stream.result).toBe('object'); // Promise
+      expect(typeof stream.usage).toBe('object'); // Promise
+
+      // Verify it calls the correct endpoint
+      const call = fetchMock.mock.calls.find((args: any[]) =>
+        String(args[0]).includes('/observe-streamVNext?runId=r-123'),
+      );
+      expect(call).toBeTruthy();
+    });
+
+    it('run.resumeStreamVNext() should return MastraClientWorkflowOutput', async () => {
+      const run = await wf.createRun();
+      const stream = await run.resumeStreamVNext({ step: 'step1', resumeData: { key: 'value' } });
+
+      expect(stream).toBeDefined();
+      expect(stream.fullStream).toBeDefined();
+      expect(typeof stream.status).toBe('object'); // Promise
+      expect(typeof stream.result).toBe('object'); // Promise
+      expect(typeof stream.usage).toBe('object'); // Promise
+
+      // Verify it calls the correct endpoint with runId
+      const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/resume-stream?runId=r-123'));
+      expect(call).toBeTruthy();
+      const options = call[1];
+      const body = JSON.parse(options.body);
+      expect(body.step).toBe('step1');
+      expect(body.resumeData).toEqual({ key: 'value' });
+    });
+
+    it('run.streamVNext() should handle requestContext', async () => {
+      const run = await wf.createRun();
+      const requestContext = { userId: '123' };
+      await run.streamVNext({ inputData: {}, requestContext: requestContext });
+
+      const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/streamVNext?runId=r-123'));
+      expect(call).toBeTruthy();
+      const options = call[1];
+      const body = JSON.parse(options.body);
+      expect(body.requestContext).toEqual(requestContext);
+    });
+
+    it('run.streamVNext() should handle closeOnSuspend and tracingOptions', async () => {
+      const run = await wf.createRun();
+      const tracingOptions = { metadata: { test: 'trace' } };
+      await run.streamVNext({ inputData: {}, closeOnSuspend: true, tracingOptions });
+
+      const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/streamVNext?runId=r-123'));
+      expect(call).toBeTruthy();
+      const options = call[1];
+      const body = JSON.parse(options.body);
+      expect(body.closeOnSuspend).toBe(true);
+      expect(body.tracingOptions).toEqual(tracingOptions);
+    });
+  });
 });
 
 // Mock fetch globally for client tests
