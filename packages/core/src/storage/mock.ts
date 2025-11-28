@@ -79,6 +79,7 @@ export class InMemoryStore extends MastraStorage {
       observabilityInstance: true,
       indexManagement: false,
       listScoresBySpan: true,
+      locking: true,
     };
   }
 

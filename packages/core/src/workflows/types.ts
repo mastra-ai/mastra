@@ -245,6 +245,8 @@ export interface WorkflowRunState {
   result?: Record<string, any>;
   error?: string | Error;
   requestContext?: Record<string, any>;
+  // Fencing: token of the current lock holder to ensure exactly-once writes
+  fencingToken?: string;
   value: Record<string, string>;
   context: { input?: Record<string, any> } & Record<string, StepResult<any, any, any, any>>;
   serializedStepGraph: SerializedStepFlowEntry[];

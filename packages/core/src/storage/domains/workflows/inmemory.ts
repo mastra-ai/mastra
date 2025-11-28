@@ -10,11 +10,48 @@ export type InMemoryWorkflows = Map<string, StorageWorkflowRun>;
 export class WorkflowsInMemory extends WorkflowsStorage {
   operations: StoreOperations;
   collection: InMemoryWorkflows;
+  #locks: Set<string> = new Set();
+  #expiries: Map<string, number> = new Map();
+  #holder: string = Math.random().toString(36).slice(2);
 
   constructor({ collection, operations }: { collection: InMemoryWorkflows; operations: StoreOperations }) {
     super();
     this.collection = collection;
     this.operations = operations;
+  }
+
+  #key({ workflowName, runId }: { workflowName: string; runId: string }) {
+    return `${workflowName}::${runId}`;
+  }
+
+  async tryAcquireRunLock(args: { workflowName: string; runId: string }): Promise<boolean> {
+    const k = this.#key(args);
+    const now = Date.now();
+    const exp = this.#expiries.get(k) || 0;
+    if (this.#locks.has(k) && exp > now) return false;
+    this.#locks.add(k);
+    this.#expiries.set(k, now + 30 * 60 * 1000);
+    return true;
+  }
+
+  async releaseRunLock(args: { workflowName: string; runId: string }): Promise<void> {
+    const k = this.#key(args);
+    this.#locks.delete(k);
+    this.#expiries.delete(k);
+  }
+
+  async renewRunLock(args: { workflowName: string; runId: string; ttlMs?: number }): Promise<boolean> {
+    const k = this.#key(args);
+    if (!this.#locks.has(k)) return false;
+    const ttl = args.ttlMs ?? 30 * 60 * 1000;
+    this.#expiries.set(k, Date.now() + ttl);
+    return true;
+  }
+
+  async getRunLock(args: { workflowName: string; runId: string }) {
+    const k = this.#key(args);
+    if (!this.#locks.has(k)) return null;
+    return { holder: this.#holder, expiresAt: this.#expiries.get(k), backend: 'inmemory' };
   }
 
   async updateWorkflowResults({

@@ -168,6 +168,131 @@ describe('Workflow', () => {
       });
     });
 
+    it('should fail resume if run lock cannot be acquired', async () => {
+      const suspendingStep = createStep({
+        id: 'pause-here',
+        execute: vi.fn().mockImplementationOnce(async ({ suspend }) => {
+          await suspend();
+          return undefined;
+        }),
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ resumed: z.boolean().default(true) }),
+      });
+
+      const wf = createWorkflow({
+        id: 'lock-test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+        steps: [suspendingStep],
+        options: { validateInputs: false },
+      });
+      wf.then(suspendingStep).commit();
+
+      const storage = new MockStore();
+      const mastra = new Mastra({ storage, workflows: { 'lock-test': wf } });
+
+      const run = await wf.createRun();
+      const { getWorkflowState } = run.streamLegacy({ inputData: { input: 'x' } });
+      const res = await getWorkflowState();
+      expect(res.status).toBe('suspended');
+
+      // Force lock acquisition to fail
+      const lockSpy = vi.spyOn(storage, 'tryAcquireWorkflowRunLock').mockResolvedValue(false);
+
+      await expect(run.resume({ resumeData: { ok: true } as any, step: 'pause-here' })).rejects.toThrow(
+        /Could not acquire lock for workflow run/,
+      );
+
+      lockSpy.mockRestore();
+    });
+
+    it('should fail restart if run lock cannot be acquired', async () => {
+      const step = createStep({
+        id: 'a',
+        execute: vi.fn().mockResolvedValue({ ok: true }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ ok: z.boolean() }),
+      });
+
+      const wf = createWorkflow({
+        id: 'lock-restart-wf',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step],
+      });
+      wf.then(step).commit();
+
+      const storage = new MockStore();
+      const mastra = new Mastra({ storage, workflows: { 'lock-restart': wf } });
+      const runId = 'restart-lock-run';
+
+      // write a running snapshot directly
+      await storage.persistWorkflowSnapshot({
+        workflowName: wf.id,
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          value: {},
+          context: { input: {} },
+          activePaths: [0],
+          activeStepsPath: { a: [0] },
+          serializedStepGraph: [],
+          suspendedPaths: {},
+          waitingPaths: {},
+          resumeLabels: {},
+          result: undefined,
+          error: undefined,
+          timestamp: Date.now(),
+        } as any,
+      });
+
+      const run = await wf.createRun({ runId });
+
+      const lockSpy = vi.spyOn(storage, 'tryAcquireWorkflowRunLock').mockResolvedValue(false);
+      await expect(run.restart()).rejects.toThrow(/Could not acquire lock for workflow run/);
+      lockSpy.mockRestore();
+    });
+
+    it('should send periodic heartbeats while resuming', async () => {
+      vi.useFakeTimers();
+
+      const step = createStep({
+        id: 'will-suspend',
+        execute: vi.fn().mockImplementationOnce(async ({ suspend }) => {
+          await suspend();
+          return undefined;
+        }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ ok: z.boolean().default(true) }),
+      });
+
+      const wf = createWorkflow({
+        id: 'hb-wf',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step],
+      });
+      wf.then(step).sleep(60 * 60 * 1000).commit();
+
+      const storage = new MockStore();
+      const hbSpy = vi.spyOn(storage, 'renewWorkflowRunLock');
+      const mastra = new Mastra({ storage, workflows: { 'hb-wf': wf } });
+
+      const run = await wf.createRun();
+      const { getWorkflowState } = run.streamLegacy({ inputData: {} });
+      const res = await getWorkflowState();
+      expect(res.status).toBe('suspended');
+
+      // Attempt resume and advance timers to trigger at least one heartbeat
+      const p = run.resume({ resumeData: {}, step: 'will-suspend' } as any).catch(() => {});
+      vi.advanceTimersByTime(10 * 60 * 1000 + 100); // > 10 minutes
+      expect(hbSpy).toHaveBeenCalled();
+      vi.useRealTimers();
+      await storage.releaseWorkflowRunLock({ workflowName: wf.id, runId: run.runId });
+      await p;
+    });
+
     it('should handle basic suspend and resume flow', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
       const promptAgentAction = vi

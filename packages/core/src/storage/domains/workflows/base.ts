@@ -10,6 +10,43 @@ export abstract class WorkflowsStorage extends MastraBase {
     });
   }
 
+  /**
+   * Optional: Acquire a distributed lock for a workflow run to prevent
+   * concurrent execution across multiple app instances.
+   *
+   * Default implementation is a no-op that returns true. Storage backends
+   * that support locking (e.g., Postgres advisory locks) should override.
+   */
+  async tryAcquireRunLock(_args: { workflowName: string; runId: string }): Promise<boolean> {
+    return true;
+  }
+
+  /**
+   * Optional: Release a previously acquired lock. Default is a no-op.
+   */
+  async releaseRunLock(_args: { workflowName: string; runId: string }): Promise<void> {
+    return;
+  }
+
+  /**
+   * Optional: Renew/heartbeat a lock extending its expiry. Default is a no-op
+   * that returns true. Backends without TTL can update metadata for observability.
+   */
+  async renewRunLock(_args: { workflowName: string; runId: string; ttlMs?: number }): Promise<boolean> {
+    return true;
+  }
+
+  /**
+   * Optional: Get lock info for debugging/observability. Default is null.
+   */
+  async getRunLock(_args: { workflowName: string; runId: string }): Promise<{
+    holder?: string;
+    expiresAt?: number;
+    backend?: string;
+  } | null> {
+    return null;
+  }
+
   abstract updateWorkflowResults({
     workflowName,
     runId,
