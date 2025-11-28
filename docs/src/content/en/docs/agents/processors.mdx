@@ -129,17 +129,26 @@ The `processInput` method receives:
 - `abort`: Function to stop processing and return early
 - `runtimeContext`: Execution metadata like `threadId` and `resourceId`
 
+The method can return:
+- `MastraMessageV2[]` — Transformed messages array (backward compatible)
+- `{ messages: MastraMessageV2[]; systemMessages: CoreMessage[] }` — Both messages and modified system messages
+
+The framework handles both return formats, so modifying system messages is optional and existing processors continue to work.
+
 ### Modifying system messages
 
 To modify system messages (e.g., trim verbose prompts for smaller models), return an object with both `messages` and `systemMessages`:
 
 ```typescript title="src/mastra/processors/system-trimmer.ts" showLineNumbers copy
-import type { InputProcessor, CoreMessage } from "@mastra/core";
+import type { InputProcessor, CoreMessage, MastraMessageV2 } from "@mastra/core";
 
 export class SystemTrimmer implements InputProcessor {
   id = "system-trimmer";
 
-  async processInput({ messages, systemMessages }) {
+  async processInput({
+    messages,
+    systemMessages,
+  }): Promise<{ messages: MastraMessageV2[]; systemMessages: CoreMessage[] }> {
     // Trim system messages for smaller models
     const trimmedSystemMessages = systemMessages.map((msg) => ({
       ...msg,
