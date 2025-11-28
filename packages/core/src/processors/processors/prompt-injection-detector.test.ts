@@ -680,9 +680,6 @@ describe('PromptInjectionDetector', () => {
       });
 
       // Create detector with providerOptions
-      // This test should FAIL initially because:
-      // 1. PromptInjectionOptions doesn't include providerOptions in its type definition
-      // 2. Even if we add it, the processor doesn't pass it to agent.generate()
       const detector = new PromptInjectionDetector({
         model: mockModel,
         providerOptions: {
@@ -690,7 +687,7 @@ describe('PromptInjectionDetector', () => {
             reasoningEffort: 'low',
           },
         },
-      } as any); // Using 'as any' to bypass type check for now - the type should be fixed
+      });
 
       const mockAbort = vi.fn();
       const messages = [createTestMessage('Test message', 'user')];
@@ -698,11 +695,10 @@ describe('PromptInjectionDetector', () => {
       await detector.processInput({ messages, abort: mockAbort as any });
 
       // Verify providerOptions were passed to the internal agent's generate call
-      // The mock model should have captured the doGenerate call with providerOptions
       expect(mockModel.doGenerateCalls).toHaveLength(1);
       const generateCall = mockModel.doGenerateCalls[0];
 
-      // This assertion should FAIL because the processor doesn't pass providerOptions
+      // Verify providerOptions are passed through
       expect(generateCall.providerOptions).toEqual({
         openai: {
           reasoningEffort: 'low',
