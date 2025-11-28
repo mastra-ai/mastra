@@ -99,13 +99,15 @@ import type {
 } from "@mastra/core";
 
 export class CustomInputProcessor implements InputProcessor {
-  name = "custom-input";
+  id = "custom-input";
 
   async processInput({
     messages,
+    systemMessages,
     context,
   }: {
     messages: MastraMessageV2[];
+    systemMessages: CoreMessage[];
     context: RuntimeContext;
   }): Promise<MastraMessageV2[]> {
     // Transform messages before they reach the LLM
@@ -119,6 +121,43 @@ export class CustomInputProcessor implements InputProcessor {
   }
 }
 ```
+
+The `processInput` method receives:
+- `messages`: User and assistant messages (not system messages)
+- `systemMessages`: All system messages (agent instructions, memory context, user-provided system prompts)
+- `messageList`: The full MessageList instance for advanced use cases
+- `abort`: Function to stop processing and return early
+- `runtimeContext`: Execution metadata like `threadId` and `resourceId`
+
+### Modifying system messages
+
+To modify system messages (e.g., trim verbose prompts for smaller models), return an object with both `messages` and `systemMessages`:
+
+```typescript title="src/mastra/processors/system-trimmer.ts" showLineNumbers copy
+import type { InputProcessor, CoreMessage } from "@mastra/core";
+
+export class SystemTrimmer implements InputProcessor {
+  id = "system-trimmer";
+
+  async processInput({ messages, systemMessages }) {
+    // Trim system messages for smaller models
+    const trimmedSystemMessages = systemMessages.map((msg) => ({
+      ...msg,
+      content:
+        typeof msg.content === "string"
+          ? msg.content.substring(0, 500)
+          : msg.content,
+    }));
+
+    return { messages, systemMessages: trimmedSystemMessages };
+  }
+}
+```
+
+This is useful for:
+- Trimming verbose system prompts for models with smaller context windows
+- Filtering or modifying semantic recall content to prevent "prompt too long" errors
+- Dynamically adjusting system instructions based on the conversation
 
 ### Custom output processor
 
@@ -155,8 +194,6 @@ export class CustomOutputProcessor implements OutputProcessor {
   }
 }
 ```
-
-Both `processInput` and `processOutputResult` receive a `context` object containing execution metadata such as `threadId`, `resourceId`, and other runtime information.
 
 ## Built-in Utility Processors
 
