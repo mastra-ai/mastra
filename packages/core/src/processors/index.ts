@@ -66,6 +66,8 @@ export interface ProcessOutputResultArgs extends ProcessorMessageContext {}
 export interface ProcessInputStepArgs extends ProcessorMessageContext {
   /** The current step number (0-indexed) */
   stepNumber: number;
+  /** All system messages (agent instructions, user-provided, memory) for read/modify access */
+  systemMessages: CoreMessageV4[];
 }
 
 /**

@@ -555,11 +555,15 @@ export class ProcessorRunner {
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
 
+      // Get all system messages to pass to the processor
+      const currentSystemMessages = messageList.getAllSystemMessages();
+
       try {
         const result = await processMethod({
           messages: processableMessages,
           messageList,
           stepNumber,
+          systemMessages: currentSystemMessages,
           abort,
           tracingContext: { currentSpan: processorSpan },
           requestContext,
