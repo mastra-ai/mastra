@@ -2,7 +2,7 @@ import type { Server } from 'node:http';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { MessageSendParams } from '@mastra/core/a2a';
-import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
+import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { A2A } from './a2a';
 
 describe('A2A', () => {
