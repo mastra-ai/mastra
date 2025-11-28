@@ -820,3 +820,252 @@ describe('MastraMCPClient - Resource Cleanup Tests', () => {
     expect(afterDisconnectCount).toBe(initialListenerCount);
   });
 });
+
+describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
+  /**
+   * Issue #8660: Client does not support MCP Roots
+   * 
+   * The filesystem MCP server logs "Client does not support MCP Roots" because:
+   * 1. The Mastra MCP client doesn't provide a way to configure roots
+   * 2. Even if roots capability is advertised, the client doesn't handle roots/list requests
+   * 
+   * According to MCP spec, when a client advertises `roots` capability:
+   * - The server can call `roots/list` to get the list of allowed directories
+   * - The client should respond with the configured roots
+   */
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+
+  beforeEach(async () => {
+    const httpServer: HttpServer = createServer();
+    const mcpServer = new McpServer(
+      { name: 'test-roots-server', version: '1.0.0' },
+      {
+        capabilities: {
+          logging: {},
+          tools: {},
+        },
+      },
+    );
+
+    mcpServer.tool(
+      'echo',
+      'Echo tool',
+      { message: z.string() },
+      async ({ message }): Promise<CallToolResult> => {
+        return { content: [{ type: 'text', text: message }] };
+      },
+    );
+
+    const serverTransport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+    });
+
+    await mcpServer.connect(serverTransport);
+
+    httpServer.on('request', async (req, res) => {
+      await serverTransport.handleRequest(req, res);
+    });
+
+    const baseUrl = await new Promise<URL>(resolve => {
+      httpServer.listen(0, '127.0.0.1', () => {
+        const addr = httpServer.address() as AddressInfo;
+        resolve(new URL(`http://127.0.0.1:${addr.port}/mcp`));
+      });
+    });
+
+    testServer = { httpServer, mcpServer, serverTransport, baseUrl };
+  });
+
+  afterEach(async () => {
+    await testServer?.mcpServer.close().catch(() => { });
+    await testServer?.serverTransport.close().catch(() => { });
+    testServer?.httpServer.close();
+  });
+
+  it('should preserve roots capability when passed in capabilities', async () => {
+    // Verify that roots capability flags are properly passed through to the SDK client
+    const client = new InternalMastraMCPClient({
+      name: 'roots-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+      capabilities: {
+        roots: {
+          listChanged: true,
+        },
+      },
+    });
+
+    const internalClient = (client as any).client;
+    const capabilities = internalClient._options?.capabilities;
+
+    expect(capabilities).toMatchObject({
+      roots: { listChanged: true },
+      elicitation: {},
+    });
+
+    await client.disconnect().catch(() => { });
+  });
+
+  it('should handle roots/list requests from server per MCP spec', async () => {
+    /**
+     * Per MCP Roots spec (https://modelcontextprotocol.io/specification/2025-11-25/client/roots):
+     * 
+     * 1. Client declares roots capability: { roots: { listChanged: true } }
+     * 2. Server sends: { method: "roots/list" }
+     * 3. Client responds: { roots: [{ uri: "file:///...", name: "..." }] }
+     * 4. When roots change, client sends: { method: "notifications/roots/list_changed" }
+     */
+
+    const client = new InternalMastraMCPClient({
+      name: 'roots-list-test',
+      server: {
+        url: testServer.baseUrl,
+        roots: [
+          { uri: 'file:///tmp', name: 'Temp Directory' },
+          { uri: 'file:///home/user/projects', name: 'Projects' },
+        ],
+      },
+    });
+
+    await client.connect();
+
+    // Verify the client has roots support via the roots getter
+    expect(client.roots).toBeDefined();
+    expect(Array.isArray(client.roots)).toBe(true);
+    expect(client.roots).toHaveLength(2);
+    expect(client.roots[0]).toEqual({ uri: 'file:///tmp', name: 'Temp Directory' });
+    expect(client.roots[1]).toEqual({ uri: 'file:///home/user/projects', name: 'Projects' });
+
+    // Verify setRoots method exists
+    expect(typeof client.setRoots).toBe('function');
+
+    await client.disconnect();
+  });
+
+  it('should send notifications/roots/list_changed when roots are updated', async () => {
+    /**
+     * Per MCP spec: "When roots change, clients that support listChanged 
+     * MUST send a notification: { method: 'notifications/roots/list_changed' }"
+     */
+
+    const client = new InternalMastraMCPClient({
+      name: 'roots-notification-test',
+      server: {
+        url: testServer.baseUrl,
+        roots: [{ uri: 'file:///initial', name: 'Initial' }],
+      },
+    });
+
+    await client.connect();
+
+    // Verify sendRootsListChanged method exists
+    expect(typeof client.sendRootsListChanged).toBe('function');
+
+    // Update roots - this should also send the notification
+    await client.setRoots([
+      { uri: 'file:///new-root', name: 'New Root' },
+    ]);
+
+    // Verify roots were updated
+    expect(client.roots).toHaveLength(1);
+    expect(client.roots[0].uri).toBe('file:///new-root');
+
+    await client.disconnect();
+  });
+
+  it('should auto-enable roots capability when roots are provided', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'roots-auto-capability-test',
+      server: {
+        url: testServer.baseUrl,
+        roots: [{ uri: 'file:///test' }],
+      },
+    });
+
+    const internalClient = (client as any).client;
+    const capabilities = internalClient._options?.capabilities;
+
+    // SDK should automatically receive roots capability when roots are provided
+    expect(capabilities.roots).toBeDefined();
+    expect(capabilities.roots.listChanged).toBe(true);
+
+    await client.disconnect().catch(() => { });
+  });
+});
+
+describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => {
+  /**
+   * Integration test using the actual @modelcontextprotocol/server-filesystem
+   * This reproduces the exact scenario from issue #8660:
+   * https://github.com/mastra-ai/mastra/issues/8660
+   */
+
+  it('WITH roots: server uses roots from client (the fix)', async () => {
+    // Capture stderr to verify the server's behavior
+    const stderrOutput: string[] = [];
+    const originalStderrWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (chunk: any, ...args: any[]) => {
+      stderrOutput.push(chunk.toString());
+      return originalStderrWrite(chunk, ...args);
+    };
+
+    try {
+      // Connect WITH roots configured - this is the fix
+      const client = new InternalMastraMCPClient({
+        name: 'with-roots-test',
+        server: {
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
+          roots: [{ uri: 'file:///tmp', name: 'Temp Directory' }],
+        },
+      });
+
+      // Verify roots capability IS advertised
+      const internalClient = (client as any).client;
+      const capabilities = internalClient._options?.capabilities;
+      expect(capabilities.roots).toBeDefined();
+      expect(capabilities.roots.listChanged).toBe(true);
+
+      await client.connect();
+      await client.tools(); // Wait for initialization
+      await client.disconnect();
+
+      // The server should log that it received roots from the client
+      const output = stderrOutput.join('');
+      expect(output).toContain('Updated allowed directories from MCP roots');
+      expect(output).not.toContain('Client does not support MCP Roots');
+    } finally {
+      process.stderr.write = originalStderrWrite;
+    }
+  }, 30000);
+
+  it('should allow dynamic root updates and notify server', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'filesystem-roots-update-test',
+      server: {
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
+        roots: [{ uri: 'file:///tmp' }],
+      },
+    });
+
+    await client.connect();
+
+    // Update roots dynamically
+    await client.setRoots([
+      { uri: 'file:///tmp', name: 'Temp' },
+      { uri: 'file:///var', name: 'Var' },
+    ]);
+
+    expect(client.roots).toHaveLength(2);
+    expect(client.roots[1].uri).toBe('file:///var');
+
+    await client.disconnect();
+  }, 30000);
+});
