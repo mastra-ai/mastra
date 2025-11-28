@@ -128,6 +128,18 @@ export class MessageList {
   private generateMessageId?: IdGenerator;
   private _agentNetworkAppend = false;
 
+  // Event recording for observability
+  private isRecording = false;
+  private recordedEvents: Array<{
+    type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
+    source?: MessageSource;
+    count?: number;
+    ids?: string[];
+    text?: string;
+    tag?: string;
+    message?: CoreMessageV4;
+  }> = [];
+
   constructor({
     threadId,
     resourceId,
@@ -142,11 +154,48 @@ export class MessageList {
     this._agentNetworkAppend = _agentNetworkAppend || false;
   }
 
+  /**
+   * Start recording mutations to the MessageList for observability/tracing
+   */
+  public startRecording(): void {
+    this.isRecording = true;
+    this.recordedEvents = [];
+  }
+
+  /**
+   * Stop recording and return the list of recorded events
+   */
+  public stopRecording(): Array<{
+    type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
+    source?: MessageSource;
+    count?: number;
+    ids?: string[];
+    text?: string;
+    tag?: string;
+    message?: CoreMessageV4;
+  }> {
+    this.isRecording = false;
+    const events = [...this.recordedEvents];
+    this.recordedEvents = [];
+    return events;
+  }
+
   public add(messages: MessageListInput, messageSource: MessageSource) {
     if (messageSource === `user`) messageSource = `input`;
 
     if (!messages) return this;
-    for (const message of Array.isArray(messages) ? messages : [messages]) {
+    const messageArray = Array.isArray(messages) ? messages : [messages];
+
+    // Record event if recording is enabled
+    if (this.isRecording) {
+      this.recordedEvents.push({
+        type: 'add',
+        source: messageSource,
+        count: messageArray.length,
+      });
+    }
+
+    for (const message of messageArray) {
       this.addOne(
         typeof message === `string`
           ? {
@@ -218,6 +267,29 @@ export class MessageList {
     return this;
   }
 
+  public makeMessageSourceChecker(): {
+    memory: Set<string>;
+    input: Set<string>;
+    output: Set<string>;
+    getSource: (message: MastraDBMessage) => MessageSource | null;
+  } {
+    const sources = {
+      memory: new Set(Array.from(this.memoryMessages.values()).map(m => m.id)),
+      output: new Set(Array.from(this.newResponseMessages.values()).map(m => m.id)),
+      input: new Set(Array.from(this.newUserMessages.values()).map(m => m.id)),
+    };
+
+    return {
+      ...sources,
+      getSource: (msg: MastraDBMessage) => {
+        if (sources.memory.has(msg.id)) return 'memory';
+        if (sources.input.has(msg.id)) return 'input';
+        if (sources.output.has(msg.id)) return 'response';
+        return null;
+      },
+    };
+  }
+
   public getLatestUserContent(): string | null {
     const currentUserMessages = this.all.core().filter(m => m.role === 'user');
     const content = currentUserMessages.at(-1)?.content;
@@ -244,11 +316,34 @@ export class MessageList {
 
   public get clear() {
     return {
+      all: {
+        db: (): MastraDBMessage[] => {
+          const allMessages = [...this.messages];
+          this.messages = [];
+          this.newUserMessages.clear();
+          this.newResponseMessages.clear();
+          this.userContextMessages.clear();
+          if (this.isRecording && allMessages.length > 0) {
+            this.recordedEvents.push({
+              type: 'clear',
+              count: allMessages.length,
+            });
+          }
+          return allMessages;
+        },
+      },
       input: {
         db: (): MastraDBMessage[] => {
           const userMessages = Array.from(this.newUserMessages);
           this.messages = this.messages.filter(m => !this.newUserMessages.has(m));
           this.newUserMessages.clear();
+          if (this.isRecording && userMessages.length > 0) {
+            this.recordedEvents.push({
+              type: 'clear',
+              source: 'input',
+              count: userMessages.length,
+            });
+          }
           return userMessages;
         },
       },
@@ -257,10 +352,46 @@ export class MessageList {
           const responseMessages = Array.from(this.newResponseMessages);
           this.messages = this.messages.filter(m => !this.newResponseMessages.has(m));
           this.newResponseMessages.clear();
+          if (this.isRecording && responseMessages.length > 0) {
+            this.recordedEvents.push({
+              type: 'clear',
+              source: 'response',
+              count: responseMessages.length,
+            });
+          }
           return responseMessages;
         },
       },
     };
+  }
+
+  /**
+   * Remove messages by ID
+   * @param ids - Array of message IDs to remove
+   * @returns Array of removed messages
+   */
+  public removeByIds(ids: string[]): MastraDBMessage[] {
+    const idsSet = new Set(ids);
+    const removed: MastraDBMessage[] = [];
+    this.messages = this.messages.filter(m => {
+      if (idsSet.has(m.id)) {
+        removed.push(m);
+        this.memoryMessages.delete(m);
+        this.newUserMessages.delete(m);
+        this.newResponseMessages.delete(m);
+        this.userContextMessages.delete(m);
+        return false;
+      }
+      return true;
+    });
+    if (this.isRecording && removed.length > 0) {
+      this.recordedEvents.push({
+        type: 'removeByIds',
+        ids,
+        count: removed.length,
+      });
+    }
+    return removed;
   }
 
   private all = {
@@ -659,11 +790,60 @@ export class MessageList {
     return Math.min(...unsavedMessages.map(m => new Date(m.createdAt).getTime()));
   }
 
+  /**
+   * Check if a message is a new user or response message that should be saved.
+   * Checks by message ID to handle cases where the message object may be a copy.
+   */
+  public isNewMessage(messageOrId: MastraDBMessage | string): boolean {
+    const id = typeof messageOrId === 'string' ? messageOrId : messageOrId.id;
+
+    // Check by object reference first (fast path)
+    if (typeof messageOrId !== 'string') {
+      if (this.newUserMessages.has(messageOrId) || this.newResponseMessages.has(messageOrId)) {
+        return true;
+      }
+    }
+
+    // Check by ID (handles copies)
+    return (
+      Array.from(this.newUserMessages).some(m => m.id === id) ||
+      Array.from(this.newResponseMessages).some(m => m.id === id)
+    );
+  }
+
   public getSystemMessages(tag?: string): CoreMessageV4[] {
     if (tag) {
       return this.taggedSystemMessages[tag] || [];
     }
     return this.systemMessages;
+  }
+
+  /**
+   * Get all system messages (both tagged and untagged)
+   * @returns Array of all system messages
+   */
+  public getAllSystemMessages(): CoreMessageV4[] {
+    return [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()];
+  }
+
+  /**
+   * Replace all system messages with new ones
+   * This clears both tagged and untagged system messages and replaces them with the provided array
+   * @param messages - Array of system messages to set
+   */
+  public replaceAllSystemMessages(messages: CoreMessageV4[]): this {
+    // Clear existing system messages
+    this.systemMessages = [];
+    this.taggedSystemMessages = {};
+
+    // Add all new messages as untagged (processors don't need to preserve tags)
+    for (const message of messages) {
+      if (message.role === 'system') {
+        this.systemMessages.push(message);
+      }
+    }
+
+    return this;
   }
 
   public addSystem(
@@ -756,8 +936,21 @@ export class MessageList {
     if (tag && !this.isDuplicateSystem(coreMessage, tag)) {
       this.taggedSystemMessages[tag] ||= [];
       this.taggedSystemMessages[tag].push(coreMessage);
+      if (this.isRecording) {
+        this.recordedEvents.push({
+          type: 'addSystem',
+          tag,
+          message: coreMessage,
+        });
+      }
     } else if (!tag && !this.isDuplicateSystem(coreMessage)) {
       this.systemMessages.push(coreMessage);
+      if (this.isRecording) {
+        this.recordedEvents.push({
+          type: 'addSystem',
+          message: coreMessage,
+        });
+      }
     }
   }
 
@@ -1140,6 +1333,11 @@ export class MessageList {
     } else if (messageSource === `response`) {
       this.newResponseMessages.add(messageV2);
       this.newResponseMessagesPersisted.add(messageV2);
+      if (this.newUserMessages.has(messageV2)) {
+        // this can happen if the client sends a client side tool back. that will be added as new user input
+        // to make sure we're not double tracking it we need to remove it from input if we add to response
+        this.newUserMessages.delete(messageV2);
+      }
     } else if (messageSource === `input`) {
       this.newUserMessages.add(messageV2);
       this.newUserMessagesPersisted.add(messageV2);

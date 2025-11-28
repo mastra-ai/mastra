@@ -1,4 +1,4 @@
-import { PassThrough } from 'stream';
+import { PassThrough } from 'node:stream';
 import { openai } from '@ai-sdk/openai-v5';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CompositeVoice } from '../../voice/composite-voice';

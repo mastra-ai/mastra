@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { ReadableStream, WritableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
@@ -2152,6 +2152,22 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               startedAt,
               endedAt: Date.now(),
             };
+
+      await emitter.emit('watch', {
+        type: 'workflow-step-result',
+        payload: {
+          id: step.id,
+          ...stepFailure,
+        },
+      });
+
+      await emitter.emit('watch', {
+        type: 'workflow-step-finish',
+        payload: {
+          id: step.id,
+          metadata: {},
+        },
+      });
 
       stepRes = {
         result: stepFailure,

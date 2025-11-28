@@ -1,5 +1,5 @@
 import http from 'node:http';
-import path from 'path';
+import path from 'node:path';
 import type { ServerType } from '@hono/node-server';
 import { serve } from '@hono/node-server';
 import { Agent } from '@mastra/core/agent';
@@ -2449,11 +2449,11 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
       expect(result.message).toContain('Please fix the following errors');
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool validation failed');
+      expect(result.content[0].text).toContain('Tool input validation failed');
       expect(result.content[0].text).toContain('Please fix the following errors');
     }
   });
@@ -2468,11 +2468,11 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
       expect(result.message).toContain('String must contain at least 3 character(s)');
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool validation failed');
+      expect(result.content[0].text).toContain('Tool input validation failed');
       expect(result.content[0].text).toContain('Message must be at least 3 characters');
     }
   });
@@ -2487,10 +2487,10 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool validation failed');
+      expect(result.content[0].text).toContain('Tool input validation failed');
     }
   });
 
@@ -2524,11 +2524,11 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
       expect(result.message).toContain('Array must contain at least 1 element(s)');
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool validation failed');
+      expect(result.content[0].text).toContain('Tool input validation failed');
       expect(result.content[0].text).toContain('Array must contain at least 1 element(s)');
     }
   });
@@ -2547,10 +2547,10 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool validation failed');
+      expect(result.content[0].text).toContain('Tool input validation failed');
     }
   });
 
@@ -2569,7 +2569,7 @@ describe('MCPServer - Tool Input Validation', () => {
     if (result.error) {
       expect(result.error).toBe(true);
       const errorText = result.message;
-      expect(errorText).toContain('Tool validation failed');
+      expect(errorText).toContain('Tool input validation failed');
       // Should contain multiple validation errors
       // Note: Some validations might not trigger when there are other errors
       expect(errorText).toContain('- tags: Array must contain at least 1 element(s)');
@@ -2577,7 +2577,7 @@ describe('MCPServer - Tool Input Validation', () => {
     } else {
       expect(result.isError).toBe(true);
       const errorText = result.content[0].text;
-      expect(errorText).toContain('Tool validation failed');
+      expect(errorText).toContain('Tool input validation failed');
       // Should contain multiple validation errors
       // Note: Some validations might not trigger when there are other errors
       expect(errorText).toContain('- tags: Array must contain at least 1 element(s)');
@@ -2600,7 +2600,7 @@ describe('MCPServer - Tool Input Validation', () => {
 
     // executeTool returns client-side validation format
     expect(invalidResult.error).toBe(true);
-    expect(invalidResult.message).toContain('Tool validation failed');
+    expect(invalidResult.message).toContain('Tool input validation failed');
     expect(invalidResult.message).toContain('Message must be at least 3 characters');
   });
 });

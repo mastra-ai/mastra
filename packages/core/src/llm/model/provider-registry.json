@@ -532,6 +532,36 @@
       "docUrl": "https://llm.chutes.ai/v1/models",
       "gateway": "models.dev"
     },
+    "agentrouter": {
+      "url": "https://agentrouter.org/v1",
+      "apiKeyEnvVar": "AGENTROUTER_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "AgentRouter",
+      "models": [
+        "claude-3-5-haiku-20241022",
+        "claude-3-5-sonnet-20240620",
+        "claude-3-5-sonnet-20241022",
+        "claude-3-7-sonnet-20250219",
+        "claude-3-7-sonnet-20250219-thinking",
+        "claude-haiku-4-5-20251001",
+        "claude-opus-4-20250514",
+        "claude-opus-4-20250514-thinking",
+        "claude-sonnet-4-20250514",
+        "claude-sonnet-4-20250514-thinking",
+        "claude-sonnet-4-5-20250929",
+        "deepseek-r1-0528",
+        "deepseek-v3.1",
+        "deepseek-v3.2",
+        "gemini-3-pro-preview",
+        "glm-4.5",
+        "glm-4.6",
+        "gpt-5",
+        "gpt-5.1",
+        "kimi-k2-thinking"
+      ],
+      "docUrl": "https://docs.agentrouter.org",
+      "gateway": "models.dev"
+    },
     "cortecs": {
       "url": "https://api.cortecs.ai/v1",
       "apiKeyEnvVar": "CORTECS_API_KEY",
@@ -813,7 +843,7 @@
       "url": "https://api.minimax.io/anthropic/v1",
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
-      "name": "Minimax",
+      "name": "MiniMax",
       "models": ["MiniMax-M2"],
       "docUrl": "https://platform.minimax.io/docs/guides/quickstart",
       "gateway": "models.dev"
@@ -930,6 +960,15 @@
       "name": "Zhipu AI Coding Plan",
       "models": ["glm-4.5", "glm-4.5-air", "glm-4.5-flash", "glm-4.5v", "glm-4.6"],
       "docUrl": "https://docs.bigmodel.cn/cn/coding-plan/overview",
+      "gateway": "models.dev"
+    },
+    "minimax-cn": {
+      "url": "https://api.minimaxi.com/anthropic/v1",
+      "apiKeyEnvVar": "MINIMAX_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "MiniMax (China)",
+      "models": ["MiniMax-M2"],
+      "docUrl": "https://platform.minimaxi.com/docs/guides/quickstart",
       "gateway": "models.dev"
     },
     "perplexity": {
@@ -1331,12 +1370,40 @@
         "claude-opus-4-1-20250805",
         "claude-opus-4-20250514",
         "claude-opus-4-5",
+        "claude-opus-4-5-20251101",
         "claude-sonnet-4-0",
         "claude-sonnet-4-20250514",
         "claude-sonnet-4-5",
         "claude-sonnet-4-5-20250929"
       ],
       "docUrl": "https://docs.anthropic.com/en/docs/about-claude/models",
+      "gateway": "models.dev"
+    },
+    "io-intelligence": {
+      "url": "https://api.intelligence.io.solutions/api/v1",
+      "apiKeyEnvVar": "IOINTELLIGENCE_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "IO Intelligence",
+      "models": [
+        "deepseek-ai-deepseek-r1-0528",
+        "intel-qwen3-coder-480b-a35b-instruct-int4-mixed-ar",
+        "meta-llama-llama-3-2-90b-vision-instruct",
+        "meta-llama-llama-3-3-70b-instruct",
+        "meta-llama-llama-4-maverick-17b-128e-instruct-fp8",
+        "mistralai-devstral-small-2505",
+        "mistralai-magistral-small-2506",
+        "mistralai-mistral-large-instruct-2411",
+        "mistralai-mistral-nemo-instruct-2407",
+        "moonshotai-kimi-k2-instruct-0905",
+        "moonshotai-kimi-k2-thinking",
+        "openai-gpt-oss-120b",
+        "openai-gpt-oss-20b",
+        "qwen-qwen2-5-vl-32b-instruct",
+        "qwen-qwen3-235b-a22b-thinking-2507",
+        "qwen-qwen3-next-80b-a3b-instruct",
+        "zai-org-glm-4-6"
+      ],
+      "docUrl": "https://io.net/docs/guides/intelligence/io-intelligence",
       "gateway": "models.dev"
     },
     "fireworks-ai": {
@@ -1981,6 +2048,28 @@
       "zai-org/GLM-4.5-Air",
       "zai-org/GLM-4.6"
     ],
+    "agentrouter": [
+      "claude-3-5-haiku-20241022",
+      "claude-3-5-sonnet-20240620",
+      "claude-3-5-sonnet-20241022",
+      "claude-3-7-sonnet-20250219",
+      "claude-3-7-sonnet-20250219-thinking",
+      "claude-haiku-4-5-20251001",
+      "claude-opus-4-20250514",
+      "claude-opus-4-20250514-thinking",
+      "claude-sonnet-4-20250514",
+      "claude-sonnet-4-20250514-thinking",
+      "claude-sonnet-4-5-20250929",
+      "deepseek-r1-0528",
+      "deepseek-v3.1",
+      "deepseek-v3.2",
+      "gemini-3-pro-preview",
+      "glm-4.5",
+      "glm-4.6",
+      "gpt-5",
+      "gpt-5.1",
+      "kimi-k2-thinking"
+    ],
     "cortecs": [
       "claude-4-5-sonnet",
       "claude-sonnet-4",
@@ -2273,6 +2362,7 @@
       "text-embedding-ada-002"
     ],
     "zhipuai-coding-plan": ["glm-4.5", "glm-4.5-air", "glm-4.5-flash", "glm-4.5v", "glm-4.6"],
+    "minimax-cn": ["MiniMax-M2"],
     "perplexity": ["sonar", "sonar-pro", "sonar-reasoning", "sonar-reasoning-pro"],
     "openrouter": [
       "anthropic/claude-3.5-haiku",
@@ -2558,10 +2648,30 @@
       "claude-opus-4-1-20250805",
       "claude-opus-4-20250514",
       "claude-opus-4-5",
+      "claude-opus-4-5-20251101",
       "claude-sonnet-4-0",
       "claude-sonnet-4-20250514",
       "claude-sonnet-4-5",
       "claude-sonnet-4-5-20250929"
+    ],
+    "io-intelligence": [
+      "deepseek-ai-deepseek-r1-0528",
+      "intel-qwen3-coder-480b-a35b-instruct-int4-mixed-ar",
+      "meta-llama-llama-3-2-90b-vision-instruct",
+      "meta-llama-llama-3-3-70b-instruct",
+      "meta-llama-llama-4-maverick-17b-128e-instruct-fp8",
+      "mistralai-devstral-small-2505",
+      "mistralai-magistral-small-2506",
+      "mistralai-mistral-large-instruct-2411",
+      "mistralai-mistral-nemo-instruct-2407",
+      "moonshotai-kimi-k2-instruct-0905",
+      "moonshotai-kimi-k2-thinking",
+      "openai-gpt-oss-120b",
+      "openai-gpt-oss-20b",
+      "qwen-qwen2-5-vl-32b-instruct",
+      "qwen-qwen3-235b-a22b-thinking-2507",
+      "qwen-qwen3-next-80b-a3b-instruct",
+      "zai-org-glm-4-6"
     ],
     "fireworks-ai": [
       "accounts/fireworks/models/deepseek-r1-0528",

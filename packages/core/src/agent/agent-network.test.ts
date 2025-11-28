@@ -1,6 +1,7 @@
 import { openai } from '@ai-sdk/openai-v5';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { MastraError } from '../error';
 import { MockMemory } from '../memory/mock';
 import { RequestContext } from '../request-context';
 import { createTool } from '../tools';
@@ -599,5 +600,100 @@ describe.skip('Agent - network', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     expect(titleGenerationAttempted).toBe(false);
+  });
+}, 120e3);
+
+describe('Agent - network - updateWorkingMemory', () => {
+  it('Should forward memory context (threadId, resourceId) to sub-agents when using same memory template', async () => {
+    // Create a shared memory instance with working memory enabled
+    // This is the scenario from issue #9873 where sub-agents share the same memory template
+    const sharedMemory = new MockMemory({
+      enableWorkingMemory: true,
+      workingMemoryTemplate: `
+      # Information Profile
+      - Title:
+      - Some facts:
+        - Fact 1:
+        - Fact 2:
+        - Fact 3:
+      - Summary:
+      `,
+    });
+
+    // Create sub-agents with the shared memory and working memory enabled
+    // These agents will need threadId/resourceId to use updateWorkingMemory tool
+    const subAgent1 = new Agent({
+      id: 'sub-agent-1',
+      name: 'Sub Agent 1',
+      instructions:
+        'You are a helpful assistant. When the user provides information, remember it using your memory tools.',
+      model: openai('gpt-4o-mini'),
+      memory: sharedMemory,
+      defaultOptions: {
+        toolChoice: 'required',
+      },
+    });
+
+    const subAgent2 = new Agent({
+      id: 'sub-agent-2',
+      name: 'Sub Agent 2',
+      instructions:
+        'You are a helpful assistant. When the user provides information, remember it using your memory tools.',
+      model: openai('gpt-4o-mini'),
+      memory: sharedMemory,
+      defaultOptions: {
+        toolChoice: 'required',
+      },
+    });
+
+    // Create network agent with the same shared memory
+    const networkWithSharedMemory = new Agent({
+      id: 'network-with-shared-memory',
+      name: 'Network With Shared Memory',
+      instructions:
+        'You can delegate tasks to sub-agents. Sub Agent 1 handles research tasks. Sub Agent 2 handles writing tasks.',
+      model: openai('gpt-4o-mini'),
+      agents: {
+        subAgent1,
+        subAgent2,
+      },
+      memory: sharedMemory,
+    });
+
+    const threadId = 'test-thread-shared-memory';
+    const resourceId = 'test-resource-shared-memory';
+
+    const anStream = await networkWithSharedMemory.network('Research dolphins and write a summary', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    // Consume the stream and track sub-agent executions
+    for await (const chunk of anStream) {
+      if (chunk.type === 'agent-execution-event-tool-result') {
+        const payload = chunk.payload as any;
+        const toolName = payload.payload?.toolName;
+        const result = payload.payload?.result;
+        if (toolName === 'updateWorkingMemory' && result instanceof MastraError) {
+          const toolResultMessage = result?.message;
+          if (toolResultMessage.includes('Thread ID') || toolResultMessage.includes('resourceId')) {
+            expect.fail(toolResultMessage + ' should not be thrown');
+          }
+        }
+      }
+    }
+
+    // Verify the stream completed (usage should be available)
+    const usage = await anStream.usage;
+    expect(usage).toBeDefined();
+
+    // Verify that the thread was created/accessed in memory
+    // This confirms that memory operations worked correctly
+    const thread = await sharedMemory.getThreadById({ threadId });
+    expect(thread).toBeDefined();
+    expect(thread?.id).toBe(threadId);
+    expect(thread?.resourceId).toBe(resourceId);
   });
 }, 120e3);

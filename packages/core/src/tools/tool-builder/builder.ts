@@ -367,11 +367,7 @@ export class CoreToolBuilder extends MastraBase {
             const resumeSchema = this.getResumeSchema();
             const resumeValidation = validateToolInput(resumeSchema, resumeData, options.name);
             if (resumeValidation.error) {
-              logger?.warn(`Tool resume data validation failed for '${options.name}'`, {
-                toolName: options.name,
-                errors: resumeValidation.error.validationErrors,
-                resumeData,
-              });
+              logger?.warn(resumeValidation.error.message);
               toolSpan?.end({ output: resumeValidation.error });
               return resumeValidation.error as any;
             }
@@ -384,11 +380,7 @@ export class CoreToolBuilder extends MastraBase {
           const suspendSchema = this.getSuspendSchema();
           const suspendValidation = validateToolSuspendData(suspendSchema, suspendData, options.name);
           if (suspendValidation.error) {
-            logger?.warn(`Tool suspend data validation failed for '${options.name}'`, {
-              toolName: options.name,
-              errors: suspendValidation.error.validationErrors,
-              suspendData,
-            });
+            logger?.warn(suspendValidation.error.message);
             toolSpan?.end({ output: suspendValidation.error });
             return suspendValidation.error as any;
           }
@@ -400,11 +392,7 @@ export class CoreToolBuilder extends MastraBase {
         const outputSchema = this.getOutputSchema();
         const outputValidation = validateToolOutput(outputSchema, result, options.name, skiptOutputValidation);
         if (outputValidation.error) {
-          logger?.warn(`Tool output validation failed for '${options.name}'`, {
-            toolName: options.name,
-            errors: outputValidation.error.validationErrors,
-            output: result,
-          });
+          logger?.warn(outputValidation.error.message);
           toolSpan?.end({ output: outputValidation.error });
           return outputValidation.error;
         }
@@ -427,11 +415,7 @@ export class CoreToolBuilder extends MastraBase {
         const parameters = processedSchema || this.getParameters();
         const { data, error } = validateToolInput(parameters, args, options.name);
         if (error) {
-          logger.warn(`Tool input validation failed for '${options.name}'`, {
-            toolName: options.name,
-            errors: error.validationErrors,
-            args,
-          });
+          logger.warn(error.message);
           return error;
         }
         // Use validated/transformed data
@@ -594,6 +578,7 @@ export class CoreToolBuilder extends MastraBase {
       id: 'id' in this.originalTool ? this.originalTool.id : undefined,
       parameters: processedSchema ?? z.object({}),
       outputSchema: processedOutputSchema,
+      providerOptions: 'providerOptions' in this.originalTool ? this.originalTool.providerOptions : undefined,
     } as unknown as CoreTool;
   }
 }

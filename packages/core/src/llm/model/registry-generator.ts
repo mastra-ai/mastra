@@ -3,8 +3,8 @@
  * Used by both the CLI generation script and runtime refresh
  */
 
-import fs from 'fs/promises';
-import path from 'path';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import type { MastraModelGateway, ProviderConfig } from './gateways/base.js';
 
 /**

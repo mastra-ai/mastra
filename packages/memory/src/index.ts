@@ -112,6 +112,15 @@ export class Memory extends MastraMemory {
     // Use perPage from args if provided, otherwise use threadConfig.lastMessages
     const perPage = perPageArg !== undefined ? perPageArg : config.lastMessages;
 
+    // When limiting messages (perPage !== false) without explicit orderBy, we need to:
+    // 1. Query DESC to get the NEWEST messages (not oldest)
+    // 2. Reverse results to restore chronological order for the LLM
+    // Without this fix, "lastMessages: 64" returns the OLDEST 64 messages, not the last 64.
+    const shouldGetNewestAndReverse = !orderBy && perPage !== false;
+    const effectiveOrderBy = shouldGetNewestAndReverse
+      ? { field: 'createdAt' as const, direction: 'DESC' as const }
+      : orderBy;
+
     const vectorResults: {
       id: string;
       score: number;
@@ -123,7 +132,7 @@ export class Memory extends MastraMemory {
       threadId,
       perPage,
       page,
-      orderBy,
+      orderBy: effectiveOrderBy,
       threadConfig,
     });
 
@@ -191,7 +200,7 @@ export class Memory extends MastraMemory {
       resourceId,
       perPage,
       page,
-      orderBy,
+      orderBy: effectiveOrderBy,
       filter,
       ...(vectorResults?.length
         ? {
@@ -210,7 +219,8 @@ export class Memory extends MastraMemory {
           }
         : {}),
     });
-    const rawMessages = paginatedResult.messages;
+    // Reverse to restore chronological order if we queried DESC to get newest messages
+    const rawMessages = shouldGetNewestAndReverse ? paginatedResult.messages.reverse() : paginatedResult.messages;
 
     const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
 
@@ -779,7 +789,7 @@ ${workingMemory}`;
   }: {
     memoryConfig?: MemoryConfig;
   }): Promise<WorkingMemoryTemplate | null> {
-    const config = this.getMergedThreadConfig(memoryConfig || {});
+    const config = this.getMergedThreadConfig(memoryConfig);
 
     if (!config.workingMemory?.enabled) {
       return null;
@@ -823,7 +833,7 @@ ${workingMemory}`;
       return null;
     }
 
-    const workingMemoryTemplate = await this.getWorkingMemoryTemplate({ memoryConfig: config });
+    const workingMemoryTemplate = await this.getWorkingMemoryTemplate({ memoryConfig });
     const workingMemoryData = await this.getWorkingMemory({ threadId, resourceId, memoryConfig: config });
 
     if (!workingMemoryTemplate) {
@@ -1033,3 +1043,6 @@ ${
     // and then querying the vector store to delete associated embeddings
   }
 }
+
+// Re-export memory processors from @mastra/core for backward compatibility
+export { SemanticRecall, WorkingMemory, MessageHistory } from '@mastra/core/processors';

@@ -2,7 +2,7 @@ import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createSampleMessageV2, createSampleThread } from './data';
 import { MastraStorage } from '@mastra/core/storage';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 
 export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }) {
   describe('updateMessages', () => {
