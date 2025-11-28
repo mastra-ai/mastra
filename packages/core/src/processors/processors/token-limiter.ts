@@ -70,7 +70,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
     messages: MastraDBMessage[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-    runtimeContext?: RequestContext;
+    requestContext?: RequestContext;
   }): Promise<MastraDBMessage[]> {
     const { messages } = args;
     const limit = this.maxTokens;

@@ -86,7 +86,7 @@ export class ProcessorRunner {
   async runOutputProcessors(
     messageList: MessageList,
     tracingContext?: TracingContext,
-    runtimeContext?: RequestContext,
+    requestContext?: RequestContext,
   ): Promise<MessageList> {
     for (const [index, processor] of this.outputProcessors.entries()) {
       const allNewMessages = messageList.get.response.db();
@@ -136,7 +136,7 @@ export class ProcessorRunner {
         messageList,
         abort: ctx.abort,
         tracingContext: { currentSpan: processorSpan },
-        runtimeContext,
+        requestContext,
       });
 
       // Stop recording and get mutations for this processor
@@ -185,7 +185,7 @@ export class ProcessorRunner {
     part: ChunkType<OUTPUT>,
     processorStates: Map<string, ProcessorState<OUTPUT>>,
     tracingContext?: TracingContext,
-    runtimeContext?: RequestContext,
+    requestContext?: RequestContext,
     messageList?: MessageList,
   ): Promise<{
     part: ChunkType<OUTPUT> | null | undefined;
@@ -225,7 +225,7 @@ export class ProcessorRunner {
                 throw new TripWire(reason || `Stream part blocked by ${processor.id}`);
               },
               tracingContext: { currentSpan: state.span },
-              runtimeContext,
+              requestContext,
               messageList,
             });
 
@@ -334,7 +334,7 @@ export class ProcessorRunner {
   async runInputProcessors(
     messageList: MessageList,
     tracingContext?: TracingContext,
-    runtimeContext?: RequestContext,
+    requestContext?: RequestContext,
   ): Promise<MessageList> {
     for (const [index, processor] of this.inputProcessors.entries()) {
       let processableMessages: MastraDBMessage[] = messageList.get.input.db();
@@ -372,15 +372,19 @@ export class ProcessorRunner {
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
 
+      // Get all system messages to pass to the processor
+      const currentSystemMessages = messageList.getAllSystemMessages();
+
       const result = await processMethod({
         messages: processableMessages,
+        systemMessages: currentSystemMessages,
         abort: ctx.abort,
         tracingContext: { currentSpan: processorSpan },
         messageList,
-        runtimeContext,
+        requestContext,
       });
 
-      // Handle both MessageList and MastraDBMessage[] return types
+      // Handle MessageList, MastraDBMessage[], or { messages, systemMessages } return types
       let mutations: Array<{
         type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
         source?: string;
@@ -407,6 +411,44 @@ export class ProcessorRunner {
           // Update processableMessages to reflect ALL current messages for next processor
           processableMessages = messageList.get.input.db();
         }
+      } else if (this.isProcessInputResultWithSystemMessages(result)) {
+        // Processor returned { messages, systemMessages } - handle both
+        mutations = messageList.stopRecording();
+
+        // Replace system messages with the modified ones
+        messageList.replaceAllSystemMessages(result.systemMessages);
+
+        // Handle regular messages
+        const regularMessages = result.messages;
+        if (regularMessages) {
+          const deletedIds = inputIds.filter(i => !regularMessages.some(m => m.id === i));
+          if (deletedIds.length) {
+            messageList.removeByIds(deletedIds);
+          }
+
+          // Separate any new system messages from other messages (backward compat)
+          const newSystemMessages = regularMessages.filter(m => m.role === 'system');
+          const nonSystemMessages = regularMessages.filter(m => m.role !== 'system');
+
+          // Add any new system messages from the messages array
+          for (const sysMsg of newSystemMessages) {
+            const systemText =
+              (sysMsg.content.content as string | undefined) ??
+              sysMsg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
+              '';
+            messageList.addSystem(systemText);
+          }
+
+          // Add non-system messages normally
+          if (nonSystemMessages.length > 0) {
+            for (const message of nonSystemMessages) {
+              messageList.removeByIds([message.id]);
+              messageList.add(message, check.getSource(message) || 'input');
+            }
+          }
+        }
+
+        processableMessages = messageList.get.input.db();
       } else {
         // Processor returned an array - stop recording before clear/add (that's just internal plumbing)
         mutations = messageList.stopRecording();
@@ -451,5 +493,21 @@ export class ProcessorRunner {
     }
 
     return messageList;
+  }
+
+  /**
+   * Type guard to check if result is { messages, systemMessages }
+   */
+  private isProcessInputResultWithSystemMessages(
+    result: unknown,
+  ): result is { messages: MastraDBMessage[]; systemMessages: unknown[] } {
+    return (
+      result !== null &&
+      typeof result === 'object' &&
+      'messages' in result &&
+      'systemMessages' in result &&
+      Array.isArray((result as any).messages) &&
+      Array.isArray((result as any).systemMessages)
+    );
   }
 }
