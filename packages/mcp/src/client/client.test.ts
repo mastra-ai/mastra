@@ -573,7 +573,7 @@ describe('MastraMCPClient - Progress Tests', () => {
     const longTask = tools['longTask'];
     expect(longTask).toBeDefined();
 
-    await longTask.execute({ context: { count: 3, delayMs: 1 } });
+    await longTask.execute({ count: 3, delayMs: 1 });
 
     expect(mockHandler).toHaveBeenCalled();
     const calls = mockHandler.mock.calls.map(call => call[0]);
@@ -603,7 +603,7 @@ describe('MastraMCPClient - Progress Tests', () => {
     const longTask = tools['longTask'];
     expect(longTask).toBeDefined();
 
-    await longTask.execute({ context: { count: 3, delayMs: 1 } });
+    await longTask.execute({ count: 3, delayMs: 1 });
 
     // Should not receive any progress notifications when disabled
     expect(mockHandler).not.toHaveBeenCalled();
