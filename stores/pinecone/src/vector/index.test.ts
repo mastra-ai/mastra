@@ -1,3 +1,4 @@
+import { createVectorTestSuite } from '@internal/storage-test-utils';
 import type { QueryResult } from '@mastra/core/vector';
 import dotenv from 'dotenv';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, afterEach } from 'vitest';
@@ -123,6 +124,7 @@ describe.skip('PineconeVector Integration Tests', () => {
 
   beforeAll(async () => {
     vectorDB = new PineconeVector({
+      id: 'pinecone-test-vector',
       apiKey: PINECONE_API_KEY,
     });
     // Delete test index
@@ -1481,5 +1483,38 @@ describe.skip('PineconeVector Integration Tests', () => {
       });
       expect(hybridResults).toHaveLength(1);
     });
+  });
+});
+
+// Metadata filtering and advanced operations tests
+describe.skip('Pinecone Metadata Filtering', () => {
+  const pineconeVector = new PineconeVector({
+    apiKey: PINECONE_API_KEY,
+    id: 'pinecone-metadata-test',
+  });
+
+  createVectorTestSuite({
+    vector: pineconeVector,
+    createIndex: async (indexName: string) => {
+      await pineconeVector.createIndex({ indexName, dimension: 4 });
+      // Wait for index to be ready
+      await waitUntilReady(pineconeVector, indexName);
+      // Return the normalized name so tests use it
+      return indexName;
+    },
+    deleteIndex: async (indexName: string) => {
+      // Use the same normalization
+      const normalizedName = indexName
+        .toLowerCase()
+        .replace(/_/g, '-')
+        .replace(/[^a-z0-9-]/g, '');
+      await pineconeVector.deleteIndex({ indexName: normalizedName });
+      // Wait for index to be deleted
+      await waitUntilIndexDeleted(pineconeVector, normalizedName);
+    },
+    waitForIndexing: async () => {
+      // Pinecone has eventual consistency, need to wait for vectors to be indexed
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    },
   });
 });

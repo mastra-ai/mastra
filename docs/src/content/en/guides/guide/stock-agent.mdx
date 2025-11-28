@@ -17,7 +17,7 @@ In this guide, you're going to create a simple agent that fetches the last day's
 
 - Node.js `v22.13.0` or later installed
 - An API key from a supported [Model Provider](/models/v1)
-- An existing Mastra project (Follow the [installation guide](/guides/v1/quickstarts/standalone-server) to set up a new project)
+- An existing Mastra project (Follow the [installation guide](/guides/v1/getting-started/quickstart) to set up a new project)
 
 ## Creating the Agent
 
@@ -30,7 +30,6 @@ To create an agent in Mastra use the `Agent` class to define it and then registe
 Create a new file `src/mastra/agents/stockAgent.ts` and define your agent:
 
 ```ts copy title="src/mastra/agents/stockAgent.ts"
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const stockAgent = new Agent({
@@ -38,7 +37,7 @@ export const stockAgent = new Agent({
   name: "Stock Agent",
   instructions:
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-5.1",
 });
 ```
 
@@ -104,8 +103,7 @@ export const stockPrices = createTool({
 
 Inside `src/mastra/agents/stockAgent.ts` import your newly created `stockPrices` tool and add it to the agent.
 
-```ts copy title="src/mastra/agents/stockAgent.ts" {3, 10-12}
-import { openai } from "@ai-sdk/openai";
+```ts copy title="src/mastra/agents/stockAgent.ts" {9-11}
 import { Agent } from "@mastra/core/agent";
 import { stockPrices } from "../tools/stockPrices";
 
@@ -114,7 +112,7 @@ export const stockAgent = new Agent({
   name: "Stock Agent",
   instructions:
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-5.1",
   tools: {
     stockPrices,
   },

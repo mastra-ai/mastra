@@ -18,8 +18,7 @@ By combining writable tool streams with agent streaming, you gain fine grained c
 
 Agent streaming can be combined with tool calls, allowing tool outputs to be written directly into the agent’s streaming response. This makes it possible to surface tool activity as part of the overall interaction.
 
-```typescript {4,10} showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
+```typescript {3,9} showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 
 import { testTool } from "../tools/test-tool";
@@ -28,7 +27,7 @@ export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
   instructions: "You are a weather agent.",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-5.1",
   tools: { testTool },
 });
 ```
@@ -117,9 +116,53 @@ for await (const chunk of stream) {
 }
 ```
 
+## Tool Lifecycle Hooks
+
+Tools support lifecycle hooks that allow you to monitor different stages of tool execution during streaming. These hooks are particularly useful for logging or analytics.
+
+### Example: Using onInputAvailable and onOutput
+
+```typescript showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const weatherTool = createTool({
+  id: "weather-tool",
+  description: "Get weather information",
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+    conditions: z.string(),
+  }),
+  // Called when the complete input is available
+  onInputAvailable: ({ input, toolCallId }) => {
+    console.log(`Weather requested for: ${input.city}`);
+  },
+  execute: async (input) => {
+    const weather = await fetchWeather(input.city);
+    return weather;
+  },
+  // Called after successful execution
+  onOutput: ({ output, toolName }) => {
+    console.log(`${toolName} result: ${output.temperature}°F, ${output.conditions}`);
+  },
+});
+```
+
+### Available Hooks
+
+- **onInputStart**: Called when tool call input streaming begins
+- **onInputDelta**: Called for each chunk of input as it streams in
+- **onInputAvailable**: Called when complete input is parsed and validated
+- **onOutput**: Called after the tool successfully executes with the output
+
+For detailed documentation on all lifecycle hooks, see the [createTool() reference](/reference/v1/tools/create-tool#tool-lifecycle-hooks).
+
 ## Tool using an agent
 
-Pipe an agent’s `textStream` to the tool’s `writer`. This streams partial output, and Mastra automatically aggregates the agent’s usage into the tool run.
+Pipe an agent's `fullStream` to the tool's `writer`. This streams partial output, and Mastra automatically aggregates the agent's usage into the tool run.
 
 ```typescript showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
@@ -133,7 +176,7 @@ export const testTool = createTool({
     const testAgent = context?.mastra?.getAgent("testAgent");
     const stream = await testAgent?.stream(`What is the weather in ${city}?`);
 
-    await stream!.textStream.pipeTo(context?.writer!);
+    await stream!.fullStream.pipeTo(context?.writer!);
 
     return {
       value: await stream!.text,

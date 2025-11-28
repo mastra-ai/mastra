@@ -1,4 +1,4 @@
-import type { WritableStream } from 'stream/web';
+import type { WritableStream } from 'node:stream/web';
 import type { ModelMessage, ToolChoice } from 'ai-v5';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
@@ -122,6 +122,9 @@ export type AgentExecutionOptions<
 
   /** Structured output generation with enhanced developer experience  */
   structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
+
+  /** Whether to include raw chunks in the stream output (not available on all model providers) */
+  includeRawChunks?: boolean;
 };
 
 export type InnerAgentExecutionOptions<

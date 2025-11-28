@@ -1,5 +1,107 @@
 # @mastra/ai-sdk
 
+## 1.0.0-beta.4
+
+### Patch Changes
+
+- Added `messageMetadata` and `onError` options to `toAISdkV5Stream`, enabling you to attach custom metadata to stream chunks and handle errors during stream conversion. ([#10313](https://github.com/mastra-ai/mastra/pull/10313))
+
+  #### messageMetadata
+
+  Attach custom metadata to start and finish chunks by providing a function that receives the current stream part:
+
+  ```typescript
+  const stream = toAISdkV5Stream(agentStream, {
+    from: 'agent',
+    messageMetadata: ({ part }) => ({
+      timestamp: Date.now(),
+      sessionId: 'session-123',
+      partType: part.type,
+    }),
+  });
+  ```
+
+  #### onError
+
+  Customize error handling during stream conversion:
+
+  ```typescript
+  const stream = toAISdkV5Stream(agentStream, {
+    from: 'agent',
+    onError: error => {
+      console.error('Stream error:', error);
+      return JSON.stringify({ error: error.message });
+    },
+  });
+  ```
+
+- Fix chat route to use agent ID instead of agent name for resolution. The `/chat/:agentId` endpoint now correctly resolves agents by their ID property (e.g., `weather-agent`) instead of requiring the camelCase variable name (e.g., `weatherAgent`). This fixes issue #10469 where URLs like `/chat/weather-agent` would return 404 errors. ([#10484](https://github.com/mastra-ai/mastra/pull/10484))
+
+- Fixes propagation of custom data chunks from nested workflows in branches to the root stream when using `toAISdkV5Stream` with `{from: 'workflow'}`. ([#10447](https://github.com/mastra-ai/mastra/pull/10447))
+
+  Previously, when a nested workflow within a branch used `writer.custom()` to write data-\* chunks, those chunks were wrapped in `workflow-step-output` events and not extracted, causing them to be dropped from the root stream.
+
+  **Changes:**
+  - Added handling for `workflow-step-output` chunks in `transformWorkflow()` to extract and propagate data-\* chunks
+  - When a `workflow-step-output` chunk contains a data-\* chunk in its `payload.output`, the transformer now extracts it and returns it directly to the root stream
+  - Added comprehensive test coverage for nested workflows with branches and custom data propagation
+
+  This ensures that custom data chunks written via `writer.custom()` in nested workflows (especially those within branches) are properly propagated to the root stream, allowing consumers to receive progress updates, metrics, and other custom data from nested workflow steps.
+
+- Fix network data step formatting in AI SDK stream transformation ([#10432](https://github.com/mastra-ai/mastra/pull/10432))
+
+  Previously, network execution steps were not being tracked correctly in the AI SDK stream transformation. Steps were being duplicated rather than updated, and critical metadata like step IDs, iterations, and task information was missing or incorrectly structured.
+
+  **Changes:**
+  - Enhanced step tracking in `AgentNetworkToAISDKTransformer` to properly maintain step state throughout execution lifecycle
+  - Steps are now identified by unique IDs and updated in place rather than creating duplicates
+  - Added proper iteration and task metadata to each step in the network execution flow
+  - Fixed agent, workflow, and tool execution events to correctly populate step data
+  - Updated network stream event types to include `networkId`, `workflowId`, and consistent `runId` tracking
+  - Added test coverage for network custom data chunks with comprehensive validation
+
+  This ensures the AI SDK correctly represents the full execution flow of agent networks with accurate step sequencing and metadata.
+
+- Add support for tool-call-approval and tool-call-suspended events in chatRoute ([#10205](https://github.com/mastra-ai/mastra/pull/10205))
+
+- Fixed workflow routes to properly receive request context from middleware. This aligns the behavior of `workflowRoute` with `chatRoute`, ensuring that context set in middleware is consistently forwarded to workflows. ([#10427](https://github.com/mastra-ai/mastra/pull/10427))
+
+  When both middleware and request body provide a request context, the middleware value now takes precedence, and a warning is emitted to help identify potential conflicts.
+
+  See [#10427](https://github.com/mastra-ai/mastra/pull/10427)
+
+- Updated dependencies [[`21a15de`](https://github.com/mastra-ai/mastra/commit/21a15de369fe82aac26bb642ed7be73505475e8b), [`feb7ee4`](https://github.com/mastra-ai/mastra/commit/feb7ee4d09a75edb46c6669a3beaceec78811747), [`b0e2ea5`](https://github.com/mastra-ai/mastra/commit/b0e2ea5b52c40fae438b9e2f7baee6f0f89c5442), [`c456e01`](https://github.com/mastra-ai/mastra/commit/c456e0149e3c176afcefdbd9bb1d2c5917723725), [`ab035c2`](https://github.com/mastra-ai/mastra/commit/ab035c2ef6d8cc7bb25f06f1a38508bd9e6f126b), [`1a46a56`](https://github.com/mastra-ai/mastra/commit/1a46a566f45a3fcbadc1cf36bf86d351f264bfa3), [`3cf540b`](https://github.com/mastra-ai/mastra/commit/3cf540b9fbfea8f4fc8d3a2319a4e6c0b0cbfd52), [`1c6ce51`](https://github.com/mastra-ai/mastra/commit/1c6ce51f875915ab57fd36873623013699a2a65d), [`898a972`](https://github.com/mastra-ai/mastra/commit/898a9727d286c2510d6b702dfd367e6aaf5c6b0f), [`a97003a`](https://github.com/mastra-ai/mastra/commit/a97003aa1cf2f4022a41912324a1e77263b326b8), [`ccc141e`](https://github.com/mastra-ai/mastra/commit/ccc141ed27da0abc3a3fc28e9e5128152e8e37f4), [`fe3b897`](https://github.com/mastra-ai/mastra/commit/fe3b897c2ccbcd2b10e81b099438c7337feddf89), [`00123ba`](https://github.com/mastra-ai/mastra/commit/00123ba96dc9e5cd0b110420ebdba56d8f237b25), [`29c4309`](https://github.com/mastra-ai/mastra/commit/29c4309f818b24304c041bcb4a8f19b5f13f6b62), [`16785ce`](https://github.com/mastra-ai/mastra/commit/16785ced928f6f22638f4488cf8a125d99211799), [`de8239b`](https://github.com/mastra-ai/mastra/commit/de8239bdcb1d8c0cfa06da21f1569912a66bbc8a), [`b5e6cd7`](https://github.com/mastra-ai/mastra/commit/b5e6cd77fc8c8e64e0494c1d06cee3d84e795d1e), [`3759cb0`](https://github.com/mastra-ai/mastra/commit/3759cb064935b5f74c65ac2f52a1145f7352899d), [`651e772`](https://github.com/mastra-ai/mastra/commit/651e772eb1475fb13e126d3fcc01751297a88214), [`b61b93f`](https://github.com/mastra-ai/mastra/commit/b61b93f9e058b11dd2eec169853175d31dbdd567), [`bae33d9`](https://github.com/mastra-ai/mastra/commit/bae33d91a63fbb64d1e80519e1fc1acaed1e9013), [`c0b731f`](https://github.com/mastra-ai/mastra/commit/c0b731fb27d712dc8582e846df5c0332a6a0c5ba), [`43ca8f2`](https://github.com/mastra-ai/mastra/commit/43ca8f2c7334851cc7b4d3d2f037d8784bfbdd5f), [`2ca67cc`](https://github.com/mastra-ai/mastra/commit/2ca67cc3bb1f6a617353fdcab197d9efebe60d6f), [`9e67002`](https://github.com/mastra-ai/mastra/commit/9e67002b52c9be19936c420a489dbee9c5fd6a78), [`35edc49`](https://github.com/mastra-ai/mastra/commit/35edc49ac0556db609189641d6341e76771b81fc)]:
+  - @mastra/core@1.0.0-beta.5
+
+## 1.0.0-beta.3
+
+### Patch Changes
+
+- Added support for tripwire data chunks in streaming responses. ([#10269](https://github.com/mastra-ai/mastra/pull/10269))
+
+  Tripwire chunks allow the AI SDK to emit special data events when certain conditions are triggered during stream processing. These chunks include a `tripwireReason` field explaining why the tripwire was activated.
+
+  #### Usage
+
+  When converting Mastra chunks to AI SDK v5 format, tripwire chunks are now automatically handled:
+
+  ```typescript
+  // Tripwire chunks are converted to data-tripwire format
+  const chunk = {
+    type: 'tripwire',
+    payload: { tripwireReason: 'Rate limit approaching' }
+  };
+
+  // Converts to:
+  {
+    type: 'data-tripwire',
+    data: { tripwireReason: 'Rate limit approaching' }
+  }
+  ```
+
+- Updated dependencies [[`352a5d6`](https://github.com/mastra-ai/mastra/commit/352a5d625cfe09849b21e8f52a24c9f0366759d5), [`a0a5b4b`](https://github.com/mastra-ai/mastra/commit/a0a5b4bbebe6c701ebbadf744873aa0d5ca01371), [`69ea758`](https://github.com/mastra-ai/mastra/commit/69ea758358edd7117f191c2e69c8bb5fc79e7a1a), [`993ad98`](https://github.com/mastra-ai/mastra/commit/993ad98d7ad3bebda9ecef5fec5c94349a0d04bc), [`3ff2c17`](https://github.com/mastra-ai/mastra/commit/3ff2c17a58e312fad5ea37377262c12d92ca0908)]:
+  - @mastra/core@1.0.0-beta.4
+
 ## 1.0.0-beta.2
 
 ### Major Changes

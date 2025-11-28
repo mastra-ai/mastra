@@ -1,4 +1,4 @@
-import type { TransformStreamDefaultController } from 'stream/web';
+import type { TransformStreamDefaultController } from 'node:stream/web';
 import { openai } from '@ai-sdk/openai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
@@ -460,7 +460,7 @@ describe('Structured Output with Tool Execution', () => {
       name = 'State Tracking Processor';
       async processOutputStream({ part, streamParts }: any) {
         streamPartsLog.push({ type: part.type, streamPartsLength: streamParts.length });
-        console.log(`Processor saw ${part.type}, streamParts.length: ${streamParts.length}`);
+        // console.log(`Processor saw ${part.type}, streamParts.length: ${streamParts.length}`);
         return part;
       }
     }
@@ -575,7 +575,6 @@ describe('Structured Output with Tool Execution', () => {
         const collected: any[] = [];
         for await (const chunk of stream.fullStream) {
           collected.push(chunk);
-          console.log('Chunk:', chunk.type, chunk.type === 'finish' ? chunk : '');
         }
         return collected;
       })(),
@@ -584,20 +583,20 @@ describe('Structured Output with Tool Execution', () => {
 
     fullStreamChunks.push(...chunks);
 
-    console.log(
-      'Full stream chunk types:',
-      fullStreamChunks.map(c => c.type),
-    );
-    console.log(
-      'Finish chunks:',
-      fullStreamChunks.filter(c => c.type === 'finish'),
-    );
-    console.log(
-      'Tool result chunk:',
-      fullStreamChunks.find(c => c.type === 'tool-result'),
-    );
-    console.log('Mock tool execute called times:', mockTool.execute.mock.calls.length);
-    console.log('Final object:', finalObject);
+    // console.log(
+    //   'Full stream chunk types:',
+    //   fullStreamChunks.map(c => c.type),
+    // );
+    // console.log(
+    //   'Finish chunks:',
+    //   fullStreamChunks.filter(c => c.type === 'finish'),
+    // );
+    // console.log(
+    //   'Tool result chunk:',
+    //   fullStreamChunks.find(c => c.type === 'tool-result'),
+    // );
+    // console.log('Mock tool execute called times:', mockTool.execute.mock.calls.length);
+    // console.log('Final object:', finalObject);
 
     // ISSUE: Before the fix, no structured output would be generated when tools are involved
     // The structured output processor would lose state between LLM calls or not trigger at all
@@ -663,7 +662,6 @@ describe('Structured Output with Tool Execution', () => {
     });
 
     const stream = await agent.stream('What is the weather in Toronto?', {
-      format: 'aisdk',
       maxSteps: 10,
       structuredOutput: {
         schema: responseSchema,
@@ -671,11 +669,7 @@ describe('Structured Output with Tool Execution', () => {
       },
     });
 
-    // Consume the stream
-    for await (const chunk of stream.fullStream) {
-      console.log('Chunk:', chunk.type);
-      // Just consume
-    }
+    await stream.consumeStream();
 
     const finalObject = await stream.object;
     console.log('Final object with multiple tools:', finalObject);

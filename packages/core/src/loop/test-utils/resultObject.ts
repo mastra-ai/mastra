@@ -673,6 +673,24 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 },
                 "type": "file",
               },
+              {
+                "file": DefaultGeneratedFileWithType {
+                  "base64Data": "Hello World",
+                  "mediaType": "text/plain",
+                  "type": "file",
+                  "uint8ArrayData": undefined,
+                },
+                "type": "file",
+              },
+              {
+                "file": DefaultGeneratedFileWithType {
+                  "base64Data": "QkFVRw==",
+                  "mediaType": "image/jpeg",
+                  "type": "file",
+                  "uint8ArrayData": undefined,
+                },
+                "type": "file",
+              },
             ],
             "dynamicToolCalls": [],
             "dynamicToolResults": [],
@@ -742,12 +760,11 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 {
                   "id": "msg-0",
                   "metadata": {
-                    "createdAt": 2024-01-01T00:00:00.003Z,
+                    "createdAt": 2024-01-01T00:00:00.000Z,
                   },
                   "parts": [
                     {
                       "mediaType": "text/plain",
-                      "providerMetadata": undefined,
                       "type": "file",
                       "url": "data:text/plain;base64,Hello World",
                     },
@@ -757,7 +774,16 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     },
                     {
                       "mediaType": "image/jpeg",
-                      "providerMetadata": undefined,
+                      "type": "file",
+                      "url": "data:image/jpeg;base64,QkFVRw==",
+                    },
+                    {
+                      "mediaType": "text/plain",
+                      "type": "file",
+                      "url": "data:text/plain;base64,Hello World",
+                    },
+                    {
+                      "mediaType": "image/jpeg",
                       "type": "file",
                       "url": "data:image/jpeg;base64,QkFVRw==",
                     },

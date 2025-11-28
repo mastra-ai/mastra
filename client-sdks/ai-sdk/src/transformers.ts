@@ -1,14 +1,16 @@
 import type { LLMStepResult } from '@mastra/core/agent';
 import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
-import type { WorkflowRunStatus, WorkflowStepStatus } from '@mastra/core/workflows';
-import type { InferUIMessageChunk, UIMessage } from 'ai';
+import type { WorkflowRunStatus, WorkflowStepStatus, WorkflowStreamEvent } from '@mastra/core/workflows';
+import type { InferUIMessageChunk, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai';
 import type { ZodType } from 'zod';
 import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from './helpers';
+import type { ToolAgentChunkType, ToolWorkflowChunkType, ToolNetworkChunkType } from './helpers';
 import {
   isAgentExecutionDataChunkType,
   isDataChunkType,
   isWorkflowExecutionDataChunkType,
   safeParseErrorObject,
+  isMastraTextStreamChunk,
 } from './utils';
 
 type LanguageModelV2Usage = {
@@ -80,7 +82,12 @@ export type AgentDataPart = {
   data: LLMStepResult;
 };
 
-export function WorkflowStreamToAISDKTransformer() {
+// used so it's not serialized to JSON
+const PRIMITIVE_CACHE_SYMBOL = Symbol('primitive-cache');
+
+export function WorkflowStreamToAISDKTransformer({
+  includeTextStreamParts,
+}: { includeTextStreamParts?: boolean } = {}) {
   const bufferedWorkflows = new Map<
     string,
     {
@@ -94,8 +101,12 @@ export function WorkflowStreamToAISDKTransformer() {
         data?: string;
         type?: 'start' | 'finish';
       }
+    | InferUIMessageChunk<UIMessage>
     | WorkflowDataPart
     | ChunkType
+    | ToolAgentChunkType
+    | ToolWorkflowChunkType
+    | ToolNetworkChunkType
   >({
     start(controller) {
       controller.enqueue({
@@ -108,8 +119,7 @@ export function WorkflowStreamToAISDKTransformer() {
       });
     },
     transform(chunk, controller) {
-      const transformed = transformWorkflow<any>(chunk, bufferedWorkflows);
-
+      const transformed = transformWorkflow<any>(chunk, bufferedWorkflows, false, includeTextStreamParts);
       if (transformed) controller.enqueue(transformed);
     },
   });
@@ -118,7 +128,18 @@ export function WorkflowStreamToAISDKTransformer() {
 export function AgentNetworkToAISDKTransformer() {
   const bufferedNetworks = new Map<
     string,
-    { name: string; steps: StepResult[]; usage: LanguageModelV2Usage | null; output: unknown | null }
+    {
+      name: string;
+      steps: (StepResult & {
+        id: string;
+        iteration: number;
+        task: null | Record<string, unknown>;
+        input: StepResult['input'];
+        [PRIMITIVE_CACHE_SYMBOL]: Map<string, any>;
+      })[];
+      usage: LanguageModelV2Usage | null;
+      output: unknown | null;
+    }
   >();
 
   return new TransformStream<
@@ -154,12 +175,16 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>({
   sendFinish,
   sendReasoning,
   sendSources,
+  messageMetadata,
+  onError,
 }: {
   lastMessageId?: string;
   sendStart?: boolean;
   sendFinish?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
+  messageMetadata?: UIMessageStreamOptions<UIMessage>['messageMetadata'];
+  onError?: UIMessageStreamOptions<UIMessage>['onError'];
 }) {
   let bufferedSteps = new Map<string, any>();
   let tripwireOccurred = false;
@@ -183,11 +208,12 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>({
         part: part as any,
         sendReasoning,
         sendSources,
+        messageMetadataValue: messageMetadata?.({ part: part as TextStreamPart<ToolSet> }),
         sendStart,
         sendFinish,
         responseMessageId: lastMessageId,
         onError(error) {
-          return safeParseErrorObject(error);
+          return onError ? onError(error) : safeParseErrorObject(error);
         },
       });
 
@@ -385,6 +411,7 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
     }
   >,
   isNested?: boolean,
+  includeTextStreamParts?: boolean,
 ) {
   switch (payload.type) {
     case 'workflow-start':
@@ -411,7 +438,7 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
         output: null,
         suspendPayload: null,
         resumePayload: null,
-      } satisfies StepResult;
+      };
       bufferedWorkflows.set(payload.runId!, current);
       return {
         type: isNested ? 'data-tool-workflow' : 'data-workflow',
@@ -431,7 +458,7 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
         ...current.steps[payload.payload.id]!,
         status: payload.payload.status,
         output: payload.payload.output ?? null,
-      } satisfies StepResult;
+      };
       return {
         type: isNested ? 'data-tool-workflow' : 'data-workflow',
         id: payload.runId,
@@ -478,6 +505,32 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
         },
       } as const;
     }
+    case 'workflow-step-output': {
+      const output = payload.payload.output;
+
+      if (includeTextStreamParts && output && isMastraTextStreamChunk(output)) {
+        const part = convertMastraChunkToAISDKv5({ chunk: output, mode: 'stream' });
+
+        const transformedChunk = convertFullStreamChunkToUIMessageStream<any>({
+          part: part as any,
+          onError(error) {
+            return safeParseErrorObject(error);
+          },
+        });
+
+        return transformedChunk;
+      }
+
+      if (output && isDataChunkType(output)) {
+        if (!('data' in output)) {
+          throw new Error(
+            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(output)}`,
+          );
+        }
+        return output;
+      }
+      return null;
+    }
     default: {
       // return the chunk as is if it's not a known type
       if (isDataChunkType(payload)) {
@@ -497,7 +550,18 @@ export function transformNetwork(
   payload: NetworkChunkType,
   bufferedNetworks: Map<
     string,
-    { name: string; steps: StepResult[]; usage: LanguageModelV2Usage | null; output: unknown | null }
+    {
+      name: string;
+      steps: (StepResult & {
+        id: string;
+        iteration: number;
+        task: null | Record<string, unknown>;
+        input: StepResult['input'];
+        [PRIMITIVE_CACHE_SYMBOL]: Map<string, any>;
+      })[];
+      usage: LanguageModelV2Usage | null;
+      output: unknown | null;
+    }
   >,
   isNested?: boolean,
 ): InferUIMessageChunk<UIMessage> | NetworkDataPart | DataChunkType | null {
@@ -505,12 +569,31 @@ export function transformNetwork(
     case 'routing-agent-start': {
       if (!bufferedNetworks.has(payload.runId)) {
         bufferedNetworks.set(payload.runId, {
-          name: payload.payload.agentId,
+          name: payload.payload.networkId,
           steps: [],
           usage: null,
           output: null,
         });
       }
+
+      const current = bufferedNetworks.get(payload.runId)!;
+      current.steps.push({
+        id: payload.payload.runId,
+        name: payload.payload.agentId,
+        status: 'running',
+        iteration: payload.payload.inputData.iteration,
+        input: {
+          task: payload.payload.inputData.task,
+          threadId: payload.payload.inputData.threadId,
+          threadResourceId: payload.payload.inputData.threadResourceId,
+        },
+        output: '',
+        task: null,
+        suspendPayload: null,
+        resumePayload: null,
+        [PRIMITIVE_CACHE_SYMBOL]: new Map(),
+      });
+
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
         id: payload.runId,
@@ -541,15 +624,22 @@ export function transformNetwork(
       } as const;
     }
     case 'agent-execution-start': {
-      const current = bufferedNetworks.get(payload.runId) || { name: '', steps: [], usage: null, output: null };
+      const current = bufferedNetworks.get(payload.runId);
+
+      if (!current) return null;
+
       current.steps.push({
+        id: payload.payload.runId,
         name: payload.payload.agentId,
         status: 'running',
-        input: payload.payload.args || null,
+        iteration: payload.payload.args?.iteration ?? 0,
+        input: { prompt: payload.payload.args?.prompt ?? '' },
         output: null,
+        task: null,
         suspendPayload: null,
         resumePayload: null,
-      } satisfies StepResult);
+        [PRIMITIVE_CACHE_SYMBOL]: new Map(),
+      });
       bufferedNetworks.set(payload.runId, current);
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
@@ -561,15 +651,22 @@ export function transformNetwork(
       } as const;
     }
     case 'workflow-execution-start': {
-      const current = bufferedNetworks.get(payload.runId) || { name: '', steps: [], usage: null, output: null };
+      const current = bufferedNetworks.get(payload.runId);
+
+      if (!current) return null;
+
       current.steps.push({
-        name: payload.payload.name,
+        id: payload.payload.runId,
+        name: payload.payload.workflowId,
         status: 'running',
-        input: payload.payload.args || null,
+        iteration: payload.payload.args?.iteration ?? 0,
+        input: { prompt: payload.payload.args?.prompt ?? '' },
         output: null,
+        task: null,
         suspendPayload: null,
         resumePayload: null,
-      } satisfies StepResult);
+        [PRIMITIVE_CACHE_SYMBOL]: new Map(),
+      });
       bufferedNetworks.set(payload.runId, current);
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
@@ -581,15 +678,25 @@ export function transformNetwork(
       } as const;
     }
     case 'tool-execution-start': {
-      const current = bufferedNetworks.get(payload.runId) || { name: '', steps: [], usage: null, output: null };
+      const current = bufferedNetworks.get(payload.runId);
+
+      if (!current) return null;
+
       current.steps.push({
+        id: payload.payload.args.toolCallId!,
         name: payload.payload.args?.toolName!,
         status: 'running',
+        iteration: payload.payload.args?.iteration ? Number(payload.payload.args.iteration) : 0,
+        task: {
+          id: payload.payload.args?.toolName!,
+        },
         input: payload.payload.args?.args || null,
         output: null,
         suspendPayload: null,
         resumePayload: null,
-      } satisfies StepResult);
+        [PRIMITIVE_CACHE_SYMBOL]: new Map(),
+      });
+
       bufferedNetworks.set(payload.runId, current);
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
@@ -603,14 +710,16 @@ export function transformNetwork(
     case 'agent-execution-end': {
       const current = bufferedNetworks.get(payload.runId!);
       if (!current) return null;
-      current.steps.push({
-        name: payload.payload.agentId,
-        status: 'success',
-        input: null,
-        output: payload.payload.result,
-        suspendPayload: null,
-        resumePayload: null,
-      } satisfies StepResult);
+
+      const stepId = payload.payload.runId;
+      const step = current.steps.find(step => step.id === stepId);
+      if (!step) {
+        return null;
+      }
+
+      step.status = 'success';
+      step.output = payload.payload.result;
+
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
         id: payload.runId!,
@@ -625,14 +734,16 @@ export function transformNetwork(
     case 'tool-execution-end': {
       const current = bufferedNetworks.get(payload.runId!);
       if (!current) return null;
-      current.steps.push({
-        name: payload.payload.toolName,
-        status: 'success',
-        input: null,
-        output: payload.payload.result,
-        suspendPayload: null,
-        resumePayload: null,
-      } satisfies StepResult);
+
+      const stepId = payload.payload.toolCallId;
+      const step = current.steps.find(step => step.id === stepId);
+      if (!step) {
+        return null;
+      }
+
+      step.status = 'success';
+      step.output = payload.payload.result;
+
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
         id: payload.runId!,
@@ -644,16 +755,19 @@ export function transformNetwork(
       } as const;
     }
     case 'workflow-execution-end': {
-      const current = bufferedNetworks.get(payload.runId!);
+      const current = bufferedNetworks.get(payload.runId);
       if (!current) return null;
-      current.steps.push({
-        name: payload.payload.name,
-        status: 'success',
-        input: null,
-        output: payload.payload.result,
-        suspendPayload: null,
-        resumePayload: null,
-      } satisfies StepResult);
+
+      const stepId = payload.payload.runId;
+      const step = current.steps.find(step => step.id === stepId);
+
+      if (!step) {
+        return null;
+      }
+
+      step.status = 'success';
+      step.output = payload.payload.result;
+
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
         id: payload.runId!,
@@ -668,12 +782,28 @@ export function transformNetwork(
     case 'routing-agent-end': {
       const current = bufferedNetworks.get(payload.runId);
       if (!current) return null;
+
+      const stepId = payload.payload.runId;
+      const step = current.steps.find(step => step.id === stepId);
+
+      if (!step) {
+        return null;
+      }
+
+      step.status = 'success';
+      step.task = {
+        id: payload.payload.primitiveId,
+        type: payload.payload.primitiveType,
+        name: payload.payload.task,
+        reason: payload.payload.selectionReason,
+      };
+      step.output = payload.payload.result;
+
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
         id: payload.runId,
         data: {
           ...current,
-          status: 'finished',
           usage: payload.payload?.usage ?? current.usage,
           output: payload.payload?.result ?? current.output,
         },
@@ -707,6 +837,46 @@ export function transformNetwork(
       } as const;
     }
     default: {
+      if (payload.type.startsWith('agent-execution-event-')) {
+        const stepId = payload.payload.runId;
+        const current = bufferedNetworks.get(payload.runId!);
+        if (!current) return null;
+
+        const step = current.steps.find(step => step.id === stepId);
+        if (!step) {
+          return null;
+        }
+
+        step[PRIMITIVE_CACHE_SYMBOL] = step[PRIMITIVE_CACHE_SYMBOL] || new Map();
+        const result = transformAgent(payload.payload as ChunkType<any>, step[PRIMITIVE_CACHE_SYMBOL]);
+        if (result) {
+          const { request, response, ...data } = result.data;
+          step.task = data;
+        }
+      }
+
+      if (payload.type.startsWith('workflow-execution-event-')) {
+        const stepId = payload.payload.runId;
+        const current = bufferedNetworks.get(payload.runId!);
+        if (!current) return null;
+
+        const step = current.steps.find(step => step.id === stepId);
+        if (!step) {
+          return null;
+        }
+
+        step[PRIMITIVE_CACHE_SYMBOL] = step[PRIMITIVE_CACHE_SYMBOL] || new Map();
+        const result = transformWorkflow(payload.payload as WorkflowStreamEvent, step[PRIMITIVE_CACHE_SYMBOL]);
+        if (result && 'data' in result) {
+          const data = result.data;
+          step.task = data;
+
+          if (data.name && step.task) {
+            step.task.id = data.name;
+          }
+        }
+      }
+
       // return the chunk as is if it's not a known type
       if (isDataChunkType(payload)) {
         if (!('data' in payload)) {
@@ -714,7 +884,9 @@ export function transformNetwork(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
           );
         }
-        return payload;
+
+        const { type, data } = payload;
+        return { type, data };
       }
       if (isAgentExecutionDataChunkType(payload)) {
         if (!('data' in payload.payload)) {
@@ -722,7 +894,9 @@ export function transformNetwork(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
           );
         }
-        return payload.payload;
+
+        const { type, data } = payload.payload;
+        return { type, data };
       }
       if (isWorkflowExecutionDataChunkType(payload)) {
         if (!('data' in payload.payload)) {
@@ -730,7 +904,8 @@ export function transformNetwork(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
           );
         }
-        return payload.payload;
+        const { type, data } = payload.payload;
+        return { type, data };
       }
       return null;
     }

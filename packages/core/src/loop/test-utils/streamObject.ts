@@ -1,4 +1,4 @@
-import { fail } from 'assert';
+import { fail } from 'node:assert';
 import {
   convertArrayToReadableStream,
   convertAsyncIterableToArray,
@@ -1035,12 +1035,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "id-0",
                     "messages": [
                       {
-                        "content": [
-                          {
-                            "text": "{ "content": "Hello, world!" }",
-                            "type": "text",
-                          },
-                        ],
+                        "content": "{ "content": "Hello, world!" }",
                         "role": "assistant",
                       },
                     ],
@@ -1249,12 +1244,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "id-0",
                     "messages": [
                       {
-                        "content": [
-                          {
-                            "text": "{ "invalid": "Hello, world!" }",
-                            "type": "text",
-                          },
-                        ],
+                        "content": "{ "invalid": "Hello, world!" }",
                         "role": "assistant",
                       },
                     ],
@@ -1460,12 +1450,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "id-0",
                     "messages": [
                       {
-                        "content": [
-                          {
-                            "text": "{ "invalid": "Hello, world!" }",
-                            "type": "text",
-                          },
-                        ],
+                        "content": "{ "invalid": "Hello, world!" }",
                         "role": "assistant",
                       },
                     ],

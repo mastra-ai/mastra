@@ -21,10 +21,9 @@ An introduction to agents, and how they compare to workflows on [YouTube (7 minu
 :::
 
 ## Setting up agents
+### Installation
 
-<Tabs>
-  <TabItem value="mastra-model-router" label="Model router">
-    <Steps>
+<Steps>
 
 <StepItem>
 
@@ -63,63 +62,13 @@ export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
   instructions: "You are a helpful assistant.",
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
 });
 ```
 
 </StepItem>
 
 </Steps>
-  </TabItem>
-  <TabItem value="vercel-ai-sdk" label="Vercel AI SDK">
-    <Steps>
-
-<StepItem>
-
-Include the Mastra core package alongside the Vercel AI SDK provider you want to use:
-
-```bash
-npm install @mastra/core@beta @ai-sdk/openai
-```
-
-</StepItem>
-
-<StepItem>
-
-Set the corresponding environment variable for your provider. For OpenAI via the AI SDK:
-
-```bash title=".env" copy
-OPENAI_API_KEY=<your-api-key>
-```
-
-:::note
-
-See the [AI SDK Providers](https://ai-sdk.dev/providers/ai-sdk-providers) in the Vercel AI SDK docs for additional configuration options.
-
-:::
-
-</StepItem>
-
-<StepItem>
-
-To create an agent in Mastra, use the `Agent` class. Every agent must include `instructions` to define its behavior, and a `model` parameter to specify the LLM provider and model. When using the Vercel AI SDK, provide the client to your agent's `model` field:
-
-```typescript title="src/mastra/agents/test-agent.ts" copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
-
-export const testAgent = new Agent({
-  id: "test-agent",
-  name: "Test Agent",
-  instructions: "You are a helpful assistant.",
-  model: openai("gpt-4o-mini"),
-});
-```
-
-</StepItem>
-    </Steps>
-  </TabItem>
-</Tabs>
 
 ### Instruction formats
 
@@ -320,7 +269,7 @@ const response = await testAgentWithTools.generate(
         summary: z.string(),
         keywords: z.array(z.string()),
       }),
-      model: "openai/gpt-4o",
+      model: "openai/gpt-5.1",
     },
   },
 );
@@ -361,7 +310,7 @@ const response = await testAgentThatDoesntSupportStructuredOutput.generate(
 console.log(response.object);
 ```
 
-## Working with images
+## Analyzing images
 
 Agents can analyze and describe images by processing both the visual content and any text within them. To enable image analysis, pass an object with `type: 'image'` and the image URL in the `content` array. You can combine image content with text prompts to guide the agent's analysis.
 
@@ -386,7 +335,8 @@ const response = await testAgent.generate([
 console.log(response.text);
 ```
 
-### Using `maxSteps`
+
+## Using `maxSteps`
 
 The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 1, but can be increased:
 
@@ -398,7 +348,7 @@ const response = await testAgent.generate("Help me organize my day", {
 console.log(response.text);
 ```
 
-### Using `onStepFinish`
+## Using `onStepFinish`
 
 You can monitor the progress of multi-step operations using the `onStepFinish` callback. This is useful for debugging or providing progress updates to users.
 
@@ -444,8 +394,8 @@ export const testAgent = new Agent({
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
     return userTier === "enterprise"
-      ? openai("gpt-4o-mini")
-      : openai("gpt-4.1-nano");
+      ? "openai/gpt-5"
+      : "openai/gpt-4.1-nano";
   },
 });
 ```

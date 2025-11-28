@@ -1,6 +1,6 @@
-import type { Server } from 'http';
-import { createServer } from 'http';
-import type { AddressInfo } from 'net';
+import type { Server } from 'node:http';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { BaseResource } from './base';
 

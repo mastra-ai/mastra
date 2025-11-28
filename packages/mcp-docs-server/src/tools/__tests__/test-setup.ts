@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { serve } from '@hono/node-server';
 import { MCPClient } from '@mastra/mcp';
 import { Hono } from 'hono';

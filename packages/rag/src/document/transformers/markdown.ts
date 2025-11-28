@@ -99,11 +99,13 @@ export class MarkdownHeaderTransformer {
 
     let inCodeBlock = false;
     let openingFence = '';
+    let inTable = false;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]!;
       const strippedLine = line.trim();
 
+      // Handle code blocks
       if (!inCodeBlock) {
         if (
           (strippedLine.startsWith('```') && strippedLine.split('```').length === 2) ||
@@ -122,6 +124,21 @@ export class MarkdownHeaderTransformer {
       if (inCodeBlock) {
         currentContent.push(line);
         continue;
+      }
+
+      // Handle markdown tables
+      // A table line must contain at least one pipe character and not be empty
+      const isTableLine = strippedLine.includes('|') && strippedLine.length > 0;
+
+      if (isTableLine) {
+        if (!inTable) {
+          inTable = true;
+        }
+        currentContent.push(line);
+        continue;
+      } else if (inTable) {
+        // We were in a table but this line is not a table line, so the table has ended
+        inTable = false;
       }
 
       let headerMatched = false;

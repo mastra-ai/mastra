@@ -6,25 +6,17 @@ import {
   TABLE_SCORERS,
   calculatePagination,
   normalizePerPage,
-  safelyParseJSON,
+  transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
 import type { StoreOperationsCloudflare } from '../operations';
 
+/**
+ * Cloudflare KV-specific score row transformation.
+ * Uses default options (no timestamp conversion).
+ */
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  const deserialized: Record<string, any> = { ...row };
-
-  deserialized.input = safelyParseJSON(row.input);
-  deserialized.output = safelyParseJSON(row.output);
-  deserialized.scorer = safelyParseJSON(row.scorer);
-  deserialized.preprocessStepResult = safelyParseJSON(row.preprocessStepResult);
-  deserialized.analyzeStepResult = safelyParseJSON(row.analyzeStepResult);
-  deserialized.metadata = safelyParseJSON(row.metadata);
-  deserialized.additionalContext = safelyParseJSON(row.additionalContext);
-  deserialized.requestContext = safelyParseJSON(row.requestContext);
-  deserialized.entity = safelyParseJSON(row.entity);
-
-  return deserialized as ScoreRowData;
+  return coreTransformScoreRow(row);
 }
 
 export class ScoresStorageCloudflare extends ScoresStorage {

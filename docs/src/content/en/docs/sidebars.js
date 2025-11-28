@@ -23,8 +23,8 @@ const sidebars = {
       items: [
         {
           type: "doc",
-          id: "getting-started/quickstart",
-          label: "Quickstart",
+          id: "getting-started/start",
+          label: "Start",
         },
         {
           type: "doc",
@@ -40,11 +40,6 @@ const sidebars = {
           type: "doc",
           id: "getting-started/mcp-docs-server",
           label: "MCP Docs Server",
-        },
-        {
-          type: "doc",
-          id: "getting-started/templates",
-          label: "Templates",
         },
       ],
     },
@@ -64,8 +59,8 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "agents/human-in-the-loop-with-tools",
-          label: "Human in the Loop with Tools",
+          id: "agents/agent-approval",
+          label: "Agent Approval",
         },
         {
           type: "doc",
@@ -97,6 +92,11 @@ const sidebars = {
           type: "doc",
           id: "workflows/overview",
           label: "Overview",
+        },
+        {
+          type: "doc",
+          id: "workflows/workflow-state",
+          label: "Workflow State",
         },
         {
           type: "doc",
@@ -163,7 +163,7 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Tools & MCP",
+      label: "MCP",
       collapsed: true,
       items: [
         {
@@ -402,11 +402,6 @@ const sidebars = {
       ],
     },
     {
-      type: "doc",
-      id: "logging",
-      label: "Logging",
-    },
-    {
       type: "category",
       label: "Observability",
       items: [
@@ -417,6 +412,11 @@ const sidebars = {
           label: "Overview",
         },
         {
+          type: "doc",
+          id: "observability/logging",
+          label: "Logging",
+        },
+        {
           type: "category",
           label: "Tracing",
           items: [
@@ -425,6 +425,17 @@ const sidebars = {
               id: "observability/tracing/overview",
               key: "observability.tracing.overview",
               label: "Overview",
+            },
+            {
+              type: "category",
+              label: "Bridges",
+              items: [
+                {
+                  type: "doc",
+                  id: "observability/tracing/bridges/otel",
+                  label: "OpenTelemetry",
+                },
+              ],
             },
             {
               type: "category",
@@ -572,80 +583,6 @@ const sidebars = {
           type: "doc",
           id: "voice/speech-to-speech",
           label: "Speech to Speech",
-        },
-      ],
-    },
-    {
-      type: "category",
-      label: "Frameworks",
-      items: [
-        {
-          type: "category",
-          label: "Agentic UIs",
-          items: [
-            {
-              type: "doc",
-              id: "frameworks/agentic-uis/ai-sdk",
-              label: "With AI SDK",
-            },
-            {
-              type: "doc",
-              id: "frameworks/agentic-uis/copilotkit",
-              label: "With CopilotKit",
-            },
-            {
-              type: "doc",
-              id: "frameworks/agentic-uis/assistant-ui",
-              label: "With Assistant UI",
-            },
-            {
-              type: "doc",
-              id: "frameworks/agentic-uis/cedar-os",
-              label: "With Cedar-OS",
-            },
-            {
-              type: "doc",
-              id: "frameworks/agentic-uis/openrouter",
-              label: "With OpenRouter",
-            },
-          ],
-        },
-        {
-          type: "category",
-          label: "Servers",
-          items: [
-            {
-              type: "doc",
-              id: "frameworks/servers/express",
-              label: "With Express",
-            },
-          ],
-        },
-        {
-          type: "category",
-          label: "Web Frameworks",
-          items: [
-            {
-              type: "doc",
-              id: "frameworks/web-frameworks/vite-react",
-              label: "With Vite/React",
-            },
-            {
-              type: "doc",
-              id: "frameworks/web-frameworks/next-js",
-              label: "With Next.js",
-            },
-            {
-              type: "doc",
-              id: "frameworks/web-frameworks/astro",
-              label: "With Astro",
-            },
-            {
-              type: "doc",
-              id: "frameworks/web-frameworks/sveltekit",
-              label: "With SvelteKit",
-            },
-          ],
         },
       ],
     },

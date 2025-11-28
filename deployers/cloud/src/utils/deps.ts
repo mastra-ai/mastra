@@ -1,5 +1,5 @@
-import * as fs from 'fs';
-import { join, resolve } from 'path';
+import * as fs from 'node:fs';
+import { join, resolve } from 'node:path';
 
 import { MastraError } from '@mastra/core/error';
 import { runWithExeca } from './execa.js';

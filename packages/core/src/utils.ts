@@ -1,7 +1,7 @@
-import { createHash } from 'crypto';
-import type { WritableStream } from 'stream/web';
+import { createHash } from 'node:crypto';
+import type { WritableStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
-import jsonSchemaToZod from 'json-schema-to-zod';
+import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
