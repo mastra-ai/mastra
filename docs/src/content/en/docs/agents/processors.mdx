@@ -95,7 +95,7 @@ Custom processors implement the `Processor` interface:
 import type {
   Processor,
   MastraDBMessage,
-  RuntimeContext,
+  RequestContext,
 } from "@mastra/core";
 
 export class CustomInputProcessor implements Processor {
@@ -108,7 +108,7 @@ export class CustomInputProcessor implements Processor {
   }: {
     messages: MastraDBMessage[];
     systemMessages: CoreMessage[];
-    context: RuntimeContext;
+    context: RequestContext;
   }): Promise<MastraDBMessage[]> {
     // Transform messages before they reach the LLM
     return messages.map((msg) => ({
@@ -127,7 +127,7 @@ The `processInput` method receives:
 - `systemMessages`: All system messages (agent instructions, memory context, user-provided system prompts)
 - `messageList`: The full MessageList instance for advanced use cases
 - `abort`: Function to stop processing and return early
-- `runtimeContext`: Execution metadata like `threadId` and `resourceId`
+- `requestContext`: Execution metadata like `threadId` and `resourceId`
 
 The method can return:
 - `MastraDBMessage[]` — Transformed messages array (backward compatible)
@@ -174,7 +174,7 @@ This is useful for:
 import type {
   Processor,
   MastraDBMessage,
-  RuntimeContext,
+  RequestContext,
 } from "@mastra/core";
 
 export class CustomOutputProcessor implements Processor {
@@ -185,7 +185,7 @@ export class CustomOutputProcessor implements Processor {
     context,
   }: {
     messages: MastraDBMessage[];
-    context: RuntimeContext;
+    context: RequestContext;
   }): Promise<MastraDBMessage[]> {
     // Transform messages after the LLM generates them
     return messages.filter((msg) => msg.role !== "system");
@@ -196,7 +196,7 @@ export class CustomOutputProcessor implements Processor {
     context,
   }: {
     stream: ReadableStream;
-    context: RuntimeContext;
+    context: RequestContext;
   }): Promise<ReadableStream> {
     // Transform streaming responses
     return stream;
