@@ -1,4 +1,4 @@
-import { Readable } from 'stream';
+import { Readable } from 'node:stream';
 import { MastraError } from '@mastra/core/error';
 import { HTTPException } from '../http-exception';
 import {

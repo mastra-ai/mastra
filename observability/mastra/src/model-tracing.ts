@@ -8,7 +8,7 @@
  * Hierarchy: MODEL_GENERATION -> MODEL_STEP -> MODEL_CHUNK
  */
 
-import { TransformStream } from 'stream/web';
+import { TransformStream } from 'node:stream/web';
 import { SpanType } from '@mastra/core/observability';
 import type {
   Span,

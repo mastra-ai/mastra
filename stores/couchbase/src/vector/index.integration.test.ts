@@ -2,8 +2,8 @@
 // IMPORTANT: These tests require Docker Engine to be running.
 // The tests will automatically start and configure the required Couchbase container.
 
-import { execSync } from 'child_process';
-import { randomUUID } from 'crypto';
+import { execSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import axios from 'axios';
 import type { Cluster, Bucket, Scope, Collection } from 'couchbase';
 import { connect, QueryScanConsistency } from 'couchbase';

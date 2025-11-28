@@ -1,4 +1,4 @@
-import type { WritableStream } from 'stream/web';
+import type { WritableStream } from 'node:stream/web';
 import type { StepResult, ToolSet } from 'ai-v5';
 import { InternalSpans } from '../../../observability';
 import type { OutputSchema } from '../../../stream/base/schema';

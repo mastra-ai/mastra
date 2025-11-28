@@ -10,7 +10,7 @@ import { GeminiLiveVoice } from './index';
 
 // Mock WebSocket
 vi.mock('ws', () => {
-  const EventEmitter = require('events');
+  const EventEmitter = require('node:events');
   class MockWebSocket extends EventEmitter {
     static CONNECTING = 0;
     static OPEN = 1;

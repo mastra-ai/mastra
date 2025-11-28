@@ -1,4 +1,4 @@
-import { Readable } from 'stream';
+import { Readable } from 'node:stream';
 
 import { MastraVoice } from '@mastra/core/voice';
 import { Speechify } from '@speechify/api-sdk';

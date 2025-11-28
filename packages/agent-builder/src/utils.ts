@@ -1,10 +1,10 @@
-import { exec as execNodejs, execFile as execFileNodejs, spawn as nodeSpawn } from 'child_process';
-import type { SpawnOptions } from 'child_process';
-import { existsSync, readFileSync } from 'fs';
-import { copyFile, readFile } from 'fs/promises';
-import { createRequire } from 'module';
-import { dirname, basename, extname, resolve, join } from 'path';
-import { promisify } from 'util';
+import { exec as execNodejs, execFile as execFileNodejs, spawn as nodeSpawn } from 'node:child_process';
+import type { SpawnOptions } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { copyFile, readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { dirname, basename, extname, resolve, join } from 'node:path';
+import { promisify } from 'node:util';
 import type { MastraLanguageModel } from '@mastra/core/agent';
 import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';

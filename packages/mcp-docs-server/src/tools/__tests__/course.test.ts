@@ -1,6 +1,6 @@
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, expect, test, beforeAll, afterAll, afterEach } from 'vitest';
 import { callTool, mcp, server } from './test-setup';
 

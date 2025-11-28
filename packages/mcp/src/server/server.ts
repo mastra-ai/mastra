@@ -1025,7 +1025,7 @@ export class MCPServer extends MCPServerBase {
    *
    * @example
    * ```typescript
-   * import http from 'http';
+   * import http from 'node:http';
    *
    * const httpServer = http.createServer(async (req, res) => {
    *   await server.startSSE({
@@ -1185,8 +1185,8 @@ export class MCPServer extends MCPServerBase {
    *
    * @example
    * ```typescript
-   * import http from 'http';
-   * import { randomUUID } from 'crypto';
+   * import http from 'node:http';
+   * import { randomUUID } from 'node:crypto';
    *
    * const httpServer = http.createServer(async (req, res) => {
    *   await server.startHTTP({

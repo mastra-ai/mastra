@@ -1,4 +1,4 @@
-import { WritableStream } from 'stream/web';
+import { WritableStream } from 'node:stream/web';
 import type { DataChunkType } from '../stream/types';
 
 export class ToolStream<T> extends WritableStream<T> {

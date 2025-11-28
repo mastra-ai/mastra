@@ -1,4 +1,4 @@
-import type { WritableStream } from 'stream/web';
+import type { WritableStream } from 'node:stream/web';
 import type {
   Tool,
   ToolV5,

@@ -1,7 +1,7 @@
-import { existsSync } from 'fs';
-import { mkdtemp, copyFile, readFile, mkdir, readdir, rm, writeFile } from 'fs/promises';
-import { tmpdir } from 'os';
-import { join, dirname, resolve, extname, basename } from 'path';
+import { existsSync } from 'node:fs';
+import { mkdtemp, copyFile, readFile, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, dirname, resolve, extname, basename } from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { Agent, tryGenerateWithJsonFallback, tryStreamWithJsonFallback } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';

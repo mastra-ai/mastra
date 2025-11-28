@@ -1,8 +1,8 @@
-import { randomUUID } from 'crypto';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
-import os from 'os';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { randomUUID } from 'node:crypto';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { PostHog } from 'posthog-node';
 
 const __filename = fileURLToPath(import.meta.url);
