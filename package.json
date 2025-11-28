@@ -5,8 +5,8 @@
   "devDependencies": {
     "@changesets/cli": "^2.29.7",
     "@types/node": "22.13.17",
-    "@vitest/coverage-v8": "catalog:",
-    "@vitest/ui": "catalog:",
+    "@vitest/coverage-v8": "^4.0.14",
+    "@vitest/ui": "^4.0.14",
     "changesets-changelog-github-local": "^1.0.1",
     "dotenv": "17.2.0",
     "husky": "^9.1.7",
@@ -17,7 +17,7 @@
     "semver": "^7.7.2",
     "turbo": "^2.5.8",
     "typescript": "^5.8.3",
-    "vitest": "catalog:"
+    "vitest": "^4.0.14"
   },
   "private": true,
   "scripts": {
