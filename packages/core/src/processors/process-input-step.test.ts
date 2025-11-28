@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage } from '../agent/message-list';
 import type { IMastraLogger } from '../logger';
-import type { Processor } from './index';
 import { ProcessorRunner } from './runner';
+import type { Processor } from './index';
 
 /**
  * Tests for processInputStep - a processor method that runs at each step of the agentic loop.
