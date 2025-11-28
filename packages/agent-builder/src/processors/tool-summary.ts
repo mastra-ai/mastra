@@ -1,11 +1,11 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraLanguageModel, MessageList } from '@mastra/core/agent';
-import type { InputProcessor } from '@mastra/core/processors';
+import type { Processor } from '@mastra/core/processors';
 
 /**
  * Summarizes tool calls and caches results to avoid re-summarizing identical calls
  */
-export class ToolSummaryProcessor implements InputProcessor {
+export class ToolSummaryProcessor implements Processor {
   readonly id = 'tool-summary-processor';
   readonly name = 'ToolSummaryProcessor';
 
