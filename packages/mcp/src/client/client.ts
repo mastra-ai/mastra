@@ -36,9 +36,9 @@ import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import { convertJsonSchemaToZod as convertJsonSchemaToZodV3 } from 'zod-from-json-schema-v3';
 import type { JSONSchema } from 'zod-from-json-schema-v3';
 import { ElicitationClientActions } from './actions/elicitation';
+import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
-import { ProgressClientActions } from './actions/progress';
 import type {
   LogHandler,
   ElicitationHandler,

@@ -1,3 +1,6 @@
+import type { RequestContext } from '@mastra/core/di';
+import type { SSEClientTransportOptions } from '@modelcontextprotocol/sdk/client/sse.js';
+import type { StreamableHTTPClientTransportOptions } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type {
   ClientCapabilities,
   ElicitRequest,
@@ -5,9 +8,6 @@ import type {
   LoggingLevel,
   ProgressNotification,
 } from '@modelcontextprotocol/sdk/types.js';
-import type { StreamableHTTPClientTransportOptions } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { SSEClientTransportOptions } from '@modelcontextprotocol/sdk/client/sse.js';
-import type { RequestContext } from '@mastra/core/di';
 
 // Re-export MCP SDK LoggingLevel for convenience
 export type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
