@@ -1,3 +1,4 @@
+import type { MastraClientWorkflowOutput } from '@mastra/client-js';
 import type {
   MastraModelOutput,
   ChunkType,
@@ -95,7 +96,7 @@ export function toAISdkV5Stream(
   options: { from: 'network' },
 ): ReadableStream<InferUIMessageChunk<UIMessage>>;
 export function toAISdkV5Stream<TOutput extends OutputSchema>(
-  stream: MastraModelOutput<TOutput>,
+  stream: MastraModelOutput<TOutput> | MastraClientWorkflowOutput,
   options: {
     from: 'agent';
     lastMessageId?: string;
@@ -112,7 +113,8 @@ export function toAISdkV5Stream(
     | MastraAgentNetworkStream
     | MastraWorkflowStream<any, any, any, any>
     | MastraModelOutput
-    | WorkflowRunOutput<WorkflowResult<any, any, any, any>>,
+    | WorkflowRunOutput<WorkflowResult<any, any, any, any>>
+    | MastraClientWorkflowOutput,
   options: {
     from: ToAISDKFrom;
     includeTextStreamParts?: boolean;
