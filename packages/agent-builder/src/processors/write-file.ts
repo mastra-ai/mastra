@@ -1,4 +1,4 @@
-import { writeFile } from 'fs/promises';
+import { writeFile } from 'node:fs/promises';
 import type { CoreMessage } from '@mastra/core/llm';
 import { MemoryProcessor } from '@mastra/core/memory';
 

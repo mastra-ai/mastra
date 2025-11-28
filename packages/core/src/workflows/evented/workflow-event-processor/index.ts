@@ -1,5 +1,5 @@
-import { randomUUID } from 'crypto';
-import EventEmitter from 'events';
+import { randomUUID } from 'node:crypto';
+import EventEmitter from 'node:events';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { EventProcessor } from '../../../events/processor';
 import type { Event } from '../../../events/types';

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execSync } from 'child_process';
+import { execSync } from 'node:child_process';
 try {
   execSync('docker compose -f "./docker-compose.yaml" ps --quiet');
   console.info('Container already running, bringing it down first...');
