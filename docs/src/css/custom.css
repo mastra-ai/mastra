@@ -1005,6 +1005,7 @@ ol {
     padding-inline: 0.38rem;
     padding-block: 0.2rem;
     display: flex;
+    font-size: 10px;
   }
 
   [data-theme="dark"] kbd {
