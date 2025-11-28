@@ -1,4 +1,5 @@
 packages:
+  - adapters/*
   - packages/*
   - deployers/*
   - stores/*
