@@ -37,7 +37,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   /**
    * Exclude input from result in Inngest workflows
    */
-  // TODO: get rid of this shit
+  // TODO: get rid of this
   protected get includeInputInResult(): boolean {
     return false;
   }
