@@ -242,7 +242,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           try {
             params.body = await this.parseBody(route, params.body);
           } catch (error) {
-            console.error('Error parsing body', error);
+            console.error('Error parsing body:', error instanceof Error ? error.message : String(error));
             // Zod validation errors should return 400 Bad Request, not 500
             return res.status(400).json({
               error: 'Invalid request body',

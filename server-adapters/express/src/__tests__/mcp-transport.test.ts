@@ -25,14 +25,13 @@ describe('Express MCP Transport Routes Integration', () => {
 
       // Apply JSON body parsing only to non-MCP routes
       // MCP transport routes need raw body access - the SDK reads the body directly
-      // app.use((req, res, next) => {
-      //   // // Skip body parsing for MCP transport routes
-      //   // if (req.path.match(/\/api\/mcp\/[^/]+\/(mcp|sse|messages)$/)) {
-      //   //   return next();
-      //   // }
-      //   return express.json()(req, res, next);
-      // });
-      app.use(express.json());
+      app.use((req, res, next) => {
+        // // Skip body parsing for MCP transport routes
+        if (req.path.match(/\/api\/mcp\/[^/]+\/(mcp|sse|messages)$/)) {
+          return next();
+        }
+        return express.json()(req, res, next);
+      });
 
       // Create adapter
       const adapter = new MastraServer({

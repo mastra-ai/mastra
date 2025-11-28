@@ -23,12 +23,6 @@ vi.mock('zod', async importOriginal => {
   const actual: {} = await importOriginal();
   return {
     ...actual,
-    object: vi.fn(() => ({
-      parse: vi.fn(input => input),
-    })),
-    string: vi.fn(() => ({
-      parse: vi.fn(input => input),
-    })),
   };
 });
 
@@ -107,6 +101,7 @@ export interface AdapterTestSuiteConfig {
  */
 export function createTestAgent(
   overrides: {
+    id?: string;
     name?: string;
     description?: string;
     instructions?: string;
@@ -121,6 +116,7 @@ export function createTestAgent(
   const mockMemory = createMockMemory();
 
   const agent = new Agent({
+    id: overrides.id || 'test-agent',
     name: overrides.name || 'test-agent',
     description: overrides.description || 'A test agent',
     instructions: overrides.instructions || 'Test instructions',
@@ -438,18 +434,68 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
 }
 
 async function mockWorkflowRun(workflow: Workflow) {
-  const workflowBuilderRun = await workflow.createRun({
+  // Mock getWorkflowRunById to return a mock run object
+  // This is needed for routes that require an existing workflow run (restart, resume, etc.)
+  vi.spyOn(workflow, 'getWorkflowRunById').mockResolvedValue({
     runId: 'test-run',
+    workflowName: 'test-workflow',
+    status: 'completed',
+    resourceId: 'test-resource',
+    snapshot: {
+      context: {},
+      value: {},
+      status: 'done',
+      runId: 'test-run',
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  } as any);
+
+  // Mock getWorkflowRunExecutionResult for execution-result routes
+  vi.spyOn(workflow, 'getWorkflowRunExecutionResult').mockResolvedValue({
+    results: { step1: { output: 'test-output' } },
+    status: 'success',
+  } as any);
+
+  // Mock createRun to return a mocked run object with all required methods
+  const originalCreateRun = workflow.createRun.bind(workflow);
+  vi.spyOn(workflow, 'createRun').mockImplementation(async (options?: any) => {
+    const run = await originalCreateRun(options);
+
+    // Mock stream methods
+    vi.spyOn(run, 'streamLegacy').mockReturnValue({
+      stream: createMockWorkflowStream(),
+    } as any);
+    vi.spyOn(run, 'observeStreamLegacy').mockReturnValue({
+      stream: createMockWorkflowStream(),
+    } as any);
+
+    // Mock start to return a successful result
+    vi.spyOn(run, 'start').mockResolvedValue({
+      results: {},
+      status: 'success',
+    } as any);
+
+    // Mock restart to return a successful result
+    vi.spyOn(run, 'restart').mockResolvedValue({
+      results: {},
+      status: 'success',
+    } as any);
+
+    // Mock resume to return a successful result
+    vi.spyOn(run, 'resume').mockResolvedValue({
+      results: {},
+      status: 'success',
+    } as any);
+
+    // Mock timeTravel to return a successful result
+    vi.spyOn(run, 'timeTravel').mockResolvedValue({
+      results: {},
+      status: 'success',
+    } as any);
+
+    return run;
   });
-  // streamLegacy returns an object with a stream property
-  vi.spyOn(workflowBuilderRun, 'streamLegacy').mockReturnValue({
-    stream: createMockWorkflowStream(),
-  } as any);
-  // observeStreamLegacy returns an object with a stream property
-  vi.spyOn(workflowBuilderRun, 'observeStreamLegacy').mockReturnValue({
-    stream: createMockWorkflowStream(),
-  } as any);
-  await workflowBuilderRun.start({ inputData: {} }).catch(() => {});
 }
 
 /**
