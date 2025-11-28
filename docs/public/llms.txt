@@ -178,7 +178,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 57+ AI providers and 1155+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 58+ AI providers and 1156+ models through Mastra's model router.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
@@ -210,7 +210,8 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Llama | Models | Mastra](https://mastra.ai/en/models/providers/llama): Use Llama models with Mastra. 7 models available.
 - [LMStudio | Models | Mastra](https://mastra.ai/en/models/providers/lmstudio): Use LMStudio models with Mastra. 3 models available.
 - [LucidQuery AI | Models | Mastra](https://mastra.ai/en/models/providers/lucidquery): Use LucidQuery AI models with Mastra. 2 models available.
-- [Minimax | Models | Mastra](https://mastra.ai/en/models/providers/minimax): Use Minimax models with Mastra. 1 model available.
+- [MiniMax (China) | Models | Mastra](https://mastra.ai/en/models/providers/minimax-cn): Use MiniMax (China) models with Mastra. 1 model available.
+- [MiniMax | Models | Mastra](https://mastra.ai/en/models/providers/minimax): Use MiniMax models with Mastra. 1 model available.
 - [Mistral | Models | Mastra](https://mastra.ai/en/models/providers/mistral): Use Mistral models with Mastra. 19 models available.
 - [ModelScope | Models | Mastra](https://mastra.ai/en/models/providers/modelscope): Use ModelScope models with Mastra. 7 models available.
 - [Moonshot AI (China) | Models | Mastra](https://mastra.ai/en/models/providers/moonshotai-cn): Use Moonshot AI (China) models with Mastra. 5 models available.
