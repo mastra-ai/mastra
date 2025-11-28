@@ -73,6 +73,54 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }
 
   /**
+   * Execute a step with retry logic for Inngest.
+   * Retries are handled via step-level retry (RetryAfterError thrown INSIDE step.run()).
+   * After retries exhausted, error propagates here and we return a failed result.
+   */
+  protected async executeStepWithRetry<T>(
+    stepId: string,
+    runStep: () => Promise<T>,
+    params: {
+      retries: number;
+      delay: number;
+      stepSpan?: any;
+      workflowId: string;
+      runId: string;
+    },
+  ): Promise<{ ok: true; result: T } | { ok: false; error: { status: 'failed'; error: string; endedAt: number } }> {
+    try {
+      // Pass retry config to wrapDurableOperation so RetryAfterError is thrown INSIDE step.run()
+      const result = await this.wrapDurableOperation(stepId, runStep, { delay: params.delay });
+      return { ok: true, result };
+    } catch (e) {
+      // After step-level retries exhausted, extract failure from error cause
+      const cause = (e as any)?.cause;
+      if (cause?.status === 'failed') {
+        params.stepSpan?.error({
+          error: e,
+          attributes: { status: 'failed' },
+        });
+        return { ok: false, error: cause };
+      }
+
+      // Fallback for other errors
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      params.stepSpan?.error({
+        error: e,
+        attributes: { status: 'failed' },
+      });
+      return {
+        ok: false,
+        error: {
+          status: 'failed',
+          error: `Error: ${errorMessage}`,
+          endedAt: Date.now(),
+        },
+      };
+    }
+  }
+
+  /**
    * Use Inngest's sleep primitive for durability
    */
   protected async executeSleepDuration(duration: number, sleepId: string, workflowId: string): Promise<void> {
@@ -88,47 +136,32 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
   /**
    * Wrap durable operations in Inngest step.run() for durability.
-   * This is the single hook that all durable operations use.
+   * If retryConfig is provided, throws RetryAfterError INSIDE step.run() to trigger
+   * Inngest's step-level retry mechanism (not function-level retry).
    */
-  protected async wrapDurableOperation<T>(operationId: string, operationFn: () => Promise<T>): Promise<T> {
-    return this.inngestStep.run(operationId, operationFn) as Promise<T>;
-  }
-
-  /**
-   * Handle step execution error.
-   * If retries remaining, throw RetryAfterError to signal Inngest to retry.
-   * If retries exhausted, return failed result to record the failure.
-   */
-  protected handleStepError(
-    error: unknown,
-    params: {
-      workflowId: string;
-      runId: string;
-      stepId: string;
-      stepSpan?: any;
-      delay: number;
-      retries: number;
-    },
-  ): { status: 'failed'; error: string; endedAt: number } {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-
-    if (this.inngestAttempts < params.retries) {
-      // Retries remaining - signal Inngest to retry
-      throw new RetryAfterError(errorMessage, params.delay, {
-        cause: {
-          status: 'failed',
-          error: `Error: ${errorMessage}`,
-          endedAt: Date.now(),
-        },
-      });
-    }
-
-    // Retries exhausted - record as failed
-    return {
-      status: 'failed',
-      error: errorMessage,
-      endedAt: Date.now(),
-    };
+  protected async wrapDurableOperation<T>(
+    operationId: string,
+    operationFn: () => Promise<T>,
+    retryConfig?: { delay: number },
+  ): Promise<T> {
+    return this.inngestStep.run(operationId, async () => {
+      try {
+        return await operationFn();
+      } catch (e) {
+        if (retryConfig) {
+          // Throw RetryAfterError INSIDE step.run() to trigger step-level retry
+          const errorMessage = e instanceof Error ? e.message : String(e);
+          throw new RetryAfterError(errorMessage, retryConfig.delay, {
+            cause: {
+              status: 'failed',
+              error: `Error: ${errorMessage}`,
+              endedAt: Date.now(),
+            },
+          });
+        }
+        throw e; // Re-throw if no retry config
+      }
+    }) as Promise<T>;
   }
 
   /**
