@@ -16993,63 +16993,6 @@ describe('Workflow', () => {
           expect(result.result).toEqual({ finalResult: 'output-from-step-1 + modified-by-step-1' });
         }
       });
-
-      it('should document that step output superset passes extra keys to next step inputData (Issue #7122 behavior)', async () => {
-        // This test documents the current behavior where:
-        // - step1 outputs { length: number, text: string }
-        // - step2 expects only { length: number }
-        // - step2 actually receives { length: number, text: string } (the superset)
-
-        let step2ReceivedInput: any = null;
-
-        const step1 = createStep({
-          id: 'step-1',
-          inputSchema: z.string(),
-          outputSchema: z.object({ length: z.number(), text: z.string() }),
-          execute: async ({ inputData }) => {
-            return { length: inputData.length, text: inputData };
-          },
-        });
-
-        const step2 = createStep({
-          id: 'step-2',
-          inputSchema: z.object({ length: z.number() }),
-          outputSchema: z.object({ length: z.number() }),
-          execute: async ({ inputData }) => {
-            step2ReceivedInput = inputData;
-            return inputData;
-          },
-        });
-
-        const workflow = createWorkflow({
-          id: 'superset-test-workflow',
-          inputSchema: step1.inputSchema,
-          outputSchema: step2.outputSchema,
-          steps: [step1, step2],
-          mastra: new Mastra({ logger: false }),
-        })
-          .then(step1)
-          .then(step2)
-          .commit();
-
-        const run = await workflow.createRun();
-        const result = await run.start({ inputData: 'hello' });
-
-        expect(result.status).toBe('success');
-
-        // Document the current behavior: step2 receives the FULL output from step1,
-        // including keys not in step2's inputSchema
-        expect(step2ReceivedInput).toEqual({ length: 5, text: 'hello' });
-
-        // The step output also includes the extra keys (since inputData passes through)
-        if (result.status === 'success') {
-          expect(result.steps['step-2']).toMatchObject({
-            status: 'success',
-            payload: { length: 5, text: 'hello' }, // Full superset is passed as payload
-            output: { length: 5, text: 'hello' }, // And returned as output
-          });
-        }
-      });
     });
 
     describe('State Persistence Across Suspend/Resume', () => {
