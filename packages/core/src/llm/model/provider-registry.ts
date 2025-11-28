@@ -3,10 +3,10 @@
  * Loads provider data from JSON file and exports typed interfaces
  */
 
-import fs from 'fs';
-import { createRequire } from 'module';
-import os from 'os';
-import path from 'path';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import os from 'node:os';
+import path from 'node:path';
 import type { ProviderConfig, MastraModelGateway } from './gateways/base.js';
 import staticRegistry from './provider-registry.json';
 import type { Provider, ModelForProvider, ModelRouterModelId, ProviderModels } from './provider-types.generated.js';

@@ -1,4 +1,4 @@
-import type { Server } from 'http';
+import type { Server } from 'node:http';
 import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
 import { createRouteAdapterTestSuite } from '@internal/server-adapter-test-utils';
 import { SERVER_ROUTES } from '@mastra/server/server-adapter';

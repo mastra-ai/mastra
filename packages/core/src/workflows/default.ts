@@ -1,5 +1,4 @@
-import type { WritableStream } from 'stream/web';
-
+import type { WritableStream } from 'node:stream/web';
 import type { RequestContext } from '../di';
 import type { IErrorDefinition } from '../error';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';

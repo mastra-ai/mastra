@@ -1,4 +1,4 @@
-import type { TransformStreamDefaultController } from 'stream/web';
+import type { TransformStreamDefaultController } from 'node:stream/web';
 import { Agent } from '../../agent';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';

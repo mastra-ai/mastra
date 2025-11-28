@@ -1,4 +1,4 @@
-import { PassThrough } from 'stream';
+import { PassThrough } from 'node:stream';
 import { experimental_generateSpeech } from 'ai-v5';
 import type { SpeechModel } from 'ai-v5';
 import { MastraVoice } from '../voice';

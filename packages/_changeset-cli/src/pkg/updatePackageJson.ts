@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import type { PackageJson } from './getPackageJson.js';
 
 export function updatePackageJson(packagePath: string, packageJson: PackageJson): void {

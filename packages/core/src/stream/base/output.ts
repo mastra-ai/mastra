@@ -1,5 +1,5 @@
-import { EventEmitter } from 'events';
-import { ReadableStream, TransformStream } from 'stream/web';
+import { EventEmitter } from 'node:events';
+import { ReadableStream, TransformStream } from 'node:stream/web';
 import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
 import { MastraBase } from '../../base';

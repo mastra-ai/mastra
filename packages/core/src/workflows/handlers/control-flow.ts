@@ -1,5 +1,5 @@
-import { randomUUID } from 'crypto';
-import type { WritableStream } from 'stream/web';
+import { randomUUID } from 'node:crypto';
+import type { WritableStream } from 'node:stream/web';
 import type { RequestContext } from '../../di';
 import { SpanType } from '../../observability';
 import type { TracingContext } from '../../observability';

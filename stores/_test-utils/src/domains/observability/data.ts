@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { SpanType } from '@mastra/core/observability';
 import type { SpanRecord } from '@mastra/core/storage';
 

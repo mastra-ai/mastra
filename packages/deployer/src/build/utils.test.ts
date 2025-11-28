@@ -1,4 +1,4 @@
-import { posix } from 'path';
+import { posix } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { getPackageName, getCompiledDepCachePath, slash, findNativePackageModule } from './utils';
 
