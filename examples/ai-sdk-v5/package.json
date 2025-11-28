@@ -19,6 +19,7 @@
     "@mastra/pg": "latest",
     "@mastra/rag": "latest",
     "@mastra/server": "latest",
+    "hono": "^4.10.3",
     "next": "15.4.7",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import type { UIMessage, CoreMessage, Message } from '@internal/ai-sdk-v4';
 import { appendClientMessage, appendResponseMessages } from '@internal/ai-sdk-v4';
 import { describe, expect, it } from 'vitest';

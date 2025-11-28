@@ -5,6 +5,7 @@ import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/p
 import type {
   ElicitRequest,
   ElicitResult,
+  ProgressNotification,
   Prompt,
   Resource,
   ResourceTemplate,
@@ -139,6 +140,50 @@ To fix this you have three different options:
     this.addToInstanceCache();
     return this;
   }
+
+  /**
+   * Provides access to progress-related operations for tracking long-running operations.
+   *
+   * Progress tracking allows MCP servers to send updates about the status of ongoing operations,
+   * providing real-time feedback to users about task completion and current state.
+   *
+   * @example
+   * ```typescript
+   * // Set up handler for progress updates from a server
+   * await mcp.progress.onUpdate('serverName', (params) => {
+   *   console.log(`Progress: ${params.progress}%`);
+   *   console.log(`Status: ${params.message}`);
+   *   
+   *   if (params.total) {
+   *     console.log(`Completed ${params.progress} of ${params.total} items`);
+   *   }
+   * });
+   * ```
+   */
+  public get progress() {
+    this.addToInstanceCache();
+    return {
+      onUpdate: async (serverName: string, handler: (params: ProgressNotification['params']) => void) => {
+        try {
+          const internalClient = await this.getConnectedClientForServer(serverName);
+          return internalClient.progress.onUpdate(handler);
+        } catch (err) {
+          throw new MastraError(
+            {
+              id: 'MCP_CLIENT_ON_UPDATE_PROGRESS_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.THIRD_PARTY,
+              details: {
+                serverName,
+              },
+            },
+            err,
+          );
+        }
+      },
+    };
+  }
+
   /**
    * Provides access to elicitation-related operations for interactive user input collection.
    *

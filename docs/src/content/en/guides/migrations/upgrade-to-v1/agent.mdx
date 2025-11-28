@@ -202,6 +202,35 @@ To migrate, update from `output` or `experimental_output` to `structuredOutput.s
   });
 ```
 
+### Agent `id` field is now required
+
+The `id` field is now required when creating an Agent. Previously, agents could be created without an explicit ID, but this is no longer supported.
+
+To migrate, add an `id` field to all Agent configurations.
+
+```diff
+  const agent = new Agent({
++   id: 'my-agent',
+    name: 'My Agent',
+    instructions: 'You are a helpful assistant',
+    model: openai('gpt-4'),
+  });
+```
+
+The `id` can be the same as the `name`, or you can use a different identifier. The ID will be used when calling `mastra.getAgentById()` and must be unique within your Mastra instance.
+
+```typescript
+// Register agent with Mastra
+const mastra = new Mastra({
+  agents: {
+    myAgent: agent, // key can differ from id
+  },
+});
+
+// Retrieve by ID
+const agent = mastra.getAgentById('my-agent');
+```
+
 ## Removed
 
 ### `generateVNext` and `streamVNext` methods

@@ -24,7 +24,7 @@ export default function Page() {
             1. Assemble Agent
           </h3>
           <p className="mb-2">
-            The agent is is defined with a name, a set of instructions, a model,
+            The agent is defined with a name, a set of instructions, a model,
             and a collection of enabled tools:
           </p>
           <CodeBlock

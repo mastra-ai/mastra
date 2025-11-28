@@ -1,4 +1,4 @@
-import * as crypto from 'crypto';
+import * as crypto from 'node:crypto';
 import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
@@ -135,7 +135,7 @@ export interface PIIDetectorOptions {
  * Supports multiple redaction strategies and maintains audit trails
  * for compliance with GDPR, CCPA, HIPAA, and other privacy regulations.
  */
-export class PIIDetector implements Processor {
+export class PIIDetector implements Processor<'pii-detector'> {
   readonly id = 'pii-detector';
   readonly name = 'PII Detector';
 

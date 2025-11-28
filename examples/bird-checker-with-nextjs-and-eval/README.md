@@ -47,7 +47,7 @@ NEXT_PUBLIC_UNSPLASH_ACCESS_KEY=your_unsplash_access_key
 # Required for AI processing
 ANTHROPIC_API_KEY=your_anthropic_key
 
-# Required for evalutating the llm prompt
+# Required for evaluating the llm prompt
 BRAINTRUST_API_KEY=your_braintrust_key
 ```
 

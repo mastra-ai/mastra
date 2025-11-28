@@ -1,5 +1,5 @@
+import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { join, dirname } from 'path';
 import { Deployer } from '@mastra/deployer';
 import { readJSON } from 'fs-extra/esm';
 

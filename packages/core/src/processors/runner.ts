@@ -1,8 +1,11 @@
-import type { MastraDBMessage, MessageList } from '../agent/message-list';
+import type { MastraDBMessage } from '../agent/message-list';
+import { MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
+import { MastraError } from '../error';
 import type { IMastraLogger } from '../logger';
 import { SpanType } from '../observability';
 import type { Span, TracingContext } from '../observability';
+import type { RequestContext } from '../request-context';
 import type { ChunkType, OutputSchema } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Processor } from './index';
@@ -80,19 +83,24 @@ export class ProcessorRunner {
     this.agentName = agentName;
   }
 
-  async runOutputProcessors(messageList: MessageList, tracingContext?: TracingContext): Promise<MessageList> {
-    const responseMessages = messageList.clear.response.db();
-
-    let processableMessages: MastraDBMessage[] = [...responseMessages];
-
-    const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
-      messages: processableMessages,
-      abort: () => {
-        throw new TripWire('Tripwire triggered');
-      },
-    };
-
+  async runOutputProcessors(
+    messageList: MessageList,
+    tracingContext?: TracingContext,
+    runtimeContext?: RequestContext,
+  ): Promise<MessageList> {
     for (const [index, processor] of this.outputProcessors.entries()) {
+      const allNewMessages = messageList.get.response.db();
+      let processableMessages: MastraDBMessage[] = [...allNewMessages];
+      const idsBeforeProcessing = processableMessages.map(m => m.id);
+      const check = messageList.makeMessageSourceChecker();
+
+      const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
+        messages: processableMessages,
+        abort: () => {
+          throw new TripWire('Tripwire triggered');
+        },
+      };
+
       const abort = (reason?: string): never => {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`);
       };
@@ -120,17 +128,51 @@ export class ProcessorRunner {
         input: processableMessages,
       });
 
-      processableMessages = await processMethod({
+      // Start recording MessageList mutations for this processor
+      messageList.startRecording();
+
+      const result = await processMethod({
         messages: processableMessages,
+        messageList,
         abort: ctx.abort,
         tracingContext: { currentSpan: processorSpan },
+        runtimeContext,
       });
 
-      processorSpan?.end({ output: processableMessages });
-    }
+      // Stop recording and get mutations for this processor
+      const mutations = messageList.stopRecording();
 
-    if (processableMessages.length > 0) {
-      messageList.add(processableMessages, 'response');
+      // Handle the new return type - MessageList or MastraDBMessage[]
+      if (result instanceof MessageList) {
+        if (result !== messageList) {
+          throw new MastraError({
+            category: 'USER',
+            domain: 'AGENT',
+            id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+            text: `Processor ${processor.id} returned a MessageList instance other than the one that was passed in as an argument. New external message list instances are not supported. Use the messageList argument instead.`,
+          });
+        }
+        if (mutations.length > 0) {
+          processableMessages = result.get.response.db();
+        }
+      } else {
+        if (result) {
+          const deletedIds = idsBeforeProcessing.filter(i => !result.some(m => m.id === i));
+          if (deletedIds.length) {
+            messageList.removeByIds(deletedIds);
+          }
+          processableMessages = result || [];
+          for (const message of result) {
+            messageList.removeByIds([message.id]);
+            messageList.add(message, check.getSource(message) || 'response');
+          }
+        }
+      }
+
+      processorSpan?.end({
+        output: processableMessages,
+        attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
+      });
     }
 
     return messageList;
@@ -143,6 +185,8 @@ export class ProcessorRunner {
     part: ChunkType<OUTPUT>,
     processorStates: Map<string, ProcessorState<OUTPUT>>,
     tracingContext?: TracingContext,
+    runtimeContext?: RequestContext,
+    messageList?: MessageList,
   ): Promise<{
     part: ChunkType<OUTPUT> | null | undefined;
     blocked: boolean;
@@ -181,6 +225,8 @@ export class ProcessorRunner {
                 throw new TripWire(reason || `Stream part blocked by ${processor.id}`);
               },
               tracingContext: { currentSpan: state.span },
+              runtimeContext,
+              messageList,
             });
 
             if (state.span && !state.span.isEvent) {
@@ -285,24 +331,22 @@ export class ProcessorRunner {
     });
   }
 
-  async runInputProcessors(messageList: MessageList, tracingContext?: TracingContext): Promise<MessageList> {
-    const userMessages = messageList.clear.input.db();
-
-    let processableMessages: MastraDBMessage[] = [...userMessages];
-
-    const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
-      messages: processableMessages,
-      abort: () => {
-        throw new TripWire('Tripwire triggered');
-      },
-    };
-
+  async runInputProcessors(
+    messageList: MessageList,
+    tracingContext?: TracingContext,
+    runtimeContext?: RequestContext,
+  ): Promise<MessageList> {
     for (const [index, processor] of this.inputProcessors.entries()) {
-      const abort = (reason?: string): never => {
-        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`);
-      };
+      let processableMessages: MastraDBMessage[] = messageList.get.input.db();
+      const inputIds = processableMessages.map(m => m.id);
+      const check = messageList.makeMessageSourceChecker();
 
-      ctx.abort = abort;
+      const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
+        messages: processableMessages,
+        abort: (reason?: string): never => {
+          throw new TripWire(reason || `Tripwire triggered by ${processor.id}`);
+        },
+      };
 
       // Use the processInput method if available
       const processMethod = processor.processInput?.bind(processor);
@@ -325,33 +369,85 @@ export class ProcessorRunner {
         input: processableMessages,
       });
 
-      processableMessages = await processMethod({
+      // Start recording MessageList mutations for this processor
+      messageList.startRecording();
+
+      const result = await processMethod({
         messages: processableMessages,
         abort: ctx.abort,
         tracingContext: { currentSpan: processorSpan },
+        messageList,
+        runtimeContext,
       });
 
-      processorSpan?.end({ output: processableMessages });
-    }
+      // Handle both MessageList and MastraDBMessage[] return types
+      let mutations: Array<{
+        type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
+        source?: string;
+        count?: number;
+        ids?: string[];
+        text?: string;
+        tag?: string;
+        message?: any;
+      }>;
 
-    if (processableMessages.length > 0) {
-      // Separate system messages from other messages since they need different handling
-      const systemMessages = processableMessages.filter(m => m.role === 'system');
-      const nonSystemMessages = processableMessages.filter(m => m.role !== 'system');
+      if (result instanceof MessageList) {
+        if (result !== messageList) {
+          throw new MastraError({
+            category: 'USER',
+            domain: 'AGENT',
+            id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+            text: `Processor ${processor.id} returned a MessageList instance other than the one that was passed in as an argument. New external message list instances are not supported. Use the messageList argument instead.`,
+          });
+        }
+        // Stop recording and capture mutations
+        mutations = messageList.stopRecording();
+        if (mutations.length > 0) {
+          // Processor returned a MessageList - it has been modified in place
+          // Update processableMessages to reflect ALL current messages for next processor
+          processableMessages = messageList.get.input.db();
+        }
+      } else {
+        // Processor returned an array - stop recording before clear/add (that's just internal plumbing)
+        mutations = messageList.stopRecording();
 
-      // Add system messages using addSystem
-      for (const sysMsg of systemMessages) {
-        const systemText =
-          (sysMsg.content.content as string | undefined) ??
-          sysMsg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
-          '';
-        messageList.addSystem(systemText);
+        if (result) {
+          // Clear and re-add since processor worked with array. clear all messages, the new result array is all messages in the list (new input but also any messages added by other processors, memory for ex)
+          const deletedIds = inputIds.filter(i => !result.some(m => m.id === i));
+          if (deletedIds.length) {
+            messageList.removeByIds(deletedIds);
+          }
+
+          // Separate system messages from other messages since they need different handling
+          const systemMessages = result.filter(m => m.role === 'system');
+          const nonSystemMessages = result.filter(m => m.role !== 'system');
+
+          // Add system messages using addSystem
+          for (const sysMsg of systemMessages) {
+            const systemText =
+              (sysMsg.content.content as string | undefined) ??
+              sysMsg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
+              '';
+            messageList.addSystem(systemText);
+          }
+
+          // Add non-system messages normally
+          if (nonSystemMessages.length > 0) {
+            for (const message of nonSystemMessages) {
+              messageList.removeByIds([message.id]);
+              messageList.add(message, check.getSource(message) || 'input');
+            }
+          }
+
+          // Use messageList.get.input.db() for consistency with MessageList return type
+          processableMessages = messageList.get.input.db();
+        }
       }
 
-      // Add non-system messages normally
-      if (nonSystemMessages.length > 0) {
-        messageList.add(nonSystemMessages, 'input');
-      }
+      processorSpan?.end({
+        output: processableMessages,
+        attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
+      });
     }
 
     return messageList;
