@@ -88,6 +88,24 @@ export const workflow = createWorkflow({
   ]}
 />
 
+## Running with initial state
+
+When starting a workflow run, you can pass `initialState` to set the starting values for the workflow's state:
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+
+const result = await run.start({
+  inputData: { value: "hello" },
+  initialState: {
+    counter: 0,
+    items: [],
+  },
+});
+```
+
+The `initialState` object should match the structure defined in the workflow's `stateSchema`. See [Workflow State](/docs/v1/workflows/workflow-state) for more details.
+
 ## Workflow status
 
 A workflow's `status` indicates its current execution state. The possible values are:
@@ -118,4 +136,5 @@ A workflow's `status` indicates its current execution state. The possible values
 ## Related
 
 - [Step Class](./step)
+- [Workflow State](/docs/workflows/workflow-state)
 - [Control flow](/docs/workflows/control-flow)
