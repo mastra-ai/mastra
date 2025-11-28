@@ -515,6 +515,34 @@ function toolsTest(version: 'v1' | 'v2') {
       expect(await result.finishReason).toBe('tool-calls');
     });
 
+    it('should resolve dynamic descriptions for client tools', async () => {
+      const dynamicClientTool = createTool({
+        id: 'dynamic-client-tool',
+        description: ({ requestContext }) => `Client tool for ${requestContext.get('tenant')}`,
+        inputSchema: z.object({}),
+        execute: async () => ({}),
+      });
+
+      const userAgent = new Agent({
+        id: 'dynamic-client-agent',
+        name: 'Dynamic client agent',
+        instructions: 'Validate dynamic descriptions for client tools.',
+        model: mockModel,
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('tenant', 'acme-inc');
+
+      const toolsForRequest = (await (userAgent as any).listClientTools({
+        requestContext,
+        clientTools: {
+          dynamicClientTool,
+        },
+      })) as Record<string, { description?: string }>;
+
+      expect(toolsForRequest.dynamicClientTool.description).toBe('Client tool for acme-inc');
+    });
+
     it('should make requestContext available to tools in generate', async () => {
       // Create a mock model that calls the testTool
       let requestContextModel: MockLanguageModelV1 | MockLanguageModelV2;

@@ -259,11 +259,14 @@ export function createStep<
       throw new Error('Tool must have input and output schemas defined');
     }
 
+    const description = getStaticDescriptionFromTool(params);
+
     return {
       // TODO: tool probably should have strong id type
       // @ts-ignore
       id: params.id,
-      description: params.description,
+      // Workflows cannot resolve dynamic descriptions at build time, so we keep static ones if available.
+      description,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
       resumeSchema: params.resumeSchema,
@@ -350,6 +353,15 @@ export function createWorkflow<
   >[],
 >(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
   return new Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput>(params);
+}
+
+function getStaticDescriptionFromTool(tool: Tool<any, any, any, any, any>): string | undefined {
+  try {
+    const desc = tool.description;
+    return typeof desc === 'string' ? desc : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function cloneWorkflow<

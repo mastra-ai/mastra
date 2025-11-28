@@ -41,6 +41,7 @@ import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, isZodType } from '../utils';
 import type { ToolOptions } from '../utils';
+import { resolveMaybePromise } from '../utils/resolve-maybe-promise';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import type { Workflow, WorkflowResult } from '../workflows';
@@ -74,14 +75,6 @@ type ModelFallbacks = {
   maxRetries: number;
   enabled: boolean;
 }[];
-
-function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>, cb: (value: T) => R): R | Promise<R> {
-  if (value instanceof Promise || (value != null && typeof (value as PromiseLike<T>).then === 'function')) {
-    return Promise.resolve(value).then(cb);
-  }
-
-  return cb(value as T);
-}
 
 /**
  * The Agent class is the foundation for creating AI agents in Mastra. It provides methods for generating responses,
@@ -1263,6 +1256,46 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   }
 
   /**
+   * Helper to resolve tool descriptions (static or dynamic)
+   * @internal
+   */
+  private async resolveToolDescription(
+    tool: { description?: unknown; getDescription?: unknown },
+    requestContext: RequestContext,
+  ): Promise<string | undefined> {
+    // check if tool has getDescription method (Mastra Tool class instance)
+    if (typeof tool.getDescription === 'function') {
+      try {
+        return await tool.getDescription({
+          requestContext,
+          mastra: this.#mastra,
+        });
+      } catch (error) {
+        this.logger?.debug?.(`[Agent:${this.name}] tool description getter threw. Falling back to undefined.`, {
+          error: error instanceof Error ? error.message : error,
+        });
+        return undefined;
+      }
+    }
+    // handle raw ToolAction objects with dynamic descriptions
+    try {
+      if (typeof tool.description === 'string') {
+        return tool.description;
+      }
+      // check if it's a dynamic description function (raw ToolAction)
+      if (typeof tool.description === 'function') {
+        return await resolveMaybePromise(tool.description({ requestContext, mastra: this.#mastra }), desc => desc);
+      }
+    } catch (error) {
+      this.logger?.debug?.(`[Agent:${this.name}] tool description getter threw. Falling back to undefined.`, {
+        error: error instanceof Error ? error.message : error,
+      });
+      return undefined;
+    }
+    return undefined;
+  }
+
+  /**
    * Retrieves and converts memory tools to CoreTool format.
    * @internal
    */
@@ -1302,7 +1335,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         },
       );
       for (const [toolName, tool] of Object.entries(memoryTools)) {
-        const toolObj = tool;
+        const description = await this.resolveToolDescription(tool, requestContext);
+
         const options: ToolOptions = {
           name: toolName,
           runId,
@@ -1316,9 +1350,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingContext,
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
-          requireApproval: (toolObj as any).requireApproval,
+          requireApproval: (tool as any).requireApproval,
+          description,
         };
-        const convertedToCoreTool = makeCoreTool(toolObj, options);
+        const convertedToCoreTool = makeCoreTool(tool, options);
         convertedMemoryTools[toolName] = convertedToCoreTool;
       }
     }
@@ -1503,6 +1538,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           return;
         }
 
+        const description = await this.resolveToolDescription(tool, requestContext);
+
         const options: ToolOptions = {
           name: k,
           runId,
@@ -1518,6 +1555,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           writableStream,
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
+          description,
         };
         return [k, makeCoreTool(tool, options)];
       }),
@@ -1566,7 +1604,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       });
       for (const toolset of toolsFromToolsets) {
         for (const [toolName, tool] of Object.entries(toolset)) {
-          const toolObj = tool;
+          const description = await this.resolveToolDescription(tool, requestContext);
+
           const options: ToolOptions = {
             name: toolName,
             runId,
@@ -1580,9 +1619,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
             tracingContext,
             model: await this.getModel({ requestContext }),
             tracingPolicy: this.#options?.tracingPolicy,
-            requireApproval: (toolObj as any).requireApproval,
+            requireApproval: (tool as any).requireApproval,
+            description,
           };
-          const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
+          const convertedToCoreTool = makeCoreTool(tool, options, 'toolset');
           toolsForRequest[toolName] = convertedToCoreTool;
         }
       }
@@ -1621,7 +1661,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         runId,
       });
       for (const [toolName, tool] of clientToolsForInput) {
+        // resolve description before spreading to preserve prototype methods (e.g., getDescription)
+        const description = await this.resolveToolDescription(tool, requestContext);
         const { execute, ...rest } = tool;
+
         const options: ToolOptions = {
           name: toolName,
           runId,
@@ -1636,6 +1679,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
+          description,
         };
         const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
         toolsForRequest[toolName] = convertedToCoreTool;

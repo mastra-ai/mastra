@@ -17,11 +17,13 @@ import type { RequestContext } from '../request-context';
 import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
 import type { ToolStream } from './stream';
 import type { ValidationError } from './validation';
+import type { DynamicArgument } from '../types';
 
 export type VercelTool = Tool;
 export type VercelToolV5 = ToolV5;
 
 export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
+export type DynamicToolDescription = DynamicArgument<string>;
 
 /**
  * MCP-specific context properties available during tool execution in MCP environments.
@@ -215,7 +217,7 @@ export interface ToolAction<
   TId extends string = string,
 > {
   id: TId;
-  description: string;
+  description: DynamicToolDescription;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
   suspendSchema?: TSuspendSchema;

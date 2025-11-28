@@ -787,7 +787,7 @@ export class MCPServer extends MCPServerBase {
         mastra: this.mastra,
         requestContext: new RequestContext(),
         tracingContext: {},
-        description: agentToolDefinition.description,
+        description: agentToolDefinition.description as string,
       };
       const coreTool = makeCoreTool(agentToolDefinition, options) as InternalCoreTool;
 
@@ -870,7 +870,7 @@ export class MCPServer extends MCPServerBase {
         mastra: this.mastra,
         requestContext: new RequestContext(),
         tracingContext: {},
-        description: workflowToolDefinition.description,
+        description: workflowToolDefinition.description as string, // Static description from createTool above
       };
 
       const coreTool = makeCoreTool(workflowToolDefinition, options) as InternalCoreTool;
@@ -914,13 +914,26 @@ export class MCPServer extends MCPServerBase {
         continue;
       }
 
+      // Resolve description without triggering Tool's dynamic getter.
+      let description: string | undefined;
+      try {
+        const desc = toolInstance.description;
+        description = typeof desc === 'string' ? desc : undefined;
+      } catch (error) {
+        this.logger.warn(
+          `Tool '${toolName}' has a dynamic description that cannot be resolved at server initialization. ` +
+            `The description will be undefined in the MCP tool listing.`,
+        );
+        description = undefined;
+      }
+
       const options = {
         name: toolName,
         requestContext: new RequestContext(),
         tracingContext: {},
         mastra: this.mastra,
         logger: this.logger,
-        description: toolInstance?.description,
+        description,
       };
 
       const coreTool = makeCoreTool(toolInstance, options) as InternalCoreTool;
