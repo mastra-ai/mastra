@@ -9,6 +9,99 @@ import zodToJsonSchemaOriginal from 'zod-to-json-schema';
 const PATCHED = Symbol('__mastra_patched__');
 
 /**
+ * Normalize JSON schema to convert additionalProperties: true to { type: 'any' }
+ * for compatibility with validators that require additionalProperties to be a schema object.
+ *
+ * Uses lazy copying - only creates new objects when modifications are needed.
+ */
+function normalizeAdditionalProperties(schema: any): any {
+  if (!schema || typeof schema !== 'object') return schema;
+
+  // Handle arrays
+  if (Array.isArray(schema)) {
+    return schema.map(normalizeAdditionalProperties);
+  }
+
+  // Early exit: if no additionalProperties and no nested structures, return as-is
+  // This avoids unnecessary copying for simple schemas
+  const hasNestedStructures =
+    schema.properties ||
+    schema.items ||
+    schema.allOf ||
+    schema.anyOf ||
+    schema.oneOf ||
+    schema.patternProperties ||
+    (schema.additionalProperties &&
+      typeof schema.additionalProperties === 'object' &&
+      schema.additionalProperties !== null &&
+      !Array.isArray(schema.additionalProperties));
+
+  if (!hasNestedStructures && schema.additionalProperties !== true) {
+    return schema;
+  }
+
+  // Create a copy to avoid mutating the original
+  const normalized = { ...schema };
+
+  // Normalize additionalProperties: true or {} to { type: 'any' }
+  // Zod v3 produces additionalProperties: true (boolean)
+  // Zod v4 produces additionalProperties: {} (empty object)
+  // Both need to be normalized to { type: 'any' } for AI SDK validator compatibility
+  if (
+    normalized.additionalProperties === true ||
+    (normalized.additionalProperties &&
+      typeof normalized.additionalProperties === 'object' &&
+      normalized.additionalProperties !== null &&
+      !Array.isArray(normalized.additionalProperties) &&
+      Object.keys(normalized.additionalProperties).length === 0)
+  ) {
+    normalized.additionalProperties = { type: 'any' };
+  }
+
+  // Recursively normalize nested objects
+  if (normalized.properties && typeof normalized.properties === 'object') {
+    normalized.properties = Object.fromEntries(
+      Object.entries(normalized.properties).map(([key, value]) => [key, normalizeAdditionalProperties(value)]),
+    );
+  }
+
+  if (normalized.items && typeof normalized.items === 'object') {
+    normalized.items = normalizeAdditionalProperties(normalized.items);
+  }
+
+  if (normalized.allOf && Array.isArray(normalized.allOf)) {
+    normalized.allOf = normalized.allOf.map(normalizeAdditionalProperties);
+  }
+
+  if (normalized.anyOf && Array.isArray(normalized.anyOf)) {
+    normalized.anyOf = normalized.anyOf.map(normalizeAdditionalProperties);
+  }
+
+  if (normalized.oneOf && Array.isArray(normalized.oneOf)) {
+    normalized.oneOf = normalized.oneOf.map(normalizeAdditionalProperties);
+  }
+
+  if (normalized.patternProperties && typeof normalized.patternProperties === 'object') {
+    normalized.patternProperties = Object.fromEntries(
+      Object.entries(normalized.patternProperties).map(([key, value]) => [key, normalizeAdditionalProperties(value)]),
+    );
+  }
+
+  // Normalize additionalProperties if it's a schema object (recursive)
+  if (
+    normalized.additionalProperties &&
+    typeof normalized.additionalProperties === 'object' &&
+    normalized.additionalProperties !== null &&
+    !Array.isArray(normalized.additionalProperties) &&
+    normalized.additionalProperties !== true
+  ) {
+    normalized.additionalProperties = normalizeAdditionalProperties(normalized.additionalProperties);
+  }
+
+  return normalized;
+}
+
+/**
  * Recursively patch Zod v4 record schemas that are missing valueType.
  * This fixes a bug in Zod v4 where z.record(valueSchema) doesn't set def.valueType.
  * The single-arg form should set valueType but instead only sets keyType.
@@ -96,7 +189,7 @@ export function zodToJsonSchema(
     // Zod v4 path - patch record schemas before converting
     patchRecordSchemas(zodSchema);
 
-    return (z as any)[fn](zodSchema, {
+    const jsonSchema = (z as any)[fn](zodSchema, {
       unrepresentable: 'any',
       override: (ctx: any) => {
         // Handle both Zod v4 structures: _def directly or nested in _zod
@@ -108,11 +201,17 @@ export function zodToJsonSchema(
         }
       },
     }) as JSONSchema7;
+
+    // Normalize additionalProperties: true to { type: 'any' } for validator compatibility
+    return normalizeAdditionalProperties(jsonSchema) as JSONSchema7;
   } else {
     // Zod v3 path - use the original converter
-    return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
+    const jsonSchema = zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
       $refStrategy: strategy,
       target,
     }) as JSONSchema7;
+
+    // Normalize additionalProperties: true to { type: 'any' } for validator compatibility
+    return normalizeAdditionalProperties(jsonSchema) as JSONSchema7;
   }
 }

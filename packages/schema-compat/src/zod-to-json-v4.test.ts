@@ -195,4 +195,119 @@ describe('zodToJsonSchema - Zod v4 specific', () => {
       expect(result.properties).toHaveProperty('field3');
     });
   });
+
+  describe('passthrough schema normalization', () => {
+    it('should normalize additionalProperties: true to { type: "any" } for validator compatibility', () => {
+      // This is the schema pattern that causes the issue:
+      // "Invalid schema for function 'vectorTool': In context=('additionalProperties',), schema must have a 'type' key."
+      const passthroughSchema = zV4
+        .object({
+          queryText: zV4.string(),
+          topK: zV4.number(),
+        })
+        .passthrough();
+
+      const result = zodToJsonSchema(passthroughSchema as any);
+
+      // Should have additionalProperties as a schema object, not true
+      expect(result.additionalProperties).toBeDefined();
+      expect(result.additionalProperties).not.toBe(true);
+      expect(result.additionalProperties).not.toBe(false);
+      expect(typeof result.additionalProperties).toBe('object');
+      expect((result.additionalProperties as any).type).toBe('any');
+    });
+
+    it('should handle nested passthrough schemas', () => {
+      const nestedPassthroughSchema = zV4.object({
+        outer: zV4
+          .object({
+            inner: zV4.string(),
+          })
+          .passthrough(),
+      });
+
+      const result = zodToJsonSchema(nestedPassthroughSchema as any);
+
+      // Top level should not have passthrough (no additionalProperties)
+      expect(result.type).toBe('object');
+      expect(result.properties).toHaveProperty('outer');
+
+      // Nested object should have normalized additionalProperties
+      const outerSchema = result.properties!.outer as any;
+      expect(outerSchema.type).toBe('object');
+      expect(outerSchema.additionalProperties).toBeDefined();
+      expect(outerSchema.additionalProperties).not.toBe(true);
+      expect((outerSchema.additionalProperties as any).type).toBe('any');
+    });
+
+    it('should preserve additionalProperties: false', () => {
+      const strictSchema = zV4
+        .object({
+          name: zV4.string(),
+        })
+        .strict();
+
+      const result = zodToJsonSchema(strictSchema as any);
+
+      expect(result.additionalProperties).toBe(false);
+    });
+
+    it('should preserve additionalProperties with schema object', () => {
+      const schemaWithCatchall = zV4
+        .object({
+          name: zV4.string(),
+        })
+        .catchall(zV4.number());
+
+      const result = zodToJsonSchema(schemaWithCatchall as any);
+
+      expect(result.additionalProperties).toBeDefined();
+      expect(typeof result.additionalProperties).toBe('object');
+      expect((result.additionalProperties as any).type).toBe('number');
+    });
+
+    it('should normalize z.looseObject() (Zod v4 replacement for passthrough)', () => {
+      // z.looseObject() is the Zod v4 replacement for deprecated .passthrough()
+      // Zod v4 produces additionalProperties: {} (empty object) instead of true
+      // Both need normalization to { type: 'any' } for AI SDK validator compatibility
+      if ('looseObject' in zV4 && typeof zV4.looseObject === 'function') {
+        const looseSchema = zV4.looseObject({
+          queryText: zV4.string(),
+          topK: zV4.number(),
+        });
+
+        const result = zodToJsonSchema(looseSchema as any, 'jsonSchema7');
+
+        // Should have additionalProperties normalized to { type: 'any' }
+        expect(result.additionalProperties).toBeDefined();
+        expect(result.additionalProperties).not.toBe(true);
+        expect(result.additionalProperties).not.toBe(false);
+        expect(typeof result.additionalProperties).toBe('object');
+        expect((result.additionalProperties as any).type).toBe('any');
+      } else {
+        // Skip if looseObject not available (e.g., older Zod v4 versions)
+        expect(true).toBe(true);
+      }
+    });
+
+    it('should normalize empty object additionalProperties (Zod v4 passthrough produces {})', () => {
+      // Zod v4's .passthrough() produces additionalProperties: {} (empty object)
+      // This also needs normalization because validators require a 'type' key
+      const passthroughSchema = zV4
+        .object({
+          queryText: zV4.string(),
+          topK: zV4.number(),
+        })
+        .passthrough();
+
+      const result = zodToJsonSchema(passthroughSchema as any, 'jsonSchema7');
+
+      // Zod v4 produces {} for passthrough, which should be normalized
+      // Check that it's been normalized to have a type key
+      expect(result.additionalProperties).toBeDefined();
+      expect(typeof result.additionalProperties).toBe('object');
+      expect(result.additionalProperties).not.toEqual({}); // Should not be empty object
+      expect((result.additionalProperties as any).type).toBe('any');
+    });
+  });
 });
