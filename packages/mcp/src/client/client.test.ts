@@ -567,6 +567,61 @@ describe('MastraMCPClient - AuthProvider Tests', () => {
   });
 });
 
+describe('MastraMCPClient - Timeout Parameter Position Tests', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should pass timeout in the options parameter (2nd arg), not params (1st arg) for listTools', async () => {
+    const customTimeout = 5000;
+
+    client = new InternalMastraMCPClient({
+      name: 'timeout-position-test',
+      server: {
+        url: testServer.baseUrl,
+      },
+      timeout: customTimeout,
+    });
+
+    await client.connect();
+
+    // Access the internal MCP SDK client to spy on listTools
+    const internalClient = (client as any).client;
+    const originalListTools = internalClient.listTools.bind(internalClient);
+
+    let capturedParams: any;
+    let capturedOptions: any;
+
+    internalClient.listTools = async (params?: any, options?: any) => {
+      capturedParams = params;
+      capturedOptions = options;
+      return originalListTools(params, options);
+    };
+
+    await client.tools();
+
+    // The timeout should be in the options (2nd argument), not in params (1st argument)
+    // If timeout is found in params, the bug exists
+    expect(capturedParams).not.toHaveProperty('timeout');
+    expect(capturedOptions).toHaveProperty('timeout', customTimeout);
+  });
+});
+
 describe('MastraMCPClient - Resource Cleanup Tests', () => {
   let testServer: {
     httpServer: HttpServer;

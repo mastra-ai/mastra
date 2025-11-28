@@ -39,6 +39,7 @@ export interface Processor<TId extends string = string> {
    * @param args.abort - Function to abort processing with an optional reason
    * @param args.tracingContext - Optional tracing context for observability
    * @param args.runtimeContext - Optional runtime context with execution metadata
+   * @param args.messageList - Optional MessageList instance for accessing conversation history including remembered messages
    */
   processOutputStream?(args: {
     part: ChunkType;
@@ -47,6 +48,7 @@ export interface Processor<TId extends string = string> {
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
     runtimeContext?: RequestContext;
+    messageList?: MessageList;
   }): Promise<ChunkType | null | undefined>;
 
   /**

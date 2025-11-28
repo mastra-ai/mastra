@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { createStep, createWorkflow } from './workflow';

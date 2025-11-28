@@ -1,7 +1,7 @@
-import { mkdtemp } from 'fs/promises';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach } from 'node:test';
-import { tmpdir } from 'os';
-import { join } from 'path';
 import { openai } from '@ai-sdk/openai';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { Agent, MessageList } from '@mastra/core/agent';

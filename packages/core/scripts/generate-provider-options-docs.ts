@@ -5,8 +5,8 @@
  * and generates markdown documentation for each provider's options.
  */
 
-import path from 'path';
-import { fileURLToPath } from 'url';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Node, Project, TypeFormatFlags } from 'ts-morph';
 import type { Type } from 'ts-morph';
 

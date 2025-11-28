@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import z from 'zod';
 import type { Agent } from '../../agent';
 import { RequestContext } from '../../di';

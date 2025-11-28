@@ -1,5 +1,5 @@
-import { randomUUID } from 'crypto';
-import type { WritableStream } from 'stream/web';
+import { randomUUID } from 'node:crypto';
+import type { WritableStream } from 'node:stream/web';
 import type { CoreMessage, UIMessage, Tool } from '@internal/ai-sdk-v4';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';

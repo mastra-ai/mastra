@@ -1,5 +1,5 @@
 import http from 'node:http';
-import path from 'path';
+import path from 'node:path';
 import type { ServerType } from '@hono/node-server';
 import { serve } from '@hono/node-server';
 import { Agent } from '@mastra/core/agent';

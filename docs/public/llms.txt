@@ -111,6 +111,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Workflows overview | Workflows](https://mastra.ai/en/docs/workflows/overview): Workflows in Mastra help you orchestrate complex sequences of tasks with features like branching, parallel execution, resource suspension, and more.
 - [Snapshots | Workflows](https://mastra.ai/en/docs/workflows/snapshots): Learn how to save and resume workflow execution state with snapshots in Mastra
 - [Suspend & Resume | Workflows](https://mastra.ai/en/docs/workflows/suspend-and-resume): Suspend and resume in Mastra workflows allows you to pause execution while waiting for external input or resources.
+- [Workflow state | Workflows](https://mastra.ai/en/docs/workflows/workflow-state): Share values across workflow steps using global state that persists through the entire workflow run.
 
 ## EN - examples
 - [Example: Request Context | Agents](https://mastra.ai/en/examples/agents/request-context): Learn how to create and configure dynamic agents using request context to adapt behavior based on user subscription tiers.

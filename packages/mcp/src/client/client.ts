@@ -691,7 +691,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
   async tools(): Promise<Record<string, Tool<any, any, any, any>>> {
     this.log('debug', `Requesting tools from MCP server`);
-    const { tools } = await this.client.listTools({ timeout: this.timeout });
+    const { tools } = await this.client.listTools({}, { timeout: this.timeout });
     const toolsRes: Record<string, Tool<any, any, any, any>> = {};
     for (const tool of tools) {
       this.log('debug', `Processing tool: ${tool.name}`);
