@@ -714,7 +714,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    if (!threadId.trim()) {
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
           id: 'STORAGE_CLOUDFLARE_LIST_MESSAGES_INVALID_THREAD_ID',
@@ -722,7 +725,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
         },
-        new Error('threadId must be a non-empty string'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
 
@@ -746,21 +749,23 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
-      // Step 1: Get thread messages (for pagination)
+      // Step 1: Get thread messages from all specified threads (for pagination)
       const threadMessageIds = new Set<string>();
-      try {
-        const threadMessagesKey = this.getThreadMessagesKey(threadId);
-        const allIds = await this.getFullOrder(threadMessagesKey);
-        allIds.forEach(id => threadMessageIds.add(id));
-      } catch {
-        // If no message order found, continue with empty set
+      for (const tid of threadIds) {
+        try {
+          const threadMessagesKey = this.getThreadMessagesKey(tid);
+          const allIds = await this.getFullOrder(threadMessagesKey);
+          allIds.forEach(id => threadMessageIds.add(id));
+        } catch {
+          // If no message order found for this thread, continue
+        }
       }
 
-      // Fetch thread messages
+      // Fetch thread messages from all threads
       const threadMessages = await this.fetchAndParseMessagesFromMultipleThreads(
         Array.from(threadMessageIds),
         undefined,
-        threadId,
+        threadIds.length === 1 ? threadIds[0] : undefined,
       );
 
       // Filter thread messages by resourceId if specified
@@ -912,7 +917,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
       // Otherwise, check if there are more pages in the pagination window
-      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const threadIdSet = new Set(threadIds);
+      const returnedThreadMessageIds = new Set(
+        finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
+      );
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
       const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + paginatedCount < total;
 

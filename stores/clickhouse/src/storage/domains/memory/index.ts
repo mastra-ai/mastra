@@ -122,6 +122,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+
     if (page < 0) {
       throw new MastraError(
         {
@@ -134,7 +137,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       );
     }
 
-    if (!threadId.trim()) {
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
           id: 'STORAGE_CLICKHOUSE_LIST_MESSAGES_INVALID_THREAD_ID',

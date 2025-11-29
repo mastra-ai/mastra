@@ -271,7 +271,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    if (!threadId.trim()) {
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
           id: 'STORAGE_DYNAMODB_LIST_MESSAGES_INVALID_THREAD_ID',
@@ -279,7 +282,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
         },
-        new Error('threadId must be a non-empty string'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
 

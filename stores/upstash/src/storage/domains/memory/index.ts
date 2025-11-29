@@ -486,7 +486,10 @@ export class StoreMemoryUpstash extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    if (!threadId.trim()) {
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
           id: 'STORAGE_UPSTASH_LIST_MESSAGES_INVALID_THREAD_ID',
@@ -494,11 +497,12 @@ export class StoreMemoryUpstash extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
         },
-        new Error('threadId must be a non-empty string'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
 
-    const threadMessagesKey = getThreadMessagesKey(threadId);
+    // For multiple threads, we'll aggregate messages from all thread keys
+    const threadMessagesKeys = threadIds.map(getThreadMessagesKey);
     const perPage = normalizePerPage(perPageInput, 40);
     // When perPage is false (get all), ignore page offset
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
