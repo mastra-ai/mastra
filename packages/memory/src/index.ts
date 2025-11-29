@@ -25,7 +25,14 @@ import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
 import { ZodObject } from 'zod';
 import type { ZodTypeAny } from 'zod';
-import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
+import {
+  updateWorkingMemoryTool,
+  __experimental_updateWorkingMemoryToolVNext,
+  deepMergeWorkingMemory,
+} from './tools/working-memory';
+
+// Re-export for testing purposes
+export { deepMergeWorkingMemory };
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
