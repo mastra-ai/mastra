@@ -7,6 +7,8 @@ import type {
   StorageListMessagesInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '../storage';
 import { InMemoryStore } from '../storage';
 import { createTool } from '../tools';
@@ -68,6 +70,10 @@ export class MockMemory extends MastraMemory {
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
     return this.storage.listThreadsByResourceId(args);
+  }
+
+  async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    return this.storage.listThreads(args);
   }
 
   async recall(args: StorageListMessagesInput & { threadConfig?: MemoryConfig; vectorSearchString?: string }): Promise<{

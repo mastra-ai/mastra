@@ -132,6 +132,17 @@ export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string(),
   resourceId: z.string(),
   orderBy: storageOrderBySchema.optional(),
+  filter: threadFilterSchema,
+});
+
+/**
+ * GET /api/memory/threads/search - Search threads without requiring resourceId
+ * @see https://github.com/mastra-ai/mastra/issues/4333
+ */
+export const searchThreadsQuerySchema = createPagePaginationSchema(100).extend({
+  agentId: z.string(),
+  orderBy: storageOrderBySchema.optional(),
+  filter: threadFilterSchema,
 });
 
 /**

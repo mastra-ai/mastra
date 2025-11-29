@@ -13,6 +13,8 @@ import type {
   StorageListMessagesInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
@@ -307,6 +309,19 @@ https://mastra.ai/en/docs/memory/overview`,
   abstract listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput>;
+
+  /**
+   * Lists threads with optional filters for resourceId and metadata.
+   * Unlike listThreadsByResourceId, this method does not require resourceId.
+   * @param args.filter.resourceId - Optional filter by resource ID
+   * @param args.filter.metadata - Optional filter by metadata key-value pairs (AND logic)
+   * @param args.page - Zero-indexed page number
+   * @param args.perPage - Number of items per page
+   * @param args.orderBy - Sorting configuration
+   * @returns Promise resolving to paginated thread results
+   * @see https://github.com/mastra-ai/mastra/issues/4333
+   */
+  abstract listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput>;
 
   /**
    * Saves or updates a thread

@@ -274,6 +274,36 @@ export type ListMemoryThreadsResponse = PaginationInfo & {
   threads: StorageThreadType[];
 };
 
+/**
+ * Parameters for searching threads without requiring resourceId.
+ * @see https://github.com/mastra-ai/mastra/issues/4333
+ */
+export interface SearchMemoryThreadsParams {
+  agentId: string;
+  page?: number;
+  perPage?: number;
+  orderBy?: 'createdAt' | 'updatedAt';
+  sortDirection?: 'ASC' | 'DESC';
+  /**
+   * Filter threads by metadata and/or resourceId.
+   * All specified key-value pairs in metadata must match (AND logic).
+   * @example
+   * ```ts
+   * filter: {
+   *   resourceId: 'optional-resource-id',
+   *   metadata: { category: 'support', priority: 'high' }
+   * }
+   * ```
+   */
+  filter?: {
+    resourceId?: string;
+    metadata?: Record<string, unknown>;
+  };
+  requestContext?: RequestContext | Record<string, any>;
+}
+
+export type SearchMemoryThreadsResponse = ListMemoryThreadsResponse;
+
 export interface GetMemoryConfigParams {
   agentId: string;
   requestContext?: RequestContext | Record<string, any>;

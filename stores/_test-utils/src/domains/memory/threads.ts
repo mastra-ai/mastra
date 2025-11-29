@@ -698,3 +698,304 @@ function isStorageSupportsSort(storage: MastraStorage): boolean {
   const storageType = storage.constructor.name;
   return ['LibSQLStore', 'PostgresStore', 'MSSQLStore', 'DynamoDBStore'].includes(storageType);
 }
+
+/**
+ * Tests for listThreadsByResourceId with metadata filter
+ * @see https://github.com/mastra-ai/mastra/issues/4333
+ */
+export function createThreadMetadataFilteringTest({ storage }: { storage: MastraStorage }) {
+  describe('Thread Metadata Filtering (Issue #4333)', () => {
+    describe('listThreadsByResourceId with metadata filter', () => {
+      let resourceId: string;
+      let threads: StorageThreadType[];
+
+      beforeEach(async () => {
+        resourceId = `filter-test-resource-${randomUUID()}`;
+        threads = [
+          {
+            id: `thread-category-a-1-${randomUUID()}`,
+            resourceId,
+            title: 'Category A Thread 1',
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+            updatedAt: new Date('2024-01-01T10:00:00Z'),
+            metadata: { category: 'categoryA', priority: 'high' },
+          },
+          {
+            id: `thread-category-a-2-${randomUUID()}`,
+            resourceId,
+            title: 'Category A Thread 2',
+            createdAt: new Date('2024-01-02T10:00:00Z'),
+            updatedAt: new Date('2024-01-02T10:00:00Z'),
+            metadata: { category: 'categoryA', priority: 'low' },
+          },
+          {
+            id: `thread-category-b-1-${randomUUID()}`,
+            resourceId,
+            title: 'Category B Thread 1',
+            createdAt: new Date('2024-01-03T10:00:00Z'),
+            updatedAt: new Date('2024-01-03T10:00:00Z'),
+            metadata: { category: 'categoryB', status: 'active' },
+          },
+          {
+            id: `thread-no-metadata-${randomUUID()}`,
+            resourceId,
+            title: 'Thread No Metadata',
+            createdAt: new Date('2024-01-04T10:00:00Z'),
+            updatedAt: new Date('2024-01-04T10:00:00Z'),
+            metadata: {},
+          },
+        ];
+
+        for (const thread of threads) {
+          await storage.saveThread({ thread });
+        }
+      });
+
+      it('should filter threads by single metadata key-value pair', async () => {
+        const result = await storage.listThreadsByResourceId({
+          resourceId,
+          filter: { metadata: { category: 'categoryA' } },
+        });
+        expect(result.threads).toHaveLength(2);
+        expect(result.threads.every(t => t.metadata?.category === 'categoryA')).toBe(true);
+      });
+
+      it('should filter threads by multiple metadata key-value pairs (AND logic)', async () => {
+        const result = await storage.listThreadsByResourceId({
+          resourceId,
+          filter: { metadata: { category: 'categoryA', priority: 'high' } },
+        });
+        expect(result.threads).toHaveLength(1);
+        expect(result.threads[0]?.metadata?.category).toBe('categoryA');
+        expect(result.threads[0]?.metadata?.priority).toBe('high');
+      });
+
+      it('should return empty array when no threads match the metadata filter', async () => {
+        const result = await storage.listThreadsByResourceId({
+          resourceId,
+          filter: { metadata: { category: 'nonExistent' } },
+        });
+        expect(result.threads).toHaveLength(0);
+      });
+
+      it('should combine metadata filter with pagination', async () => {
+        const result = await storage.listThreadsByResourceId({
+          resourceId,
+          filter: { metadata: { category: 'categoryA' } },
+          page: 0,
+          perPage: 1,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+        });
+        expect(result.threads).toHaveLength(1);
+        expect(result.total).toBe(2);
+        expect(result.hasMore).toBe(true);
+      });
+
+      it('should combine metadata filter with ordering', async () => {
+        const result = await storage.listThreadsByResourceId({
+          resourceId,
+          filter: { metadata: { category: 'categoryA' } },
+          orderBy: { field: 'createdAt', direction: 'DESC' },
+        });
+        expect(result.threads).toHaveLength(2);
+        // DESC order: newest first
+        expect(result.threads[0]?.title).toBe('Category A Thread 2');
+        expect(result.threads[1]?.title).toBe('Category A Thread 1');
+      });
+
+      it('should filter by priority metadata', async () => {
+        const result = await storage.listThreadsByResourceId({
+          resourceId,
+          filter: { metadata: { priority: 'low' } },
+        });
+        expect(result.threads).toHaveLength(1);
+        expect(result.threads[0]?.metadata?.priority).toBe('low');
+      });
+
+      it('should return all threads when no filter is provided', async () => {
+        const result = await storage.listThreadsByResourceId({ resourceId });
+        expect(result.threads).toHaveLength(4);
+      });
+
+      it('should handle filtering with empty metadata object (no filter applied)', async () => {
+        const result = await storage.listThreadsByResourceId({
+          resourceId,
+          filter: { metadata: {} },
+        });
+        expect(result.threads).toHaveLength(4);
+      });
+    });
+  });
+}
+
+/**
+ * Tests for listThreads method - querying threads without requiring resourceId
+ * @see https://github.com/mastra-ai/mastra/issues/4333
+ */
+export function createListThreadsTest({ storage }: { storage: MastraStorage }) {
+  describe('listThreads (Issue #4333)', () => {
+    let resourceId1: string;
+    let resourceId2: string;
+    let threads: StorageThreadType[];
+    // Use unique category values to avoid conflicts with other tests
+    let uniqueCategoryA: string;
+    let uniqueCategoryB: string;
+    let uniqueCategoryC: string;
+
+    beforeEach(async () => {
+      const testId = randomUUID().slice(0, 8);
+      resourceId1 = `list-threads-test-resource1-${randomUUID()}`;
+      resourceId2 = `list-threads-test-resource2-${randomUUID()}`;
+      uniqueCategoryA = `listThreads-catA-${testId}`;
+      uniqueCategoryB = `listThreads-catB-${testId}`;
+      uniqueCategoryC = `listThreads-catC-${testId}`;
+
+      // Create test threads with different metadata and resources
+      const threadData: StorageThreadType[] = [
+        {
+          id: `thread-r1-cat-a-${randomUUID()}`,
+          resourceId: resourceId1,
+          title: 'Resource 1 - Category A',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+          updatedAt: new Date('2024-01-01T10:00:00Z'),
+          metadata: { category: uniqueCategoryA, priority: 'high' },
+        },
+        {
+          id: `thread-r1-cat-b-${randomUUID()}`,
+          resourceId: resourceId1,
+          title: 'Resource 1 - Category B',
+          createdAt: new Date('2024-01-02T10:00:00Z'),
+          updatedAt: new Date('2024-01-02T10:00:00Z'),
+          metadata: { category: uniqueCategoryB, priority: 'low' },
+        },
+        {
+          id: `thread-r2-cat-a-${randomUUID()}`,
+          resourceId: resourceId2,
+          title: 'Resource 2 - Category A',
+          createdAt: new Date('2024-01-03T10:00:00Z'),
+          updatedAt: new Date('2024-01-03T10:00:00Z'),
+          metadata: { category: uniqueCategoryA, priority: 'high' },
+        },
+        {
+          id: `thread-r2-cat-c-${randomUUID()}`,
+          resourceId: resourceId2,
+          title: 'Resource 2 - Category C',
+          createdAt: new Date('2024-01-04T10:00:00Z'),
+          updatedAt: new Date('2024-01-04T10:00:00Z'),
+          metadata: { category: uniqueCategoryC, priority: 'medium' },
+        },
+      ];
+
+      threads = [];
+      for (const thread of threadData) {
+        const savedThread = await storage.saveThread({ thread });
+        threads.push(savedThread);
+      }
+    });
+
+    describe('filtering by metadata only (no resourceId)', () => {
+      it('should filter threads by metadata across all resources', async () => {
+        const result = await storage.listThreads({
+          page: 0,
+          perPage: 10,
+          filter: {
+            metadata: { category: uniqueCategoryA },
+          },
+        });
+
+        expect(result.threads).toHaveLength(2);
+        expect(result.threads.every(t => t.metadata?.category === uniqueCategoryA)).toBe(true);
+        // Should include threads from both resources
+        const resourceIds = new Set(result.threads.map(t => t.resourceId));
+        expect(resourceIds.size).toBe(2);
+      });
+
+      it('should filter by multiple metadata fields across all resources', async () => {
+        const result = await storage.listThreads({
+          page: 0,
+          perPage: 10,
+          filter: {
+            metadata: { category: uniqueCategoryA, priority: 'high' },
+          },
+        });
+
+        expect(result.threads).toHaveLength(2);
+        expect(result.threads.every(t => t.metadata?.category === uniqueCategoryA)).toBe(true);
+        expect(result.threads.every(t => t.metadata?.priority === 'high')).toBe(true);
+      });
+
+      it('should return empty when no threads match metadata filter', async () => {
+        const result = await storage.listThreads({
+          page: 0,
+          perPage: 10,
+          filter: {
+            metadata: { category: 'nonExistent-' + randomUUID() },
+          },
+        });
+
+        expect(result.threads).toHaveLength(0);
+        expect(result.total).toBe(0);
+      });
+    });
+
+    describe('filtering by resourceId only', () => {
+      it('should filter threads by resourceId', async () => {
+        const result = await storage.listThreads({
+          page: 0,
+          perPage: 10,
+          filter: {
+            resourceId: resourceId1,
+          },
+        });
+
+        expect(result.threads).toHaveLength(2);
+        expect(result.threads.every(t => t.resourceId === resourceId1)).toBe(true);
+      });
+    });
+
+    describe('filtering by both resourceId and metadata', () => {
+      it('should filter by both resourceId and metadata', async () => {
+        const result = await storage.listThreads({
+          page: 0,
+          perPage: 10,
+          filter: {
+            resourceId: resourceId1,
+            metadata: { category: uniqueCategoryA },
+          },
+        });
+
+        expect(result.threads).toHaveLength(1);
+        expect(result.threads[0]!.resourceId).toBe(resourceId1);
+        expect(result.threads[0]!.metadata?.category).toBe(uniqueCategoryA);
+      });
+    });
+
+    describe('no filter (list all threads)', () => {
+      it('should return all threads when no filter is provided', async () => {
+        const result = await storage.listThreads({
+          page: 0,
+          perPage: 10,
+        });
+
+        // Should have at least our 4 test threads
+        expect(result.threads.length).toBeGreaterThanOrEqual(4);
+      });
+    });
+
+    describe('pagination with metadata filter', () => {
+      it('should paginate filtered results correctly', async () => {
+        const result = await storage.listThreads({
+          page: 0,
+          perPage: 1,
+          filter: {
+            metadata: { category: uniqueCategoryA },
+          },
+        });
+
+        expect(result.threads).toHaveLength(1);
+        expect(result.total).toBe(2);
+        expect(result.hasMore).toBe(true);
+      });
+    });
+  });
+}

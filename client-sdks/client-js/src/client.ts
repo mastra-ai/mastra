@@ -44,6 +44,8 @@ import type {
   ListAgentsModelProvidersResponse,
   ListMemoryThreadsParams,
   ListMemoryThreadsResponse,
+  SearchMemoryThreadsParams,
+  SearchMemoryThreadsResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -87,7 +89,7 @@ export class MastraClient extends BaseResource {
 
   /**
    * Lists memory threads for a resource with pagination support
-   * @param params - Parameters containing resource ID, pagination options, and optional request context
+   * @param params - Parameters containing resource ID, pagination options, filter, and optional request context
    * @returns Promise containing paginated array of memory threads with metadata
    */
   public async listMemoryThreads(params: ListMemoryThreadsParams): Promise<ListMemoryThreadsResponse> {
@@ -99,6 +101,7 @@ export class MastraClient extends BaseResource {
       ...(params.perPage !== undefined && { perPage: params.perPage.toString() }),
       ...(params.orderBy && { orderBy: params.orderBy }),
       ...(params.sortDirection && { sortDirection: params.sortDirection }),
+      ...(params.filter && { filter: JSON.stringify(params.filter) }),
     });
 
     const response: ListMemoryThreadsResponse | ListMemoryThreadsResponse['threads'] = await this.request(
@@ -117,6 +120,30 @@ export class MastraClient extends BaseResource {
           };
 
     return actualResponse;
+  }
+
+  /**
+   * Searches memory threads without requiring resourceId
+   * Allows filtering by metadata key-value pairs
+   * @param params - Parameters containing filter options, pagination, and optional request context
+   * @returns Promise containing paginated array of memory threads with metadata
+   * @see https://github.com/mastra-ai/mastra/issues/4333
+   */
+  public async searchMemoryThreads(params: SearchMemoryThreadsParams): Promise<SearchMemoryThreadsResponse> {
+    const queryParams = new URLSearchParams({
+      agentId: params.agentId,
+      ...(params.page !== undefined && { page: params.page.toString() }),
+      ...(params.perPage !== undefined && { perPage: params.perPage.toString() }),
+      ...(params.orderBy && { orderBy: params.orderBy }),
+      ...(params.sortDirection && { sortDirection: params.sortDirection }),
+      ...(params.filter && { filter: JSON.stringify(params.filter) }),
+    });
+
+    const response: SearchMemoryThreadsResponse = await this.request(
+      `/api/memory/threads/search?${queryParams.toString()}${requestContextQueryString(params.requestContext, '&')}`,
+    );
+
+    return response;
   }
 
   /**

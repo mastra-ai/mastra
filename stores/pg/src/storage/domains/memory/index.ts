@@ -16,6 +16,8 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
@@ -172,6 +174,110 @@ export class MemoryPG extends MemoryStorage {
           details: {
             resourceId,
             page,
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException(mastraError);
+      return {
+        threads: [],
+        total: 0,
+        page,
+        perPage: perPageForResponse,
+        hasMore: false,
+      };
+    }
+  }
+
+  /**
+   * Lists threads with optional filters for resourceId and metadata.
+   * @see https://github.com/mastra-ai/mastra/issues/4333
+   */
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
+
+    // Validate page parameter
+    if (page < 0) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_PG_STORE_INVALID_PAGE',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Page number must be non-negative',
+        details: {
+          page,
+        },
+      });
+    }
+
+    const { field, direction } = this.parseOrderBy(orderBy);
+    const perPage = normalizePerPage(perPageInput, 100);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    try {
+      const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+
+      // Build WHERE clause with optional filters
+      const conditions: string[] = [];
+      const queryParams: any[] = [];
+      let paramIndex = 1;
+
+      // Apply resourceId filter if provided
+      if (filter?.resourceId) {
+        conditions.push(`"resourceId" = $${paramIndex++}`);
+        queryParams.push(filter.resourceId);
+      }
+
+      // Apply metadata filter using JSONB containment operator (@>)
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        conditions.push(`metadata @> $${paramIndex}::jsonb`);
+        queryParams.push(JSON.stringify(filter.metadata));
+        paramIndex++;
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const baseQuery = `FROM ${tableName} ${whereClause}`;
+
+      const countQuery = `SELECT COUNT(*) ${baseQuery}`;
+      const countResult = await this.client.one(countQuery, queryParams);
+      const total = parseInt(countResult.count, 10);
+
+      if (total === 0) {
+        return {
+          threads: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      const limitValue = perPageInput === false ? total : perPage;
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+      const rows = await this.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
+
+      const threads = (rows || []).map(thread => ({
+        ...thread,
+        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+        createdAt: thread.createdAt,
+        updatedAt: thread.updatedAt,
+      }));
+
+      return {
+        threads,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
+      };
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_LIST_THREADS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            page,
+            filter,
           },
         },
         error,

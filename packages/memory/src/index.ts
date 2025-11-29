@@ -12,6 +12,8 @@ import type {
 import type {
   StorageListThreadsByResourceIdOutput,
   StorageListThreadsByResourceIdInput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   StorageListMessagesInput,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
@@ -238,6 +240,15 @@ export class Memory extends MastraMemory {
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
     return this.storage.listThreadsByResourceId(args);
+  }
+
+  /**
+   * Lists threads with optional filters for resourceId and metadata.
+   * Unlike listThreadsByResourceId, this method does not require resourceId.
+   * @see https://github.com/mastra-ai/mastra/issues/4333
+   */
+  async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    return this.storage.listThreads(args);
   }
 
   private async handleWorkingMemoryFromMetadata({

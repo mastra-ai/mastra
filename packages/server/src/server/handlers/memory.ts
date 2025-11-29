@@ -9,6 +9,7 @@ import {
   getMemoryStatusQuerySchema,
   getMemoryConfigQuerySchema,
   listThreadsQuerySchema,
+  searchThreadsQuerySchema,
   getThreadByIdQuerySchema,
   listMessagesQuerySchema,
   getWorkingMemoryQuerySchema,
@@ -183,9 +184,9 @@ export const LIST_THREADS_ROUTE = createRoute({
   queryParamSchema: listThreadsQuerySchema,
   responseSchema: listThreadsResponseSchema,
   summary: 'List memory threads',
-  description: 'Returns a paginated list of conversation threads filtered by resource ID',
+  description: 'Returns a paginated list of conversation threads filtered by resource ID and optional metadata',
   tags: ['Memory'],
-  handler: async ({ mastra, agentId, resourceId, requestContext, page, perPage, orderBy }) => {
+  handler: async ({ mastra, agentId, resourceId, requestContext, page, perPage, orderBy, filter }) => {
     try {
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
@@ -200,10 +201,45 @@ export const LIST_THREADS_ROUTE = createRoute({
         page,
         perPage,
         orderBy,
+        filter,
       });
       return result;
     } catch (error) {
       return handleError(error, 'Error listing threads');
+    }
+  },
+});
+
+/**
+ * Search threads without requiring resourceId - filter by metadata
+ * @see https://github.com/mastra-ai/mastra/issues/4333
+ */
+export const SEARCH_THREADS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/memory/threads/search',
+  responseType: 'json',
+  queryParamSchema: searchThreadsQuerySchema,
+  responseSchema: listThreadsResponseSchema,
+  summary: 'Search memory threads',
+  description: 'Search threads by metadata without requiring resourceId',
+  tags: ['Memory'],
+  handler: async ({ mastra, agentId, requestContext, page, perPage, orderBy, filter }) => {
+    try {
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
+
+      if (!memory) {
+        throw new HTTPException(400, { message: 'Memory is not initialized' });
+      }
+
+      const result = await memory.listThreads({
+        page,
+        perPage,
+        orderBy,
+        filter,
+      });
+      return result;
+    } catch (error) {
+      return handleError(error, 'Error searching threads');
     }
   },
 });

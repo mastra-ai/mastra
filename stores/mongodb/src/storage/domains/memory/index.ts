@@ -595,7 +595,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
-      const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+      const { resourceId, page = 0, perPage: perPageInput, orderBy, filter } = args;
 
       if (page < 0) {
         throw new MastraError(
@@ -614,7 +614,16 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const { field, direction } = this.parseOrderBy(orderBy);
       const collection = await this.operations.getCollection(TABLE_THREADS);
 
-      const query = { resourceId };
+      // Build query with optional metadata filter (Issue #4333)
+      const query: Record<string, any> = { resourceId };
+
+      // Apply metadata filter using MongoDB dot notation for nested fields
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          query[`metadata.${key}`] = value;
+        }
+      }
+
       const total = await collection.countDocuments(query);
 
       if (perPage === 0) {
