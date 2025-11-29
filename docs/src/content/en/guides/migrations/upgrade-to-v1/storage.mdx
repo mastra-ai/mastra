@@ -80,30 +80,39 @@ npx @mastra/codemod@beta v1/storage-get-messages-paginated .
 
 :::
 
-### `getThreadsByResourceId` to `listThreadsByResourceId`
+### `getThreadsByResourceId` to `listThreads`
 
-The `getThreadsByResourceId()` method has been renamed to `listThreadsByResourceId()`. This change aligns with the convention that `list*` methods return collections.
+The `getThreadsByResourceId()` method has been replaced with `listThreads()`. This new method provides more flexibility by making `resourceId` optional and adding support for metadata filtering.
 
-To migrate, rename the method call and update pagination parameters.
+To migrate, use the new `listThreads()` method with the `filter` parameter.
 
 ```diff
 - const threads = await storage.getThreadsByResourceId({
-+ const threads = await storage.listThreadsByResourceId({
-    resourceId: 'res-123',
+-   resourceId: 'res-123',
+- });
++ const threads = await storage.listThreads({
++   filter: { resourceId: 'res-123' },
 +   page: 0,
 +   perPage: 20,
-  });
++ });
 ```
 
-:::tip[Codemod]
+The new `listThreads()` method also supports filtering by metadata:
 
-You can use Mastra's codemod CLI to update your code automatically:
+```typescript
+// Filter by metadata only (across all resources)
+const threads = await storage.listThreads({
+  filter: { metadata: { category: 'support' } },
+});
 
-```shell
-npx @mastra/codemod@beta v1/storage-get-threads-by-resource .
+// Filter by both resourceId and metadata
+const threads = await storage.listThreads({
+  filter: {
+    resourceId: 'res-123',
+    metadata: { priority: 'high' },
+  },
+});
 ```
-
-:::
 
 ### `getWorkflowRuns` to `listWorkflowRuns`
 
