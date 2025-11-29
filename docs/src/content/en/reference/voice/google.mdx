@@ -246,8 +246,14 @@ The Google Voice provider supports two authentication methods:
 Uses a Google Cloud API key for authentication. Suitable for development and simple use cases.
 
 ```typescript
+// Using environment variable (GOOGLE_API_KEY)
+const voice = new GoogleVoice();
+
+// Using explicit API key
 const voice = new GoogleVoice({
   speechModel: { apiKey: "your-api-key" },
+  listeningModel: { apiKey: "your-api-key" },
+  speaker: "en-US-Casual-K",
 });
 ```
 
@@ -262,12 +268,38 @@ Uses Google Cloud project-based authentication with service accounts. Recommende
 - Audit logging
 - Enterprise features
 
+**Configuration Options:**
+
 ```typescript
+// Using Application Default Credentials (ADC)
+// Set GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_CLOUD_PROJECT env vars
+const voice = new GoogleVoice({
+  vertexAI: true,
+  project: "your-gcp-project",
+  location: "us-central1", // Optional, defaults to 'us-central1'
+});
+
+// Using service account key file
 const voice = new GoogleVoice({
   vertexAI: true,
   project: "your-gcp-project",
   speechModel: {
     keyFilename: "/path/to/service-account.json",
+  },
+  listeningModel: {
+    keyFilename: "/path/to/service-account.json",
+  },
+});
+
+// Using in-memory credentials
+const voice = new GoogleVoice({
+  vertexAI: true,
+  project: "your-gcp-project",
+  speechModel: {
+    credentials: {
+      client_email: "service-account@project.iam.gserviceaccount.com",
+      private_key: "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
+    },
   },
 });
 ```
