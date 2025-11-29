@@ -61,8 +61,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       await storage.saveThread({ thread: thread1 });
       await storage.saveThread({ thread: thread2 });
 
-      const { threads } = await storage.listThreadsByResourceId({
-        resourceId: thread1.resourceId,
+      const { threads } = await storage.listThreads({
+        filter: { resourceId: thread1.resourceId },
         page: 0,
         perPage: 10,
       });
@@ -208,24 +208,24 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       );
       await Promise.all(threadPromises);
 
-      const page1 = await storage.listThreadsByResourceId({ resourceId, page: 0, perPage: 7 });
+      const page1 = await storage.listThreads({ filter: { resourceId }, page: 0, perPage: 7 });
       expect(page1.threads).toHaveLength(7);
       expect(page1.total).toBe(17);
       expect(page1.page).toBe(0);
       expect(page1.perPage).toBe(7);
       expect(page1.hasMore).toBe(true);
 
-      const page3 = await storage.listThreadsByResourceId({ resourceId, page: 2, perPage: 7 });
+      const page3 = await storage.listThreads({ filter: { resourceId }, page: 2, perPage: 7 });
       expect(page3.threads).toHaveLength(3); // 17 total, page 2 (skip 14), get 3 remaining
       expect(page3.total).toBe(17);
       expect(page3.hasMore).toBe(false);
     });
 
-    it('should return paginated results when no pagination params for listThreadsByResourceId', async () => {
+    it('should return paginated results when no pagination params for listThreads', async () => {
       const resourceId = `pg-non-paginated-resource-${randomUUID()}`;
       await storage.saveThread({ thread: { ...createSampleThread(), resourceId } });
 
-      const results = await storage.listThreadsByResourceId({ resourceId, page: 0, perPage: 100 });
+      const results = await storage.listThreads({ filter: { resourceId }, page: 0, perPage: 100 });
       expect(Array.isArray(results.threads)).toBe(true);
       expect(results.threads.length).toBe(1);
       expect(results.total).toBe(1);
@@ -438,10 +438,10 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       }
     });
 
-    describe('listThreadsByResourceId sorting', () => {
+    describe('listThreads sorting', () => {
       it('should sort paginated threads by createdAt DESC by default', async () => {
-        const result = await storage.listThreadsByResourceId({
-          resourceId,
+        const result = await storage.listThreads({
+          filter: { resourceId },
           page: 0,
           perPage: 3,
         });
@@ -452,8 +452,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort paginated threads by createdAt ASC', async () => {
-        const result = await storage.listThreadsByResourceId({
-          resourceId,
+        const result = await storage.listThreads({
+          filter: { resourceId },
           page: 0,
           perPage: 3,
           orderBy: { field: 'createdAt', direction: 'ASC' },
@@ -465,8 +465,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort threads by createdAt DESC', async () => {
-        const result = await storage.listThreadsByResourceId({
-          resourceId,
+        const result = await storage.listThreads({
+          filter: { resourceId },
           orderBy: { field: 'createdAt', direction: 'DESC' },
           page: 0,
           perPage: 3,
@@ -478,8 +478,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort paginated threads by updatedAt ASC', async () => {
-        const result = await storage.listThreadsByResourceId({
-          resourceId,
+        const result = await storage.listThreads({
+          filter: { resourceId },
           page: 0,
           perPage: 3,
           orderBy: { field: 'updatedAt', direction: 'ASC' },
@@ -491,8 +491,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort paginated threads by updatedAt DESC', async () => {
-        const result = await storage.listThreadsByResourceId({
-          resourceId,
+        const result = await storage.listThreads({
+          filter: { resourceId },
           page: 0,
           perPage: 3,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
@@ -504,8 +504,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort by createdAt DESC when only field is specified (direction defaults to DESC)', async () => {
-        const result = await storage.listThreadsByResourceId({
-          resourceId,
+        const result = await storage.listThreads({
+          filter: { resourceId },
           orderBy: { field: 'createdAt' },
           page: 0,
           perPage: 3,
@@ -517,8 +517,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort by updatedAt DESC when only field is specified (direction defaults to DESC)', async () => {
-        const result = await storage.listThreadsByResourceId({
-          resourceId,
+        const result = await storage.listThreads({
+          filter: { resourceId },
           orderBy: { field: 'updatedAt' },
           page: 0,
           perPage: 3,
@@ -530,8 +530,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort by createdAt ASC when only direction ASC is specified (field defaults to createdAt)', async () => {
-        const result = await storage.listThreadsByResourceId({
-          resourceId,
+        const result = await storage.listThreads({
+          filter: { resourceId },
           orderBy: { direction: 'ASC' },
           page: 0,
           perPage: 3,
@@ -543,8 +543,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort by createdAt DESC when only direction DESC is specified (field defaults to createdAt)', async () => {
-        const result = await storage.listThreadsByResourceId({
-          resourceId,
+        const result = await storage.listThreads({
+          filter: { resourceId },
           orderBy: { direction: 'DESC' },
           page: 0,
           perPage: 3,
@@ -557,30 +557,30 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
       it('should maintain sort order consistency across pages', async () => {
         // Get all threads sorted by updatedAt DESC for comparison
-        const { threads: allThreads } = await storage.listThreadsByResourceId({
-          resourceId,
+        const { threads: allThreads } = await storage.listThreads({
+          filter: { resourceId },
           orderBy: { field: 'updatedAt', direction: 'DESC' },
           page: 0,
           perPage: 10,
         });
 
         // Get paginated results
-        const page1 = await storage.listThreadsByResourceId({
-          resourceId,
+        const page1 = await storage.listThreads({
+          filter: { resourceId },
           page: 0,
           perPage: 2,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
 
-        const page2 = await storage.listThreadsByResourceId({
-          resourceId,
+        const page2 = await storage.listThreads({
+          filter: { resourceId },
           page: 1,
           perPage: 2,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
 
-        const page3 = await storage.listThreadsByResourceId({
-          resourceId,
+        const page3 = await storage.listThreads({
+          filter: { resourceId },
           page: 2,
           perPage: 2,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
@@ -597,8 +597,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       it('should handle empty results with sorting parameters', async () => {
         const emptyResourceId = `empty-resource-${randomUUID()}`;
 
-        const result = await storage.listThreadsByResourceId({
-          resourceId: emptyResourceId,
+        const result = await storage.listThreads({
+          filter: { resourceId: emptyResourceId },
           page: 0,
           perPage: 10,
           orderBy: { field: 'createdAt', direction: 'ASC' },
@@ -617,8 +617,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
           thread: { ...createSampleThread(), resourceId: singleResourceId },
         });
 
-        const result = await storage.listThreadsByResourceId({
-          resourceId: singleResourceId,
+        const result = await storage.listThreads({
+          filter: { resourceId: singleResourceId },
           page: 0,
           perPage: 10,
           orderBy: { field: 'updatedAt', direction: 'ASC' },
@@ -669,8 +669,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
           }),
         ]);
 
-        const { threads: result } = await storage.listThreadsByResourceId({
-          resourceId: identicalResourceId,
+        const { threads: result } = await storage.listThreads({
+          filter: { resourceId: identicalResourceId },
           page: 0,
           perPage: 3,
           orderBy: { field: 'createdAt', direction: 'ASC' },
@@ -699,13 +699,9 @@ function isStorageSupportsSort(storage: MastraStorage): boolean {
   return ['LibSQLStore', 'PostgresStore', 'MSSQLStore', 'DynamoDBStore'].includes(storageType);
 }
 
-/**
- * Tests for listThreadsByResourceId with metadata filter
- * @see https://github.com/mastra-ai/mastra/issues/4333
- */
 export function createThreadMetadataFilteringTest({ storage }: { storage: MastraStorage }) {
-  describe('Thread Metadata Filtering (Issue #4333)', () => {
-    describe('listThreadsByResourceId with metadata filter', () => {
+  describe('Thread Metadata Filtering', () => {
+    describe('listThreads with resourceId and metadata filter', () => {
       let resourceId: string;
       let threads: StorageThreadType[];
 
@@ -752,18 +748,16 @@ export function createThreadMetadataFilteringTest({ storage }: { storage: Mastra
       });
 
       it('should filter threads by single metadata key-value pair', async () => {
-        const result = await storage.listThreadsByResourceId({
-          resourceId,
-          filter: { metadata: { category: 'categoryA' } },
+        const result = await storage.listThreads({
+          filter: { resourceId, metadata: { category: 'categoryA' } },
         });
         expect(result.threads).toHaveLength(2);
         expect(result.threads.every(t => t.metadata?.category === 'categoryA')).toBe(true);
       });
 
       it('should filter threads by multiple metadata key-value pairs (AND logic)', async () => {
-        const result = await storage.listThreadsByResourceId({
-          resourceId,
-          filter: { metadata: { category: 'categoryA', priority: 'high' } },
+        const result = await storage.listThreads({
+          filter: { resourceId, metadata: { category: 'categoryA', priority: 'high' } },
         });
         expect(result.threads).toHaveLength(1);
         expect(result.threads[0]?.metadata?.category).toBe('categoryA');
@@ -771,17 +765,15 @@ export function createThreadMetadataFilteringTest({ storage }: { storage: Mastra
       });
 
       it('should return empty array when no threads match the metadata filter', async () => {
-        const result = await storage.listThreadsByResourceId({
-          resourceId,
-          filter: { metadata: { category: 'nonExistent' } },
+        const result = await storage.listThreads({
+          filter: { resourceId, metadata: { category: 'nonExistent' } },
         });
         expect(result.threads).toHaveLength(0);
       });
 
       it('should combine metadata filter with pagination', async () => {
-        const result = await storage.listThreadsByResourceId({
-          resourceId,
-          filter: { metadata: { category: 'categoryA' } },
+        const result = await storage.listThreads({
+          filter: { resourceId, metadata: { category: 'categoryA' } },
           page: 0,
           perPage: 1,
           orderBy: { field: 'createdAt', direction: 'ASC' },
@@ -792,9 +784,8 @@ export function createThreadMetadataFilteringTest({ storage }: { storage: Mastra
       });
 
       it('should combine metadata filter with ordering', async () => {
-        const result = await storage.listThreadsByResourceId({
-          resourceId,
-          filter: { metadata: { category: 'categoryA' } },
+        const result = await storage.listThreads({
+          filter: { resourceId, metadata: { category: 'categoryA' } },
           orderBy: { field: 'createdAt', direction: 'DESC' },
         });
         expect(result.threads).toHaveLength(2);
@@ -804,23 +795,21 @@ export function createThreadMetadataFilteringTest({ storage }: { storage: Mastra
       });
 
       it('should filter by priority metadata', async () => {
-        const result = await storage.listThreadsByResourceId({
-          resourceId,
-          filter: { metadata: { priority: 'low' } },
+        const result = await storage.listThreads({
+          filter: { resourceId, metadata: { priority: 'low' } },
         });
         expect(result.threads).toHaveLength(1);
         expect(result.threads[0]?.metadata?.priority).toBe('low');
       });
 
-      it('should return all threads when no filter is provided', async () => {
-        const result = await storage.listThreadsByResourceId({ resourceId });
+      it('should return all threads for resourceId when no metadata filter is provided', async () => {
+        const result = await storage.listThreads({ filter: { resourceId } });
         expect(result.threads).toHaveLength(4);
       });
 
-      it('should handle filtering with empty metadata object (no filter applied)', async () => {
-        const result = await storage.listThreadsByResourceId({
-          resourceId,
-          filter: { metadata: {} },
+      it('should handle filtering with empty metadata object (no metadata filter applied)', async () => {
+        const result = await storage.listThreads({
+          filter: { resourceId, metadata: {} },
         });
         expect(result.threads).toHaveLength(4);
       });
@@ -828,12 +817,8 @@ export function createThreadMetadataFilteringTest({ storage }: { storage: Mastra
   });
 }
 
-/**
- * Tests for listThreads method - querying threads without requiring resourceId
- * @see https://github.com/mastra-ai/mastra/issues/4333
- */
 export function createListThreadsTest({ storage }: { storage: MastraStorage }) {
-  describe('listThreads (Issue #4333)', () => {
+  describe('listThreads', () => {
     let resourceId1: string;
     let resourceId2: string;
     let threads: StorageThreadType[];

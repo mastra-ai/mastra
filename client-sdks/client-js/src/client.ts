@@ -44,8 +44,6 @@ import type {
   ListAgentsModelProvidersResponse,
   ListMemoryThreadsParams,
   ListMemoryThreadsResponse,
-  SearchMemoryThreadsParams,
-  SearchMemoryThreadsResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -94,9 +92,8 @@ export class MastraClient extends BaseResource {
    */
   public async listMemoryThreads(params: ListMemoryThreadsParams): Promise<ListMemoryThreadsResponse> {
     const queryParams = new URLSearchParams({
-      resourceId: params.resourceId,
-      resourceid: params.resourceId,
       agentId: params.agentId,
+      ...(params.resourceId && { resourceId: params.resourceId }),
       ...(params.page !== undefined && { page: params.page.toString() }),
       ...(params.perPage !== undefined && { perPage: params.perPage.toString() }),
       ...(params.orderBy && { orderBy: params.orderBy }),
@@ -120,30 +117,6 @@ export class MastraClient extends BaseResource {
           };
 
     return actualResponse;
-  }
-
-  /**
-   * Searches memory threads without requiring resourceId
-   * Allows filtering by metadata key-value pairs
-   * @param params - Parameters containing filter options, pagination, and optional request context
-   * @returns Promise containing paginated array of memory threads with metadata
-   * @see https://github.com/mastra-ai/mastra/issues/4333
-   */
-  public async searchMemoryThreads(params: SearchMemoryThreadsParams): Promise<SearchMemoryThreadsResponse> {
-    const queryParams = new URLSearchParams({
-      agentId: params.agentId,
-      ...(params.page !== undefined && { page: params.page.toString() }),
-      ...(params.perPage !== undefined && { perPage: params.perPage.toString() }),
-      ...(params.orderBy && { orderBy: params.orderBy }),
-      ...(params.sortDirection && { sortDirection: params.sortDirection }),
-      ...(params.filter && { filter: JSON.stringify(params.filter) }),
-    });
-
-    const response: SearchMemoryThreadsResponse = await this.request(
-      `/api/memory/threads/search?${queryParams.toString()}${requestContextQueryString(params.requestContext, '&')}`,
-    );
-
-    return response;
   }
 
   /**

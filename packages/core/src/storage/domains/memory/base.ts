@@ -7,8 +7,6 @@ import type {
   ThreadSortDirection,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
   StorageOrderBy,
@@ -58,21 +56,7 @@ export abstract class MemoryStorage extends MastraBase {
     );
   }
 
-  abstract listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput>;
-
-  /**
-   * Lists threads with optional filters for resourceId and metadata.
-   * Unlike listThreadsByResourceId, this method does not require resourceId.
-   * @see https://github.com/mastra-ai/mastra/issues/4333
-   */
-  async listThreads(_args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
-    throw new Error(
-      `listThreads is not implemented by this storage adapter (${this.constructor.name}). ` +
-        `This method allows querying threads by metadata without requiring resourceId.`,
-    );
-  }
+  abstract listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput>;
 
   async getResourceById(_: { resourceId: string }): Promise<StorageResourceType | null> {
     throw new Error(

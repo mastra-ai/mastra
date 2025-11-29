@@ -14,8 +14,6 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
 } from '@mastra/core/storage';
@@ -106,94 +104,6 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-
-    // Validate page parameter
-    if (page < 0) {
-      throw new MastraError({
-        id: 'MASTRA_STORAGE_PG_STORE_INVALID_PAGE',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        text: 'Page number must be non-negative',
-        details: {
-          resourceId,
-          page,
-        },
-      });
-    }
-
-    const { field, direction } = this.parseOrderBy(orderBy);
-    const perPage = normalizePerPage(perPageInput, 100);
-    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-    try {
-      const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
-      const baseQuery = `FROM ${tableName} WHERE "resourceId" = $1`;
-      const queryParams: any[] = [resourceId];
-
-      const countQuery = `SELECT COUNT(*) ${baseQuery}`;
-      const countResult = await this.client.one(countQuery, queryParams);
-      const total = parseInt(countResult.count, 10);
-
-      if (total === 0) {
-        return {
-          threads: [],
-          total: 0,
-          page,
-          perPage: perPageForResponse,
-          hasMore: false,
-        };
-      }
-
-      const limitValue = perPageInput === false ? total : perPage;
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`;
-      const rows = await this.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
-
-      const threads = (rows || []).map(thread => ({
-        ...thread,
-        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-        createdAt: thread.createdAt, // Assuming already Date objects or ISO strings
-        updatedAt: thread.updatedAt,
-      }));
-
-      return {
-        threads,
-        total,
-        page,
-        perPage: perPageForResponse,
-        hasMore: perPageInput === false ? false : offset + perPage < total,
-      };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'MASTRA_STORAGE_PG_STORE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            resourceId,
-            page,
-          },
-        },
-        error,
-      );
-      this.logger?.error?.(mastraError.toString());
-      this.logger?.trackException(mastraError);
-      return {
-        threads: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
-    }
-  }
-
-  /**
-   * Lists threads with optional filters for resourceId and metadata.
-   * @see https://github.com/mastra-ai/mastra/issues/4333
-   */
   public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 
@@ -277,7 +187,7 @@ export class MemoryPG extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             page,
-            filter,
+            filter: JSON.stringify(filter),
           },
         },
         error,

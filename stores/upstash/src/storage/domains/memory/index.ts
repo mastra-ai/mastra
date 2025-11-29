@@ -14,8 +14,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   ThreadOrderBy,
   ThreadSortDirection,
 } from '@mastra/core/storage';
@@ -71,17 +71,15 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
     const perPage = normalizePerPage(perPageInput, 100);
 
     if (page < 0) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+          id: 'STORAGE_UPSTASH_LIST_THREADS_INVALID_PAGE',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { page },
@@ -91,6 +89,17 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
 
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+    // Helper to check if thread matches metadata filter
+    const matchesMetadataFilter = (threadMetadata: Record<string, unknown> | undefined): boolean => {
+      if (!filter?.metadata || Object.keys(filter.metadata).length === 0) {
+        return true;
+      }
+      if (!threadMetadata) {
+        return false;
+      }
+      return Object.entries(filter.metadata).every(([key, value]) => threadMetadata[key] === value);
+    };
 
     try {
       let allThreads: StorageThreadType[] = [];
@@ -103,14 +112,26 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
       for (let i = 0; i < results.length; i++) {
         const thread = results[i] as StorageThreadType | null;
-        if (thread && thread.resourceId === resourceId) {
-          allThreads.push({
-            ...thread,
-            createdAt: ensureDate(thread.createdAt)!,
-            updatedAt: ensureDate(thread.updatedAt)!,
-            metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-          });
+        if (!thread) continue;
+
+        const parsedMetadata = typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata;
+
+        // Apply resourceId filter if provided
+        if (filter?.resourceId && thread.resourceId !== filter.resourceId) {
+          continue;
         }
+
+        // Apply metadata filter
+        if (!matchesMetadataFilter(parsedMetadata)) {
+          continue;
+        }
+
+        allThreads.push({
+          ...thread,
+          createdAt: ensureDate(thread.createdAt)!,
+          updatedAt: ensureDate(thread.updatedAt)!,
+          metadata: parsedMetadata,
+        });
       }
 
       // Apply sorting with parameters
@@ -132,11 +153,11 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: 'STORAGE_UPSTASH_LIST_THREADS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            resourceId,
+            filter: JSON.stringify(filter),
             page,
             perPage,
           },

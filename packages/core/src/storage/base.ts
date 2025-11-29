@@ -36,8 +36,6 @@ import type {
   StorageListMessagesInput,
   StorageListMessagesOutput,
   StorageListWorkflowRunsInput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
 } from './types';
@@ -279,25 +277,6 @@ export abstract class MastraStorage extends MastraBase {
     });
   }
 
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    if (this.stores?.memory) {
-      return this.stores.memory.listThreadsByResourceId(args);
-    }
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_LIST_THREADS_BY_RESOURCE_ID_PAGINATED_NOT_SUPPORTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      text: `Listing threads by resource ID paginated is not implemented by this storage adapter (${this.constructor.name})`,
-    });
-  }
-
-  /**
-   * Lists threads with optional filters for resourceId and metadata.
-   * Unlike listThreadsByResourceId, this method does not require resourceId.
-   * @see https://github.com/mastra-ai/mastra/issues/4333
-   */
   async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     if (this.stores?.memory) {
       return this.stores.memory.listThreads(args);

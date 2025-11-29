@@ -317,8 +317,8 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           });
 
           // Perform a query that should use the index
-          await storage.listThreadsByResourceId({
-            resourceId: testThread.resourceId,
+          await storage.listThreads({
+            filter: { resourceId: testThread.resourceId },
             page: 0,
             perPage: 10,
           });
@@ -484,8 +484,8 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
 
           // Measure query performance
           const startTime = Date.now();
-          await storage.listThreadsByResourceId({
-            resourceId: `perf-resource-5`,
+          await storage.listThreads({
+            filter: { resourceId: `perf-resource-5` },
             page: 0,
             perPage: 10,
             orderBy: { field: 'createdAt', direction: 'DESC' },

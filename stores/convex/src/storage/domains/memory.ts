@@ -14,8 +14,8 @@ import {
 import type {
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   StorageResourceType,
 } from '@mastra/core/storage';
 
@@ -109,24 +109,33 @@ export class MemoryConvex extends MemoryStorage {
     await this.operations.deleteMany(TABLE_THREADS, [threadId]);
   }
 
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+  async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
     const perPage = normalizePerPage(perPageInput, 100);
     const { field, direction } = this.parseOrderBy(orderBy);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
+    // Query with optional resourceId filter
+    const queryFilters = filter?.resourceId ? [{ field: 'resourceId', value: filter.resourceId }] : [];
+
     const rows = await this.operations.queryTable<
       Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }
-    >(TABLE_THREADS, [{ field: 'resourceId', value: resourceId }]);
+    >(TABLE_THREADS, queryFilters);
 
-    const threads = rows.map(row => ({
+    let threads = rows.map(row => ({
       ...row,
       metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
       createdAt: new Date(row.createdAt),
       updatedAt: new Date(row.updatedAt),
     }));
+
+    // Apply metadata filter in memory
+    if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+      threads = threads.filter(thread => {
+        if (!thread.metadata) return false;
+        return Object.entries(filter.metadata!).every(([key, value]) => thread.metadata[key] === value);
+      });
+    }
 
     threads.sort((a, b) => {
       const aValue = a[field];

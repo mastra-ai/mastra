@@ -7,8 +7,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import {
   MemoryStorage,
@@ -764,16 +764,14 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
     const perPage = normalizePerPage(perPageInput, 100);
 
     if (page < 0) {
       throw new MastraError(
         {
-          id: 'STORAGE_CLICKHOUSE_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+          id: 'STORAGE_CLICKHOUSE_LIST_THREADS_INVALID_PAGE',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { page },
@@ -782,15 +780,34 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       );
     }
 
-    // When perPage is false (get all), ignore page offset
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);
+
+    // Build WHERE clause with optional filters
+    const conditions: string[] = [];
+    const queryParams: Record<string, any> = {};
+
+    if (filter?.resourceId) {
+      conditions.push('resourceId = {resourceId:String}');
+      queryParams.resourceId = filter.resourceId;
+    }
+
+    if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+      let paramIndex = 0;
+      for (const [key, value] of Object.entries(filter.metadata)) {
+        const paramName = `metaVal${paramIndex++}`;
+        conditions.push(`JSONExtractString(metadata, '${key}') = {${paramName}:String}`);
+        queryParams[paramName] = String(value);
+      }
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     try {
       // Get total count - count distinct thread IDs to handle duplicates
       const countResult = await this.client.query({
-        query: `SELECT count(DISTINCT id) as total FROM ${TABLE_THREADS} WHERE resourceId = {resourceId:String}`,
-        query_params: { resourceId },
+        query: `SELECT count(DISTINCT id) as total FROM ${TABLE_THREADS} ${whereClause}`,
+        query_params: queryParams,
         clickhouse_settings: {
           date_time_input_format: 'best_effort',
           date_time_output_format: 'iso',
@@ -824,7 +841,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                   toDateTime64(updatedAt, 3) as updatedAt,
                   ROW_NUMBER() OVER (PARTITION BY id ORDER BY updatedAt DESC) as row_num
                 FROM ${TABLE_THREADS}
-                WHERE resourceId = {resourceId:String}
+                ${whereClause}
               )
               SELECT
                 id,
@@ -839,7 +856,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
               LIMIT {perPage:Int64} OFFSET {offset:Int64}
             `,
         query_params: {
-          resourceId,
+          ...queryParams,
           perPage: perPage,
           offset: offset,
         },
@@ -867,10 +884,10 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: 'CLICKHOUSE_STORAGE_LIST_THREADS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId, page },
+          details: { filter: JSON.stringify(filter), page },
         },
         error,
       );

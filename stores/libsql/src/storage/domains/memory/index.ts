@@ -7,8 +7,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import {
   MemoryStorage,
@@ -680,15 +680,13 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 
     if (page < 0) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+          id: 'LIBSQL_STORE_LIST_THREADS_INVALID_PAGE',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { page },
@@ -702,15 +700,33 @@ export class MemoryLibSQL extends MemoryStorage {
     const { field, direction } = this.parseOrderBy(orderBy);
 
     try {
-      const baseQuery = `FROM ${TABLE_THREADS} WHERE resourceId = ?`;
-      const queryParams: InValue[] = [resourceId];
+      // Build WHERE clause with optional filters
+      const conditions: string[] = [];
+      const queryParams: InValue[] = [];
+
+      // Apply resourceId filter if provided
+      if (filter?.resourceId) {
+        conditions.push('resourceId = ?');
+        queryParams.push(filter.resourceId);
+      }
+
+      // Apply metadata filter using json_extract
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          conditions.push(`json_extract(metadata, '$.${parseSqlIdentifier(key)}') = ?`);
+          queryParams.push(value as InValue);
+        }
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const baseQuery = `FROM ${TABLE_THREADS} ${whereClause}`;
 
       const mapRowToStorageThreadType = (row: any): StorageThreadType => ({
         id: row.id as string,
         resourceId: row.resourceId as string,
         title: row.title as string,
-        createdAt: new Date(row.createdAt as string), // Convert string to Date
-        updatedAt: new Date(row.updatedAt as string), // Convert string to Date
+        createdAt: new Date(row.createdAt as string),
+        updatedAt: new Date(row.updatedAt as string),
         metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
       });
 
@@ -748,10 +764,10 @@ export class MemoryLibSQL extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'LIBSQL_STORE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: 'LIBSQL_STORE_LIST_THREADS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId },
+          details: { filter: JSON.stringify(filter) },
         },
         error,
       );

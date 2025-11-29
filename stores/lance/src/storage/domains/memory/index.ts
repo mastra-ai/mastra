@@ -15,8 +15,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import type { StoreOperationsLance } from '../operations';
 import { getTableSchema, processResultWithTypeConversion } from '../utils';
@@ -477,17 +477,15 @@ export class StoreMemoryLance extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     try {
-      const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+      const { page = 0, perPage: perPageInput, orderBy, filter } = args;
       const perPage = normalizePerPage(perPageInput, 100);
 
       if (page < 0) {
         throw new MastraError(
           {
-            id: 'STORAGE_LANCE_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+            id: 'STORAGE_LANCE_LIST_THREADS_INVALID_PAGE',
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { page },
@@ -496,16 +494,34 @@ export class StoreMemoryLance extends MemoryStorage {
         );
       }
 
-      // When perPage is false (get all), ignore page offset
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const { field, direction } = this.parseOrderBy(orderBy);
       const table = await this.client.openTable(TABLE_THREADS);
 
+      // Build WHERE clause with optional filters
+      const conditions: string[] = [];
+
+      if (filter?.resourceId) {
+        conditions.push(`\`resourceId\` = '${this.escapeSql(filter.resourceId)}'`);
+      }
+
+      // Apply metadata filter - Lance stores metadata as JSON string
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          conditions.push(`json_extract_string(metadata, '$.${key}') = '${this.escapeSql(String(value))}'`);
+        }
+      }
+
+      const whereClause = conditions.length > 0 ? conditions.join(' AND ') : undefined;
+
       // Get total count
-      const total = await table.countRows(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
+      const total = whereClause ? await table.countRows(whereClause) : await table.countRows();
 
       // Get ALL matching records (no limit/offset yet - need to sort first)
-      const query = table.query().where(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
+      let query = table.query();
+      if (whereClause) {
+        query = query.where(whereClause);
+      }
       const records = await query.toArray();
 
       // Apply dynamic sorting BEFORE pagination
@@ -542,7 +558,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: 'LANCE_STORE_LIST_THREADS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

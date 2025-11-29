@@ -16,8 +16,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import { createSqlBuilder } from '../../sql-builder';
 import type { StoreOperationsD1 } from '../operations';
@@ -208,16 +208,14 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
     const perPage = normalizePerPage(perPageInput, 100);
 
     if (page < 0) {
       throw new MastraError(
         {
-          id: 'STORAGE_CLOUDFLARE_D1_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+          id: 'STORAGE_CLOUDFLARE_D1_LIST_THREADS_INVALID_PAGE',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { page },
@@ -241,22 +239,32 @@ export class MemoryStorageD1 extends MemoryStorage {
     });
 
     try {
-      const countQuery = createSqlBuilder().count().from(fullTableName).where('resourceId = ?', resourceId);
-      const countResult = (await this.operations.executeQuery(countQuery.build())) as {
-        count: number;
-      }[];
+      // Build query with optional filters
+      let countQueryBuilder = createSqlBuilder().count().from(fullTableName);
+      let selectQueryBuilder = createSqlBuilder().select('*').from(fullTableName);
+
+      // Apply resourceId filter if provided
+      if (filter?.resourceId) {
+        countQueryBuilder = countQueryBuilder.where('resourceId = ?', filter.resourceId);
+        selectQueryBuilder = selectQueryBuilder.where('resourceId = ?', filter.resourceId);
+      }
+
+      // Apply metadata filter using json_extract
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          const condition = `json_extract(metadata, '$.${key}') = ?`;
+          countQueryBuilder = countQueryBuilder.where(condition, String(value));
+          selectQueryBuilder = selectQueryBuilder.where(condition, String(value));
+        }
+      }
+
+      const countResult = (await this.operations.executeQuery(countQueryBuilder.build())) as { count: number }[];
       const total = Number(countResult?.[0]?.count ?? 0);
 
       const limitValue = perPageInput === false ? total : perPage;
-      const selectQuery = createSqlBuilder()
-        .select('*')
-        .from(fullTableName)
-        .where('resourceId = ?', resourceId)
-        .orderBy(field, direction)
-        .limit(limitValue)
-        .offset(offset);
+      selectQueryBuilder = selectQueryBuilder.orderBy(field, direction).limit(limitValue).offset(offset);
 
-      const results = (await this.operations.executeQuery(selectQuery.build())) as Record<string, any>[];
+      const results = (await this.operations.executeQuery(selectQueryBuilder.build())) as Record<string, any>[];
       const threads = results.map(mapRowToStorageThreadType);
 
       return {
@@ -269,13 +277,11 @@ export class MemoryStorageD1 extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_LIST_THREADS_BY_RESOURCE_ID_ERROR',
+          id: 'CLOUDFLARE_D1_STORAGE_LIST_THREADS_ERROR',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: `Error getting threads by resourceId ${resourceId}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-          details: { resourceId },
+          text: `Error listing threads: ${error instanceof Error ? error.message : String(error)}`,
+          details: { filter: JSON.stringify(filter) },
         },
         error,
       );

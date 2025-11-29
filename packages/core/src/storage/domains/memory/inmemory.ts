@@ -8,8 +8,6 @@ import type {
   ThreadSortDirection,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
 } from '../../types';
@@ -473,55 +471,6 @@ export class InMemoryMemory extends MemoryStorage {
     }
   }
 
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy, filter } = args;
-    const { field, direction } = this.parseOrderBy(orderBy);
-    const perPage = normalizePerPage(perPageInput, 100);
-
-    if (page < 0) {
-      throw new Error('page must be >= 0');
-    }
-
-    // Prevent unreasonably large page values that could cause performance issues
-    const maxOffset = Number.MAX_SAFE_INTEGER / 2;
-    if (page * perPage > maxOffset) {
-      throw new Error('page value too large');
-    }
-
-    this.logger.debug(`MockStore: listThreadsByResourceId called for ${resourceId}`);
-
-    // Find threads by resourceId
-    let threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === resourceId);
-
-    // Apply metadata filter (Issue #4333)
-    if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
-      threads = threads.filter(thread => {
-        if (!thread.metadata) return false;
-        return Object.entries(filter.metadata!).every(([key, value]) => thread.metadata![key] === value);
-      });
-    }
-
-    const sortedThreads = this.sortThreads(threads, field, direction);
-    const clonedThreads = sortedThreads.map(thread => ({
-      ...thread,
-      metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
-    })) as StorageThreadType[];
-    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-    return {
-      threads: clonedThreads.slice(offset, offset + perPage),
-      total: clonedThreads.length,
-      page,
-      perPage: perPageForResponse,
-      hasMore: offset + perPage < clonedThreads.length,
-    };
-  }
-
-  /**
-   * Lists threads with optional filters for resourceId and metadata.
-   * @see https://github.com/mastra-ai/mastra/issues/4333
-   */
   async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, filter } = args;
     const { field, direction } = this.parseOrderBy(orderBy);

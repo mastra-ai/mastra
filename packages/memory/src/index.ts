@@ -9,13 +9,7 @@ import type {
   WorkingMemoryTemplate,
   MessageDeleteInput,
 } from '@mastra/core/memory';
-import type {
-  StorageListThreadsByResourceIdOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsInput,
-  StorageListThreadsOutput,
-  StorageListMessagesInput,
-} from '@mastra/core/storage';
+import type { StorageListThreadsInput, StorageListThreadsOutput, StorageListMessagesInput } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
@@ -236,17 +230,6 @@ export class Memory extends MastraMemory {
     return this.storage.getThreadById({ threadId });
   }
 
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    return this.storage.listThreadsByResourceId(args);
-  }
-
-  /**
-   * Lists threads with optional filters for resourceId and metadata.
-   * Unlike listThreadsByResourceId, this method does not require resourceId.
-   * @see https://github.com/mastra-ai/mastra/issues/4333
-   */
   async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     return this.storage.listThreads(args);
   }

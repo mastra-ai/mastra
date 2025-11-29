@@ -125,10 +125,6 @@ export type StorageListThreadsByResourceIdInput = {
    */
   page?: number;
   orderBy?: StorageOrderBy;
-  /**
-   * Filter options for querying threads within this resource.
-   * @see https://github.com/mastra-ai/mastra/issues/4333
-   */
   filter?: {
     /**
      * Filter threads by metadata key-value pairs.
@@ -142,11 +138,6 @@ export type StorageListThreadsByResourceIdOutput = PaginationInfo & {
   threads: StorageThreadType[];
 };
 
-/**
- * Input type for listing threads with optional filters.
- * Unlike listThreadsByResourceId, this method does not require resourceId.
- * @see https://github.com/mastra-ai/mastra/issues/4333
- */
 export type StorageListThreadsInput = {
   /**
    * Number of items per page, or `false` to fetch all records without pagination limit.
