@@ -35,55 +35,6 @@ const transcript = await voice.listen(audioStream, {
 const voices = await voice.getSpeakers({ languageCode: "en-US" });
 ```
 
-## Configuration Examples
-
-### Standard Mode (API Key)
-
-```typescript
-const voice = new GoogleVoice({
-  speechModel: {
-    apiKey: "your-speech-api-key",
-  },
-  listeningModel: {
-    apiKey: "your-listening-api-key",
-  },
-  speaker: "en-US-Casual-K",
-});
-```
-
-### Vertex AI Mode (Service Account)
-
-```typescript
-// Using Application Default Credentials (ADC)
-const voice = new GoogleVoice({
-  vertexAI: true,
-  project: "your-gcp-project",
-  location: "us-central1", // Optional, defaults to 'us-central1'
-  speaker: "en-US-Studio-O",
-});
-
-// Using service account key file
-const voiceWithKeyFile = new GoogleVoice({
-  vertexAI: true,
-  project: "your-gcp-project",
-  speechModel: {
-    keyFilename: "/path/to/service-account.json",
-  },
-});
-
-// Using in-memory credentials
-const voiceWithCredentials = new GoogleVoice({
-  vertexAI: true,
-  project: "your-gcp-project",
-  speechModel: {
-    credentials: {
-      client_email: "service-account@project.iam.gserviceaccount.com",
-      private_key: "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
-    },
-  },
-});
-```
-
 ## Constructor Parameters
 
 <PropertiesTable
