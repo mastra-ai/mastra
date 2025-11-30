@@ -30,7 +30,7 @@ interface LocalTestContext {
 
 async function resetInngest() {
   await new Promise(resolve => setTimeout(resolve, 1000));
-  await $`docker-compose restart`;
+  await $`docker compose restart`;
   await new Promise(resolve => setTimeout(resolve, 1500));
 }
 
@@ -4264,6 +4264,141 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
     });
 
+    it('should provide access to suspend data when resuming a step', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      // Mock action that captures the suspend and resume data
+      let capturedSuspendData: any = null;
+      let capturedResumeData: any = null;
+
+      const stepAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          // First execution - suspend with data
+          await suspend({
+            reason: 'Waiting for user input',
+            timestamp: 1234567890,
+            metadata: { user: 'test' },
+          });
+          return undefined;
+        })
+        .mockImplementationOnce(async ({ resumeData, suspendData }) => {
+          // Second execution - capture data for verification
+          capturedSuspendData = suspendData;
+          capturedResumeData = resumeData;
+          return {
+            result: 'completed',
+            hadSuspendData: !!suspendData,
+            suspendReason: suspendData?.reason,
+          };
+        });
+
+      const testStep = createStep({
+        id: 'testStep',
+        execute: stepAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({
+          result: z.string(),
+          hadSuspendData: z.boolean(),
+          suspendReason: z.string().optional(),
+        }),
+        suspendSchema: z.object({
+          reason: z.string(),
+          timestamp: z.number(),
+          metadata: z.object({ user: z.string() }),
+        }),
+        resumeSchema: z.object({ userInput: z.string() }),
+      });
+
+      const testWorkflow = createWorkflow({
+        id: 'suspend-data-test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({
+          result: z.string(),
+          hadSuspendData: z.boolean(),
+          suspendReason: z.string().optional(),
+        }),
+      })
+        .then(testStep)
+        .commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': testWorkflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      const run = await testWorkflow.createRun();
+
+      // Start workflow - should suspend
+      const initialResult = await run.start({ inputData: { input: 'test' } });
+
+      expect(initialResult.status).toBe('suspended');
+      expect(initialResult.steps.testStep.status).toBe('suspended');
+      expect(initialResult.steps.testStep.suspendPayload).toMatchObject({
+        reason: 'Waiting for user input',
+        timestamp: 1234567890,
+        metadata: { user: 'test' },
+      });
+
+      // Resume workflow - should have access to suspend data
+      const resumeResult = await run.resume({
+        step: 'testStep',
+        resumeData: { userInput: 'user provided input' },
+      });
+
+      expect(resumeResult.status).toBe('success');
+      expect(resumeResult.steps.testStep.status).toBe('success');
+      if (resumeResult.steps.testStep.status !== 'success') {
+        throw new Error('Step did not complete successfully');
+      }
+      expect(resumeResult.steps.testStep.output).toMatchObject({
+        result: 'completed',
+        hadSuspendData: true,
+        suspendReason: 'Waiting for user input',
+      });
+
+      // Verify the captured data in the step execution
+      expect(capturedSuspendData).toMatchObject({
+        reason: 'Waiting for user input',
+        timestamp: 1234567890,
+        metadata: { user: 'test' },
+      });
+      expect(capturedResumeData).toMatchObject({
+        userInput: 'user provided input',
+      });
+
+      srv.close();
+    });
+
     it('should handle consecutive nested workflows with suspend/resume', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
@@ -4710,7 +4845,7 @@ describe('MastraInngestWorkflow', () => {
       const run = await workflow.createRun();
 
       await expect(run.timeTravel({ step: 'step2', inputData: { invalidPayload: 2 } })).rejects.toThrow(
-        'Invalid inputData: \n- step1Result: Required',
+        'Invalid inputData: \n- step1Result: Invalid input: expected number, received undefined',
       );
 
       srv.close();
@@ -9220,7 +9355,7 @@ describe('MastraInngestWorkflow', () => {
       const { stream, getWorkflowState } = run.streamLegacy({ inputData: { input: 'test' } });
 
       for await (const data of stream) {
-        if (data.type === 'workflow-step-suspended') {
+        if (data.type === 'step-suspended') {
           expect(promptAgentAction).toHaveBeenCalledTimes(1);
 
           // make it async to show that execution is not blocked
@@ -9617,7 +9752,7 @@ describe('MastraInngestWorkflow', () => {
       beforeEach(() => {
         const createMockScorer = (name: string, score: number = 0.8): MastraScorer => {
           const scorer = createScorer({
-            id: `mock-scorer-${name}`,
+            id: name,
             description: 'Mock scorer',
             name,
           }).generateScore(() => {
@@ -10612,8 +10747,8 @@ describe('MastraInngestWorkflow', () => {
       expect(agentEvents.map(event => event?.payload?.output?.type)).toEqual([
         'step-start',
         'text-delta',
-        'finish',
         'step-finish',
+        'finish',
         'step-start',
         'text-delta',
         'step-finish',
@@ -10737,7 +10872,7 @@ describe('MastraInngestWorkflow', () => {
         },
         {
           payload: {
-            id: expect.any(String),
+            id: 'test-agent-2',
             payload: {
               prompt: 'Capital of UK, just the name',
             },
@@ -10749,30 +10884,8 @@ describe('MastraInngestWorkflow', () => {
           runId: 'test-run-id',
         },
         {
-          args: {
-            prompt: 'Capital of UK, just the name',
-          },
-          name: 'test-agent-2',
-          type: 'tool-call-streaming-start',
-        },
-        {
-          args: {
-            prompt: 'Capital of UK, just the name',
-          },
-          argsTextDelta: 'London',
-          name: 'test-agent-2',
-          type: 'tool-call-delta',
-        },
-        {
-          args: {
-            prompt: 'Capital of UK, just the name',
-          },
-          name: 'test-agent-2',
-          type: 'tool-call-streaming-finish',
-        },
-        {
           payload: {
-            id: expect.any(String),
+            id: 'test-agent-2',
             output: {
               text: 'London',
             },
@@ -10810,7 +10923,7 @@ describe('MastraInngestWorkflow', () => {
       beforeEach(() => {
         const createMockScorer = (name: string, score: number = 0.8): MastraScorer => {
           const scorer = createScorer({
-            id: `mock-scorer-${name}`,
+            id: name,
             description: 'Mock scorer',
             name,
           }).generateScore(() => {

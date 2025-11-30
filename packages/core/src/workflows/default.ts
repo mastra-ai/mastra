@@ -701,6 +701,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       resumeDataToUse = resume?.resumePayload;
     }
 
+    // Extract suspend data if this step was previously suspended
+    const suspendDataToUse =
+      stepResults[step.id]?.status === 'suspended' ? stepResults[step.id]?.suspendPayload : undefined;
+
     const startTime = resumeDataToUse ? undefined : Date.now();
     const resumeTime = resumeDataToUse ? Date.now() : undefined;
 
@@ -799,6 +803,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           retryCount,
           resumeData: resumeDataToUse,
+          suspendData: suspendDataToUse,
           tracingContext: { currentSpan: stepSpan },
           getInitData: () => stepResults?.input as any,
           getStepResult: getStepResult.bind(this, stepResults),

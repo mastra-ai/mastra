@@ -553,15 +553,19 @@ export class InngestRun<
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
     const writer = writable.getWriter();
+
+    // Write start event once at the beginning
+    writer
+      .write({
+        // @ts-ignore
+        type: 'start',
+        // @ts-ignore
+        payload: { runId: this.runId },
+      })
+      .catch(() => {});
+
     const unwatch = this.watch(async event => {
       try {
-        await writer.write({
-          // @ts-ignore
-          type: 'start',
-          // @ts-ignore
-          payload: { runId: this.runId },
-        });
-
         const e: any = {
           ...event,
           type: event.type.replace('workflow-', ''),
@@ -1278,6 +1282,7 @@ export function createStep<
         tracingContext,
         suspend,
         resumeData,
+        suspendData,
         runId,
         workflowId,
         state,
@@ -1291,6 +1296,7 @@ export function createStep<
           workflow: {
             runId,
             resumeData,
+            suspendData,
             suspend,
             workflowId,
             state,
@@ -1374,13 +1380,28 @@ export function init(inngest: Inngest) {
       workflow: Workflow<InngestEngineType, TSteps, string, TState, TInput, TOutput, TPrevSchema>,
       opts: { id: TWorkflowId },
     ): Workflow<InngestEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
-      const wf: Workflow<InngestEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> = new Workflow({
-        id: opts.id,
-        inputSchema: workflow.inputSchema,
-        outputSchema: workflow.outputSchema,
-        steps: workflow.stepDefs,
-        mastra: workflow.mastra,
-      });
+      const wf: Workflow<InngestEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> =
+        workflow instanceof InngestWorkflow
+          ? new InngestWorkflow(
+              {
+                id: opts.id,
+                inputSchema: workflow.inputSchema,
+                outputSchema: workflow.outputSchema,
+                steps: workflow.stepDefs,
+                mastra: workflow.mastra,
+                stateSchema: workflow.stateSchema,
+                options: workflow.options,
+                retryConfig: workflow.retryConfig,
+              },
+              inngest,
+            )
+          : new Workflow({
+              id: opts.id,
+              inputSchema: workflow.inputSchema,
+              outputSchema: workflow.outputSchema,
+              steps: workflow.stepDefs,
+              mastra: workflow.mastra,
+            });
 
       wf.setStepFlow(workflow.stepGraph);
       wf.commit();
@@ -1990,6 +2011,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           resumeDataToUse = resume?.resumePayload;
         }
 
+        // Extract suspend data if this step was previously suspended
+        const suspendDataToUse =
+          stepResults[step.id]?.status === 'suspended' ? stepResults[step.id]?.suspendPayload : undefined;
+
         try {
           if (validationError) {
             throw validationError;
@@ -2018,6 +2043,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             },
             inputData,
             resumeData: resumeDataToUse,
+            suspendData: suspendDataToUse,
             tracingContext: {
               currentSpan: stepSpan,
             },

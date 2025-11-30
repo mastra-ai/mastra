@@ -25,7 +25,7 @@
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "pnpm build --watch",
-    "test": "docker-compose up -d && vitest run --no-isolate --retry=1 && docker-compose down",
+    "test": "docker compose up -d && vitest run --no-isolate --retry=1 && docker compose down",
     "lint": "eslint ."
   },
   "dependencies": {
@@ -46,6 +46,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ai": "^4.3.19",
+    "dotenv": "^17.2.3",
     "eslint": "^9.37.0",
     "execa": "^9.6.0",
     "get-port": "7.1.0",

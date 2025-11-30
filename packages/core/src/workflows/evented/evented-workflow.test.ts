@@ -5416,6 +5416,109 @@ describe('Workflow', () => {
 
       await mastra.stopEventEngine();
     });
+
+    it('should provide access to suspend data when resuming a step', async () => {
+      // Mock action that captures the suspend and resume data
+      let capturedSuspendData: any = null;
+      let capturedResumeData: any = null;
+
+      const stepAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          // First execution - suspend with data
+          return await suspend({
+            reason: 'Waiting for user input',
+            timestamp: 1234567890,
+            metadata: { user: 'test' },
+          });
+        })
+        .mockImplementationOnce(async ({ resumeData, suspendData }) => {
+          // Second execution - capture data for verification
+          capturedSuspendData = suspendData;
+          capturedResumeData = resumeData;
+          return {
+            result: 'completed',
+            hadSuspendData: !!suspendData,
+            suspendReason: suspendData?.reason,
+          };
+        });
+
+      const testStep = createStep({
+        id: 'testStep',
+        execute: stepAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({
+          result: z.string(),
+          hadSuspendData: z.boolean(),
+          suspendReason: z.string().optional(),
+        }),
+        suspendSchema: z.object({
+          reason: z.string(),
+          timestamp: z.number(),
+          metadata: z.object({ user: z.string() }),
+        }),
+        resumeSchema: z.object({ userInput: z.string() }),
+      });
+
+      const testWorkflow = createWorkflow({
+        id: 'suspend-data-test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({
+          result: z.string(),
+          hadSuspendData: z.boolean(),
+          suspendReason: z.string().optional(),
+        }),
+      });
+
+      testWorkflow.then(testStep).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'suspend-data-test-workflow': testWorkflow },
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await testWorkflow.createRun();
+
+      // Start workflow - should suspend
+      const initialResult = await run.start({ inputData: { input: 'test' } });
+
+      expect(initialResult.status).toBe('suspended');
+      expect(initialResult.steps.testStep.status).toBe('suspended');
+      expect(initialResult.steps.testStep.suspendPayload).toMatchObject({
+        reason: 'Waiting for user input',
+        timestamp: 1234567890,
+        metadata: { user: 'test' },
+      });
+
+      // Resume workflow - should have access to suspend data
+      const resumeResult = await run.resume({
+        step: 'testStep',
+        resumeData: { userInput: 'user provided input' },
+      });
+
+      expect(resumeResult.status).toBe('success');
+      expect(resumeResult.steps.testStep.status).toBe('success');
+      expect(resumeResult.steps.testStep.output).toMatchObject({
+        result: 'completed',
+        hadSuspendData: true,
+        suspendReason: 'Waiting for user input',
+      });
+
+      // Verify the captured data in the step execution
+      expect(capturedSuspendData).toMatchObject({
+        reason: 'Waiting for user input',
+        timestamp: 1234567890,
+        metadata: { user: 'test' },
+      });
+      expect(capturedResumeData).toMatchObject({
+        userInput: 'user provided input',
+      });
+
+      await mastra.stopEventEngine();
+    });
   });
 
   describe('Time travel', () => {
