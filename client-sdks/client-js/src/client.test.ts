@@ -110,7 +110,7 @@ describe('MastraClient', () => {
     it('should use custom fetch function when provided', async () => {
       // Arrange: Create a custom fetch that tracks usage
       let customFetchCalled = false;
-      const customFetch = vi.fn(async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      const customFetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit): Promise<Response> => {
         customFetchCalled = true;
         return {
           ok: true,
