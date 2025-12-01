@@ -80,6 +80,19 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
    * Optional logger instance for structured logging
    */
   logger?: IMastraLogger;
+
+  /**
+   * Provider-specific options passed to the internal structuring agent.
+   * Use this to control model behavior like reasoning effort for thinking models.
+   *
+   * @example
+   * ```ts
+   * providerOptions: {
+   *   openai: { reasoningEffort: 'low' }
+   * }
+   * ```
+   */
+  providerOptions?: ProviderOptions;
 } & FallbackFields<OUTPUT>;
 
 export type SerializableStructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = Omit<

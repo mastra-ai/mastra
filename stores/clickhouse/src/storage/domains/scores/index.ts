@@ -8,7 +8,7 @@ import {
   TABLE_SCORERS,
   calculatePagination,
   normalizePerPage,
-  safelyParseJSON,
+  transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsClickhouse } from '../operations';
@@ -22,37 +22,15 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     this.operations = operations;
   }
 
+  /**
+   * ClickHouse-specific score row transformation.
+   * Converts timestamps to Date objects and filters out '_null_' values.
+   */
   private transformScoreRow(row: any): ScoreRowData {
-    const scorer = safelyParseJSON(row.scorer);
-    const preprocessStepResult = safelyParseJSON(row.preprocessStepResult);
-    const analyzeStepResult = safelyParseJSON(row.analyzeStepResult);
-    const input = safelyParseJSON(row.input);
-    const output = safelyParseJSON(row.output);
-    const requestContext = safelyParseJSON(row.requestContext);
-    const entity = safelyParseJSON(row.entity);
-
-    const data: Record<string, any> = {
-      ...row,
-      scorer,
-      preprocessStepResult,
-      analyzeStepResult,
-      input,
-      output,
-      requestContext,
-      entity,
-      createdAt: new Date(row.createdAt),
-      updatedAt: new Date(row.updatedAt),
-    };
-
-    const result: Record<string, any> = {};
-    for (const [key, value] of Object.entries(data)) {
-      if (value === '_null_') {
-        continue;
-      }
-      result[key] = value;
-    }
-
-    return result as ScoreRowData;
+    return coreTransformScoreRow(row, {
+      convertTimestamps: true,
+      nullValuePattern: '_null_',
+    });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {

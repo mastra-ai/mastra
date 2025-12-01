@@ -253,6 +253,17 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "providerOptions",
+              type: "ProviderOptions",
+              isOptional: true,
+              description:
+                "Provider-specific options passed to the internal structuring agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`).",
+            },
+          ],
+        },
       ],
     },
     {
