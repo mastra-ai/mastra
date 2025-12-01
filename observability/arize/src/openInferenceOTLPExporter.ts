@@ -20,6 +20,52 @@ export class OpenInferenceOTLPTraceExporter extends OTLPTraceExporter {
         attributes['gen_ai.output.messages'] = convertMastraMessagesToGenAIMessages(attributes['gen_ai.completion']);
       }
 
+      // Gather custom attributes into OpenInference metadata (flat best-effort)
+      const reservedPrefixes = [
+        'gen_ai.',
+        'llm.',
+        'input.',
+        'output.',
+        'span.',
+        'mastra',
+        'agent.',
+        'workflow.',
+        'mcp.',
+        'openinference.',
+        'retrieval.',
+        'reranker.',
+        'embedding.',
+        'document.',
+        'tool',
+        'error.',
+        'http.',
+        'db.',
+      ];
+      const metadataEntries: Record<string, unknown> = {};
+      const reservedExact = new Set<string>(['input', 'output', 'sessionId', 'metadata']);
+      for (const [key, value] of Object.entries(attributes)) {
+        const isReserved =
+          reservedPrefixes.some(prefix => key.startsWith(prefix)) ||
+          key === 'threadId' ||
+          key === 'userId' ||
+          key === SemanticConventions.SESSION_ID ||
+          key === SemanticConventions.USER_ID ||
+          reservedExact.has(key);
+        if (!isReserved) {
+          metadataEntries[key] = value;
+        }
+      }
+
+      let metadataPayload: string | undefined;
+      if (Object.keys(metadataEntries).length > 0) {
+        try {
+          metadataPayload = JSON.stringify(metadataEntries);
+          attributes[SemanticConventions.METADATA] = metadataPayload;
+        } catch {
+          // best-effort only
+        }
+      }
+
       const sessionId = typeof attributes['threadId'] === 'string' ? (attributes['threadId'] as string) : undefined;
       const userId = typeof attributes['userId'] === 'string' ? (attributes['userId'] as string) : undefined;
 
@@ -41,6 +87,9 @@ export class OpenInferenceOTLPTraceExporter extends OTLPTraceExporter {
         }
         if (userId) {
           processedAttributes[SemanticConventions.USER_ID] = userId;
+        }
+        if (metadataPayload) {
+          processedAttributes[SemanticConventions.METADATA] = metadataPayload;
         }
         mutableSpan.attributes = processedAttributes;
       }
