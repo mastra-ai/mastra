@@ -4,7 +4,7 @@ import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import { MastraServerBase, redactStreamChunk } from '@mastra/server/server-adapter';
-import type { BodyLimitOptions, ServerRoute, StreamOptions } from '@mastra/server/server-adapter';
+import type { ServerRoute } from '@mastra/server/server-adapter';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context, Env, Hono, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';

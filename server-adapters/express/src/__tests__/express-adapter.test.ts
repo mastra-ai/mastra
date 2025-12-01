@@ -6,12 +6,11 @@ import {
   createStreamWithSensitiveData,
   consumeSSEStream,
 } from '@internal/server-adapter-test-utils';
+import type { ServerRoute } from '@mastra/server/server-adapter';
 import express from 'express';
 import type { Application } from 'express';
-import { MastraServer } from '../index';
-
-import type { ServerRoute } from '@mastra/server/server-adapter';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { MastraServer } from '../index';
 
 // Wrapper describe block so the factory can call describe() inside
 describe('Express Server Adapter', () => {

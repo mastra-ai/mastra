@@ -1,5 +1,4 @@
 import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
-import { MastraServer } from '../index';
 import {
   createRouteAdapterTestSuite,
   createDefaultTestContext,
@@ -9,6 +8,7 @@ import {
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeEach } from 'vitest';
+import { MastraServer } from '../index';
 
 // Wrapper describe block so the factory can call describe() inside
 describe('Hono Server Adapter', () => {
