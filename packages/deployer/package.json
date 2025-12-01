@@ -95,6 +95,7 @@
   "dependencies": {
     "@babel/core": "^7.28.5",
     "@babel/preset-typescript": "^7.27.1",
+    "@hono/standard-validator": "^0.2.0",
     "@mastra/server": "workspace:^",
     "@optimize-lodash/rollup-plugin": "^5.0.2",
     "@rollup/plugin-alias": "6.0.0",
@@ -119,11 +120,11 @@
   },
   "devDependencies": {
     "@hono/node-server": "^1.19.6",
-    "@mastra/hono": "workspace:*",
     "@hono/swagger-ui": "^0.5.2",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/hono": "workspace:*",
     "@mastra/mcp": "workspace:^",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/babel__core": "^7.20.5",
