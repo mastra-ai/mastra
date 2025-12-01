@@ -367,6 +367,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/schema-compat':
+        specifier: workspace:*
+        version: link:../../packages/schema-compat
       json-schema:
         specifier: ^0.4.0
         version: 0.4.0
