@@ -19,7 +19,7 @@ export default function Tools() {
   const { data: agentsRecord = {}, isLoading: isLoadingAgents } = useAgents();
   const { data: tools = {}, isLoading: isLoadingTools } = useTools();
 
-  const isEmpty = !isLoadingTools && Object.keys(agentsRecord).length === 0;
+  const isEmpty = !isLoadingTools && Object.keys(tools).length === 0;
 
   return (
     <MainContentLayout>
