@@ -307,7 +307,7 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
       return;
     }
 
-    this.app.use('*', authenticationMiddleware as any);
-    this.app.use('*', authorizationMiddleware as any);
+    this.app.use('*', authenticationMiddleware);
+    this.app.use('*', authorizationMiddleware);
   }
 }

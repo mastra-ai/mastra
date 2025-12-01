@@ -149,14 +149,19 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         response.end();
       }
     } else if (route.responseType === 'mcp-http') {
-      // MCP Streamable HTTP transport
+      // MCP Streamable HTTP transport - request is required
+      if (!request) {
+        response.status(500).json({ error: 'Request object required for MCP transport' });
+        return;
+      }
+
       const { server, httpPath } = result as MCPHttpTransportResult;
 
       try {
         await server.startHTTP({
-          url: new URL(request!.url, `http://${request!.headers.host}`),
+          url: new URL(request.url, `http://${request.headers.host}`),
           httpPath,
-          req: request!,
+          req: request,
           res: response,
         });
         // Response handled by startHTTP
@@ -170,15 +175,20 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         }
       }
     } else if (route.responseType === 'mcp-sse') {
-      // MCP SSE transport
+      // MCP SSE transport - request is required
+      if (!request) {
+        response.status(500).json({ error: 'Request object required for MCP transport' });
+        return;
+      }
+
       const { server, ssePath, messagePath } = result as MCPSseTransportResult;
 
       try {
         await server.startSSE({
-          url: new URL(request!.url, `http://${request!.headers.host}`),
+          url: new URL(request.url, `http://${request.headers.host}`),
           ssePath,
           messagePath,
-          req: request!,
+          req: request,
           res: response,
         });
         // Response handled by startSSE

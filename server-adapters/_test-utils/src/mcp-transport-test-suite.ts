@@ -290,6 +290,7 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
         });
 
         afterAll(async () => {
+          await failingClient?.disconnect();
           failingHttpServer?.close();
           await failingServer?.close();
         });

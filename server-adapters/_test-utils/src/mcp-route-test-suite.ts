@@ -99,6 +99,8 @@ export function createMCPRouteTestSuite(config: AdapterTestSuiteConfig) {
         expect((res.data as any).servers).toHaveLength(1);
         expect((res.data as any).next).toContain('limit=1');
         expect((res.data as any).next).toContain('offset=1');
+        // Verify the returned server is one of the expected ones
+        expect(['Test Server 1', 'Test Server 2']).toContain((res.data as any).servers[0].name);
       });
 
       it('should return empty list when no MCP servers registered', async () => {
