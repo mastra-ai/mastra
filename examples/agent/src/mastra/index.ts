@@ -6,9 +6,10 @@ import { Observability } from '@mastra/observability';
 import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { lessComplexWorkflow, myWorkflow } from './workflows';
-import { chefModelV2Agent, errorAgent, networkAgent } from './agents/model-v2-agent';
+import { chefModelV2Agent, networkAgent } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/evals';
-import { myWorkflowX } from './workflows/other';
+import { myWorkflowX, nestedWorkflow } from './workflows/other';
+import { moderationProcessor } from './agents/model-v2-agent';
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
@@ -25,7 +26,6 @@ const testScorer = createScorer({
 
 export const mastra = new Mastra({
   agents: {
-    errorAgent,
     chefAgent,
     chefAgentResponses,
     dynamicAgent,
@@ -34,13 +34,16 @@ export const mastra = new Mastra({
     chefModelV2Agent,
     networkAgent,
   },
+  processors: {
+    moderationProcessor,
+  },
   logger: new PinoLogger({ name: 'Chef', level: 'debug' }),
   storage,
   mcpServers: {
     myMcpServer,
     myMcpServerTwo,
   },
-  workflows: { myWorkflow, myWorkflowX, lessComplexWorkflow },
+  workflows: { myWorkflow, myWorkflowX, lessComplexWorkflow, nestedWorkflow },
   bundler: {
     sourcemap: true,
   },

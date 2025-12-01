@@ -1,5 +1,5 @@
 ---
-title: "Custom Scorers | Evals | Mastra Docs"
+title: "Custom Scorers | Evals"
 ---
 
 # Custom scorers
@@ -41,13 +41,12 @@ Every scorer starts with the `createScorer` factory function, which requires a n
 
 ```typescript
 import { createScorer } from '@mastra/core/evals';
-import { openai } from '@ai-sdk/openai';
 
 const glutenCheckerScorer = createScorer({
   name: 'Gluten Checker',
   description: 'Check if recipes contain gluten ingredients',
   judge: {                    // Optional: for prompt object steps
-    model: openai('gpt-4o'),
+    model: 'openai/gpt-5.1',
     instructions: 'You are a Chef that identifies if recipes contain gluten.'
   }
 })
@@ -245,7 +244,6 @@ Together, these components allow you to define custom evaluation logic using LLM
 > See [createScorer](/reference/v1/evals/create-scorer) for the full API and configuration options.
 
 ```typescript title="src/mastra/scorers/gluten-checker.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { createScorer } from "@mastra/core/evals";
 import { z } from "zod";
 
@@ -303,7 +301,7 @@ export const glutenCheckerScorer = createScorer({
   name: "Gluten Checker",
   description: "Check if the output contains any gluten",
   judge: {
-    model: openai("gpt-4o"),
+    model: "openai/gpt-4.1-nano",
     instructions: GLUTEN_INSTRUCTIONS,
   },
 })
@@ -338,7 +336,7 @@ Sets up the LLM model and defines its role as a domain expert.
 
 ```typescript
 judge: {
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-4.1-nano',
   instructions: GLUTEN_INSTRUCTIONS,
 }
 ```

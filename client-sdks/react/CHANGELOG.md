@@ -1,5 +1,65 @@
 # @mastra/react-hooks
 
+## 0.1.0-beta.5
+
+### Patch Changes
+
+- Configurable resourceId in react useChat ([#10461](https://github.com/mastra-ai/mastra/pull/10461))
+
+- fix(agent): persist messages before tool suspension ([#10369](https://github.com/mastra-ai/mastra/pull/10369))
+
+  Fixes issues where thread and messages were not saved before suspension when tools require approval or call suspend() during execution. This caused conversation history to be lost if users refreshed during tool approval or suspension.
+
+  **Backend changes (@mastra/core):**
+  - Add assistant messages to messageList immediately after LLM execution
+  - Flush messages synchronously before suspension to persist state
+  - Create thread if it doesn't exist before flushing
+  - Add metadata helpers to persist and remove tool approval state
+  - Pass saveQueueManager and memory context through workflow for immediate persistence
+
+  **Frontend changes (@mastra/react):**
+  - Extract runId from pending approvals to enable resumption after refresh
+  - Convert `pendingToolApprovals` (DB format) to `requireApprovalMetadata` (runtime format)
+  - Handle both `dynamic-tool` and `tool-{NAME}` part types for approval state
+  - Change runId from hardcoded `agentId` to unique `uuid()`
+
+  **UI changes (@mastra/playground-ui):**
+  - Handle tool calls awaiting approval in message initialization
+  - Convert approval metadata format when loading initial messages
+
+  Fixes #9745, #9906
+
+- Updated dependencies [[`898a972`](https://github.com/mastra-ai/mastra/commit/898a9727d286c2510d6b702dfd367e6aaf5c6b0f)]:
+  - @mastra/client-js@1.0.0-beta.5
+
+## 0.1.0-beta.4
+
+### Patch Changes
+
+- Updated dependencies [[`6a86fe5`](https://github.com/mastra-ai/mastra/commit/6a86fe56b8ff53ca2eb3ed87ffc0748749ebadce), [`595a3b8`](https://github.com/mastra-ai/mastra/commit/595a3b8727c901f44e333909c09843c711224440)]:
+  - @mastra/client-js@1.0.0-beta.4
+
+## 0.1.0-beta.3
+
+### Patch Changes
+
+- Updated dependencies [[`e1bb9c9`](https://github.com/mastra-ai/mastra/commit/e1bb9c94b4eb68b019ae275981be3feb769b5365)]:
+  - @mastra/client-js@1.0.0-beta.3
+
+## 0.1.0-beta.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mastra/client-js@1.0.0-beta.2
+
+## 0.1.0-beta.1
+
+### Patch Changes
+
+- Updated dependencies [[`dbd9db0`](https://github.com/mastra-ai/mastra/commit/dbd9db0d5c2797a210b9098e7e3e613718e5442f)]:
+  - @mastra/client-js@1.0.0-beta.1
+
 ## 0.1.0-beta.0
 
 ### Minor Changes

@@ -16,12 +16,66 @@ export type chatRouteOptions<OUTPUT extends OutputSchema = undefined> = {
       path: string;
       agent: string;
     }
-);
+) & {
+    sendStart?: boolean;
+    sendFinish?: boolean;
+    sendReasoning?: boolean;
+    sendSources?: boolean;
+  };
 
+/**
+ * Creates a chat route handler for streaming agent conversations using the AI SDK format.
+ *
+ * This function registers an HTTP POST endpoint that accepts messages, executes an agent,
+ * and streams the response back to the client in AI SDK v5 compatible format.
+ * *
+ * @param {chatRouteOptions} options - Configuration options for the chat route
+ * @param {string} [options.path='/chat/:agentId'] - The route path. Include `:agentId` for dynamic routing
+ * @param {string} [options.agent] - Fixed agent ID when not using dynamic routing
+ * @param {AgentExecutionOptions} [options.defaultOptions] - Default options passed to agent execution
+ * @param {boolean} [options.sendStart=true] - Whether to send start events in the stream
+ * @param {boolean} [options.sendFinish=true] - Whether to send finish events in the stream
+ * @param {boolean} [options.sendReasoning=false] - Whether to include reasoning steps in the stream
+ * @param {boolean} [options.sendSources=false] - Whether to include source citations in the stream
+ *
+ * @returns {ReturnType<typeof registerApiRoute>} A registered API route handler
+ *
+ * @throws {Error} When path doesn't include `:agentId` and no fixed agent is specified
+ * @throws {Error} When agent ID is missing at runtime
+ * @throws {Error} When specified agent is not found in Mastra instance
+ *
+ * @example
+ * // Dynamic agent routing
+ * chatRoute({
+ *   path: '/chat/:agentId',
+ *   sendReasoning: true,
+ * });
+ *
+ * @example
+ * // Fixed agent with custom path
+ * chatRoute({
+ *   path: '/api/support-chat',
+ *   agent: 'support-agent',
+ *   defaultOptions: {
+ *     maxSteps: 5,
+ *   },
+ * });
+ *
+ * @remarks
+ * - The route handler expects a JSON body with a `messages` array
+ * - Messages should follow the format: `{ role: 'user' | 'assistant' | 'system', content: string }`
+ * - The response is a Server-Sent Events (SSE) stream compatible with AI SDK v5
+ * - If both `agent` and `:agentId` are present, a warning is logged and the fixed `agent` takes precedence
+ * - Request context from the incoming request overrides `defaultOptions.requestContext` if both are present
+ */
 export function chatRoute<OUTPUT extends OutputSchema = undefined>({
   path = '/chat/:agentId',
   agent,
   defaultOptions,
+  sendStart = true,
+  sendFinish = true,
+  sendReasoning = false,
+  sendSources = false,
 }: chatRouteOptions<OUTPUT>): ReturnType<typeof registerApiRoute> {
   if (!agent && !path.includes('/:agentId')) {
     throw new Error('Path must include :agentId to route to the correct agent or pass the agent explicitly');
@@ -51,6 +105,14 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
             schema: {
               type: 'object',
               properties: {
+                resumeData: {
+                  type: 'object',
+                  description: 'Resume data for the agent',
+                },
+                runId: {
+                  type: 'string',
+                  description: 'The run ID required when resuming an agent execution',
+                },
                 messages: {
                   type: 'array',
                   description: 'Array of messages in the conversation',
@@ -121,9 +183,13 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
       },
     },
     handler: async c => {
-      const { messages, ...rest } = await c.req.json();
+      const { messages, resumeData, runId, ...rest } = await c.req.json();
       const mastra = c.get('mastra');
       const requestContext = (c as any).get('requestContext') as RequestContext | undefined;
+
+      if (resumeData && !runId) {
+        throw new Error('runId is required when resumeData is provided');
+      }
 
       let agentToUse: string | undefined = agent;
       if (!agent) {
@@ -149,16 +215,21 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
         throw new Error('Agent ID is required');
       }
 
-      const agentObj = mastra.getAgent(agentToUse);
+      const agentObj = mastra.getAgentById(agentToUse);
       if (!agentObj) {
         throw new Error(`Agent ${agentToUse} not found`);
       }
 
-      const result = await agentObj.stream<OUTPUT>(messages, {
+      const mergedOptions = {
         ...defaultOptions,
         ...rest,
+        ...(runId && { runId }),
         requestContext: requestContext || defaultOptions?.requestContext,
-      });
+      };
+
+      const result = resumeData
+        ? await agentObj.resumeStream<OUTPUT>(resumeData, mergedOptions)
+        : await agentObj.stream<OUTPUT>(messages, mergedOptions);
 
       let lastMessageId: string | undefined;
       if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
@@ -168,7 +239,14 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
       const uiMessageStream = createUIMessageStream({
         originalMessages: messages,
         execute: async ({ writer }) => {
-          for await (const part of toAISdkV5Stream(result, { from: 'agent', lastMessageId })!) {
+          for await (const part of toAISdkV5Stream(result, {
+            from: 'agent',
+            lastMessageId,
+            sendStart,
+            sendFinish,
+            sendReasoning,
+            sendSources,
+          })!) {
             writer.write(part);
           }
         },

@@ -1,5 +1,5 @@
 ---
-title: "Semantic Recall | Memory | Mastra Docs"
+title: "Semantic Recall | Memory"
 description: "Learn how to use semantic recall in Mastra to retrieve relevant messages from past conversations using vector search and embeddings."
 ---
 
@@ -30,16 +30,15 @@ After getting a response from the LLM, all new messages (user, assistant, and to
 
 Semantic recall is enabled by default, so if you give your agent memory it will be included:
 
-```typescript {9}
+```typescript {8}
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
   id: "support-agent",
   name: "SupportAgent",
   instructions: "You are a helpful support agent.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   memory: new Memory(),
 });
 ```
@@ -94,7 +93,7 @@ const agent = new Agent({
 **Storage/vector code Examples**:
 
 - [LibSQL](/docs/v1/memory/storage/memory-with-libsql)
-- [MongoDB](/examples/v1/memory/memory-with-mongodb)
+- [MongoDB](/docs/v1/memory/storage/memory-with-mongodb)
 - [Postgres](/docs/v1/memory/storage/memory-with-pg)
 - [Upstash](/docs/v1/memory/storage/memory-with-upstash)
 
@@ -109,11 +108,12 @@ The simplest way is to use a `provider/model` string with autocomplete support:
 ```ts {7}
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
 const agent = new Agent({
   memory: new Memory({
     // ... other memory options
-    embedder: "openai/text-embedding-3-small", // TypeScript autocomplete supported
+    embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   }),
 });
 ```
@@ -129,15 +129,15 @@ The model router automatically handles API key detection from environment variab
 
 You can also use AI SDK embedding models directly:
 
-```ts {3,8}
+```ts {2,7}
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
 const agent = new Agent({
   memory: new Memory({
     // ... other memory options
-    embedder: openai.embedding("text-embedding-3-small"),
+    embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   }),
 });
 ```

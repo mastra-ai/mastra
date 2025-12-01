@@ -25,7 +25,7 @@ To migrate, replace all calls to `mastra.getWorkflows()` with `mastra.listWorkfl
 You can use Mastra's codemod CLI to update your imports automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/workflows-get-workflows .
+npx @mastra/codemod@beta v1/mastra-plural-apis .
 ```
 
 :::
@@ -68,6 +68,16 @@ To migrate, rename method calls from `createRunAsync` to `createRun`.
 + await workflow.createRun({ input: { ... } });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/workflow-create-run-async .
+```
+
+:::
+
 ### `runCount` to `retryCount` (deprecated)
 
 The `runCount` parameter has been deprecated in favor of `retryCount` in workflow step execution. This change provides clearer naming that better describes retry behavior. The old `runCount` still works but shows deprecation warnings.
@@ -83,6 +93,16 @@ To migrate, rename `runCount` to `retryCount` in step execution functions.
   });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/workflow-run-count .
+```
+
+:::
+
 ### `getWorkflowRuns` to `listWorkflowRuns`
 
 The `getWorkflowRuns()` method has been renamed to `listWorkflowRuns()`. This change aligns with the convention that `list*` methods return collections.
@@ -92,6 +112,50 @@ To migrate, rename method calls from `getWorkflowRuns` to `listWorkflowRuns`.
 ```diff
 - const runs = await workflow.getWorkflowRuns({ fromDate, toDate });
 + const runs = await workflow.listWorkflowRuns({ fromDate, toDate });
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/workflow-list-runs .
+```
+
+:::
+
+### Inputs are validated by default
+
+Previously, inputs weren't validated by default. The [`validateInputs`](/reference/v1/workflows/workflow#workflowoptions) flag determines whether to validate the workflow inputs or not. This boolean has been flipped to `true`. If you want the old behavior or have workflows whose schemas don't need to be validated, set `validateInputs: false`.
+
+```diff
+createWorkflow({
++  options: {
++    validateInputs: false
++  }
+})
+```
+
+### Step `suspendPayload` validation
+
+Step `suspendPayload` is now validated for steps that have a `suspendSchema` defined. This also uses the `validateInputs` flag to determine whether to validate the `suspendPayload` or not.
+
+```diff
+  createStep({
+    id: "suspend-resume-step",
+    // ... other step properties
+    suspendSchema: z.object({
+      reason: z.string(),
+      otherReason: z.string()
+    }),
+    execute: async ({ suspend, resumeData}) => {
+      if (!resumeData) {
+-       return suspend({ reason: "Suspension reason" }); // Missing otherReason
++       return suspend({ reason: "Suspension reason", otherReason: "Other reason" });
+      }
+      //... continue execution logic
+    },
+  });
 ```
 
 ## Removed

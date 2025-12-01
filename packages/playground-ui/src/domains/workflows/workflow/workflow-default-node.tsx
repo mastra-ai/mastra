@@ -33,7 +33,7 @@ export interface WorkflowDefaultNodeProps {
 }
 
 export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<DefaultNode> & WorkflowDefaultNodeProps) {
-  const { steps, runId } = useCurrentRun();
+  const { steps } = useCurrentRun();
   const {
     label,
     stepId,
@@ -48,7 +48,6 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
     isForEach,
   } = data;
 
-  const fullLabel = parentWorkflowName ? `${parentWorkflowName}.${label}` : label;
   const stepKey = parentWorkflowName ? `${parentWorkflowName}.${stepId || label}` : stepId || label;
 
   const step = steps[stepKey];
@@ -153,9 +152,11 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
           input={step?.input}
           resumeData={step?.resumeData}
           output={step?.output}
+          suspendOutput={step?.suspendOutput}
           error={step?.error}
           mapConfig={mapConfig}
           status={step?.status}
+          stepKey={stepKey}
         />
       </div>
 

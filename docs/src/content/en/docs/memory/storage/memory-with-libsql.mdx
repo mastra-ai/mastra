@@ -1,5 +1,5 @@
 ---
-title: "Memory with LibSQL | Memory | Mastra Docs"
+title: "Memory with LibSQL | Memory"
 description: Example for how to use Mastra's memory system with LibSQL storage and vector database backend.
 ---
 
@@ -28,7 +28,6 @@ To add LibSQL memory to an agent use the `Memory` class and create a new `storag
 ```typescript title="src/mastra/agents/example-libsql-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const libsqlAgent = new Agent({
@@ -36,7 +35,7 @@ export const libsqlAgent = new Agent({
   name: "LibSQL Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'libsql-agent-storage',
@@ -64,7 +63,6 @@ Add the following to your agent:
 ```typescript title="src/mastra/agents/example-libsql-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 import { fastembed } from "@mastra/fastembed";
 
@@ -73,7 +71,7 @@ export const libsqlAgent = new Agent({
   name: "LibSQL Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'libsql-agent-storage',
@@ -140,6 +138,3 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-## Related
-
-- [Calling Agents](/examples/v1/agents/calling-agents)

@@ -1,13 +1,37 @@
+import type { WritableStream } from 'node:stream/web';
 import type { TextStreamPart } from '@internal/ai-sdk-v4';
 import type { z } from 'zod';
+import type { MastraScorers } from '../evals';
 import type { Mastra } from '../mastra';
-import type { TracingPolicy, TracingProperties } from '../observability';
-import type { WorkflowStreamEvent } from '../stream/types';
+import type { AnySpan, TracingContext, TracingPolicy, TracingProperties } from '../observability';
+import type { RequestContext } from '../request-context';
+import type { ChunkType, WorkflowStreamEvent } from '../stream/types';
+import type { Tool, ToolExecutionContext } from '../tools';
+import type { DynamicArgument } from '../types';
 import type { ExecutionEngine } from './execution-engine';
-import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } from './step';
+import type { ConditionFunction, ExecuteFunction, ExecuteFunctionParams, LoopConditionFunction, Step } from './step';
 
 export type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
+
+export type WorkflowEngineType = string;
+
+export type RestartExecutionParams = {
+  activePaths: number[];
+  activeStepsPath: Record<string, number[]>;
+  stepResults: Record<string, StepResult<any, any, any, any>>;
+  state?: Record<string, any>;
+};
+
+export type TimeTravelExecutionParams = {
+  executionPath: number[];
+  inputData?: any;
+  stepResults: Record<string, StepResult<any, any, any, any>>;
+  nestedStepResults?: Record<string, Record<string, StepResult<any, any, any, any>>>;
+  steps: string[];
+  state?: Record<string, any>;
+  resumeData?: any;
+};
 
 export type Emitter = {
   emit: (event: string, data: any) => Promise<void>;
@@ -24,6 +48,7 @@ export type StepSuccess<P, R, S, T> = {
   payload: P;
   resumePayload?: R;
   suspendPayload?: S;
+  suspendOutput?: T;
   startedAt: number;
   endedAt: number;
   suspendedAt?: number;
@@ -31,12 +56,13 @@ export type StepSuccess<P, R, S, T> = {
   metadata?: StepMetadata;
 };
 
-export type StepFailure<P, R, S> = {
+export type StepFailure<P, R, S, T> = {
   status: 'failed';
   error: string | Error;
   payload: P;
   resumePayload?: R;
   suspendPayload?: S;
+  suspendOutput?: T;
   startedAt: number;
   endedAt: number;
   suspendedAt?: number;
@@ -44,41 +70,61 @@ export type StepFailure<P, R, S> = {
   metadata?: StepMetadata;
 };
 
-export type StepSuspended<P, S> = {
+export type StepSuspended<P, S, T> = {
   status: 'suspended';
   payload: P;
   suspendPayload?: S;
+  suspendOutput?: T;
   startedAt: number;
   suspendedAt: number;
   metadata?: StepMetadata;
 };
 
-export type StepRunning<P, R, S> = {
+export type StepRunning<P, R, S, T> = {
   status: 'running';
   payload: P;
   resumePayload?: R;
   suspendPayload?: S;
+  suspendOutput?: T;
   startedAt: number;
   suspendedAt?: number;
   resumedAt?: number;
   metadata?: StepMetadata;
 };
 
-export type StepWaiting<P, R, S> = {
+export type StepWaiting<P, R, S, T> = {
   status: 'waiting';
   payload: P;
   suspendPayload?: S;
   resumePayload?: R;
+  suspendOutput?: T;
   startedAt: number;
   metadata?: StepMetadata;
 };
 
 export type StepResult<P, R, S, T> =
   | StepSuccess<P, R, S, T>
-  | StepFailure<P, R, S>
-  | StepSuspended<P, S>
-  | StepRunning<P, R, S>
-  | StepWaiting<P, R, S>;
+  | StepFailure<P, R, S, T>
+  | StepSuspended<P, S, T>
+  | StepRunning<P, R, S, T>
+  | StepWaiting<P, R, S, T>;
+
+export type TimeTravelContext<P, R, S, T> = Record<
+  string,
+  {
+    status: WorkflowRunStatus;
+    payload?: P;
+    output?: T;
+    resumePayload?: R;
+    suspendPayload?: S;
+    suspendOutput?: T;
+    startedAt?: number;
+    endedAt?: number;
+    suspendedAt?: number;
+    resumedAt?: number;
+    metadata?: StepMetadata;
+  }
+>;
 
 export type WorkflowStepStatus = StepResult<any, any, any, any>['status'];
 
@@ -147,7 +193,15 @@ export type StreamEvent =
   // vnext events
   | WorkflowStreamEvent;
 
-export type WorkflowRunStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'pending' | 'canceled';
+export type WorkflowRunStatus =
+  | 'running'
+  | 'success'
+  | 'failed'
+  | 'suspended'
+  | 'waiting'
+  | 'pending'
+  | 'canceled'
+  | 'bailed';
 
 // Type to get the inferred type at a specific path in a Zod schema
 export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
@@ -165,6 +219,8 @@ export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
 
 export interface WorkflowState {
   status: WorkflowRunStatus;
+  activeStepsPath: Record<string, number[]>;
+  serializedStepGraph: SerializedStepFlowEntry[];
   steps: Record<
     string,
     {
@@ -194,7 +250,8 @@ export interface WorkflowRunState {
   value: Record<string, string>;
   context: { input?: Record<string, any> } & Record<string, StepResult<any, any, any, any>>;
   serializedStepGraph: SerializedStepFlowEntry[];
-  activePaths: Array<unknown>;
+  activePaths: Array<number>;
+  activeStepsPath: Record<string, number[]>;
   suspendedPaths: Record<string, number[]>;
   resumeLabels: Record<
     string,
@@ -319,6 +376,45 @@ export type StepWithComponent = Step<string, any, any, any, any, any> & {
   steps?: Record<string, StepWithComponent>;
 };
 
+export type StepParams<
+  TStepId extends string,
+  TState extends z.ZodObject<any>,
+  TStepInput extends z.ZodType<any>,
+  TStepOutput extends z.ZodType<any>,
+  TResumeSchema extends z.ZodType<any>,
+  TSuspendSchema extends z.ZodType<any>,
+> = {
+  id: TStepId;
+  description?: string;
+  inputSchema: TStepInput;
+  outputSchema: TStepOutput;
+  resumeSchema?: TResumeSchema;
+  suspendSchema?: TSuspendSchema;
+  stateSchema?: TState;
+  retries?: number;
+  scorers?: DynamicArgument<MastraScorers>;
+  execute: ExecuteFunction<
+    z.infer<TState>,
+    z.infer<TStepInput>,
+    z.infer<TStepOutput>,
+    z.infer<TResumeSchema>,
+    z.infer<TSuspendSchema>,
+    DefaultEngineType
+  >;
+};
+
+export type ToolStep<
+  TSchemaIn extends z.ZodType<any>,
+  TSuspendSchema extends z.ZodType<any>,
+  TResumeSchema extends z.ZodType<any>,
+  TSchemaOut extends z.ZodType<any>,
+  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
+> = Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
+  inputSchema: TSchemaIn;
+  outputSchema: TSchemaOut;
+  execute: (input: z.infer<TSchemaIn>, context?: TContext) => Promise<any>;
+};
+
 export type WorkflowResult<
   TState extends z.ZodObject<any>,
   TInput extends z.ZodType<any>,
@@ -438,3 +534,177 @@ export type SubsetOf<TStepState extends z.ZodObject<any>, TState extends z.ZodOb
         : never
       : never
     : never;
+
+/**
+ * Execution context passed through workflow execution
+ */
+export type ExecutionContext = {
+  workflowId: string;
+  runId: string;
+  executionPath: number[];
+  activeStepsPath: Record<string, number[]>;
+  foreachIndex?: number;
+  suspendedPaths: Record<string, number[]>;
+  resumeLabels: Record<
+    string,
+    {
+      stepId: string;
+      foreachIndex?: number;
+    }
+  >;
+  waitingPaths?: Record<string, number[]>;
+  retryConfig: {
+    attempts: number;
+    delay: number;
+  };
+  format?: 'legacy' | 'vnext' | undefined;
+  state: Record<string, any>;
+};
+
+/**
+ * Mutable context that can change during step execution.
+ * This is a subset of ExecutionContext containing only the fields that
+ * can be modified by step execution (via setState, suspend, etc.)
+ */
+export type MutableContext = {
+  state: Record<string, any>;
+  suspendedPaths: Record<string, number[]>;
+  resumeLabels: Record<
+    string,
+    {
+      stepId: string;
+      foreachIndex?: number;
+    }
+  >;
+};
+
+/**
+ * Result returned from step execution methods.
+ * Wraps the StepResult with additional context needed for durable execution engines.
+ */
+export type StepExecutionResult = {
+  result: StepResult<any, any, any, any>;
+  stepResults: Record<string, StepResult<any, any, any, any>>;
+  mutableContext: MutableContext;
+  requestContext: Record<string, any>;
+};
+
+/**
+ * Result returned from entry execution methods.
+ * Similar to StepExecutionResult but for top-level entry execution in executeEntry.
+ */
+export type EntryExecutionResult = {
+  result: StepResult<any, any, any, any>;
+  stepResults: Record<string, StepResult<any, any, any, any>>;
+  mutableContext: MutableContext;
+  requestContext: Record<string, any>;
+};
+
+// =============================================================================
+// Execution Engine Hook Types
+// =============================================================================
+
+/**
+ * Parameters for the step execution start hook
+ */
+export type StepExecutionStartParams = {
+  workflowId: string;
+  runId: string;
+  step: Step<any, any, any>;
+  inputData: any;
+  emitter: Emitter;
+  executionContext: ExecutionContext;
+  stepCallId: string;
+  stepInfo: Record<string, any>;
+};
+
+/**
+ * Parameters for executing a regular (non-workflow) step
+ */
+export type RegularStepExecutionParams = {
+  step: Step<any, any, any>;
+  stepResults: Record<string, StepResult<any, any, any, any>>;
+  executionContext: ExecutionContext;
+  resume?: {
+    steps: string[];
+    resumePayload: any;
+    label?: string;
+    forEachIndex?: number;
+  };
+  restart?: RestartExecutionParams;
+  timeTravel?: TimeTravelExecutionParams;
+  prevOutput: any;
+  inputData: any;
+  emitter: Emitter;
+  abortController: AbortController;
+  requestContext: RequestContext;
+  tracingContext?: TracingContext;
+  writableStream?: WritableStream<ChunkType>;
+  startedAt: number;
+  resumeDataToUse?: any;
+  stepSpan?: AnySpan;
+  validationError?: Error;
+  stepCallId: string;
+  serializedStepGraph: SerializedStepFlowEntry[];
+  resourceId?: string;
+  disableScorers?: boolean;
+};
+
+/**
+ * Result from step execution core logic
+ */
+export type StepExecutionCoreResult = {
+  status: 'success' | 'failed' | 'suspended' | 'bailed';
+  output?: any;
+  error?: string;
+  suspendPayload?: any;
+  suspendOutput?: any;
+  endedAt?: number;
+  suspendedAt?: number;
+};
+
+/**
+ * Parameters for executing sleep duration (platform-specific)
+ */
+export type SleepDurationParams = {
+  duration: number;
+  sleepId: string;
+};
+
+/**
+ * Parameters for executing sleep until date (platform-specific)
+ */
+export type SleepUntilDateParams = {
+  date: Date;
+  sleepUntilId: string;
+};
+
+/**
+ * Parameters for evaluating a condition (platform-specific wrapping)
+ */
+export type ConditionEvalParams<TEngineType = DefaultEngineType> = {
+  conditionFn: ConditionFunction<any, any, any, any, TEngineType>;
+  index: number;
+  workflowId: string;
+  runId: string;
+  context: ExecuteFunctionParams<any, any, any, any, TEngineType>;
+  evalSpan?: AnySpan;
+};
+
+/**
+ * Parameters for persistence wrapping
+ */
+export type PersistenceWrapParams = {
+  workflowId: string;
+  runId: string;
+  executionPath: number[];
+  persistFn: () => Promise<void>;
+};
+
+/**
+ * Parameters for wrapping a durable operation (for dynamic sleep/sleepUntil functions)
+ */
+export type DurableOperationWrapParams<T> = {
+  operationId: string;
+  operationFn: () => Promise<T>;
+};

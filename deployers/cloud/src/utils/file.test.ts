@@ -1,4 +1,4 @@
-import { join } from 'path';
+import { join } from 'node:path';
 import { MastraError } from '@mastra/core/error';
 import { FileService } from '@mastra/deployer';
 import { describe, it, expect, vi, beforeEach } from 'vitest';

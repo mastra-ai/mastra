@@ -1,5 +1,5 @@
 ---
-title: "Reference: Tool Call Accuracy Scorers | Evals | Mastra Docs"
+title: "Reference: Tool Call Accuracy Scorers | Evals"
 description: Documentation for the Tool Call Accuracy Scorers in Mastra, which evaluate whether LLM outputs call the correct tools from available options.
 ---
 
@@ -349,7 +349,7 @@ The LLM-based scorer provides:
 ```typescript showLineNumbers copy
 // Basic configuration
 const basicLLMScorer = createLLMScorer({
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5.1',
   availableTools: [
     { name: 'tool1', description: 'Description 1' },
     { name: 'tool2', description: 'Description 2' }
@@ -358,7 +358,7 @@ const basicLLMScorer = createLLMScorer({
 
 // With different model
 const customModelScorer = createLLMScorer({
-  model: openai('gpt-4'), // More powerful model for complex evaluations
+  model: 'openai/gpt-5', // More powerful model for complex evaluations
   availableTools: [...]
 });
 ```
@@ -389,7 +389,7 @@ The LLM-based scorer uses AI to evaluate whether tool selections are appropriate
 
 ```typescript title="src/example-llm-basic.ts" showLineNumbers copy
 const llmScorer = createToolCallAccuracyScorerLLM({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   availableTools: [
     {
       name: "weather-tool",
@@ -510,9 +510,9 @@ console.log(result.reason); // "The agent appropriately asked for clarification 
 Here's an example using both scorers on the same data:
 
 ```typescript title="src/example-comparison.ts" showLineNumbers copy
-import { 
-  createToolCallAccuracyScorerCode as createCodeScorer, 
-  createToolCallAccuracyScorerLLM as createLLMScorer 
+import {
+  createToolCallAccuracyScorerCode as createCodeScorer,
+  createToolCallAccuracyScorerLLM as createLLMScorer
 } from "@mastra/evals/scorers/prebuilt";
 
 // Setup both scorers
@@ -522,7 +522,7 @@ const codeScorer = createCodeScorer({
 });
 
 const llmScorer = createLLMScorer({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   availableTools: [
     { name: "weather-tool", description: "Get weather information" },
     { name: "search-tool", description: "Search the web" },

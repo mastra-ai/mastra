@@ -1,5 +1,5 @@
 ---
-title: "Streaming Overview | Streaming | Mastra Docs"
+title: "Streaming Overview | Streaming"
 description: "Streaming in Mastra enables real-time, incremental responses from both agents and workflows, providing immediate feedback as AI-generated content is produced."
 ---
 
@@ -60,19 +60,30 @@ An agent stream provides access to various response properties:
 
 AI SDK v5 uses `LanguageModelV2` for the model providers. If you are getting an error that you are using an AI SDK v4 model you will need to upgrade your model package to the next major version.
 
-For integration with AI SDK v5, use `format` 'aisdk' to get an `AISDKV5OutputStream`:
+For integration with AI SDK v5, use the `toAISdkV5Stream()` utility from `@mastra/ai-sdk` to convert Mastra streams to AI SDK-compatible format:
 
-```typescript {5} showLineNumbers copy
+```typescript {2,9-12} showLineNumbers copy
+import { toAISdkV5Stream } from "@mastra/ai-sdk";
+
 const testAgent = mastra.getAgent("testAgent");
 
-const stream = await testAgent.stream(
-  [{ role: "user", content: "Help me organize my day" }],
-  { format: "aisdk" },
-);
+const stream = await testAgent.stream([
+  { role: "user", content: "Help me organize my day" },
+]);
 
-for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk);
-}
+// Convert to AI SDK v5 compatible stream
+const aiSDKStream = toAISdkV5Stream(stream, { from: "agent" });
+
+// Use with AI SDK v5 methods
+```
+
+For converting messages to AI SDK v5 format, use the `toAISdkV5Messages()` utility from `@mastra/ai-sdk/ui`:
+
+```typescript {1,4} showLineNumbers copy
+import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
+
+const messages = [{ role: "user", content: "Hello" }];
+const aiSDKMessages = toAISdkV5Messages(messages);
 ```
 
 ### Using `Agent.network()`

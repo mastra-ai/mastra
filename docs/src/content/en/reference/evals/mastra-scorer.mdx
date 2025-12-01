@@ -1,5 +1,5 @@
 ---
-title: "Reference: MastraScorer | Evals | Mastra Docs"
+title: "Reference: MastraScorer | Evals"
 description: Documentation for the MastraScorer base class in Mastra, which provides the foundation for all custom and built-in scorers.
 ---
 
@@ -14,6 +14,8 @@ The `MastraScorer` class is the base class for all scorers in Mastra. It provide
 Use the `createScorer` factory function, which returns a `MastraScorer` instance:
 
 ```typescript
+import { createScorer } from "@mastra/core/evals";
+
 const scorer = createScorer({
   name: "My Custom Scorer",
   description: "Evaluates responses based on custom criteria",

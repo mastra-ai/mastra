@@ -1,4 +1,4 @@
-import EventEmitter from 'events';
+import EventEmitter from 'node:events';
 import { MastraBase } from '../../base';
 import type { RequestContext } from '../../di';
 import { getErrorFromUnknown } from '../../error/utils.js';
@@ -9,7 +9,12 @@ import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { getStepResult } from '../step';
 import type { LoopConditionFunction, Step } from '../step';
 import type { Emitter, StepFlowEntry, StepResult } from '../types';
-import { validateStepInput, createDeprecationProxy, runCountDeprecationMessage } from '../utils';
+import {
+  validateStepInput,
+  createDeprecationProxy,
+  runCountDeprecationMessage,
+  validateStepSuspendData,
+} from '../utils';
 
 export class StepExecutor extends MastraBase {
   protected mastra?: Mastra;
@@ -46,7 +51,7 @@ export class StepExecutor extends MastraBase {
     const { inputData, validationError } = await validateStepInput({
       prevOutput: typeof params.foreachIdx === 'number' ? params.input?.[params.foreachIdx] : params.input,
       step,
-      validateInputs: params.validateInputs ?? false,
+      validateInputs: params.validateInputs ?? true,
     });
 
     let stepInfo: {
@@ -90,7 +95,14 @@ export class StepExecutor extends MastraBase {
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(this, stepResults),
             suspend: async (suspendPayload: any): Promise<any> => {
-              suspended = { payload: { ...suspendPayload, __workflow_meta: { runId, path: [step.id] } } };
+              const { suspendData, validationError } = await validateStepSuspendData({
+                suspendData: suspendPayload,
+                step,
+              });
+              if (validationError) {
+                throw validationError;
+              }
+              suspended = { payload: { ...suspendData, __workflow_meta: { runId, path: [step.id] } } };
             },
             bail: (result: any) => {
               bailed = { payload: result };
@@ -123,6 +135,7 @@ export class StepExecutor extends MastraBase {
           ...stepInfo,
           status: 'suspended',
           suspendedAt: endedAt,
+          ...(stepResult ? { suspendOutput: stepResult } : {}),
         };
 
         if (suspended.payload) {

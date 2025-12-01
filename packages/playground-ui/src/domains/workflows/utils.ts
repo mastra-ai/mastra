@@ -1,4 +1,4 @@
-import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
+import type { WorkflowRunState, StepResult, TimeTravelContext } from '@mastra/core/workflows';
 
 import { WorkflowRunStreamResult } from './context/workflow-run-context';
 
@@ -15,6 +15,8 @@ export function convertWorkflowRunStateToStreamResult(runState: WorkflowRunState
         status: result.status,
         output: 'output' in result ? result.output : undefined,
         payload: 'payload' in result ? result.payload : undefined,
+        suspendPayload: 'suspendPayload' in result ? result.suspendPayload : undefined,
+        suspendOutput: 'suspendOutput' in result ? result.suspendOutput : undefined,
         resumePayload: 'resumePayload' in result ? result.resumePayload : undefined,
         error: 'error' in result ? result.error : undefined,
         startedAt: 'startedAt' in result ? result.startedAt : Date.now(),

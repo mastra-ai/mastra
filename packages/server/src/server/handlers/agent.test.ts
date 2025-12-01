@@ -11,15 +11,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import {
-  listAgentsHandler,
-  getAgentByIdHandler,
-  generateHandler,
-  updateAgentModelHandler,
-  reorderAgentModelListHandler,
-  updateAgentModelInModelListHandler,
-  streamGenerateLegacyHandler,
-  streamGenerateHandler,
+  LIST_AGENTS_ROUTE,
+  GET_AGENT_BY_ID_ROUTE,
+  GENERATE_AGENT_ROUTE,
+  UPDATE_AGENT_MODEL_ROUTE,
+  REORDER_AGENT_MODEL_LIST_ROUTE,
+  UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE,
+  STREAM_GENERATE_LEGACY_ROUTE,
+  STREAM_GENERATE_ROUTE,
 } from './agents';
+import { createTestRuntimeContext } from './test-utils';
 class MockAgent extends Agent {
   constructor(config: AgentConfig) {
     super(config);
@@ -92,7 +93,10 @@ describe('Agent Handlers', () => {
 
   describe('listAgentsHandler', () => {
     it('should return serialized agents', async () => {
-      const result = await listAgentsHandler({ mastra: mockMastra, requestContext });
+      const result = await LIST_AGENTS_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
+        requestContext,
+      });
 
       expect(result).toEqual({
         'test-agent': {
@@ -170,7 +174,10 @@ describe('Agent Handlers', () => {
         },
       });
 
-      const result = await listAgentsHandler({ mastra: mastraWithCoreProcessors, requestContext });
+      const result = await LIST_AGENTS_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mastraWithCoreProcessors }),
+        requestContext,
+      });
 
       expect(result['agent-with-core-processors']).toMatchObject({
         name: 'agent-with-core-processors',
@@ -227,7 +234,10 @@ describe('Agent Handlers', () => {
       workflow.then(firstStep).then(secondStep);
       mockAgent = makeMockAgent({ workflows: { hello: workflow } });
       mockMastra = makeMastraMock({ agents: { 'test-agent': mockAgent } });
-      const result = await getAgentByIdHandler({ mastra: mockMastra, agentId: 'test-agent', requestContext });
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
+        agentId: 'test-agent',
+      });
 
       expect(result).toEqual({
         name: 'test-agent',
@@ -263,8 +273,8 @@ describe('Agent Handlers', () => {
     });
 
     it('should return serialized agent with model list', async () => {
-      const result = await getAgentByIdHandler({
-        mastra: mockMastra,
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
         agentId: 'test-multi-model-agent',
         requestContext,
       });
@@ -295,7 +305,7 @@ describe('Agent Handlers', () => {
 
     it('should throw 404 when agent not found', async () => {
       await expect(
-        getAgentByIdHandler({ mastra: mockMastra, requestContext, agentId: 'non-existing' }),
+        GET_AGENT_BY_ID_ROUTE.handler({ ...createTestRuntimeContext({ mastra: mockMastra }), agentId: 'non-existing' }),
       ).rejects.toThrow(
         new HTTPException(404, {
           message: 'Agent with id non-existing not found',
@@ -309,22 +319,13 @@ describe('Agent Handlers', () => {
       const mockResult = { response: 'test' };
       (mockAgent.generate as any).mockResolvedValue(mockResult);
 
-      const result = await generateHandler({
-        mastra: mockMastra,
+      const result = await GENERATE_AGENT_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
         agentId: 'test-agent',
-        body: {
-          messages: ['test message'],
-          resourceId: 'test-resource',
-          threadId: 'test-thread',
-          experimental_output: undefined,
-          // @ts-expect-error
-          requestContext: {
-            user: {
-              name: 'test-user',
-            },
-          },
-        },
-        requestContext: new RequestContext(),
+        messages: ['test message'],
+        resourceId: 'test-resource',
+        threadId: 'test-thread',
+        experimental_output: undefined,
       });
 
       expect(result).toEqual(mockResult);
@@ -332,22 +333,13 @@ describe('Agent Handlers', () => {
 
     it('should throw 404 when agent not found', async () => {
       await expect(
-        generateHandler({
-          mastra: mockMastra,
+        GENERATE_AGENT_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra: mockMastra }),
           agentId: 'non-existing',
-          body: {
-            messages: ['test message'],
-            resourceId: 'test-resource',
-            threadId: 'test-thread',
-            experimental_output: undefined,
-            // @ts-expect-error
-            requestContext: {
-              user: {
-                name: 'test-user',
-              },
-            },
-          },
-          requestContext: new RequestContext(),
+          messages: ['test message'],
+          resourceId: 'test-resource',
+          threadId: 'test-thread',
+          experimental_output: undefined,
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Agent with id non-existing not found' }));
     });
@@ -361,22 +353,13 @@ describe('Agent Handlers', () => {
       };
       (mockAgent.stream as any).mockResolvedValue(mockStreamResult);
 
-      const result = await streamGenerateLegacyHandler({
-        mastra: mockMastra,
+      const result = await STREAM_GENERATE_LEGACY_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
         agentId: 'test-agent',
-        body: {
-          messages: ['test message'],
-          resourceId: 'test-resource',
-          threadId: 'test-thread',
-          experimental_output: undefined,
-          // @ts-expect-error
-          requestContext: {
-            user: {
-              name: 'test-user',
-            },
-          },
-        },
-        requestContext: new RequestContext(),
+        messages: ['test message'],
+        resourceId: 'test-resource',
+        threadId: 'test-thread',
+        experimental_output: undefined,
       });
 
       expect(result).toBeInstanceOf(Response);
@@ -384,22 +367,13 @@ describe('Agent Handlers', () => {
 
     it('should throw 404 when agent not found', async () => {
       await expect(
-        streamGenerateLegacyHandler({
-          mastra: mockMastra,
+        STREAM_GENERATE_LEGACY_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra: mockMastra }),
           agentId: 'non-existing',
-          body: {
-            messages: ['test message'],
-            resourceId: 'test-resource',
-            threadId: 'test-thread',
-            experimental_output: undefined,
-            // @ts-expect-error
-            requestContext: {
-              user: {
-                name: 'test-user',
-              },
-            },
-          },
-          requestContext: new RequestContext(),
+          messages: ['test message'],
+          resourceId: 'test-resource',
+          threadId: 'test-thread',
+          experimental_output: undefined,
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Agent with id non-existing not found' }));
     });
@@ -407,18 +381,18 @@ describe('Agent Handlers', () => {
 
   describe('updateAgentModelHandler', () => {
     it('should update agent model', async () => {
+      const mockFullStream = new ReadableStream();
       const mockStreamResult = {
         toTextStreamResponse: vi.fn().mockReturnValue(new Response()),
         toDataStreamResponse: vi.fn().mockReturnValue(new Response()),
+        fullStream: mockFullStream,
       };
       (mockAgent.stream as any).mockResolvedValue(mockStreamResult);
-      const updateResult = await updateAgentModelHandler({
-        mastra: mockMastra,
+      const updateResult = await UPDATE_AGENT_MODEL_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
         agentId: 'test-agent',
-        body: {
-          modelId: 'gpt-4o-mini',
-          provider: 'openai',
-        },
+        modelId: 'gpt-4o-mini',
+        provider: 'openai',
       });
 
       const agent = mockMastra.getAgentById('test-agent');
@@ -428,22 +402,13 @@ describe('Agent Handlers', () => {
       expect(modelId).toEqual('gpt-4o-mini');
       //confirm that stream works fine after the model update
 
-      const result = await streamGenerateHandler({
-        mastra: mockMastra,
+      const result = await STREAM_GENERATE_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
         agentId: 'test-agent',
-        body: {
-          messages: ['test message'],
-          resourceId: 'test-resource',
-          threadId: 'test-thread',
-          experimental_output: undefined,
-          // @ts-expect-error
-          requestContext: {
-            user: {
-              name: 'test-user',
-            },
-          },
-        },
-        requestContext: new RequestContext(),
+        messages: ['test message'],
+        resourceId: 'test-resource',
+        threadId: 'test-thread',
+        experimental_output: undefined,
       });
 
       expect(result).toBeDefined();
@@ -462,12 +427,10 @@ describe('Agent Handlers', () => {
       const modelListIds = modelList.map(m => m.id);
       const reversedModelListIds = modelListIds.reverse();
 
-      await reorderAgentModelListHandler({
-        mastra: mockMastra,
+      await REORDER_AGENT_MODEL_LIST_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
         agentId: 'test-multi-model-agent',
-        body: {
-          reorderedModelIds: reversedModelListIds,
-        },
+        reorderedModelIds: reversedModelListIds,
       });
 
       const reorderedModelList = await agent.getModelList();
@@ -484,17 +447,15 @@ describe('Agent Handlers', () => {
       const modelList = await agent.getModelList();
       expect(modelList?.length).toBe(3);
       const model1Id = modelList?.[1].id!;
-      await updateAgentModelInModelListHandler({
-        mastra: mockMastra,
+      await UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
         agentId: 'test-multi-model-agent',
         modelConfigId: model1Id,
-        body: {
-          model: {
-            modelId: 'gpt-5',
-            provider: 'openai',
-          },
-          maxRetries: 4,
+        model: {
+          modelId: 'gpt-5',
+          provider: 'openai',
         },
+        maxRetries: 4,
       });
       const updatedModelList = await agent.getModelList();
       expect(updatedModelList?.[0].model.modelId).toBe('gpt-4o-mini');

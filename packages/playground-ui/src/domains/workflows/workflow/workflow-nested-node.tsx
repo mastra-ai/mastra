@@ -135,10 +135,12 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
           input={step?.input}
           resumeData={step?.resumeData}
           output={step?.output}
+          suspendOutput={step?.suspendOutput}
           error={step?.error}
           mapConfig={mapConfig}
           onShowNestedGraph={() => showNestedGraph({ label, fullStep: fullLabel, stepGraph })}
           status={step?.status}
+          stepKey={stepKey}
         />
       </div>
       {!withoutBottomHandle && <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden' }} />}

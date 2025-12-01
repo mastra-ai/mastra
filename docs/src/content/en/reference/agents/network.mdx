@@ -1,7 +1,9 @@
 ---
-title: "Reference: Agent.network() | Agents | Mastra Docs"
+title: "Reference: Agent.network() | Agents"
 description: "Documentation for the `Agent.network()` method in Mastra agents, which enables multi-agent collaboration and routing."
 ---
+
+import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsProperties";
 
 # Agent.network()
 
@@ -15,7 +17,6 @@ The `.network()` method enables multi-agent collaboration and routing. This meth
 
 ```typescript copy
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { agent1, agent2 } from "./agents";
 import { workflow1 } from "./workflows";
 import { tool1, tool2 } from "./tools";
@@ -25,7 +26,7 @@ const agent = new Agent({
   name: "Network Agent",
   instructions:
     "You are a network agent that can help users with a variety of tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   agents: {
     agent1,
     agent2,
@@ -40,7 +41,7 @@ const agent = new Agent({
 });
 
 await agent.network(`
-  Find me the weather in Tokyo. 
+  Find me the weather in Tokyo.
   Based on the weather, plan an activity for me.
 `);
 ```
@@ -208,91 +209,7 @@ await agent.network(`
         },
       ],
     },
-    {
-      name: "modelSettings",
-      type: "CallSettings",
-      isOptional: true,
-      description:
-        "Model-specific settings like temperature, maxTokens, topP, etc. These are passed to the underlying language model.",
-      properties: [
-        {
-          parameters: [
-            {
-              name: "temperature",
-              type: "number",
-              isOptional: true,
-              description:
-                "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "maxRetries",
-              type: "number",
-              isOptional: true,
-              description: "Maximum number of retries for failed requests.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "topP",
-              type: "number",
-              isOptional: true,
-              description:
-                "Nucleus sampling. This is a number between 0 and 1. It is recommended to set either temperature or topP, but not both.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "topK",
-              type: "number",
-              isOptional: true,
-              description:
-                "Only sample from the top K options for each subsequent token. Used to remove 'long tail' low probability responses.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "presencePenalty",
-              type: "number",
-              isOptional: true,
-              description:
-                "Presence penalty setting. It affects the likelihood of the model to repeat information that is already in the prompt. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition).",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "frequencyPenalty",
-              type: "number",
-              isOptional: true,
-              description:
-                "Frequency penalty setting. It affects the likelihood of the model to repeatedly use the same words or phrases. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition).",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "stopSequences",
-              type: "string[]",
-              isOptional: true,
-              description:
-                "Stop sequences. If set, the model will stop generating text when one of the stop sequences is generated.",
-            },
-          ],
-        },
-      ],
-    },
+    MODEL_SETTINGS_OBJECT,
     {
       name: "runId",
       type: "string",

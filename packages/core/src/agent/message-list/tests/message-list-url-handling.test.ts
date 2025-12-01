@@ -5,7 +5,7 @@ import { MessageList } from '../index';
 describe('MessageList - File URL Handling', () => {
   it('should preserve external URLs through V2->V3->V2 message conversion', () => {
     const messageList = new MessageList();
-    const imageUrl = 'https://httpbin.org/image/png';
+    const imageUrl = 'https://placehold.co/10.png';
 
     // Create a V2 message with a file part containing a URL
     const v2Message: MastraDBMessage = {
@@ -51,7 +51,7 @@ describe('MessageList - File URL Handling', () => {
 
   it('should provide clean URLs to InputProcessors without data URI corruption', () => {
     const messageList = new MessageList();
-    const imageUrl = 'https://httpbin.org/image/png';
+    const imageUrl = 'https://placehold.co/10.png';
 
     // Simulate what happens when stream receives messages with file parts
     const inputMessage: MastraDBMessage = {
@@ -90,7 +90,7 @@ describe('MessageList - File URL Handling', () => {
   });
 
   it('should correctly differentiate between URLs and base64 data', () => {
-    const imageUrl = 'https://httpbin.org/image/png';
+    const imageUrl = 'https://placehold.co/10.png';
     const base64Data =
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
     const dataUri = `data:image/png;base64,${base64Data}`;
@@ -158,4 +158,99 @@ describe('MessageList - File URL Handling', () => {
       }
     });
   });
+
+  it('should preserve URLs for providers that support them natively', async () => {
+    const messageList = new MessageList();
+    const imageUrl = 'https://placehold.co/10.png';
+
+    // Add message with URL
+    const v2Message: MastraDBMessage = {
+      id: 'test-msg-1',
+      role: 'user',
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Analyze this image' },
+          { type: 'file', mimeType: 'image/png', data: imageUrl },
+        ],
+      },
+      createdAt: new Date(),
+      resourceId: 'test-resource',
+      threadId: 'test-thread',
+    };
+
+    messageList.add(v2Message, 'user');
+
+    // Test with provider that supports URLs (like OpenAI)
+    const supportedUrls = {
+      'image/png': [/^https:\/\/placehold\.co\//],
+    };
+
+    const llmPrompt = await messageList.get.all.aiV5.llmPrompt({
+      downloadConcurrency: 1,
+      downloadRetries: 1,
+      supportedUrls,
+    });
+
+    const userMessage = llmPrompt.find((msg: any) => msg.role === 'user');
+    expect(userMessage).toBeDefined();
+
+    if (userMessage && Array.isArray(userMessage.content)) {
+      const filePart = userMessage.content.find((part: any) => part.type === 'file');
+      expect(filePart).toBeDefined();
+      expect(filePart?.type).toBe('file');
+      // URL should be preserved, not converted to base64
+      expect((filePart as any)?.data.toString()).toBe(imageUrl);
+      expect((filePart as any)?.data).not.toContain('data:image/png;base64,');
+    }
+  });
+
+  it(
+    'should download URLs for providers that do not support them',
+    {
+      timeout: 100000,
+      retry: 3,
+    },
+    async () => {
+      const messageList = new MessageList();
+      const imageUrl = 'https://placehold.co/10.png';
+
+      // Add message with URL
+      const v2Message: MastraDBMessage = {
+        id: 'test-msg-2',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Analyze this image' },
+            { type: 'file', mimeType: 'image/png', data: imageUrl },
+          ],
+        },
+        createdAt: new Date(),
+        resourceId: 'test-resource',
+        threadId: 'test-thread',
+      };
+
+      messageList.add(v2Message, 'user');
+
+      // Test with provider that does NOT support URLs (empty supportedUrls)
+      const llmPrompt = await messageList.get.all.aiV5.llmPrompt({
+        downloadConcurrency: 1,
+        downloadRetries: 1,
+        supportedUrls: {}, // No URL support
+      });
+
+      const userMessage = llmPrompt.find((msg: any) => msg.role === 'user');
+      expect(userMessage).toBeDefined();
+
+      if (userMessage && Array.isArray(userMessage.content)) {
+        const filePart = userMessage.content.find((part: any) => part.type === 'file');
+        expect(filePart).toBeDefined();
+        expect(filePart?.type).toBe('file');
+        // URL should be downloaded and converted to binary data
+        expect((filePart as any)?.data).toBeInstanceOf(Uint8Array);
+        expect((filePart as any)?.data).not.toBe(imageUrl);
+      }
+    },
+  );
 });

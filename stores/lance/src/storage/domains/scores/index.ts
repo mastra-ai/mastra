@@ -52,6 +52,9 @@ export class StoreScoresLance extends ScoresStorage {
         }
       }
 
+      filteredScore.createdAt = new Date();
+      filteredScore.updatedAt = new Date();
+
       filteredScore.id = id;
       await table.add([filteredScore], { mode: 'append' });
       return { score };
@@ -78,8 +81,7 @@ export class StoreScoresLance extends ScoresStorage {
       const records = await query.toArray();
 
       if (records.length === 0) return null;
-      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
-      return processResultWithTypeConversion(records[0], schema) as ScoreRowData;
+      return await this.transformScoreRow(records[0]);
     } catch (error: any) {
       throw new MastraError(
         {
@@ -92,6 +94,23 @@ export class StoreScoresLance extends ScoresStorage {
         error,
       );
     }
+  }
+
+  /**
+   * LanceDB-specific score row transformation.
+   *
+   * Note: This implementation does NOT use coreTransformScoreRow because:
+   * 1. LanceDB stores schema information in the table itself (requires async fetch)
+   * 2. Uses processResultWithTypeConversion utility for LanceDB-specific type handling
+   */
+  private async transformScoreRow(row: Record<string, any>): Promise<ScoreRowData> {
+    const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
+    const transformed = processResultWithTypeConversion(row, schema) as ScoreRowData;
+    return {
+      ...transformed,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
   }
 
   async listScoresByScorerId({
@@ -150,8 +169,7 @@ export class StoreScoresLance extends ScoresStorage {
       }
 
       const records = await query.toArray();
-      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
-      const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
+      const scores = await Promise.all(records.map(async record => await this.transformScoreRow(record)));
 
       return {
         pagination: {
@@ -206,8 +224,7 @@ export class StoreScoresLance extends ScoresStorage {
       }
 
       const records = await query.toArray();
-      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
-      const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
+      const scores = await Promise.all(records.map(async record => await this.transformScoreRow(record)));
 
       return {
         pagination: {
@@ -267,8 +284,7 @@ export class StoreScoresLance extends ScoresStorage {
       }
 
       const records = await query.toArray();
-      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
-      const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
+      const scores = await Promise.all(records.map(async record => await this.transformScoreRow(record)));
 
       return {
         pagination: {
@@ -325,8 +341,7 @@ export class StoreScoresLance extends ScoresStorage {
       }
 
       const records = await query.toArray();
-      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
-      const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
+      const scores = await Promise.all(records.map(async record => await this.transformScoreRow(record)));
 
       return {
         pagination: {

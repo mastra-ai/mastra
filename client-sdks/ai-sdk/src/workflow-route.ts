@@ -5,6 +5,8 @@ import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
 import { toAISdkV5Stream } from './convert-streams';
 
 type WorkflowRouteBody = {
+  runId?: string;
+  resourceId?: string;
   inputData?: Record<string, any>;
   resumeData?: Record<string, any>;
   requestContext?: RequestContext;
@@ -13,12 +15,13 @@ type WorkflowRouteBody = {
 };
 
 export type WorkflowRouteOptions =
-  | { path: `${string}:workflowId${string}`; workflow?: never }
-  | { path: string; workflow: string };
+  | { path: `${string}:workflowId${string}`; workflow?: never; includeTextStreamParts?: boolean }
+  | { path: string; workflow: string; includeTextStreamParts?: boolean };
 
 export function workflowRoute({
   path = '/api/workflows/:workflowId/stream',
   workflow,
+  includeTextStreamParts = true,
 }: WorkflowRouteOptions): ReturnType<typeof registerApiRoute> {
   if (!workflow && !path.includes('/:workflowId')) {
     throw new Error('Path must include :workflowId to route to the correct workflow or pass the workflow explicitly');
@@ -46,9 +49,13 @@ export function workflowRoute({
             schema: {
               type: 'object',
               properties: {
+                runId: { type: 'string' },
+                resourceId: { type: 'string' },
                 inputData: { type: 'object', additionalProperties: true },
+                resumeData: { type: 'object', additionalProperties: true },
                 requestContext: { type: 'object', additionalProperties: true },
                 tracingOptions: { type: 'object', additionalProperties: true },
+                step: { type: 'string' },
               },
             },
           },
@@ -66,8 +73,9 @@ export function workflowRoute({
       },
     },
     handler: async c => {
-      const { inputData, resumeData, ...rest } = (await c.req.json()) as WorkflowRouteBody;
+      const { runId, resourceId, inputData, resumeData, ...rest } = (await c.req.json()) as WorkflowRouteBody;
       const mastra = c.get('mastra');
+      const requestContext = (c as any).get('requestContext') as RequestContext | undefined;
 
       let workflowToUse: string | undefined = workflow;
       if (!workflow) {
@@ -86,18 +94,28 @@ export function workflowRoute({
         throw new Error('Workflow ID is required');
       }
 
-      const workflowObj = mastra.getWorkflow(workflowToUse);
+      const workflowObj = mastra.getWorkflowById(workflowToUse);
       if (!workflowObj) {
         throw new Error(`Workflow ${workflowToUse} not found`);
       }
 
-      const run = await workflowObj.createRun();
+      if (requestContext && rest.requestContext) {
+        mastra
+          .getLogger()
+          ?.warn(
+            `"requestContext" from the request body will be ignored because "requestContext" is already set in the route options.`,
+          );
+      }
 
-      const stream = resumeData ? run.resumeStream({ resumeData, ...rest }) : run.stream({ inputData, ...rest });
+      const run = await workflowObj.createRun({ runId, resourceId, ...rest });
+
+      const stream = resumeData
+        ? run.resumeStream({ resumeData, ...rest, requestContext: requestContext || rest.requestContext })
+        : run.stream({ inputData, ...rest, requestContext: requestContext || rest.requestContext });
 
       const uiMessageStream = createUIMessageStream({
         execute: async ({ writer }) => {
-          for await (const part of toAISdkV5Stream(stream, { from: 'workflow' })) {
+          for await (const part of toAISdkV5Stream(stream, { from: 'workflow', includeTextStreamParts })) {
             writer.write(part);
           }
         },

@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { RequestContext } from '../di';
@@ -63,7 +63,6 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
       runId,
       entry,
       prevOutput: null,
-      prevStep: null as any,
       serializedStepGraph: [],
       stepResults: {} as Record<string, StepResult<any, any, any, any>>,
       executionContext: {
@@ -75,6 +74,9 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
           attempts: 3,
           delay: 1000,
         },
+        activeStepsPath: {},
+        resumeLabels: {},
+        state: {},
       },
       emitter,
       abortController,

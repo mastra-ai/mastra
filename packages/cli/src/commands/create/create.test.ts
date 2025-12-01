@@ -38,6 +38,7 @@ vi.mock('@clack/prompts', () => ({
     start: vi.fn(),
     stop: vi.fn(),
   })),
+  confirm: vi.fn(),
 }));
 
 // Mock init command
@@ -48,6 +49,27 @@ vi.mock('../init/init', () => ({
 // Mock init utils
 vi.mock('../init/utils', () => ({
   interactivePrompt: vi.fn(),
+  getModelIdentifier: vi.fn((provider: string) => {
+    const models: Record<string, string> = {
+      openai: "'openai/gpt-4o-mini'",
+      anthropic: "'anthropic/claude-sonnet-4-5-20250929'",
+      groq: "'groq/llama-3.3-70b-versatile'",
+      google: "'google/gemini-2.5-pro'",
+      cerebras: "'cerebras/llama-3.3-70b'",
+      mistral: "'mistral/mistral-medium-2508'",
+    };
+    return models[provider];
+  }),
+  LLMProvider: ['openai', 'anthropic', 'groq', 'google', 'cerebras', 'mistral'],
+  LLM_PROVIDERS: [
+    { value: 'openai', label: 'OpenAI', hint: 'recommended' },
+    { value: 'anthropic', label: 'Anthropic' },
+    { value: 'groq', label: 'Groq' },
+    { value: 'google', label: 'Google' },
+    { value: 'cerebras', label: 'Cerebras' },
+    { value: 'mistral', label: 'Mistral' },
+  ],
+  COMPONENTS: ['agents', 'workflows', 'tools', 'scorers'],
 }));
 
 // Mock utils
@@ -106,13 +128,14 @@ describe('create command with --template flag', () => {
     it('should create project from specific template name', async () => {
       const { loadTemplates, findTemplateByName, getDefaultProjectName } = await import('../../utils/template-utils');
       const { cloneTemplate, installDependencies } = await import('../../utils/clone-template');
-      const { text, isCancel } = await import('@clack/prompts');
+      const { text, isCancel, select } = await import('@clack/prompts');
 
       vi.mocked(loadTemplates).mockResolvedValue([mockTemplate]);
       vi.mocked(findTemplateByName).mockReturnValue(mockTemplate);
       vi.mocked(getDefaultProjectName).mockReturnValue('test-project');
       vi.mocked(text).mockResolvedValue('my-project');
       vi.mocked(isCancel).mockReturnValue(false);
+      vi.mocked(select).mockResolvedValue('openai');
       vi.mocked(cloneTemplate).mockResolvedValue('/my-project');
       vi.mocked(installDependencies).mockResolvedValue();
 
@@ -126,6 +149,8 @@ describe('create command with --template flag', () => {
       expect(cloneTemplate).toHaveBeenCalledWith({
         template: mockTemplate,
         projectName: 'my-project',
+        branch: 'beta',
+        llmProvider: 'openai',
       });
       expect(installDependencies).toHaveBeenCalledWith('/my-project');
     });
@@ -133,13 +158,14 @@ describe('create command with --template flag', () => {
     it('should prompt for project name when not provided', async () => {
       const { loadTemplates, findTemplateByName, getDefaultProjectName } = await import('../../utils/template-utils');
       const { cloneTemplate, installDependencies } = await import('../../utils/clone-template');
-      const { text, isCancel } = await import('@clack/prompts');
+      const { text, isCancel, select } = await import('@clack/prompts');
 
       vi.mocked(loadTemplates).mockResolvedValue([mockTemplate]);
       vi.mocked(findTemplateByName).mockReturnValue(mockTemplate);
       vi.mocked(getDefaultProjectName).mockReturnValue('test-project');
       vi.mocked(text).mockResolvedValue('user-chosen-name');
       vi.mocked(isCancel).mockReturnValue(false);
+      vi.mocked(select).mockResolvedValue('openai');
       vi.mocked(cloneTemplate).mockResolvedValue('/user-chosen-name');
       vi.mocked(installDependencies).mockResolvedValue();
 
@@ -156,18 +182,21 @@ describe('create command with --template flag', () => {
       expect(cloneTemplate).toHaveBeenCalledWith({
         template: mockTemplate,
         projectName: 'user-chosen-name',
+        branch: 'beta',
+        llmProvider: 'openai',
       });
     });
 
     it('should show template selection when template flag provided without value', async () => {
       const { loadTemplates, selectTemplate } = await import('../../utils/template-utils');
       const { cloneTemplate, installDependencies } = await import('../../utils/clone-template');
-      const { text, isCancel } = await import('@clack/prompts');
+      const { text, isCancel, select } = await import('@clack/prompts');
 
       vi.mocked(loadTemplates).mockResolvedValue([mockTemplate]);
       vi.mocked(selectTemplate).mockResolvedValue(mockTemplate);
       vi.mocked(text).mockResolvedValue('my-project');
       vi.mocked(isCancel).mockReturnValue(false);
+      vi.mocked(select).mockResolvedValue('openai');
       vi.mocked(cloneTemplate).mockResolvedValue('/my-project');
       vi.mocked(installDependencies).mockResolvedValue();
 
@@ -181,6 +210,8 @@ describe('create command with --template flag', () => {
       expect(cloneTemplate).toHaveBeenCalledWith({
         template: mockTemplate,
         projectName: 'my-project',
+        branch: 'beta',
+        llmProvider: 'openai',
       });
     });
 
@@ -276,7 +307,7 @@ describe('create command with --template flag', () => {
 
     it('should handle GitHub URLs as templates', async () => {
       const { cloneTemplate, installDependencies } = await import('../../utils/clone-template');
-      const { text, isCancel, spinner, note } = await import('@clack/prompts');
+      const { text, isCancel, select, spinner, note } = await import('@clack/prompts');
 
       // Mock spinner
       const mockSpinner = {
@@ -312,6 +343,7 @@ describe('create command with --template flag', () => {
 
       vi.mocked(text).mockResolvedValue('my-github-project');
       vi.mocked(isCancel).mockReturnValue(false);
+      vi.mocked(select).mockResolvedValue('openai');
       vi.mocked(cloneTemplate).mockResolvedValue('/my-github-project');
       vi.mocked(installDependencies).mockResolvedValue();
 
@@ -330,6 +362,8 @@ describe('create command with --template flag', () => {
           slug: 'template-deep-research',
         }),
         projectName: 'my-github-project',
+        branch: 'beta',
+        llmProvider: 'openai',
       });
       expect(note).toHaveBeenCalled();
     });

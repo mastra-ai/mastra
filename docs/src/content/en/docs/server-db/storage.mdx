@@ -1,5 +1,5 @@
 ---
-title: "MastraStorage | Server & DB | Mastra Docs"
+title: "MastraStorage | Server & DB"
 description: Overview of Mastra's storage system and data persistence capabilities.
 ---
 
@@ -489,11 +489,22 @@ console.log(result.messages); // MastraDBMessage[]
 console.log(result.total); // Total count
 console.log(result.hasMore); // Whether more pages exist
 
+// Get messages from multiple threads at once
+const multiThreadResult = await mastra
+  .getStorage()
+  .listMessages({
+    threadId: ["thread-1", "thread-2", "thread-3"],
+    page: 0,
+    perPage: 100
+  });
+
 // Get messages by their IDs
 const messages = await mastra
   .getStorage()
   .listMessagesById({ messageIds: messageIdArr });
 ```
+
+The `threadId` parameter accepts either a single thread ID string or an array of thread IDs to query messages from multiple threads in a single request.
 
 All message queries return `MastraDBMessage[]` format. If you need to convert messages to AI SDK formats for UI rendering, use the conversion utilities from `@mastra/ai-sdk/ui`:
 

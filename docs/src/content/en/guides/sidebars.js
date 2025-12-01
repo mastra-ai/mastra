@@ -10,38 +10,60 @@ const sidebars = {
     "index",
     {
       type: "category",
-      label: "Guides",
+      label: "Getting Started",
       collapsed: false,
       items: [
         {
           type: "doc",
-          id: "guide/chef-michel",
-          label: "Agents: Chef Michel",
+          id: "getting-started/quickstart",
+          label: "Quickstart",
         },
         {
           type: "doc",
-          id: "guide/stock-agent",
-          label: "Tools: Stock Agent",
+          id: "getting-started/next-js",
+          label: "Next.js",
         },
         {
           type: "doc",
-          id: "guide/ai-recruiter",
-          label: "Workflows: AI Recruiter",
+          id: "getting-started/astro",
+          label: "Astro",
         },
         {
           type: "doc",
-          id: "guide/research-assistant",
-          label: "RAG: Research Assistant",
+          id: "getting-started/vite-react",
+          label: "React",
         },
         {
           type: "doc",
-          id: "guide/notes-mcp-server",
-          label: "MCP Server: Notes MCP Server",
+          id: "getting-started/sveltekit",
+          label: "SvelteKit",
         },
         {
           type: "doc",
-          id: "guide/web-search",
-          label: "Tools: Web Search",
+          id: "getting-started/express",
+          label: "Express",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "Build your UI",
+      collapsed: false,
+      items: [
+        {
+          type: "doc",
+          id: "build-your-ui/ai-sdk-ui",
+          label: "AI SDK UI",
+        },
+        {
+          type: "doc",
+          id: "build-your-ui/copilotkit",
+          label: "CopilotKit",
+        },
+        {
+          type: "doc",
+          id: "build-your-ui/assistant-ui",
+          label: "Assistant UI",
         },
       ],
     },
@@ -134,12 +156,59 @@ const sidebars = {
         {
           type: "doc",
           id: "migrations/vnext-to-standard-apis",
-          label: "VNext to Standard APIs",
+          label: "VNext → Standard APIs",
         },
         {
           type: "doc",
           id: "migrations/agentnetwork",
-          label: "AgentNetwork to .network()",
+          label: "AgentNetwork → .network()",
+        },
+        {
+          type: "doc",
+          id: "migrations/ai-sdk-v4-to-v5",
+          label: "AI SDK v4 → v5",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "Guides",
+      collapsed: false,
+      items: [
+        {
+          type: "doc",
+          id: "guide/chef-michel",
+          label: "Agents: Chef Michel",
+        },
+        {
+          type: "doc",
+          id: "guide/stock-agent",
+          label: "Tools: Stock Agent",
+        },
+        {
+          type: "doc",
+          id: "guide/ai-recruiter",
+          label: "Workflows: AI Recruiter",
+        },
+        {
+          type: "doc",
+          id: "guide/research-assistant",
+          label: "RAG: Research Assistant",
+        },
+        {
+          type: "doc",
+          id: "guide/notes-mcp-server",
+          label: "MCP Server: Notes MCP Server",
+        },
+        {
+          type: "doc",
+          id: "guide/web-search",
+          label: "Tools: Web Search",
+        },
+        {
+          type: "doc",
+          id: "guide/whatsapp-chat-bot",
+          label: "WhatsApp Chat Bot",
         },
       ],
     },

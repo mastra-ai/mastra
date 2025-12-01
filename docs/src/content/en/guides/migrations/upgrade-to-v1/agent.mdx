@@ -25,7 +25,7 @@ To migrate, replace all calls to `mastra.getAgents()` with `mastra.listAgents()`
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/agent-get-agents .
+npx @mastra/codemod@beta v1/mastra-plural-apis .
 ```
 
 :::
@@ -177,6 +177,16 @@ To migrate, move `abortSignal` from `modelSettings` to the top level.
   });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/agent-abort-signal .
+```
+
+:::
+
 ### `output` to `structuredOutput.schema`
 
 The deprecated `output` and `experimental_output` options have been removed. This change consolidates on a single, stable API for structured output.
@@ -190,6 +200,35 @@ To migrate, update from `output` or `experimental_output` to `structuredOutput.s
 +     schema: z.object({ result: z.string() }),
 +   },
   });
+```
+
+### Agent `id` field is now required
+
+The `id` field is now required when creating an Agent. Previously, agents could be created without an explicit ID, but this is no longer supported.
+
+To migrate, add an `id` field to all Agent configurations.
+
+```diff
+  const agent = new Agent({
++   id: 'my-agent',
+    name: 'My Agent',
+    instructions: 'You are a helpful assistant',
+    model: openai('gpt-4'),
+  });
+```
+
+The `id` can be the same as the `name`, or you can use a different identifier. The ID will be used when calling `mastra.getAgentById()` and must be unique within your Mastra instance.
+
+```typescript
+// Register agent with Mastra
+const mastra = new Mastra({
+  agents: {
+    myAgent: agent, // key can differ from id
+  },
+});
+
+// Retrieve by ID
+const agent = mastra.getAgentById('my-agent');
 ```
 
 ## Removed

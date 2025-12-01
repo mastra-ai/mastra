@@ -1,5 +1,5 @@
 ---
-title: "Tracing | Observability | Mastra Docs"
+title: "Tracing | Observability"
 description: "Set up Tracing for Mastra applications"
 ---
 
@@ -97,7 +97,24 @@ In addition to the internal exporters, Mastra supports integration with popular 
 - **[Langfuse](/docs/v1/observability/tracing/exporters/langfuse)** - Sends traces to the Langfuse open-source LLM engineering platform
 - **[LangSmith](/docs/v1/observability/tracing/exporters/langsmith)** - Pushes traces into LangSmith's observability and evaluation toolkit
 - **[OpenTelemetry](/docs/v1/observability/tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
-  - Supports: Dash0, Laminar, New Relic, SigNoz, Traceloop, Zipkin, and others!
+  - Supports: Dash0, MLflow, Laminar, New Relic, SigNoz, Traceloop, Zipkin, and others!
+
+## Bridges
+
+Bridges provide bidirectional integration with external tracing systems. Unlike exporters that send trace data to external platforms, bridges create native spans in external systems and inherit context from them. This enables Mastra operations to participate in existing distributed traces.
+
+- **[OpenTelemetry Bridge](/docs/v1/observability/tracing/bridges/otel)** - Integrate with existing OpenTelemetry infrastructure
+
+### Bridges vs Exporters
+
+| Feature | Bridges | Exporters |
+| --- | --- | --- |
+| Creates native spans in external systems | Yes | No |
+| Inherits context from external systems | Yes | No |
+| Sends data to backends | Via external SDK | Directly |
+| Use case | Existing distributed tracing | Standalone Mastra tracing |
+
+You can use both together — a bridge for context propagation and exporters to send traces to additional destinations.
 
 ## Sampling Strategies
 
@@ -619,7 +636,7 @@ console.log("Trace ID:", finalState.traceId);
 Once you have a trace ID, you can:
 
 1. **Look up traces in Studio**: Navigate to the traces view and search by ID
-2. **Query traces in external platforms**: Use the ID in Langfuse, Braintrust, or your observability platform
+2. **Query traces in external platforms**: Use the ID in Langfuse, Braintrust, MLflow, or your observability platform
 3. **Correlate with logs**: Include the trace ID in your application logs for cross-referencing
 4. **Share for debugging**: Provide trace IDs to support teams or developers for investigation
 
@@ -751,10 +768,6 @@ Mastra automatically creates spans for:
 
 ## See Also
 
-### Examples
-
-- [Basic Tracing Example](/examples/v1/observability/basic-tracing) - Working implementation
-
 ### Reference Documentation
 
 - [Configuration API](/reference/v1/observability/tracing/configuration) - ObservabilityConfig details
@@ -770,7 +783,12 @@ Mastra automatically creates spans for:
 - [Arize](/reference/v1/observability/tracing/exporters/arize) - Arize Phoenix and Arize AX integration
 - [Braintrust](/reference/v1/observability/tracing/exporters/braintrust) - Braintrust integration
 - [Langfuse](/reference/v1/observability/tracing/exporters/langfuse) - Langfuse integration
+- [MLflow](/reference/v1/observability/tracing/exporters/otel#mlflow) - MLflow OTLP endpoint setup
 - [OpenTelemetry](/reference/v1/observability/tracing/exporters/otel) - OTEL-compatible platforms
+
+### Bridges
+
+- [OpenTelemetry Bridge](/reference/v1/observability/tracing/bridges/otel) - OTEL context integration
 
 ### Processors
 

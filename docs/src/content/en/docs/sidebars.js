@@ -23,8 +23,8 @@ const sidebars = {
       items: [
         {
           type: "doc",
-          id: "getting-started/installation",
-          label: "Installation",
+          id: "getting-started/start",
+          label: "Start",
         },
         {
           type: "doc",
@@ -41,11 +41,6 @@ const sidebars = {
           id: "getting-started/mcp-docs-server",
           label: "MCP Docs Server",
         },
-        {
-          type: "doc",
-          id: "getting-started/templates",
-          label: "Templates",
-        },
       ],
     },
     {
@@ -61,6 +56,11 @@ const sidebars = {
           type: "doc",
           id: "agents/using-tools",
           label: "Using Tools",
+        },
+        {
+          type: "doc",
+          id: "agents/agent-approval",
+          label: "Agent Approval",
         },
         {
           type: "doc",
@@ -95,6 +95,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "workflows/workflow-state",
+          label: "Workflow State",
+        },
+        {
+          type: "doc",
           id: "workflows/control-flow",
           label: "Control Flow",
         },
@@ -110,11 +115,6 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "workflows/error-handling",
-          label: "Error Handling",
-        },
-        {
-          type: "doc",
           id: "workflows/human-in-the-loop",
           label: "Human-in-the-loop",
         },
@@ -122,6 +122,11 @@ const sidebars = {
           type: "doc",
           id: "workflows/snapshots",
           label: "Snapshots",
+        },
+        {
+          type: "doc",
+          id: "workflows/error-handling",
+          label: "Error Handling",
         },
         {
           type: "doc",
@@ -158,23 +163,18 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Tools & MCP",
+      label: "MCP",
       collapsed: true,
       items: [
         {
           type: "doc",
-          id: "tools-mcp/overview",
+          id: "mcp/overview",
           label: "Overview",
         },
         {
           type: "doc",
-          id: "tools-mcp/mcp-overview",
-          label: "MCP Overview",
-        },
-        {
-          type: "doc",
-          id: "tools-mcp/advanced-usage",
-          label: "Advanced Usage",
+          id: "mcp/publishing-mcp-server",
+          label: "Publishing an MCP Server",
         },
       ],
     },
@@ -224,6 +224,11 @@ const sidebars = {
             },
             {
               type: "doc",
+              id: "memory/storage/memory-with-mongodb",
+              label: "Memory with MongoDB",
+            },
+            {
+              type: "doc",
               id: "memory/storage/memory-with-pg",
               label: "Memory with PostgreSQL",
             },
@@ -268,8 +273,8 @@ const sidebars = {
       items: [
         {
           type: "doc",
-          id: "server-db/production-server",
-          label: "Production Server",
+          id: "server-db/mastra-server",
+          label: "Mastra Server",
         },
         {
           type: "doc",
@@ -309,8 +314,8 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "deployment/server-deployment",
-          label: "Server deployment",
+          id: "deployment/building-mastra",
+          label: "Building Mastra",
         },
         {
           type: "doc",
@@ -324,27 +329,27 @@ const sidebars = {
         },
         {
           type: "category",
-          label: "Serverless Platforms",
+          label: "Mastra Cloud",
           items: [
             {
               type: "doc",
-              id: "deployment/serverless-platforms/index",
+              id: "deployment/mastra-cloud/overview",
               label: "Overview",
             },
             {
               type: "doc",
-              id: "deployment/serverless-platforms/cloudflare-deployer",
-              label: "Cloudflare",
+              id: "deployment/mastra-cloud/setting-up",
+              label: "Setup & Deploy",
             },
             {
               type: "doc",
-              id: "deployment/serverless-platforms/netlify-deployer",
-              label: "Netlify",
+              id: "deployment/mastra-cloud/dashboard",
+              label: "Dashboard",
             },
             {
               type: "doc",
-              id: "deployment/serverless-platforms/vercel-deployer",
-              label: "Vercel",
+              id: "deployment/mastra-cloud/observability",
+              label: "Observability",
             },
           ],
         },
@@ -369,48 +374,32 @@ const sidebars = {
             },
             {
               type: "doc",
+              id: "deployment/cloud-providers/azure-app-services",
+              label: "Azure App Services",
+            },
+            {
+              type: "doc",
+              id: "deployment/cloud-providers/cloudflare-deployer",
+              label: "Cloudflare",
+            },
+            {
+              type: "doc",
               id: "deployment/cloud-providers/digital-ocean",
               label: "Digital Ocean",
             },
             {
               type: "doc",
-              id: "deployment/cloud-providers/azure-app-services",
-              label: "Azure App Services",
+              id: "deployment/cloud-providers/netlify-deployer",
+              label: "Netlify",
+            },
+            {
+              type: "doc",
+              id: "deployment/cloud-providers/vercel-deployer",
+              label: "Vercel",
             },
           ],
         },
       ],
-    },
-    {
-      type: "category",
-      label: "Mastra Cloud",
-      items: [
-        {
-          type: "doc",
-          id: "mastra-cloud/overview",
-          label: "Overview",
-        },
-        {
-          type: "doc",
-          id: "mastra-cloud/setting-up",
-          label: "Setup & Deploy",
-        },
-        {
-          type: "doc",
-          id: "mastra-cloud/dashboard",
-          label: "Dashboard",
-        },
-        {
-          type: "doc",
-          id: "mastra-cloud/observability",
-          label: "Observability",
-        },
-      ],
-    },
-    {
-      type: "doc",
-      id: "logging",
-      label: "Logging",
     },
     {
       type: "category",
@@ -419,7 +408,13 @@ const sidebars = {
         {
           type: "doc",
           id: "observability/overview",
+          key: "observability.overview",
           label: "Overview",
+        },
+        {
+          type: "doc",
+          id: "observability/logging",
+          label: "Logging",
         },
         {
           type: "category",
@@ -428,7 +423,19 @@ const sidebars = {
             {
               type: "doc",
               id: "observability/tracing/overview",
+              key: "observability.tracing.overview",
               label: "Overview",
+            },
+            {
+              type: "category",
+              label: "Bridges",
+              items: [
+                {
+                  type: "doc",
+                  id: "observability/tracing/bridges/otel",
+                  label: "OpenTelemetry",
+                },
+              ],
             },
             {
               type: "category",
@@ -497,8 +504,8 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "evals/off-the-shelf-scorers",
-          label: "Off the Shelf Scorers",
+          id: "evals/built-in-scorers",
+          label: "Built-in Scorers",
         },
         {
           type: "doc",
@@ -576,80 +583,6 @@ const sidebars = {
           type: "doc",
           id: "voice/speech-to-speech",
           label: "Speech to Speech",
-        },
-      ],
-    },
-    {
-      type: "category",
-      label: "Frameworks",
-      items: [
-        {
-          type: "category",
-          label: "Agentic UIs",
-          items: [
-            {
-              type: "doc",
-              id: "frameworks/agentic-uis/ai-sdk",
-              label: "With Vercel AI SDK",
-            },
-            {
-              type: "doc",
-              id: "frameworks/agentic-uis/copilotkit",
-              label: "With CopilotKit",
-            },
-            {
-              type: "doc",
-              id: "frameworks/agentic-uis/assistant-ui",
-              label: "With Assistant UI",
-            },
-            {
-              type: "doc",
-              id: "frameworks/agentic-uis/cedar-os",
-              label: "With Cedar-OS",
-            },
-            {
-              type: "doc",
-              id: "frameworks/agentic-uis/openrouter",
-              label: "With OpenRouter",
-            },
-          ],
-        },
-        {
-          type: "category",
-          label: "Servers",
-          items: [
-            {
-              type: "doc",
-              id: "frameworks/servers/express",
-              label: "With Express",
-            },
-          ],
-        },
-        {
-          type: "category",
-          label: "Web Frameworks",
-          items: [
-            {
-              type: "doc",
-              id: "frameworks/web-frameworks/vite-react",
-              label: "With Vite/React",
-            },
-            {
-              type: "doc",
-              id: "frameworks/web-frameworks/next-js",
-              label: "With Next.js",
-            },
-            {
-              type: "doc",
-              id: "frameworks/web-frameworks/astro",
-              label: "With Astro",
-            },
-            {
-              type: "doc",
-              id: "frameworks/web-frameworks/sveltekit",
-              label: "With SvelteKit",
-            },
-          ],
         },
       ],
     },

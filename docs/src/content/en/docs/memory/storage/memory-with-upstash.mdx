@@ -1,5 +1,5 @@
 ---
-title: "Memory with Upstash | Memory | Mastra Docs"
+title: "Memory with Upstash | Memory"
 description: Example for how to use Mastra's memory system with Upstash Redis storage and vector capabilities.
 ---
 
@@ -34,7 +34,6 @@ To add Upstash memory to an agent use the `Memory` class and create a new `stora
 ```typescript title="src/mastra/agents/example-upstash-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { UpstashStore } from "@mastra/upstash";
 
 export const upstashAgent = new Agent({
@@ -42,7 +41,7 @@ export const upstashAgent = new Agent({
   name: "Upstash Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   memory: new Memory({
     storage: new UpstashStore({
       id: 'upstash-agent-storage',
@@ -71,7 +70,6 @@ Add the following to your agent:
 ```typescript title="src/mastra/agents/example-upstash-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { UpstashStore, UpstashVector } from "@mastra/upstash";
 import { fastembed } from "@mastra/fastembed";
 
@@ -80,7 +78,7 @@ export const upstashAgent = new Agent({
   name: "Upstash Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   memory: new Memory({
     storage: new UpstashStore({
       id: 'upstash-agent-storage',
@@ -146,6 +144,3 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-## Related
-
-- [Calling Agents](/examples/v1/agents/calling-agents)

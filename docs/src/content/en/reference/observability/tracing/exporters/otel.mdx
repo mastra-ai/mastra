@@ -1,5 +1,5 @@
 ---
-title: "Reference: OtelExporter | Observability | Mastra Docs"
+title: "Reference: OtelExporter | Observability"
 description: OpenTelemetry exporter for Tracing
 ---
 
@@ -367,3 +367,9 @@ The exporter preserves span hierarchy from Mastra's Tracing:
 - Uses `parentSpanId` directly from Mastra spans
 - Maintains correct nesting for agents, workflows, LLM calls, and tools
 - Exports complete traces with all relationships intact
+
+## Related
+
+- [OtelExporter Guide](/docs/v1/observability/tracing/exporters/otel) - Setup guide with provider configurations
+- [OtelBridge](/docs/v1/observability/tracing/bridges/otel) - For bidirectional OTEL context integration
+- [Tracing Overview](/docs/v1/observability/tracing/overview) - General tracing concepts

@@ -1,7 +1,8 @@
-import { PassThrough } from 'stream';
+import { PassThrough } from 'node:stream';
 
 import { MastraVoice } from '@mastra/core/voice';
 import OpenAI from 'openai';
+import type { ClientOptions } from 'openai';
 
 type OpenAIVoiceId = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer' | 'ash' | 'coral' | 'sage';
 type OpenAIModel = 'tts-1' | 'tts-1-hd' | 'whisper-1';
@@ -9,6 +10,7 @@ type OpenAIModel = 'tts-1' | 'tts-1-hd' | 'whisper-1';
 export interface OpenAIConfig {
   name?: OpenAIModel;
   apiKey?: string;
+  options?: Omit<ClientOptions, 'apiKey'>;
 }
 
 export interface OpenAIVoiceConfig {
@@ -16,10 +18,12 @@ export interface OpenAIVoiceConfig {
     model: 'tts-1' | 'tts-1-hd';
     apiKey?: string;
     speaker?: OpenAIVoiceId;
+    options?: Omit<ClientOptions, 'apiKey'>;
   };
   listening?: {
     model: 'whisper-1';
     apiKey?: string;
+    options?: Omit<ClientOptions, 'apiKey'>;
   };
 }
 
@@ -71,13 +75,19 @@ export class OpenAIVoice extends MastraVoice {
     if (!speechApiKey) {
       throw new Error('No API key provided for speech model');
     }
-    this.speechClient = new OpenAI({ apiKey: speechApiKey });
+    this.speechClient = new OpenAI({
+      apiKey: speechApiKey,
+      ...speechModel?.options,
+    });
 
     const listeningApiKey = listeningModel?.apiKey || defaultApiKey;
     if (!listeningApiKey) {
       throw new Error('No API key provided for listening model');
     }
-    this.listeningClient = new OpenAI({ apiKey: listeningApiKey });
+    this.listeningClient = new OpenAI({
+      apiKey: listeningApiKey,
+      ...listeningModel?.options,
+    });
 
     if (!this.speechClient && !this.listeningClient) {
       throw new Error('At least one of OPENAI_API_KEY, speechModel.apiKey, or listeningModel.apiKey must be set');

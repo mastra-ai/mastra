@@ -1,4 +1,4 @@
-import type { ReadableStream } from 'stream/web';
+import type { ReadableStream } from 'node:stream/web';
 import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 
 async function sharedProcessMastraStream({
@@ -29,7 +29,6 @@ async function sharedProcessMastraStream({
           const data = line.slice(6); // Remove 'data: '
 
           if (data === '[DONE]') {
-            console.info('🏁 Stream finished');
             return;
           }
           let json;

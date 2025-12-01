@@ -1,6 +1,6 @@
 :root {
   --chatbot-sidebar-width: 400px;
-  --chatbot-sidebar-hidden-width: fit-content;
+  --chatbot-sidebar-hidden-width: 40px;
 }
 
 .chatbotSidebarContainer {
@@ -9,39 +9,20 @@
 
 @media (min-width: 997px) {
   .chatbotSidebarContainer {
-    display: block;
+    display: flex;
+    flex-direction: column;
     width: var(--chatbot-sidebar-width);
-    margin-top: calc(-1 * var(--ifm-navbar-height));
+    height: calc(100vh - var(--ifm-navbar-height));
     margin-left: auto;
     border-left: 0.5px solid var(--border);
-    will-change: width;
-    background-color: var(--mastra-surface-1);
-    position: relative;
+    background-color: var(--ifm-navbar-background-color);
+    position: fixed;
+    bottom: 0;
+    right: 0;
   }
 
   .chatbotSidebarContainerHidden {
     width: var(--chatbot-sidebar-hidden-width);
-  }
-
-  .sidebarViewport {
-    top: 0;
-    overflow-y: auto;
-    position: sticky;
-    padding-top: calc(var(--ifm-navbar-height) - 11px);
-    min-height: 100vh;
-    max-height: 100vh;
-    display: flex;
-    flex-direction: column;
-
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    &::-webkit-scrollbar {
-      display: none;
-    }
-  }
-
-  .sidebarViewportHidden {
-    opacity: 0.5;
   }
 
   /* Chatbot content */

@@ -1,5 +1,5 @@
-import { join } from 'path';
-import process from 'process';
+import { join } from 'node:path';
+import process from 'node:process';
 import { Deployer } from '@mastra/deployer';
 import { DepsService } from '@mastra/deployer/services';
 import { move, writeJson } from 'fs-extra/esm';

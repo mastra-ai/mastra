@@ -1,5 +1,5 @@
 ---
-title: "Adding Voice to Agents | Agents | Mastra Docs"
+title: "Adding Voice to Agents | Agents"
 ---
 
 # Adding Voice to Agents
@@ -15,7 +15,6 @@ import { createReadStream } from "fs";
 import path from "path";
 import { Agent } from "@mastra/core/agent";
 import { OpenAIVoice } from "@mastra/voice-openai";
-import { openai } from "@ai-sdk/openai";
 
 // Initialize the voice provider with default settings
 const voice = new OpenAIVoice();
@@ -25,7 +24,7 @@ export const agent = new Agent({
   id: "voice-agent",
   name: "Voice Agent",
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice,
 });
 
@@ -105,7 +104,7 @@ import { search, calculate } from "../tools";
 // Initialize the realtime voice provider
 const voice = new OpenAIRealtimeVoice({
   apiKey: process.env.OPENAI_API_KEY,
-  model: "gpt-4o-mini-realtime",
+  model: "gpt-5.1-realtime",
   speaker: "alloy",
 });
 
@@ -114,7 +113,7 @@ export const agent = new Agent({
   id: "speech-to-speech-agent",
   name: "Speech-to-Speech Agent",
   instructions: `You are a helpful assistant with speech-to-speech capabilities.`,
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   tools: {
     // Tools configured on Agent are passed to voice provider
     search,
@@ -178,7 +177,6 @@ import { Agent } from "@mastra/core/agent";
 import { CompositeVoice } from "@mastra/core/voice";
 import { OpenAIVoice } from "@mastra/voice-openai";
 import { Mastra } from "@mastra/core";
-import { openai } from "@ai-sdk/openai";
 
 // Saves an audio stream to a file in the audio directory, creating the directory if it doesn't exist.
 export const saveAudioToFile = async (
@@ -217,7 +215,7 @@ export const convertToText = async (
 export const hybridVoiceAgent = new Agent({
   id: "hybrid-voice-agent",
   name: "Hybrid Voice Agent",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   instructions: "You can speak and listen using different providers.",
   voice: new CompositeVoice({
     input: new OpenAIVoice(),
@@ -229,7 +227,7 @@ export const unifiedVoiceAgent = new Agent({
   id: "unified-voice-agent",
   name: "Unified Voice Agent",
   instructions: "You are an agent with both STT and TTS capabilities.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new OpenAIVoice(),
 });
 
@@ -269,13 +267,12 @@ import { Agent } from "@mastra/core/agent";
 import { CompositeVoice } from "@mastra/core/voice";
 import { OpenAIVoice } from "@mastra/voice-openai";
 import { PlayAIVoice } from "@mastra/voice-playai";
-import { openai } from "@ai-sdk/openai";
 
 export const agent = new Agent({
   id: "voice-agent",
   name: "Voice Agent",
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
 
   // Create a composite voice using OpenAI for listening and PlayAI for speaking
   voice: new CompositeVoice({
@@ -284,6 +281,55 @@ export const agent = new Agent({
   }),
 });
 ```
+
+### Using AI SDK
+
+Mastra supports using AI SDK's transcription and speech models directly in `CompositeVoice`, giving you access to a wide range of providers through the AI SDK ecosystem:
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { CompositeVoice } from "@mastra/core/voice";
+import { openai } from "@ai-sdk/openai";
+import { elevenlabs } from "@ai-sdk/elevenlabs";
+import { groq } from "@ai-sdk/groq";
+
+export const agent = new Agent({
+  id: "aisdk-voice-agent",
+  name: "AI SDK Voice Agent",
+  instructions: `You are a helpful assistant with voice capabilities.`,
+  model: openai("gpt-5.1"),
+
+  // Pass AI SDK models directly to CompositeVoice
+  voice: new CompositeVoice({
+    input: openai.transcription('whisper-1'),      // AI SDK transcription model
+    output: elevenlabs.speech('eleven_turbo_v2'),  // AI SDK speech model
+  }),
+});
+
+// Use voice capabilities as usual
+const audioStream = await agent.voice.speak("Hello!");
+const transcribedText = await agent.voice.listen(audioStream);
+```
+
+#### Mix and Match Providers
+
+You can mix AI SDK models with Mastra voice providers:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { PlayAIVoice } from "@mastra/voice-playai";
+import { openai } from "@ai-sdk/openai";
+
+// Use AI SDK for transcription and Mastra provider for speech
+const voice = new CompositeVoice({
+  input: openai.transcription('whisper-1'),  // AI SDK
+  output: new PlayAIVoice(),                  // Mastra provider
+});
+```
+
+For the complete list of supported AI SDK providers and their capabilities:
+* [Transcription](https://ai-sdk.dev/docs/providers/openai/transcription)
+* [Speech](https://ai-sdk.dev/docs/providers/elevenlabs/speech)
 
 ## Supported Voice Providers
 

@@ -1,0 +1,288 @@
+import type { Mastra } from '@mastra/core/mastra';
+import type { RequestContext } from '@mastra/core/request-context';
+import type { Tool } from '@mastra/core/tools';
+import { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import type { ServerRoute, BodyLimitOptions } from '@mastra/server/server-adapter';
+import { MastraServerAdapter } from '@mastra/server/server-adapter';
+import type { Application, NextFunction, Request, Response } from 'express';
+
+// Extend Express types to include Mastra context
+declare global {
+  namespace Express {
+    interface Locals {
+      mastra: Mastra;
+      requestContext: RequestContext;
+      abortSignal: AbortSignal;
+      tools: Record<string, Tool>;
+      taskStore: InMemoryTaskStore;
+      customRouteAuthConfig?: Map<string, boolean>;
+      playground?: boolean;
+      isDev?: boolean;
+    }
+  }
+}
+
+export class ExpressServerAdapter extends MastraServerAdapter<Application, Request, Response> {
+  private taskStore: InMemoryTaskStore;
+  private customRouteAuthConfig?: Map<string, boolean>;
+  private playground?: boolean;
+  private isDev?: boolean;
+
+  constructor({
+    mastra,
+    tools,
+    taskStore,
+    customRouteAuthConfig,
+    playground,
+    isDev,
+    bodyLimitOptions,
+  }: {
+    mastra: Mastra;
+    tools?: Record<string, Tool>;
+    taskStore?: InMemoryTaskStore;
+    customRouteAuthConfig?: Map<string, boolean>;
+    playground?: boolean;
+    isDev?: boolean;
+    bodyLimitOptions?: BodyLimitOptions;
+  }) {
+    super({ mastra, bodyLimitOptions, tools });
+    this.taskStore = taskStore || new InMemoryTaskStore();
+    this.customRouteAuthConfig = customRouteAuthConfig;
+    this.playground = playground;
+    this.isDev = isDev;
+  }
+
+  createContextMiddleware(): (req: Request, res: Response, next: NextFunction) => Promise<void> {
+    return async (req: Request, res: Response, next: NextFunction) => {
+      // Parse request context from request body and add to context
+      let bodyRequestContext: Record<string, any> | undefined;
+      let paramsRequestContext: Record<string, any> | undefined;
+
+      // Parse request context from request body (POST/PUT)
+      if (req.method === 'POST' || req.method === 'PUT') {
+        const contentType = req.headers['content-type'];
+        if (contentType?.includes('application/json') && req.body) {
+          if (req.body.requestContext) {
+            bodyRequestContext = req.body.requestContext;
+          }
+        }
+      }
+
+      // Parse request context from query params (GET)
+      if (req.method === 'GET') {
+        try {
+          const encodedRequestContext = req.query.requestContext;
+          if (typeof encodedRequestContext === 'string') {
+            // Try JSON first
+            try {
+              paramsRequestContext = JSON.parse(encodedRequestContext);
+            } catch {
+              // Fallback to base64(JSON)
+              try {
+                const json = Buffer.from(encodedRequestContext, 'base64').toString('utf-8');
+                paramsRequestContext = JSON.parse(json);
+              } catch {
+                // ignore if still invalid
+              }
+            }
+          }
+        } catch {
+          // ignore query parsing errors
+        }
+      }
+
+      const requestContext = this.mergeRequestContext({ paramsRequestContext, bodyRequestContext });
+
+      // Set context in res.locals
+      res.locals.requestContext = requestContext;
+      res.locals.mastra = this.mastra;
+      res.locals.tools = this.tools || {};
+      res.locals.taskStore = this.taskStore;
+      res.locals.playground = this.playground === true;
+      res.locals.isDev = this.isDev === true;
+      res.locals.customRouteAuthConfig = this.customRouteAuthConfig;
+      const controller = new AbortController();
+      req.on('close', () => {
+        controller.abort();
+      });
+      res.locals.abortSignal = controller.signal;
+      next();
+    };
+  }
+  async stream(route: ServerRoute, res: Response, result: { fullStream: ReadableStream }): Promise<void> {
+    res.setHeader('Content-Type', 'text/plain');
+    res.setHeader('Transfer-Encoding', 'chunked');
+
+    const streamFormat = route.streamFormat || 'stream';
+
+    const readableStream = result instanceof ReadableStream ? result : result.fullStream;
+    const reader = readableStream.getReader();
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        if (value) {
+          if (streamFormat === 'sse') {
+            res.write(`data: ${JSON.stringify(value)}\n\n`);
+          } else {
+            res.write(JSON.stringify(value) + '\x1E');
+          }
+        }
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      res.end();
+    }
+  }
+
+  async getParams(
+    route: ServerRoute,
+    request: Request,
+  ): Promise<{ urlParams: Record<string, string>; queryParams: Record<string, string>; body: unknown }> {
+    const urlParams = request.params;
+    const queryParams = request.query;
+    const body = await request.body;
+    return { urlParams, queryParams: queryParams as Record<string, string>, body };
+  }
+
+  async sendResponse(route: ServerRoute, response: Response, result: unknown): Promise<void> {
+    if (route.responseType === 'json') {
+      response.json(result);
+    } else if (route.responseType === 'stream') {
+      await this.stream(route, response, result as { fullStream: ReadableStream });
+    } else if (route.responseType === 'datastream-response') {
+      // Handle AI SDK Response objects - pipe Response.body to Express response
+      const fetchResponse = result as globalThis.Response;
+      fetchResponse.headers.forEach((value, key) => response.setHeader(key, value));
+      response.status(fetchResponse.status);
+      if (fetchResponse.body) {
+        const reader = fetchResponse.body.getReader();
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            response.write(value);
+          }
+        } finally {
+          response.end();
+        }
+      } else {
+        response.end();
+      }
+    } else {
+      response.sendStatus(500);
+    }
+  }
+
+  async registerRoute(app: Application, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+    // Determine if body limits should be applied
+    const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
+
+    // Get the body size limit for this route (route-specific or default)
+    const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
+
+    // Create middleware array
+    const middlewares: Array<(req: Request, res: Response, next: NextFunction) => void> = [];
+
+    // Add body limit middleware if needed
+    if (shouldApplyBodyLimit && maxSize && this.bodyLimitOptions) {
+      const bodyLimitMiddleware = (req: Request, res: Response, next: NextFunction) => {
+        const contentLength = req.headers['content-length'];
+        if (contentLength && parseInt(contentLength, 10) > maxSize) {
+          try {
+            const errorResponse = this.bodyLimitOptions!.onError({ error: 'Request body too large' });
+            return res.status(413).json(errorResponse);
+          } catch {
+            return res.status(413).json({ error: 'Request body too large' });
+          }
+        }
+        next();
+      };
+      middlewares.push(bodyLimitMiddleware);
+    }
+
+    app[route.method.toLowerCase() as keyof Application](
+      `${prefix}${route.path}`,
+      ...middlewares,
+      async (req: Request, res: Response) => {
+        const params = await this.getParams(route, req);
+
+        if (params.queryParams) {
+          try {
+            params.queryParams = await this.parseQueryParams(route, params.queryParams as Record<string, string>);
+          } catch (error) {
+            console.error('Error parsing query params', error);
+            // Zod validation errors should return 400 Bad Request, not 500
+            return res.status(400).json({
+              error: 'Invalid query parameters',
+              details: error instanceof Error ? error.message : 'Unknown error',
+            });
+          }
+        }
+
+        if (params.body) {
+          try {
+            params.body = await this.parseBody(route, params.body);
+          } catch (error) {
+            console.error('Error parsing body', error);
+            // Zod validation errors should return 400 Bad Request, not 500
+            return res.status(400).json({
+              error: 'Invalid request body',
+              details: error instanceof Error ? error.message : 'Unknown error',
+            });
+          }
+        }
+
+        const handlerParams = {
+          ...params.urlParams,
+          ...params.queryParams,
+          ...(typeof params.body === 'object' ? params.body : {}),
+          requestContext: res.locals.requestContext,
+          mastra: this.mastra,
+          tools: res.locals.tools,
+          taskStore: res.locals.taskStore,
+          abortSignal: res.locals.abortSignal,
+        };
+
+        try {
+          const result = await route.handler(handlerParams);
+          await this.sendResponse(route, res, result);
+        } catch (error) {
+          console.error('Error calling handler', error);
+          // Check if it's an HTTPException or MastraError with a status code
+          let status = 500;
+          if (error && typeof error === 'object') {
+            // Check for direct status property (HTTPException)
+            if ('status' in error) {
+              status = (error as any).status;
+            }
+            // Check for MastraError with status in details
+            else if (
+              'details' in error &&
+              error.details &&
+              typeof error.details === 'object' &&
+              'status' in error.details
+            ) {
+              status = (error.details as any).status;
+            }
+          }
+          res.status(status).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+        }
+      },
+    );
+  }
+
+  registerContextMiddleware(app: Application): void {
+    app.use(this.createContextMiddleware());
+  }
+
+  async registerRoutes(
+    app: Application,
+    { prefix, openapiPath }: { prefix?: string; openapiPath?: string },
+  ): Promise<void> {
+    await super.registerRoutes(app, { prefix, openapiPath });
+  }
+}
