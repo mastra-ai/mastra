@@ -99,9 +99,16 @@ export class InMemoryMemory extends MemoryStorage {
     page = 0,
     orderBy,
   }: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    this.logger.debug(`MockStore: listMessages called for thread ${threadId}`);
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
 
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+    this.logger.debug(`MockStore: listMessages called for threads ${threadIds.join(', ')}`);
+
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
+      throw new Error('threadId must be a non-empty string or array of non-empty strings');
+    }
+
+    const threadIdSet = new Set(threadIds);
 
     const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
@@ -122,9 +129,9 @@ export class InMemoryMemory extends MemoryStorage {
 
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-    // Step 1: Get regular paginated messages from the thread first
+    // Step 1: Get regular paginated messages from the thread(s) first
     let threadMessages = Array.from(this.collection.messages.values()).filter((msg: any) => {
-      if (msg.thread_id !== threadId) return false;
+      if (!threadIdSet.has(msg.thread_id)) return false;
       if (resourceId && msg.resourceId !== resourceId) return false;
       return true;
     });
