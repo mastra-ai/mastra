@@ -1556,10 +1556,10 @@ export class MessageList {
   private generateCreatedAt(messageSource: MessageSource, start?: unknown): Date {
     // Normalize timestamp
     const startDate: Date | undefined =
-      typeof start === 'string' || typeof start === 'number'
-        ? new Date(start)
-        : start instanceof Date
-          ? start
+      start instanceof Date
+        ? start
+        : typeof start === 'string' || typeof start === 'number'
+          ? new Date(start)
           : undefined;
 
     if (startDate && !this.lastCreatedAt) {
