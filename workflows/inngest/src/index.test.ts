@@ -3090,6 +3090,128 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
     });
+
+    it('should run foreach with nested workflow', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      // Steps for the nested workflow (from issue #9965)
+      const cyclePhasesStep1 = createStep({
+        id: 'phase-1',
+        description: 'phase number 1',
+        inputSchema: z.object({
+          element: z.string(),
+        }),
+        outputSchema: z.object({
+          element: z.string(),
+        }),
+        execute: async ({ inputData }) => {
+          return { element: inputData.element };
+        },
+      });
+
+      const cyclePhasesStep2 = createStep({
+        id: 'phase-2',
+        description: 'phase number 2',
+        inputSchema: z.object({
+          element: z.string(),
+        }),
+        outputSchema: z.object({
+          element: z.string(),
+        }),
+        execute: async ({ inputData }) => {
+          return { element: inputData.element };
+        },
+      });
+
+      const cyclePhasesStep3 = createStep({
+        id: 'phase-3',
+        description: 'phase number 3',
+        inputSchema: z.object({
+          element: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        execute: async ({ inputData }) => {
+          return { result: inputData.element };
+        },
+      });
+
+      // Create nested workflow with multiple steps
+      const dynamicWorkflowPhases = createWorkflow({
+        id: 'dynamicWorkflowPhases',
+        inputSchema: z.object({
+          element: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      })
+        .then(cyclePhasesStep1)
+        .then(cyclePhasesStep2)
+        .then(cyclePhasesStep3)
+        .commit();
+
+      // Issue #9965: Wrap the nested workflow in createStep() - this causes the bug
+      // because createStep() strips the InngestWorkflow class identity
+      const dynamicWorkflowPhasesStep = createStep(dynamicWorkflowPhases);
+
+      // Create orchestrator workflow that uses foreach with the nested workflow
+      const dynamicWorkflowOrchestrator = createWorkflow({
+        id: 'dynamicWorkflowOrchestrator',
+        inputSchema: z.object({
+          elements: z.array(z.string()),
+        }),
+        outputSchema: z.array(z.object({ result: z.string() })),
+      })
+        .map(async ({ inputData }) => {
+          return inputData.elements.map(element => {
+            return { element: element };
+          });
+        })
+        .foreach(dynamicWorkflowPhasesStep)
+        .commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': dynamicWorkflowOrchestrator,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await dynamicWorkflowOrchestrator.createRun();
+      const result = await run.start({ inputData: { elements: ['a', 'b', 'c'] } });
+
+      expect(result.status).toBe('success');
+      expect(result.result).toEqual([{ result: 'a' }, { result: 'b' }, { result: 'c' }]);
+
+      srv.close();
+    });
   });
 
   describe('if-else branching', () => {

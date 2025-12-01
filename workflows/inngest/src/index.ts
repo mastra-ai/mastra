@@ -24,6 +24,10 @@ function isTool(params: any): params is Tool<any, any, any> {
   return params instanceof Tool;
 }
 
+function isInngestWorkflow(params: any): params is InngestWorkflow {
+  return params instanceof InngestWorkflow;
+}
+
 export function createStep<
   TStepId extends string,
   TState extends z.ZodObject<any>,
@@ -69,6 +73,20 @@ export function createStep<
     | ToolStep<TStepInput, TSuspendSchema, TResumeSchema, TStepOutput, any>,
   agentOptions?: AgentStepOptions,
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType> {
+  // Issue #9965: Preserve InngestWorkflow identity when passed to createStep
+  // This ensures nested workflows in foreach are properly detected by isNestedWorkflowStep()
+  if (isInngestWorkflow(params)) {
+    return params as unknown as Step<
+      TStepId,
+      TState,
+      TStepInput,
+      TStepOutput,
+      TResumeSchema,
+      TSuspendSchema,
+      InngestEngineType
+    >;
+  }
+
   if (isAgent(params)) {
     return {
       id: params.name as TStepId,
