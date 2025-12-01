@@ -5,6 +5,7 @@ import { serve } from '@hono/node-server';
 import { Agent } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { MCPServerConfig, Repository, PackageInfo, RemoteInfo, ConvertedTool } from '@mastra/core/mcp';
+import { createTool } from '@mastra/core/tools';
 import { createStep, Workflow } from '@mastra/core/workflows';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type {
@@ -156,7 +157,8 @@ describe('MCPServer', () => {
     vi.clearAllMocks();
 
     // @ts-ignore - Mocking Date completely
-    global.Date = vi.fn((...args: any[]) => {
+    // Must use a regular function (not arrow function) to support `new Date()` constructor calls
+    global.Date = vi.fn(function (this: any, ...args: any[]) {
       if (args.length === 0) {
         // new Date()
         return mockDate;
@@ -168,9 +170,7 @@ describe('MCPServer', () => {
     // @ts-ignore
     global.Date.now = vi.fn(() => mockDate.getTime());
     // @ts-ignore
-    global.Date.prototype.toISOString = vi.fn(() => mockDateISO);
-    // @ts-ignore // Static Date.toISOString() might be used by some libraries
-    global.Date.toISOString = vi.fn(() => mockDateISO);
+    global.Date.prototype = OriginalDate.prototype;
   });
 
   // Restore original Date after all tests in this describe block
@@ -1226,7 +1226,11 @@ describe('MCPServer', () => {
   describe('MCPServer Session Management', () => {
     let sessionServer: MCPServer;
     let sessionHttpServer: http.Server;
-    const SESSION_TEST_PORT = 9600 + Math.floor(Math.random() * 1000);
+    let currentTestPort: number;
+
+    beforeEach(() => {
+      currentTestPort = 9600 + Math.floor(Math.random() * 1000);
+    });
 
     afterEach(async () => {
       if (sessionHttpServer) {
@@ -1251,7 +1255,7 @@ describe('MCPServer', () => {
       });
 
       sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
-        const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
         await sessionServer.startHTTP({
           url,
           httpPath: '/http',
@@ -1261,21 +1265,21 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(SESSION_TEST_PORT, () => resolve()));
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
 
       const client = new InternalMastraMCPClient({
         name: 'default-session-client',
         server: {
-          url: new URL(`http://localhost:${SESSION_TEST_PORT}/http`),
+          url: new URL(`http://localhost:${currentTestPort}/http`),
         },
       });
 
       await client.connect();
 
       // Verify that a session was created by checking if we can list tools
-      const tools = await client.listTools();
+      const tools = await client.tools();
       expect(tools).toBeDefined();
-      expect(tools.tools).toBeInstanceOf(Array);
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
 
       await client.disconnect();
     });
@@ -1288,7 +1292,7 @@ describe('MCPServer', () => {
       });
 
       sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
-        const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
         await sessionServer.startHTTP({
           url,
           httpPath: '/http',
@@ -1300,21 +1304,21 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(SESSION_TEST_PORT, () => resolve()));
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
 
       const client = new InternalMastraMCPClient({
         name: 'no-session-client',
         server: {
-          url: new URL(`http://localhost:${SESSION_TEST_PORT}/http`),
+          url: new URL(`http://localhost:${currentTestPort}/http`),
         },
       });
 
       await client.connect();
 
       // Should work in stateless mode
-      const tools = await client.listTools();
+      const tools = await client.tools();
       expect(tools).toBeDefined();
-      expect(tools.tools).toBeInstanceOf(Array);
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
 
       await client.disconnect();
     });
@@ -1327,7 +1331,7 @@ describe('MCPServer', () => {
       });
 
       sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
-        const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
         await sessionServer.startHTTP({
           url,
           httpPath: '/http',
@@ -1339,21 +1343,21 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(SESSION_TEST_PORT, () => resolve()));
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
 
       const client = new InternalMastraMCPClient({
         name: 'serverless-client',
         server: {
-          url: new URL(`http://localhost:${SESSION_TEST_PORT}/http`),
+          url: new URL(`http://localhost:${currentTestPort}/http`),
         },
       });
 
       await client.connect();
 
       // Should work in stateless serverless mode
-      const tools = await client.listTools();
+      const tools = await client.tools();
       expect(tools).toBeDefined();
-      expect(tools.tools).toBeInstanceOf(Array);
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
 
       await client.disconnect();
     });
@@ -1375,7 +1379,7 @@ describe('MCPServer', () => {
       });
 
       sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
-        const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
         await sessionServer.startHTTP({
           url,
           httpPath: '/http',
@@ -1387,12 +1391,12 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(SESSION_TEST_PORT, () => resolve()));
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
 
       const client = new InternalMastraMCPClient({
         name: 'custom-session-client',
         server: {
-          url: new URL(`http://localhost:${SESSION_TEST_PORT}/http`),
+          url: new URL(`http://localhost:${currentTestPort}/http`),
         },
       });
 
@@ -1414,7 +1418,7 @@ describe('MCPServer', () => {
       });
 
       sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
-        const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
 
         await sessionServer.startHTTP({
           url,
@@ -1423,33 +1427,27 @@ describe('MCPServer', () => {
           res,
           options: {
             sessionIdGenerator: undefined, // User explicitly disables sessions
-            // The default is sessionIdGenerator: () => randomUUID()
-            // This test verifies that the user's undefined overrides the default
           },
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(SESSION_TEST_PORT, () => resolve()));
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
 
       const client = new InternalMastraMCPClient({
         name: 'override-test-client',
         server: {
-          url: new URL(`http://localhost:${SESSION_TEST_PORT}/http`),
+          url: new URL(`http://localhost:${currentTestPort}/http`),
         },
       });
 
       await client.connect();
 
-      // Should work with sessions disabled
-      const tools = await client.listTools();
+      // Should work with serverless mode enabled
+      const tools = await client.tools();
       expect(tools).toBeDefined();
-      expect(tools.tools).toBeInstanceOf(Array);
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
 
       await client.disconnect();
-
-      // Note: serverlessModeCalled check is removed because sessionIdGenerator: undefined
-      // doesn't automatically trigger serverless mode - it just disables session tracking
-      // Serverless mode is only triggered by options.serverless: true
     });
   });
 });
@@ -1593,6 +1591,204 @@ describe('MCPServer - Agent to Tool Conversion', () => {
         }),
     ).toThrow('must have a non-empty description');
   });
+
+  it('should pass MCP context to tools both directly and through agents', async () => {
+    const mockExtra: MCPRequestHandlerExtra = {
+      signal: new AbortController().signal,
+      sessionId: 'auth-test-session',
+      authInfo: {
+        token: 'test-auth-token-123',
+        clientId: 'test-client-456',
+        scopes: ['read', 'write'],
+      },
+      requestId: 'auth-test-request',
+      sendNotification: vi.fn(),
+      sendRequest: vi.fn(),
+    };
+
+    let directToolOptions: any = null;
+    const directAuthCheckTool: ToolsInput = {
+      authCheck: {
+        description: 'Tool that checks for auth context',
+        parameters: z.object({ query: z.string().optional() }),
+        execute: async (args, options) => {
+          directToolOptions = options;
+          return {
+            source: 'direct-mcp',
+            authInfo: options?.mcp?.extra?.authInfo,
+          };
+        },
+      },
+    };
+
+    server = new MCPServer({
+      name: 'DirectToolServer',
+      version: '1.0.0',
+      tools: directAuthCheckTool,
+    });
+
+    const serverInstance = server.getServer();
+    // @ts-ignore
+    const requestHandlers = serverInstance._requestHandlers;
+    const callToolHandler = requestHandlers.get('tools/call');
+
+    await callToolHandler(
+      {
+        jsonrpc: '2.0' as const,
+        id: 'test-direct-tool-1',
+        method: 'tools/call' as const,
+        params: {
+          name: 'authCheck',
+          arguments: { query: 'direct call' },
+        },
+      },
+      mockExtra,
+    );
+
+    expect(directToolOptions).toBeDefined();
+    expect(directToolOptions.mcp).toBeDefined();
+    expect(directToolOptions.mcp.extra.authInfo.token).toBe('test-auth-token-123');
+    expect(directToolOptions.mcp.extra.authInfo.clientId).toBe('test-client-456');
+    expect(directToolOptions.mcp.extra.sessionId).toBe('auth-test-session');
+
+    let agentContextObj: any = null;
+    let agentExecOptions: any = null;
+
+    const agentAuthCheckToolInstance = createTool({
+      id: 'authCheck',
+      description: 'Tool that checks for auth context',
+      inputSchema: z.object({ query: z.string().optional() }),
+      execute: async (inputData, context) => {
+        agentContextObj = context;
+        agentExecOptions = context;
+        const mcpExtra = context?.runtimeContext?.get('mcp.extra');
+        return {
+          source: 'agent-runtime-context',
+          authInfo: mcpExtra?.authInfo,
+        };
+      },
+    });
+
+    const agentMock = new MockLanguageModelV2({
+      doGenerate: async params => {
+        const hasToolResults = params.prompt.some(
+          (msg: any) =>
+            msg.role === 'tool' ||
+            (Array.isArray(msg.content) && msg.content.some((c: any) => c.type === 'tool-result')),
+        );
+
+        if (!hasToolResults) {
+          return {
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'call-1',
+                toolName: 'authCheck',
+                input: JSON.stringify({ query: 'agent call' }),
+              },
+            ],
+            warnings: [],
+          };
+        } else {
+          return {
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Tool executed successfully' }],
+            warnings: [],
+          };
+        }
+      },
+      doStream: async params => {
+        const hasToolResults = params.prompt.some(
+          (msg: any) =>
+            msg.role === 'tool' ||
+            (Array.isArray(msg.content) && msg.content.some((c: any) => c.type === 'tool-result')),
+        );
+
+        if (!hasToolResults) {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolName: 'authCheck',
+                input: JSON.stringify({ query: 'agent call' }),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ] as any),
+          };
+        } else {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-delta', id: 'text-1', delta: 'Tool executed successfully' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ] as any),
+          };
+        }
+      },
+    });
+
+    const agentWithTool = new Agent({
+      id: 'AgentWithAuthCheckTool',
+      name: 'AgentWithAuthCheckTool',
+      instructions: 'You use the authCheck tool',
+      description: 'Agent that uses authCheck tool',
+      model: agentMock,
+      tools: { authCheck: agentAuthCheckToolInstance },
+    });
+
+    server = new MCPServer({
+      name: 'AgentAuthContextServer',
+      version: '1.0.0',
+      tools: {},
+      agents: { authAgent: agentWithTool },
+    });
+
+    const serverInstance2 = server.getServer();
+    // @ts-ignore
+    const requestHandlers2 = serverInstance2._requestHandlers;
+    const callToolHandler2 = requestHandlers2.get('tools/call');
+
+    await callToolHandler2(
+      {
+        jsonrpc: '2.0' as const,
+        id: 'test-agent-tool-1',
+        method: 'tools/call' as const,
+        params: {
+          name: 'ask_authAgent',
+          arguments: { message: 'Please check auth' },
+        },
+      },
+      mockExtra,
+    );
+
+    expect(agentContextObj).toBeDefined();
+    expect(agentContextObj.runtimeContext).toBeDefined();
+    expect(typeof agentContextObj.runtimeContext.get).toBe('function');
+
+    const mcpExtra = agentContextObj.runtimeContext.get('mcp.extra');
+    expect(mcpExtra).toBeDefined();
+    expect(mcpExtra.authInfo).toBeDefined();
+    expect(mcpExtra.authInfo.token).toBe('test-auth-token-123');
+    expect(mcpExtra.authInfo.clientId).toBe('test-client-456');
+    expect(mcpExtra.sessionId).toBe('auth-test-session');
+    expect(mcpExtra.requestId).toBe('auth-test-request');
+    expect(agentExecOptions.mcp).toBeUndefined();
+  });
 });
 
 describe('MCPServer - Workflow to Tool Conversion', () => {
@@ -1603,7 +1799,7 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
   });
 
   it('should convert a provided workflow to an MCP tool', () => {
-    const testWorkflow = createMockWorkflow('MyTestWorkflow', 'A test workflow.');
+    const testWorkflow = createMockWorkflow('MyTestWorkflow', 'A test workflow.', z.object({ input: z.string() }));
     server = new MCPServer({
       name: 'WorkflowToolServer',
       version: '1.0.0',

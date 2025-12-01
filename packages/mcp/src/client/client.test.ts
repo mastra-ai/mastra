@@ -578,3 +578,94 @@ describe('MastraMCPClient - AuthProvider Tests', () => {
     expect(tools).toHaveProperty('greet');
   });
 });
+
+describe('MastraMCPClient - Resource Cleanup Tests', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+  });
+
+  afterEach(async () => {
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should not accumulate SIGTERM listeners across multiple connect/disconnect cycles', async () => {
+    const initialListenerCount = process.listenerCount('SIGTERM');
+
+    // Perform multiple connect/disconnect cycles
+    for (let i = 0; i < 15; i++) {
+      const client = new InternalMastraMCPClient({
+        name: `cleanup-test-client-${i}`,
+        server: {
+          url: testServer.baseUrl,
+        },
+      });
+
+      await client.connect();
+      await client.disconnect();
+    }
+
+    const finalListenerCount = process.listenerCount('SIGTERM');
+
+    // The listener count should not have increased significantly
+    // (allowing for some tolerance in case other parts of the test framework add listeners)
+    expect(finalListenerCount).toBeLessThanOrEqual(initialListenerCount + 1);
+  });
+
+  it('should clean up exit hooks and SIGTERM listeners on disconnect', async () => {
+    const initialListenerCount = process.listenerCount('SIGTERM');
+
+    const client = new InternalMastraMCPClient({
+      name: 'cleanup-single-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+
+    await client.connect();
+
+    // After connect, there should be at most one additional SIGTERM listener
+    const afterConnectCount = process.listenerCount('SIGTERM');
+    expect(afterConnectCount).toBeLessThanOrEqual(initialListenerCount + 1);
+
+    await client.disconnect();
+
+    // After disconnect, the listener count should return to the initial value
+    const afterDisconnectCount = process.listenerCount('SIGTERM');
+    expect(afterDisconnectCount).toBe(initialListenerCount);
+  });
+
+  it('should not add duplicate listeners when connect is called multiple times on the same client', async () => {
+    const initialListenerCount = process.listenerCount('SIGTERM');
+
+    const client = new InternalMastraMCPClient({
+      name: 'duplicate-connect-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+
+    // Connect multiple times on the same client
+    await client.connect();
+    await client.connect();
+    await client.connect();
+
+    const afterMultipleConnects = process.listenerCount('SIGTERM');
+
+    // Should only have added one listener, not three
+    expect(afterMultipleConnects).toBeLessThanOrEqual(initialListenerCount + 1);
+
+    await client.disconnect();
+
+    const afterDisconnectCount = process.listenerCount('SIGTERM');
+    expect(afterDisconnectCount).toBe(initialListenerCount);
+  });
+});
