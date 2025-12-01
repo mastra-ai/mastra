@@ -302,11 +302,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               }
               break;
             case 'object-result':
+              // Buffer the object - it will be resolved in the 'finish' step
+              // after output processors have had a chance to modify the text
               self.#bufferedObject = chunk.object;
-              // Only resolve if not already rejected by validation error
-              if (self.#delayedPromises.object.status.type === 'pending') {
-                self.#delayedPromises.object.resolve(chunk.object);
-              }
               break;
             case 'source':
               self.#bufferedSources.push(chunk);
@@ -586,6 +584,17 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   self.#delayedPromises.text.resolve(outputText);
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
 
+                  // Resolve object with processed text parsed as JSON if possible
+                  if (self.#delayedPromises.object.status.type === 'pending') {
+                    try {
+                      const parsedObject = JSON.parse(outputText);
+                      self.#delayedPromises.object.resolve(parsedObject as InferSchemaOutput<OUTPUT>);
+                    } catch {
+                      // If parsing fails, use the original buffered object
+                      self.#delayedPromises.object.resolve(self.#bufferedObject as InferSchemaOutput<OUTPUT>);
+                    }
+                  }
+
                   // Update response with processed messages after output processors have run
                   if (chunk.payload.metadata) {
                     const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
@@ -599,6 +608,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   const textContent = self.#bufferedText.join('');
                   self.#delayedPromises.text.resolve(textContent);
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
+
+                  // Resolve object with buffered object (no processor modifications)
+                  if (self.#delayedPromises.object.status.type === 'pending') {
+                    self.#delayedPromises.object.resolve(self.#bufferedObject as InferSchemaOutput<OUTPUT>);
+                  }
                 }
               } catch (error) {
                 if (error instanceof TripWire) {
@@ -624,7 +638,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#delayedPromises.providerMetadata.resolve(chunk.payload.metadata?.providerMetadata);
               self.#delayedPromises.response.resolve(response as LLMStepResult<OUTPUT>['response']);
               self.#delayedPromises.request.resolve(self.#request || {});
-              self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
+              // Note: text is already resolved in the try-catch block above (lines 586, 600, 608, 614)
+              // for all cases: processor, non-processor, and error handling
               const reasoningText =
                 self.#bufferedReasoning.length > 0
                   ? self.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join('')
