@@ -9,6 +9,7 @@
 export type ZodLikeSchema = {
   parse: (data: unknown) => any;
   safeParse: (data: unknown) => { success: boolean; data?: any; error?: any };
+  safeParseAsync(data: unknown): Promise<{ success: boolean; data?: any; error?: any }>;
 };
 
 /**
