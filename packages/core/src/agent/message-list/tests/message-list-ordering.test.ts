@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MastraDBMessage } from '../../types';
+import type { MessageListInput } from '../index';
 import { MessageList } from '../index';
 
 /**
@@ -145,7 +146,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
   it('should preserve order for Core messages without createdAt (exact reproduction from issue #10683)', () => {
     // Input messages in correct order - AI SDK V5 Core message format
     // Note: V5 uses 'input' for tool call args (not 'args')
-    const messages = [
+    const messages: MessageListInput = [
       {
         role: 'system' as const,
         content: 'You are a helpful assistant.',
@@ -326,9 +327,15 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       expect(texts).toEqual(['First message', 'Second message', 'Third message']);
 
       // Verify the timestamps are preserved in metadata (can be Date or string)
-      expect(new Date(result[0].metadata?.createdAt as string | Date).getTime()).toEqual(time1.getTime());
-      expect(new Date(result[1].metadata?.createdAt as string | Date).getTime()).toEqual(time2.getTime());
-      expect(new Date(result[2].metadata?.createdAt as string | Date).getTime()).toEqual(time3.getTime());
+      expect(new Date((result[0].metadata as { createdAt?: string | Date })?.createdAt!).getTime()).toEqual(
+        time1.getTime(),
+      );
+      expect(new Date((result[1].metadata as { createdAt?: string | Date })?.createdAt!).getTime()).toEqual(
+        time2.getTime(),
+      );
+      expect(new Date((result[2].metadata as { createdAt?: string | Date })?.createdAt!).getTime()).toEqual(
+        time3.getTime(),
+      );
     });
 
     it('should sort messages correctly when user provides out-of-order timestamps via MastraDBMessage format', () => {
@@ -430,10 +437,10 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       expect(result[1].id).toBe('ui-msg-2');
 
       // Verify timestamps are preserved (metadata.createdAt can be Date or string)
-      const createdAt1 = result[0].metadata?.createdAt;
-      const createdAt2 = result[1].metadata?.createdAt;
-      expect(new Date(createdAt1 as string | Date).getTime()).toEqual(time1.getTime());
-      expect(new Date(createdAt2 as string | Date).getTime()).toEqual(time2.getTime());
+      const createdAt1 = (result[0].metadata as { createdAt?: string | Date })?.createdAt;
+      const createdAt2 = (result[1].metadata as { createdAt?: string | Date })?.createdAt;
+      expect(new Date(createdAt1!).getTime()).toEqual(time1.getTime());
+      expect(new Date(createdAt2!).getTime()).toEqual(time2.getTime());
     });
 
     it('should preserve order for V5 Core messages without timestamps', () => {
