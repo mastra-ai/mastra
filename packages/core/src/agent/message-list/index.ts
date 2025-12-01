@@ -1527,16 +1527,9 @@ export class MessageList {
         'createdAt' in message.metadata
           ? message.metadata.createdAt
           : undefined;
-      // Convert string timestamps to Date objects
-      const originalCreatedAt =
-        typeof rawCreatedAt === 'string'
-          ? new Date(rawCreatedAt)
-          : rawCreatedAt instanceof Date || typeof rawCreatedAt === 'number'
-            ? rawCreatedAt
-            : undefined;
       const result = {
         ...dbMsg,
-        createdAt: this.generateCreatedAt(messageSource, originalCreatedAt),
+        createdAt: this.generateCreatedAt(messageSource, rawCreatedAt),
         threadId: this.memoryInfo?.threadId,
         resourceId: this.memoryInfo?.resourceId,
       };
@@ -1547,16 +1540,9 @@ export class MessageList {
       // Only use the original createdAt from input message, not the generated one from the static method
       // This fixes issue #10683 where messages without createdAt would get shuffled
       const rawCreatedAt = 'createdAt' in message ? message.createdAt : undefined;
-      // Convert string timestamps to Date objects
-      const originalCreatedAt =
-        typeof rawCreatedAt === 'string'
-          ? new Date(rawCreatedAt)
-          : rawCreatedAt instanceof Date || typeof rawCreatedAt === 'number'
-            ? rawCreatedAt
-            : undefined;
       return {
         ...dbMsg,
-        createdAt: this.generateCreatedAt(messageSource, originalCreatedAt),
+        createdAt: this.generateCreatedAt(messageSource, rawCreatedAt),
         threadId: this.memoryInfo?.threadId,
         resourceId: this.memoryInfo?.resourceId,
       };
@@ -1567,21 +1553,28 @@ export class MessageList {
 
   private lastCreatedAt?: number;
   // this makes sure messages added in order will always have a date atleast 1ms apart.
-  private generateCreatedAt(messageSource: MessageSource, start?: Date | number): Date {
-    start = start instanceof Date ? start : start ? new Date(start) : undefined;
+  private generateCreatedAt(messageSource: MessageSource, start?: unknown): Date {
+    // Normalize timestamp
+    const startDate: Date | undefined =
+      typeof start === 'string' || typeof start === 'number'
+        ? new Date(start)
+        : start instanceof Date
+          ? start
+          : undefined;
 
-    if (start && !this.lastCreatedAt) {
-      this.lastCreatedAt = start.getTime();
-      return start;
+    if (startDate && !this.lastCreatedAt) {
+      this.lastCreatedAt = startDate.getTime();
+      return startDate;
     }
 
-    if (start && messageSource === `memory`) {
-      // we don't want to modify start time if the message came from memory or we may accidentally re-order old messages
-      return start;
+    if (startDate && messageSource === `memory`) {
+      // Preserve user-provided timestamps for memory messages to avoid re-ordering
+      // Messages without timestamps will fall through to get generated incrementing timestamps
+      return startDate;
     }
 
     const now = new Date();
-    const nowTime = start?.getTime() || now.getTime();
+    const nowTime = startDate ? startDate.getTime() : now.getTime();
     // find the latest createdAt in all stored messages
     const lastTime = this.messages.reduce((p, m) => {
       if (m.createdAt.getTime() > p) return m.createdAt.getTime();
@@ -1947,18 +1940,11 @@ export class MessageList {
       'createdAt' in coreMessage.metadata
         ? coreMessage.metadata.createdAt
         : undefined;
-    // Convert string timestamps to Date objects
-    const originalCreatedAt =
-      typeof rawCreatedAt === 'string'
-        ? new Date(rawCreatedAt)
-        : rawCreatedAt instanceof Date || typeof rawCreatedAt === 'number'
-          ? rawCreatedAt
-          : undefined;
 
     return {
       id,
       role: MessageList.getRole(coreMessage),
-      createdAt: this.generateCreatedAt(messageSource, originalCreatedAt),
+      createdAt: this.generateCreatedAt(messageSource, rawCreatedAt),
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
       content,
