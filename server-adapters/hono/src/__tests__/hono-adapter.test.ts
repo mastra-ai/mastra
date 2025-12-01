@@ -56,8 +56,8 @@ describe('Hono Server Adapter', () => {
         body: request.body ? JSON.stringify(request.body) : undefined,
       });
 
-      // Execute request through Hono
-      let response: Response | ReadableStream;
+      // Execute request through Hono - app.request() always returns Promise<Response>
+      let response: Response;
       try {
         response = await app.request(req);
       } catch (error) {
@@ -66,26 +66,6 @@ describe('Hono Server Adapter', () => {
           status: 500,
           type: 'json',
           data: { error: error instanceof Error ? error.message : 'Unknown error' },
-          headers: {},
-        };
-      }
-
-      // Check if response is defined
-      if (!response) {
-        return {
-          status: 500,
-          type: 'json',
-          data: { error: 'No response returned from handler' },
-          headers: {},
-        };
-      }
-
-      // Handle case where Hono returns a ReadableStream directly (datastream-response type)
-      if (response instanceof ReadableStream) {
-        return {
-          status: 200, // Assume success if we get a stream
-          type: 'stream',
-          stream: response,
           headers: {},
         };
       }
