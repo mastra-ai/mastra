@@ -472,8 +472,10 @@ export class MemoryPG extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    // Normalize threadId to array
-    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+    // Normalize threadId to array, filtering out non-string values to avoid TypeError
+    const threadIds = (Array.isArray(threadId) ? threadId : [threadId]).filter(
+      (id): id is string => typeof id === 'string',
+    );
 
     if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
@@ -481,7 +483,7 @@ export class MemoryPG extends MemoryStorage {
           id: 'STORAGE_PG_LIST_MESSAGES_INVALID_THREAD_ID',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
+          details: { threadId: Array.isArray(threadId) ? String(threadId) : String(threadId) },
         },
         new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
