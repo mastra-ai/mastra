@@ -2214,7 +2214,7 @@ describe('MastraInngestWorkflow', () => {
       expect(step2Action).not.toHaveBeenCalled();
       expect(result?.steps).toMatchObject({
         input: {},
-        step1: { status: 'failed', error: 'Failed' },
+        step1: { status: 'failed', error: 'Error: Failed' },
       });
     });
 
@@ -2467,7 +2467,7 @@ describe('MastraInngestWorkflow', () => {
       await expect(run.start({ inputData: {} })).resolves.toMatchObject({
         steps: {
           step1: {
-            error: 'Step execution failed',
+            error: 'Error: Step execution failed',
             status: 'failed',
           },
         },
@@ -2556,7 +2556,7 @@ describe('MastraInngestWorkflow', () => {
         },
         step2: {
           status: 'failed',
-          error: 'Step execution failed',
+          error: 'Error: Step execution failed',
         },
       });
 
@@ -2648,7 +2648,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result.steps).toMatchObject({
         'test-workflow': {
           status: 'failed',
-          error: 'Step execution failed',
+          error: 'Error: Step execution failed',
         },
       });
 
@@ -3628,7 +3628,7 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
 
       expect(result.steps.step1).toMatchObject({ status: 'success', output: { result: 'success' } });
-      expect(result.steps.step2).toMatchObject({ status: 'failed', error: 'Step failed' });
+      expect(result.steps.step2).toMatchObject({ status: 'failed', error: 'Error: Step failed' });
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
     });
@@ -4182,6 +4182,8 @@ describe('MastraInngestWorkflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
           resumedAt: expect.any(Number),
+          suspendPayload: { testPayload: 'hello' },
+          suspendedAt: expect.any(Number),
         },
         evaluateToneConsistency: {
           status: 'success',
@@ -4231,6 +4233,8 @@ describe('MastraInngestWorkflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
           resumedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          suspendPayload: { testPayload: 'hello' },
         },
         evaluateToneConsistency: {
           status: 'success',
@@ -4253,6 +4257,7 @@ describe('MastraInngestWorkflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
           resumedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
         },
         evaluateImprovedResponse: {
           status: 'success',
@@ -4479,8 +4484,9 @@ describe('MastraInngestWorkflow', () => {
       expect(initialResult.steps['branch-step-2'].suspendOutput).toBeUndefined();
       if (initialResult.status === 'suspended') {
         expect(initialResult.suspended).toHaveLength(2);
-        expect(initialResult.suspended[0]).toContain('branch-step-1');
-        expect(initialResult.suspended[1]).toContain('branch-step-2');
+        const suspendedStepIds = initialResult.suspended.map(s => s[0]);
+        expect(suspendedStepIds).toContain('branch-step-1');
+        expect(suspendedStepIds).toContain('branch-step-2');
       }
 
       const resumedResult1 = await run.resume({
@@ -4889,6 +4895,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result.status).toBe('success');
       expect(result).toEqual({
         status: 'success',
+        input: { value: 0 },
         steps: {
           input: {
             value: 0,
@@ -4943,6 +4950,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result2.status).toBe('success');
       expect(result2).toEqual({
         status: 'success',
+        input: {},
         steps: {
           input: {},
           step1: {
@@ -5069,7 +5077,7 @@ describe('MastraInngestWorkflow', () => {
       expect(failedRun.steps.step2).toEqual({
         status: 'failed',
         payload: { step1Result: 2 },
-        error: 'Simulated error',
+        error: 'Error: Simulated error',
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -5090,6 +5098,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result.status).toBe('success');
       expect(result).toEqual({
         status: 'success',
+        input: { value: 0 },
         steps: {
           input: {
             value: 0,
@@ -5143,6 +5152,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result2.status).toBe('success');
       expect(result2).toEqual({
         status: 'success',
+        input: { value: 0 },
         steps: {
           input: { value: 0 },
           step1: {
@@ -5308,6 +5318,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result.status).toBe('success');
       expect(result).toEqual({
         status: 'success',
+        input: { value: 0 },
         steps: {
           input: { value: 0 },
           step1: {
@@ -5361,6 +5372,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result2.status).toBe('success');
       expect(result2).toEqual({
         status: 'success',
+        input: {},
         steps: {
           input: {},
           step1: {
@@ -5408,6 +5420,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result3.status).toBe('success');
       expect(result3).toEqual({
         status: 'success',
+        input: {},
         steps: {
           input: {},
           step1: {
@@ -5615,6 +5628,8 @@ describe('MastraInngestWorkflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
           resumedAt: expect.any(Number),
+          suspendPayload: { testPayload: 'hello' },
+          suspendedAt: expect.any(Number),
         },
         evaluateToneConsistency: {
           status: 'success',
@@ -5805,6 +5820,8 @@ describe('MastraInngestWorkflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
           resumedAt: expect.any(Number),
+          suspendPayload: { testPayload: 'hello' },
+          suspendedAt: expect.any(Number),
         },
         evaluateToneConsistency: {
           status: 'success',
@@ -5930,6 +5947,7 @@ describe('MastraInngestWorkflow', () => {
       });
       expect(result).toEqual({
         status: 'success',
+        input: { value: 0 },
         steps: {
           input: {
             value: 0,
@@ -5955,6 +5973,7 @@ describe('MastraInngestWorkflow', () => {
               value: 10,
             },
             endedAt: expect.any(Number),
+            metadata: { iterationCount: 5 },
           },
           final: {
             payload: {
@@ -6104,6 +6123,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result.status).toBe('success');
       expect(result).toEqual({
         status: 'success',
+        input: {},
         steps: {
           input: {},
           initialStep: {
@@ -6231,6 +6251,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result2.status).toBe('success');
       expect(result2).toEqual({
         status: 'success',
+        input: { input: 'start' },
         steps: {
           input: { input: 'start' },
           initialStep: {
@@ -6319,6 +6340,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result3.status).toBe('success');
       expect(result3).toEqual({
         status: 'success',
+        input: {},
         steps: {
           input: {},
           initialStep: {
@@ -8161,8 +8183,8 @@ describe('MastraInngestWorkflow', () => {
     });
   });
 
-  // TODO: can we support this on inngest?
-  describe.skip('Dependency Injection', () => {
+  // Testing requestContext persistence across Inngest memoization
+  describe('Dependency Injection', () => {
     it('should inject requestContext dependencies into steps during run', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
@@ -8184,7 +8206,12 @@ describe('MastraInngestWorkflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
-      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        options: { validateInputs: false },
+      });
       workflow.then(step).commit();
 
       const mastra = new Mastra({
@@ -8334,6 +8361,7 @@ describe('MastraInngestWorkflow', () => {
         id: 'increment-workflow',
         inputSchema: z.object({ value: z.number() }),
         outputSchema: z.object({ value: z.number() }),
+        options: { validateInputs: false },
       })
         .then(incrementStep)
         .then(resumeStep)
@@ -8351,11 +8379,30 @@ describe('MastraInngestWorkflow', () => {
         )
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
-        storage: testStorage,
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
         workflows: { incrementWorkflow },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
       });
+
+      const app = await createHonoServer(mastra);
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
 
       const run = await incrementWorkflow.createRun();
       const result = await run.start({ inputData: { value: 0 } });
@@ -8365,6 +8412,8 @@ describe('MastraInngestWorkflow', () => {
         resumeData: { value: 21 },
         step: ['resume'],
       });
+
+      srv.close();
 
       expect(resumeResult.status).toBe('success');
     });
@@ -8421,6 +8470,7 @@ describe('MastraInngestWorkflow', () => {
         id: 'increment-workflow',
         inputSchema: z.object({ value: z.number() }),
         outputSchema: z.object({ value: z.number() }),
+        options: { validateInputs: false },
       })
         .then(incrementStep)
         .then(resumeStep)
@@ -8438,11 +8488,30 @@ describe('MastraInngestWorkflow', () => {
         )
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
-        storage: testStorage,
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
         workflows: { incrementWorkflow },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
       });
+
+      const app = await createHonoServer(mastra);
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
 
       const run = await incrementWorkflow.createRun();
       const result = await run.start({ inputData: { value: 0 } });
@@ -8452,6 +8521,8 @@ describe('MastraInngestWorkflow', () => {
         resumeData: { value: 21 },
         step: ['resume'],
       });
+
+      srv.close();
 
       expect(resumeResult.status).toBe('success');
     });
@@ -10009,7 +10080,7 @@ describe('MastraInngestWorkflow', () => {
         {
           payload: {
             id: 'step2',
-            error: 'Step input validation failed: \n- value: Required',
+            error: 'Error: Step input validation failed: \n- value: Required',
             endedAt: expect.any(Number),
             startedAt: expect.any(Number),
             payload: {
@@ -10047,7 +10118,7 @@ describe('MastraInngestWorkflow', () => {
       });
       expect(executionResult.steps.step2).toMatchObject({
         status: 'failed',
-        error: 'Step input validation failed: \n- value: Required',
+        error: 'Error: Step input validation failed: \n- value: Required',
         payload: {
           result: 'success1',
         },

@@ -1,6 +1,8 @@
 import type { ToolSet } from 'ai-v5';
 import z from 'zod';
 import type { MastraDBMessage } from '../../../memory';
+import type { ProcessorState } from '../../../processors';
+import { ProcessorRunner } from '../../../processors/runner';
 import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type { ChunkType } from '../../../stream/types';
@@ -13,6 +15,69 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
   { models, _internal, ...rest }: OuterLLMRun<Tools, OUTPUT>,
   llmExecutionStep: any,
 ) {
+  /**
+   * Output processor handling for tool-result and tool-error chunks.
+   *
+   * LLM-generated chunks (text-delta, tool-call, etc.) are processed through output processors
+   * in the Inner MastraModelOutput (llm-execution-step.ts). However, tool-result and tool-error
+   * chunks are created HERE after tool execution completes, so they would bypass the output
+   * processor pipeline if we just enqueued them directly.
+   *
+   * To ensure output processors receive ALL chunk types (including tool-result), we create
+   * a ProcessorRunner here that uses the SAME processorStates map as the Inner MastraModelOutput.
+   * This ensures:
+   * 1. Processors see tool-result chunks in processOutputStream
+   * 2. Processor state (streamParts, customState) is shared across all chunks
+   * 3. Blocking/tripwire works correctly for tool results
+   */
+  const processorRunner =
+    rest.outputProcessors?.length && rest.logger
+      ? new ProcessorRunner({
+          inputProcessors: [],
+          outputProcessors: rest.outputProcessors,
+          logger: rest.logger,
+          agentName: 'LLMMappingStep',
+        })
+      : undefined;
+
+  // Get tracing context from modelSpanTracker if available
+  const tracingContext = rest.modelSpanTracker?.getTracingContext();
+
+  // Helper function to process a chunk through output processors and enqueue it
+  async function processAndEnqueueChunk(chunk: ChunkType<OUTPUT>): Promise<void> {
+    if (processorRunner && rest.processorStates) {
+      const {
+        part: processed,
+        blocked,
+        reason,
+      } = await processorRunner.processPart(
+        chunk,
+        rest.processorStates as Map<string, ProcessorState<OUTPUT>>,
+        tracingContext,
+        rest.requestContext,
+        rest.messageList,
+      );
+
+      if (blocked) {
+        // Emit a tripwire chunk so downstream knows about the abort
+        rest.controller.enqueue({
+          type: 'tripwire',
+          payload: {
+            tripwireReason: reason || 'Output processor blocked content',
+          },
+        } as ChunkType<OUTPUT>);
+        return;
+      }
+
+      if (processed) {
+        rest.controller.enqueue(processed as ChunkType<OUTPUT>);
+      }
+    } else {
+      // No processor runner, just enqueue the chunk directly
+      rest.controller.enqueue(chunk);
+    }
+  }
+
   return createStep({
     id: 'llmExecutionMappingStep',
     inputSchema: z.array(toolCallOutputSchema),
@@ -26,8 +91,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
         const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
 
         if (errorResults?.length) {
-          errorResults.forEach(toolCall => {
-            const chunk: ChunkType = {
+          for (const toolCall of errorResults) {
+            const chunk: ChunkType<OUTPUT> = {
               type: 'tool-error',
               runId: rest.runId,
               from: ChunkFrom.AGENT,
@@ -39,8 +104,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
                 providerMetadata: toolCall.providerMetadata,
               },
             };
-            rest.controller.enqueue(chunk);
-          });
+            await processAndEnqueueChunk(chunk);
+          }
 
           const msg: MastraDBMessage = {
             id: toolResultMessageId || '',
@@ -74,7 +139,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
 
       if (inputData?.length) {
         for (const toolCall of inputData) {
-          const chunk: ChunkType = {
+          const chunk: ChunkType<OUTPUT> = {
             type: 'tool-result',
             runId: rest.runId,
             from: ChunkFrom.AGENT,
@@ -88,7 +153,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
             },
           };
 
-          rest.controller.enqueue(chunk);
+          await processAndEnqueueChunk(chunk);
 
           if (initialResult?.metadata?.modelVersion === 'v2') {
             await rest.options?.onChunk?.({

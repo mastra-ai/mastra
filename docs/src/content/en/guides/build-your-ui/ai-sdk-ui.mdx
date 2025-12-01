@@ -298,6 +298,7 @@ export async function POST(req: Request) {
 
   // Transform stream into AI SDK format and create UI messages stream
   const uiMessageStream = createUIMessageStream({
+    originalMessages: messages,
     execute: async ({ writer }) => {
       for await (const part of toAISdkStream(stream, { from: "agent" })!) {
         writer.write(part);
@@ -390,6 +391,7 @@ export async function POST(req: Request) {
   });
 
   const uiMessageStream = createUIMessageStream({
+    initialMessages: messages,
     execute: async ({ writer }) => {
       for await (const part of toAISdkStream(stream, {
         from: "agent",
