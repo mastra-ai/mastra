@@ -61,7 +61,7 @@ export type PaginationInfo = {
 export type MastraMessageFormat = 'v1' | 'v2';
 
 export type StorageListMessagesInput = {
-  threadId: string;
+  threadId: string | string[];
   resourceId?: string;
   include?: {
     id: string;

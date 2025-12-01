@@ -228,15 +228,18 @@ export class StoreMemoryLance extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    if (!threadId.trim()) {
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
           id: 'STORAGE_LANCE_LIST_MESSAGES_INVALID_THREAD_ID',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
         },
-        new Error('threadId must be a non-empty string'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
 
@@ -262,8 +265,12 @@ export class StoreMemoryLance extends MemoryStorage {
 
       const table = await this.client.openTable(TABLE_MESSAGES);
 
-      // Build query conditions
-      const conditions: string[] = [`thread_id = '${this.escapeSql(threadId)}'`];
+      // Build query conditions for multiple threads
+      const threadCondition =
+        threadIds.length === 1
+          ? `thread_id = '${this.escapeSql(threadIds[0]!)}'`
+          : `thread_id IN (${threadIds.map(t => `'${this.escapeSql(t)}'`).join(', ')})`;
+      const conditions: string[] = [threadCondition];
 
       if (resourceId) {
         conditions.push(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
@@ -397,7 +404,7 @@ export class StoreMemoryLance extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId,
+            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
           },
         },

@@ -503,28 +503,29 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
   }
 
-  private async _getIncludedMessages(threadId: string, include: StorageListMessagesInput['include']) {
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-    if (!include) return null;
+  private async _getIncludedMessages(include: StorageListMessagesInput['include']) {
+    if (!include || include.length === 0) return null;
 
     const unionQueries: string[] = [];
     const params: any[] = [];
     let paramIdx = 1;
+    const tableName = this.operations.getTableName(TABLE_MESSAGES);
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
-      // if threadId is provided, use it, otherwise use threadId from args
-      const searchId = inc.threadId || threadId;
+      // Query by message ID directly - get the threadId from the message itself via subquery
 
       unionQueries.push(`
                 SELECT * FROM (
-                  WITH ordered_messages AS (
+                  WITH target_thread AS (
+                    SELECT thread_id FROM ${tableName} WHERE id = ?
+                  ),
+                  ordered_messages AS (
                     SELECT
                       *,
                       ROW_NUMBER() OVER (ORDER BY createdAt ASC) AS row_num
-                    FROM ${this.operations.getTableName(TABLE_MESSAGES)}
-                    WHERE thread_id = ?
+                    FROM ${tableName}
+                    WHERE thread_id = (SELECT thread_id FROM target_thread)
                   )
                   SELECT
                     m.id,
@@ -548,7 +549,7 @@ export class MemoryStorageD1 extends MemoryStorage {
                 ) AS query_${paramIdx}
             `);
 
-      params.push(searchId, id, id, withNextMessages, withPreviousMessages);
+      params.push(id, id, id, withNextMessages, withPreviousMessages);
       paramIdx++;
     }
 
@@ -627,15 +628,18 @@ export class MemoryStorageD1 extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    if (!threadId.trim()) {
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
           id: 'STORAGE_CLOUDFLARE_D1_LIST_MESSAGES_INVALID_THREAD_ID',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
         },
-        new Error('threadId must be a non-empty string'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
 
@@ -754,7 +758,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       if (include && include.length > 0) {
         // Use the existing _getIncludedMessages helper, but adapt it for listMessages format
-        const includeResult = (await this._getIncludedMessages(threadId, include)) as MastraDBMessage[];
+        const includeResult = (await this._getIncludedMessages(include)) as MastraDBMessage[];
         if (Array.isArray(includeResult)) {
           includeMessages = includeResult;
 
@@ -813,11 +817,11 @@ export class MemoryStorageD1 extends MemoryStorage {
           id: 'CLOUDFLARE_D1_STORAGE_LIST_MESSAGES_ERROR',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: `Failed to list messages for thread ${threadId}: ${
+          text: `Failed to list messages for thread ${Array.isArray(threadId) ? threadId.join(',') : threadId}: ${
             error instanceof Error ? error.message : String(error)
           }`,
           details: {
-            threadId,
+            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
           },
         },

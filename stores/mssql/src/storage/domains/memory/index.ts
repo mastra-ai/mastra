@@ -373,30 +373,22 @@ export class MemoryMSSQL extends MemoryStorage {
     }
   }
 
-  private async _getIncludedMessages({
-    threadId,
-    include,
-  }: {
-    threadId: string;
-    include: StorageListMessagesInput['include'];
-  }) {
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-    if (!include) return null;
+  private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
+    if (!include || include.length === 0) return null;
 
     const unionQueries: string[] = [];
     const paramValues: any[] = [];
     let paramIdx = 1;
     const paramNames: string[] = [];
+    const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
-      const searchId = inc.threadId || threadId;
+      // Query by message ID directly - get the threadId from the message itself via subquery
 
-      const pThreadId = `@p${paramIdx}`;
-      const pId = `@p${paramIdx + 1}`;
-      const pPrev = `@p${paramIdx + 2}`;
-      const pNext = `@p${paramIdx + 3}`;
+      const pId = `@p${paramIdx}`;
+      const pPrev = `@p${paramIdx + 1}`;
+      const pNext = `@p${paramIdx + 2}`;
 
       unionQueries.push(
         `
@@ -411,16 +403,16 @@ export class MemoryMSSQL extends MemoryStorage {
             m.seq_id
           FROM (
             SELECT *, ROW_NUMBER() OVER (ORDER BY [createdAt] ASC) as row_num
-            FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })}
-            WHERE [thread_id] = ${pThreadId}
+            FROM ${tableName}
+            WHERE [thread_id] = (SELECT thread_id FROM ${tableName} WHERE id = ${pId})
           ) AS m
           WHERE m.id = ${pId}
           OR EXISTS (
             SELECT 1
             FROM (
               SELECT *, ROW_NUMBER() OVER (ORDER BY [createdAt] ASC) as row_num
-              FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })}
-              WHERE [thread_id] = ${pThreadId}
+              FROM ${tableName}
+              WHERE [thread_id] = (SELECT thread_id FROM ${tableName} WHERE id = ${pId})
             ) AS target
             WHERE target.id = ${pId}
             AND (
@@ -434,9 +426,9 @@ export class MemoryMSSQL extends MemoryStorage {
         `,
       );
 
-      paramValues.push(searchId, id, withPreviousMessages, withNextMessages);
-      paramNames.push(`p${paramIdx}`, `p${paramIdx + 1}`, `p${paramIdx + 2}`, `p${paramIdx + 3}`);
-      paramIdx += 4;
+      paramValues.push(id, withPreviousMessages, withNextMessages);
+      paramNames.push(`p${paramIdx}`, `p${paramIdx + 1}`, `p${paramIdx + 2}`);
+      paramIdx += 3;
     }
 
     const finalQuery = `
@@ -517,15 +509,18 @@ export class MemoryMSSQL extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    if (!threadId.trim()) {
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
           id: 'STORAGE_MSSQL_LIST_MESSAGES_INVALID_THREAD_ID',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
         },
-        new Error('threadId must be a non-empty string'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
 
@@ -536,7 +531,7 @@ export class MemoryMSSQL extends MemoryStorage {
         category: ErrorCategory.USER,
         text: 'Page number must be non-negative',
         details: {
-          threadId,
+          threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
           page,
         },
       });
@@ -554,7 +549,7 @@ export class MemoryMSSQL extends MemoryStorage {
       const baseQuery = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId FROM ${tableName}`;
 
       const filters: Record<string, any> = {
-        thread_id: threadId,
+        thread_id: threadIds.length === 1 ? threadIds[0] : { $in: threadIds },
         ...(resourceId ? { resourceId } : {}),
         ...buildDateRangeFilter(filter?.dateRange, 'createdAt'),
       };
@@ -612,7 +607,7 @@ export class MemoryMSSQL extends MemoryStorage {
       // Add included messages with context (if any), excluding duplicates
       if (include?.length) {
         const messageIds = new Set(messages.map(m => m.id));
-        const includeMessages = await this._getIncludedMessages({ threadId, include });
+        const includeMessages = await this._getIncludedMessages({ include });
         includeMessages?.forEach(msg => {
           if (!messageIds.has(msg.id)) {
             messages.push(msg);
@@ -648,7 +643,8 @@ export class MemoryMSSQL extends MemoryStorage {
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
       // Otherwise, check if there are more pages in the pagination window
-      const returnedThreadMessageCount = finalMessages.filter(m => m.threadId === threadId).length;
+      const threadIdSet = new Set(threadIds);
+      const returnedThreadMessageCount = finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).length;
       const hasMore = perPageInput !== false && returnedThreadMessageCount < total && offset + perPage < total;
 
       return {
@@ -665,7 +661,7 @@ export class MemoryMSSQL extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId,
+            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
           },
         },

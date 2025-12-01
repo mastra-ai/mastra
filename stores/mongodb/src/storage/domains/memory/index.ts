@@ -52,39 +52,33 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     return result;
   }
 
-  private async _getIncludedMessages({
-    threadId,
-    include,
-  }: {
-    threadId: string;
-    include: StorageListMessagesInput['include'];
-  }) {
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-    if (!include) return null;
+  private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
+    if (!include || include.length === 0) return null;
 
     const collection = await this.operations.getCollection(TABLE_MESSAGES);
-
     const includedMessages: any[] = [];
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
-      const searchThreadId = inc.threadId || threadId;
 
-      // Get all messages for the search thread ordered by creation date
-      const allMessages = await collection.find({ thread_id: searchThreadId }).sort({ createdAt: 1 }).toArray();
+      // Step 1: Get the target message by ID (globally unique)
+      const targetMessage = await collection.findOne({ id });
+      if (!targetMessage) continue;
 
-      // Find the target message
+      // Step 2: Get the threadId from the message itself
+      const messageThreadId = targetMessage.thread_id;
+
+      // Step 3: Get all messages for that thread ordered by creation date
+      const allMessages = await collection.find({ thread_id: messageThreadId }).sort({ createdAt: 1 }).toArray();
+
+      // Step 4: Find the target message index
       const targetIndex = allMessages.findIndex((msg: any) => msg.id === id);
-
       if (targetIndex === -1) continue;
 
-      // Get previous messages
+      // Step 5: Get surrounding context
       const startIndex = Math.max(0, targetIndex - withPreviousMessages);
-      // Get next messages
       const endIndex = Math.min(allMessages.length - 1, targetIndex + withNextMessages);
 
-      // Add messages in range
       for (let i = startIndex; i <= endIndex; i++) {
         includedMessages.push(allMessages[i]);
       }
@@ -131,15 +125,18 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    if (!threadId.trim()) {
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
           id: 'STORAGE_MONGODB_LIST_MESSAGES_INVALID_THREAD_ID',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
         },
-        new Error('threadId must be a non-empty string'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
 
@@ -165,8 +162,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       const collection = await this.operations.getCollection(TABLE_MESSAGES);
 
-      // Build query conditions
-      const query: any = { thread_id: threadId };
+      // Build query conditions - use $in for multiple thread IDs
+      const query: any = { thread_id: threadIds.length === 1 ? threadIds[0] : { $in: threadIds } };
 
       if (resourceId) {
         query.resourceId = resourceId;
@@ -214,7 +211,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Step 2: Add included messages with context (if any), excluding duplicates
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ threadId, include });
+        const includeMessages = await this._getIncludedMessages({ include });
         if (includeMessages) {
           // Deduplicate: only add messages that aren't already in the paginated results
           for (const includeMsg of includeMessages) {
@@ -248,7 +245,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
       // Otherwise, check if there are more pages in the pagination window
-      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const threadIdSet = new Set(threadIds);
+      const returnedThreadMessageIds = new Set(
+        finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
+      );
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
       const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
 
@@ -266,7 +266,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId,
+            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
           },
         },

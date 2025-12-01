@@ -443,7 +443,7 @@ export class InternalMastraMCPClient extends MastraBase {
       throw e;
     } finally {
       this.transport = undefined;
-      this.isConnected = Promise.resolve(false);
+      this.isConnected = null;
 
       // Clean up exit hooks to prevent memory leaks
       if (this.exitHookUnsubscribe) {
@@ -455,6 +455,74 @@ export class InternalMastraMCPClient extends MastraBase {
         this.sigTermHandler = undefined;
       }
     }
+  }
+
+  /**
+   * Checks if an error indicates a session invalidation that requires reconnection.
+   * 
+   * Common session-related errors include:
+   * - "No valid session ID provided" (HTTP 400)
+   * - "Server not initialized" (HTTP 400)
+   * - Connection refused errors
+   * 
+   * @param error - The error to check
+   * @returns true if the error indicates a session problem requiring reconnection
+   * 
+   * @internal
+   */
+  private isSessionError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+    
+    const errorMessage = error.message.toLowerCase();
+    
+    // Check for session-related error patterns
+    return (
+      errorMessage.includes('no valid session') ||
+      errorMessage.includes('session') ||
+      errorMessage.includes('server not initialized') ||
+      errorMessage.includes('http 400') ||
+      errorMessage.includes('http 401') ||
+      errorMessage.includes('http 403') ||
+      errorMessage.includes('econnrefused') ||
+      errorMessage.includes('fetch failed') ||
+      errorMessage.includes('connection refused')
+    );
+  }
+
+  /**
+   * Forces a reconnection to the MCP server by disconnecting and reconnecting.
+   * 
+   * This is useful when the session becomes invalid (e.g., after server restart)
+   * and the client needs to establish a fresh connection.
+   * 
+   * @returns Promise resolving when reconnection is complete
+   * @throws {Error} If reconnection fails
+   * 
+   * @internal
+   */
+  async forceReconnect(): Promise<void> {
+    this.log('debug', 'Forcing reconnection to MCP server...');
+    
+    // Disconnect current connection (ignore errors as connection may already be broken)
+    try {
+      if (this.transport) {
+        await this.transport.close();
+      }
+    } catch (e) {
+      this.log('debug', 'Error during force disconnect (ignored)', {
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+    
+    // Reset connection state
+    this.transport = undefined;
+    this.isConnected = null;
+    
+    // Reconnect
+    await this.connect();
+    this.log('debug', 'Successfully reconnected to MCP server');
   }
 
   async listResources() {
@@ -667,7 +735,8 @@ export class InternalMastraMCPClient extends MastraBase {
           execute: async (input: any, context?: { requestContext?: RequestContext | null, runId?: string }) => {
             const previousContext = this.currentOperationContext;
             this.currentOperationContext = context?.requestContext || null; // Set current context
-            try {
+            
+            const executeToolCall = async () => {
               this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input, runId: context?.runId });
               const res = await this.client.callTool(
                 {
@@ -691,7 +760,36 @@ export class InternalMastraMCPClient extends MastraBase {
               }
 
               return res;
+            };
+            
+            try {
+              return await executeToolCall();
             } catch (e) {
+              // Check if this is a session-related error that requires reconnection
+              if (this.isSessionError(e)) {
+                this.log('debug', `Session error detected for tool ${tool.name}, attempting reconnection...`, {
+                  error: e instanceof Error ? e.message : String(e),
+                });
+                
+                try {
+                  // Force reconnection
+                  await this.forceReconnect();
+                  
+                  // Retry the tool call with fresh connection
+                  this.log('debug', `Retrying tool ${tool.name} after reconnection...`);
+                  return await executeToolCall();
+                } catch (reconnectError) {
+                  this.log('error', `Reconnection or retry failed for tool ${tool.name}`, {
+                    originalError: e instanceof Error ? e.message : String(e),
+                    reconnectError: reconnectError instanceof Error ? reconnectError.stack : String(reconnectError),
+                    toolArgs: input,
+                  });
+                  // Throw the original error if reconnection/retry fails
+                  throw e;
+                }
+              }
+              
+              // For non-session errors, log and rethrow
               this.log('error', `Error calling tool: ${tool.name}`, {
                 error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
                 toolArgs: input,
