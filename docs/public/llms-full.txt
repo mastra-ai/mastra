@@ -927,6 +927,10 @@ const scrubbedAgent = new Agent({
 
 > See [SystemPromptScrubber](/reference/v1/processors/system-prompt-scrubber) for a full list of configuration options.
 
+:::note
+When streaming responses over HTTP, Mastra redacts sensitive request data (system prompts, tool definitions, API keys) from stream chunks at the server level by default. See [Stream data redaction](/docs/v1/server-db/mastra-server#stream-data-redaction) for details.
+:::
+
 ## Hybrid processors
 
 Hybrid processors can be applied either before messages are sent to the language model or before responses are returned to the user. They are useful for tasks like content moderation and PII redaction.
@@ -13549,6 +13553,35 @@ export const mastra = new Mastra({
 });
 ```
 
+## Stream data redaction
+
+When streaming agent responses over HTTP, Mastra automatically redacts sensitive information from stream chunks before sending them to clients. This prevents accidental exposure of:
+
+- System prompts and agent instructions
+- Tool definitions and their parameters
+- API keys and other credentials in request bodies
+- Internal configuration data
+
+This redaction happens at the HTTP boundary, so internal callbacks like `onStepFinish` still have access to the full request data for debugging and observability purposes.
+
+### Configuring redaction
+
+By default, redaction is enabled. If you're using the server adapters directly (e.g., `@mastra/hono` or `@mastra/express`), you can configure this behavior:
+
+```typescript title="Custom server setup" copy
+import { HonoServerAdapter } from "@mastra/hono";
+import { mastra } from "./mastra";
+
+const adapter = new HonoServerAdapter({
+  mastra,
+  streamOptions: {
+    redact: true,
+  },
+});
+```
+
+Set `redact: false` only for internal services or debugging scenarios where you need access to the full request data in stream responses.
+
 
 ---
 title: "Middleware | Server & DB"
@@ -13920,7 +13953,6 @@ export const weatherTool = createTool({
 
 ## Related
 
-- [Request Context Example](/examples/v1/agents/request-context)
 - [Agent Request Context](/docs/v1/agents/overview#using-requestcontext)
 - [Workflow Request Context](../workflows/overview#using-requestcontext)
 - [Tool Request Context](../mcp/overview#using-requestcontext)
@@ -17963,6 +17995,7 @@ for await (const chunk of stream.stream) {
 
 - [Control Flow](/docs/v1/workflows/control-flow)
 - [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+- [Time Travel](/docs/v1/workflows/time-travel)
 - [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)
 
 
@@ -17980,7 +18013,7 @@ Some workflows need to pause for human input before continuing. When a workflow 
 
 Human-in-the-loop input works much like [pausing a workflow](/docs/v1/workflows/suspend-and-resume) using `suspend()`. The key difference is that when human input is required, you can return `suspend()` with a payload that provides context or guidance to the user on how to continue.
 
-![Pausing a workflow with suspend()](/img/workflows/workflows-suspend-resume-suspend.jpg)
+![Pausing a workflow with suspend()](/img/workflows/workflows-suspend.jpg)
 
 ```typescript {12-17,22-26} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -18062,7 +18095,7 @@ The data returned by the step can include a reason and help the user understand 
 
 As with [restarting a workflow](/docs/v1/workflows/suspend-and-resume#restarting-a-workflow-with-resume), use `resume()` with `resumeData` to continue a workflow after receiving input from a human. The workflow resumes from the step where it was paused.
 
-![Restarting a workflow with resume()](/img/workflows/workflows-suspend-resume-resume.jpg)
+![Restarting a workflow with resume()](/img/workflows/workflows-resume.jpg)
 
 ```typescript {13} showLineNumbers copy
 const workflow = mastra.getWorkflow("testWorkflow");
@@ -19289,6 +19322,7 @@ if (result.status === "suspended") {
 
 - [Control Flow](/docs/v1/workflows/control-flow)
 - [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+- [Time Travel](/docs/v1/workflows/time-travel)
 - [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)
 
 
@@ -19308,7 +19342,7 @@ Use `suspend()` to pause workflow execution at a specific step. You can define a
 - If the condition isn’t met, the workflow pauses and returns `suspend()`.
 - If the condition is met, the workflow continues with the remaining logic in the step.
 
-![Pausing a workflow with suspend()](/img/workflows/workflows-suspend-resume-suspend.jpg)
+![Pausing a workflow with suspend()](/img/workflows/workflows-suspend.jpg)
 
 ```typescript {9-11,16-18} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
@@ -19353,7 +19387,7 @@ export const testWorkflow = createWorkflow({
 
 Use `resume()` to restart a suspended workflow from the step where it paused. To satisfy the step’s suspend condition, pass a value using `resumeData` that matches the step's `resumeSchema`, allowing execution to continue from the suspended step.
 
-![Restarting a workflow with resume()](/img/workflows/workflows-suspend-resume-resume.jpg)
+![Restarting a workflow with resume()](/img/workflows/workflows-resume.jpg)
 
 ```typescript {13} showLineNumbers copy
 const workflow = mastra.getWorkflow("testWorkflow");
@@ -19434,6 +19468,324 @@ Sleep and event methods can be used to pause execution at the workflow level, wh
 
 - [Control Flow](/docs/v1/workflows/control-flow)
 - [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)
+- [Snapshots](/docs/v1/workflows/snapshots)
+- [Time Travel](/docs/v1/workflows/time-travel)
+
+
+---
+title: "Time Travel | Workflows"
+description: "Re-execute workflow steps from a specific point using time travel debugging in Mastra"
+---
+
+# Time Travel
+[EN] Source: https://mastra.ai/en/docs/workflows/time-travel
+
+Time travel allows you to re-execute a workflow starting from any specific step, using either stored snapshot data or custom context you provide. This is useful for debugging failed workflows, testing individual steps with different inputs, or recovering from errors without re-running the entire workflow.
+You can also use time travel to execute a workflow that has not been run yet, starting from any specific step.
+
+## How time travel works
+
+When you call `timeTravel()` on a workflow run:
+
+1. The workflow loads the existing snapshot from storage (if available)
+2. Step results before the target step are reconstructed from the snapshot or provided context
+3. Execution begins from the specified step with the provided or reconstructed input data
+4. The workflow continues to completion from that point forward
+
+Time travel requires storage to be configured since it relies on persisted workflow snapshots.
+
+## Basic usage
+
+Use `run.timeTravel()` to re-execute a workflow from a specific step:
+
+```typescript showLineNumbers copy
+import { mastra } from "./mastra";
+
+const workflow = mastra.getWorkflow("myWorkflow");
+const run = await workflow.createRun();
+
+const result = await run.timeTravel({
+  step: "step2",
+  inputData: { previousStepResult: "custom value" },
+});
+```
+
+## Specifying the target step
+
+You can specify the target step using either a step reference or a step ID:
+
+### Using step reference
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: step2,
+  inputData: { value: 10 },
+});
+```
+
+### Using step ID
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: "step2",
+  inputData: { value: 10 },
+});
+```
+
+### Nested workflow steps
+
+For steps inside nested workflows, use dot notation, an array of step IDS or an array of step references:
+
+```typescript showLineNumbers copy
+// Using dot notation
+const result = await run.timeTravel({
+  step: "nestedWorkflow.step3",
+  inputData: { value: 10 },
+});
+
+// Using array of step IDs
+const result = await run.timeTravel({
+  step: ["nestedWorkflow", "step3"],
+  inputData: { value: 10 },
+});
+
+// Using array of step references
+const result = await run.timeTravel({
+  step: [nestedWorkflow, step3],
+  inputData: { value: 10 },
+});
+```
+
+## Providing execution context
+
+You can provide context to specify the state of previous steps when time traveling:
+
+```typescript {3-13} showLineNumbers copy
+const result = await run.timeTravel({
+  step: "step2",
+  context: {
+    step1: {
+      status: "success",
+      payload: { value: 0 },
+      output: { step1Result: 2 },
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+    },
+  },
+});
+```
+
+The context object contains step results keyed by step ID. Each step result includes:
+
+- `status`: The step's execution status (`success`, `failed`, `suspended`)
+- `payload`: The input data passed to the step
+- `output`: The step's output data (for successful steps)
+- `startedAt`: Timestamp when the step started
+- `endedAt`: Timestamp when the step ended (for completed steps)
+- `suspendPayload`: Data passed to `suspend()` (for suspended steps)
+- `resumePayload`: Data passed to `resume()` (for resumed steps)
+
+## Re-running failed workflows
+
+Time travel is particularly useful for debugging and recovering from failed workflow executions:
+
+```typescript showLineNumbers copy
+const workflow = mastra.getWorkflow("myWorkflow");
+const run = await workflow.createRun();
+
+// Initial run fails at step2
+const failedResult = await run.start({
+  inputData: { value: 1 },
+});
+
+if (failedResult.status === "failed") {
+  // Re-run from step2 with corrected input
+  const recoveredResult = await run.timeTravel({
+    step: "step2",
+    inputData: { step1Result: 5 }, // Provide corrected input
+  });
+}
+```
+
+## Time travel with suspended workflows
+
+You can time travel to resume a suspended workflow from an earlier step:
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+
+// Start workflow - suspends at promptAgent step
+const initialResult = await run.start({
+  inputData: { input: "test" },
+});
+
+if (initialResult.status === "suspended") {
+  // Time travel back to an earlier step with resume data
+  const result = await run.timeTravel({
+    step: "getUserInput",
+    resumeData: {
+      userInput: "corrected input",
+    },
+  });
+}
+```
+
+## Streaming time travel results
+
+Use `timeTravelStream()` to receive streaming events during time travel execution:
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+
+const output = run.timeTravelStream({
+  step: "step2",
+  inputData: { value: 10 },
+});
+
+// Access the stream
+for await (const event of output.fullStream) {
+  console.log(event.type, event.payload);
+}
+
+// Get final result
+const result = await output.result;
+```
+
+## Time travel with initial state
+
+You can provide initial state when time traveling to set workflow-level state:
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: "step2",
+  inputData: { value: 10 },
+  initialState: {
+    counter: 5,
+    metadata: { source: "time-travel" },
+  },
+});
+```
+
+## Error handling
+
+Time travel throws errors in specific situations:
+
+### Running workflow
+
+You cannot time travel to a workflow that is currently running:
+
+```typescript showLineNumbers copy
+try {
+  await run.timeTravel({ step: "step2" });
+} catch (error) {
+  // "This workflow run is still running, cannot time travel"
+}
+```
+
+### Invalid step ID
+
+Time travel throws if the target step doesn't exist in the workflow:
+
+```typescript showLineNumbers copy
+try {
+  await run.timeTravel({ step: "nonExistentStep" });
+} catch (error) {
+  // "Time travel target step not found in execution graph: 'nonExistentStep'. Verify the step id/path."
+}
+```
+
+### Invalid input data
+
+When `validateInputs` is enabled, time travel validates the input data against the step's schema:
+
+```typescript showLineNumbers copy
+try {
+  await run.timeTravel({
+    step: "step2",
+    inputData: { invalidField: "value" },
+  });
+} catch (error) {
+  // "Invalid inputData: \n- step1Result: Required"
+}
+```
+
+## Nested workflows context
+
+When time traveling into a nested workflow, you can provide context for both the parent and nested workflow steps:
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: "nestedWorkflow.step3",
+  context: {
+    step1: {
+      status: "success",
+      payload: { value: 0 },
+      output: { step1Result: 2 },
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+    },
+    nestedWorkflow: {
+      status: "running",
+      payload: { step1Result: 2 },
+      startedAt: Date.now(),
+    },
+  },
+  nestedStepsContext: {
+    nestedWorkflow: {
+      step2: {
+        status: "success",
+        payload: { step1Result: 2 },
+        output: { step2Result: 3 },
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+      },
+    },
+  },
+});
+```
+
+## Use cases
+
+### Debugging failed steps
+
+Re-run a failed step with the same or modified input to diagnose issues:
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: failedStepId,
+  context: originalContext, // Use context from the failed run
+});
+```
+
+### Testing step logic on new workflow run
+
+Test individual steps with specific inputs on a new workflow run, useful for testing a step logic without starting workflow execution from the beginning.
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: "processData",
+  inputData: { testData: "specific test case" },
+});
+```
+
+### Recovering from transient failures
+
+Re-run steps that failed due to temporary issues (network errors, rate limits):
+
+```typescript showLineNumbers copy
+// After fixing the external service issue
+const result = await run.timeTravel({
+  step: "callExternalApi",
+  inputData: savedInputData,
+});
+```
+
+## Related
+
+- [Snapshots](/docs/v1/workflows/snapshots)
+- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+- [Error Handling](/docs/v1/workflows/error-handling)
+- [Control Flow](/docs/v1/workflows/control-flow)
 
 
 ---
@@ -19628,301 +19980,6 @@ const parentWorkflow = createWorkflow({
 - [Step Class](/reference/v1/workflows/step)
 - [Workflow Class](/reference/v1/workflows/workflow)
 
-
-
----
-title: "Example: Request Context | Agents"
-description: Learn how to create and configure dynamic agents using request context to adapt behavior based on user subscription tiers.
----
-
-# Request Context
-[EN] Source: https://mastra.ai/en/examples/agents/request-context
-
-This example demonstrates how to use request context to create a single agent that dynamically adapts its behavior, capabilities, model selection, tools, memory configuration, input/output processing, and quality scoring based on user subscription tiers.
-
-## Prerequisites
-
-This example uses OpenAI models through Mastra's model router. Make sure to add `OPENAI_API_KEY` to your `.env` file.
-
-```bash title=".env" copy
-OPENAI_API_KEY=<your-api-key>
-```
-
-## Creating the Dynamic Agent
-
-Create an agent that adapts all its properties based on the user's subscription tier:
-
-```typescript title="src/mastra/agents/support-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/libsql";
-import { TokenLimiterProcessor } from "@mastra/core/processors";
-import { RequestContext } from "@mastra/core/request-context";
-import {
-  knowledgeBase,
-  ticketSystem,
-  advancedAnalytics,
-  customIntegration,
-} from "../tools/support-tools";
-import { CharacterLimiterProcessor } from "../processors/character-limiter";
-import { responseQualityScorer } from "../scorers/response-quality";
-
-export type UserTier = "free" | "pro" | "enterprise";
-export type SupportRequestContext = {
-  "user-tier": UserTier;
-  language: "en" | "es" | "ja" | "fr";
-};
-
-export const supportAgent = new Agent({
-  id: "support-agent",
-  name: "Support Agent",
-  description: "AI support agent that adapts to user subscription tiers",
-
-  instructions: async ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
-    const language = requestContext.get("language");
-
-    return `You are a customer support agent for our SaaS platform.
-    The current user is on the ${userTier} tier and prefers ${language} language.
-
-    Support guidance based on tier:
-    ${userTier === "free" ? "- Provide basic support and documentation links" : ""}
-    ${userTier === "pro" ? "- Offer detailed technical support and best practices" : ""}
-    ${userTier === "enterprise" ? "- Provide priority support with custom solutions and dedicated assistance" : ""}
-
-    Always respond in ${language} language.
-    ${userTier === "enterprise" ? "You have access to custom integrations and advanced analytics." : ""}`;
-  },
-
-  model: ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
-
-    if (userTier === "enterprise") return "openai/gpt-5.1";
-    if (userTier === "pro") return "openai/gpt-4.1";
-    return "openai/gpt-4.1-nano";
-  },
-
-  tools: ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
-    const baseTools = [knowledgeBase, ticketSystem];
-
-    if (userTier === "pro" || userTier === "enterprise") {
-      baseTools.push(advancedAnalytics);
-    }
-
-    if (userTier === "enterprise") {
-      baseTools.push(customIntegration);
-    }
-
-    return baseTools;
-  },
-
-  memory: ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
-
-    switch (userTier) {
-      case "enterprise":
-        return new Memory({
-          storage: new LibSQLStore({ id: 'enterprise-storage', url: "file:enterprise.db" }),
-          options: {
-            semanticRecall: { topK: 15, messageRange: 8 },
-            workingMemory: { enabled: true },
-          },
-        });
-      case "pro":
-        return new Memory({
-          storage: new LibSQLStore({ id: 'pro-storage', url: "file:pro.db" }),
-          options: {
-            semanticRecall: { topK: 8, messageRange: 4 },
-            workingMemory: { enabled: true },
-          },
-        });
-      case "free":
-      default:
-        return new Memory({
-          storage: new LibSQLStore({ id: 'free-storage', url: "file:free.db" }),
-          options: {
-            semanticRecall: { topK: 3, messageRange: 2 },
-            workingMemory: { enabled: false },
-          },
-        });
-    }
-  },
-
-  inputProcessors: ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
-
-    switch (userTier) {
-      case "enterprise":
-        return [];
-      case "pro":
-        return [new CharacterLimiterProcessor(2000)];
-      case "free":
-      default:
-        return [new CharacterLimiterProcessor(500)];
-    }
-  },
-
-  outputProcessors: ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
-
-    switch (userTier) {
-      case "enterprise":
-        return [
-          new TokenLimiterProcessor({ limit: 2000, strategy: "truncate" }),
-        ];
-      case "pro":
-        return [
-          new TokenLimiterProcessor({ limit: 500, strategy: "truncate" }),
-        ];
-      case "free":
-      default:
-        return [
-          new TokenLimiterProcessor({ limit: 100, strategy: "truncate" }),
-        ];
-    }
-  },
-
-  scorers: ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
-
-    if (userTier === "enterprise") {
-      return [responseQualityScorer];
-    }
-
-    return [];
-  },
-});
-```
-
-> See [Agent](/reference/v1/agents/agent) for a full list of configuration options.
-
-## Registering the Agent
-
-Register the agent in your main Mastra instance:
-
-```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
-import { supportAgent } from "./agents/support-agent";
-
-export const mastra = new Mastra({
-  agents: { supportAgent },
-});
-```
-
-## Usage Examples
-
-### Free Tier User
-
-```typescript title="src/examples/free-tier-usage.ts" showLineNumbers copy
-import "dotenv/config";
-import { mastra } from "../mastra";
-import { RequestContext } from "@mastra/core/request-context";
-import type { SupportRequestContext } from "../mastra/agents/support-agent";
-
-const agent = mastra.getAgent("supportAgent");
-const requestContext = new RequestContext<SupportRequestContext>();
-
-requestContext.set("user-tier", "free");
-requestContext.set("language", "en");
-
-const response = await agent.generate(
-  "I'm having trouble with API rate limits. Can you help?",
-  { requestContext },
-);
-
-console.log(response.text);
-```
-
-### Pro Tier User
-
-```typescript title="src/examples/pro-tier-usage.ts" showLineNumbers copy
-import "dotenv/config";
-import { mastra } from "../mastra";
-import { RequestContext } from "@mastra/core/request-context";
-import type { SupportRequestContext } from "../mastra/agents/support-agent";
-
-const agent = mastra.getAgent("supportAgent");
-const requestContext = new RequestContext<SupportRequestContext>();
-
-requestContext.set("user-tier", "pro");
-requestContext.set("language", "es");
-
-const response = await agent.generate(
-  "I need detailed analytics on my API usage patterns and optimization recommendations.",
-  { requestContext },
-);
-
-console.log(response.text);
-```
-
-### Enterprise Tier User
-
-```typescript title="src/examples/enterprise-tier-usage.ts" showLineNumbers copy
-import "dotenv/config";
-import { mastra } from "../mastra";
-import { RequestContext } from "@mastra/core/request-context";
-import type { SupportRequestContext } from "../mastra/agents/support-agent";
-
-const agent = mastra.getAgent("supportAgent");
-const requestContext = new RequestContext<SupportRequestContext>();
-
-requestContext.set("user-tier", "enterprise");
-requestContext.set("language", "ja");
-
-const response = await agent.generate(
-  "I need to integrate our custom webhook system with your platform and get real-time analytics on our usage across multiple environments.",
-  { requestContext },
-);
-
-console.log(response.text);
-```
-
-## Key Benefits
-
-This request context approach provides:
-
-- **Cost Optimization**: Enterprise users get premium models and features while free users get basic functionality
-- **Resource Management**: Input and output limits prevent abuse on lower subscription tiers
-- **Quality Assurance**: Response quality scoring only where it adds business value (enterprise tier)
-- **Scalable Architecture**: A single agent definition serves all user segments without code duplication
-- **Personalization**: Language preferences and tier-specific instructions create tailored experiences
-
-## Related
-
-- [Request Context Documentation](/docs/v1/server-db/request-context)
-- [Agent Reference](/reference/v1/agents/agent)
-- [Input Processors](/docs/v1/agents/guardrails)
-- [Output Processors](/docs/v1/agents/guardrails)
-- [Scorers](/docs/v1/evals/overview)
 
 
 ---
@@ -20133,7 +20190,6 @@ The Examples section is a short list of example projects demonstrating basic AI 
         title: "Image Analysis Agent",
         href: "/docs/v1/agents/overview#analyzing-images",
       },
-      { title: "Runtime Context", href: "/examples/v1/agents/request-context" },
       {
         title: "Deploying an MCP Server",
         href: "/docs/v1/mcp/publishing-mcp-server",
@@ -29714,6 +29770,17 @@ const mastra = new Mastra({
 // Retrieve by ID
 const agent = mastra.getAgentById('my-agent');
 ```
+
+### Stream API responses now redact sensitive data
+
+The Mastra server now automatically redacts sensitive information from agent stream responses. This prevents accidental exposure of system prompts, tool definitions, and API keys in `step-start`, `step-finish`, and `finish` stream chunks.
+
+**What's redacted:**
+- `request.body` containing LLM request payloads (system prompts, tool schemas)
+- `metadata.request` in step results
+- `output.steps[].request` in nested step data
+
+This behavior is enabled by default. If you need access to the full request data (e.g., for debugging or internal services), you can disable redaction when using server adapters directly (e.g., `@mastra/hono` or `@mastra/express`).
 
 ## Removed
 
