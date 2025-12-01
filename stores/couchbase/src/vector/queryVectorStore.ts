@@ -11,6 +11,7 @@ import type {
   DeleteIndexParams,
   DeleteVectorParams,
   UpdateVectorParams,
+  DeleteVectorsParams,
 } from '@mastra/core/vector';
 // External packages
 import type { Bucket, Cluster, Collection, Scope } from 'couchbase';
@@ -56,8 +57,16 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
   private scope: Scope;
   private vector_dimension: number;
 
-  constructor({ connectionString, username, password, bucketName, scopeName, collectionName }: CouchbaseVectorParams) {
-    super();
+  constructor({
+    id,
+    connectionString,
+    username,
+    password,
+    bucketName,
+    scopeName,
+    collectionName,
+  }: CouchbaseVectorParams & { id: string }) {
+    super({ id });
 
     try {
       const baseClusterPromise = connect(connectionString, {
@@ -65,15 +74,7 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
         password,
         configProfile: 'wanDevelopment',
       });
-
-      const telemetry = this.__getTelemetry();
-      this.clusterPromise =
-        telemetry?.traceClass(baseClusterPromise, {
-          spanNamePrefix: 'couchbase-query-vector',
-          attributes: {
-            'vector.type': 'couchbase_query_store',
-          },
-        }) ?? baseClusterPromise;
+      this.clusterPromise = baseClusterPromise;
       this.cluster = null as unknown as Cluster;
       this.bucketName = bucketName;
       this.collectionName = collectionName;
@@ -249,7 +250,7 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
           }
         }
         let fields_string: string = fields_clause.length > 0 ? `INCLUDE (${fields_clause})` : '';
-        sqlpp_query = `CREATE VECTOR INDEX \`${indexName}\` ON ${this.bucketName}.${this.scopeName}.${this.collectionName} (embedding VECTOR) ${fields_string} USING GSI WITH ${JSON.stringify(default_index_metadata)};`;
+        sqlpp_query = `CREATE VECTOR INDEX \`${indexName}\` ON \`${this.bucketName}\`.\`${this.scopeName}\`.\`${this.collectionName}\` (embedding VECTOR) ${fields_string} USING GSI WITH ${JSON.stringify(default_index_metadata)};`;
       } else if (vector_index_type === 'composite') {
         for (const key of Object.keys(index_metadata)) {
           if (Object.keys(default_index_metadata).includes(key)) {
@@ -257,7 +258,7 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
           }
         }
         let fields_string: string = fields_clause.length > 0 ? `${fields_clause},` : '';
-        sqlpp_query = `CREATE INDEX \`${indexName}\` ON ${this.bucketName}.${this.scopeName}.${this.collectionName} (${fields_string}embedding VECTOR) USING GSI WITH ${JSON.stringify(default_index_metadata)};`;
+        sqlpp_query = `CREATE INDEX \`${indexName}\` ON \`${this.bucketName}\`.\`${this.scopeName}\`.\`${this.collectionName}\` (${fields_string}embedding VECTOR) USING GSI WITH ${JSON.stringify(default_index_metadata)};`;
       } else {
         throw new Error('Vector index type must be either "hyperscale" or "composite"');
       }
@@ -287,7 +288,7 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
     }
   }
 
-  async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
+  async upsert({ indexName: _indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
     try {
       await this.getCollection();
 
@@ -369,7 +370,7 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
                 [${queryVector}],
                 "${QUERY_VECTOR_INDEX_DISTANCE_MAPPING[index_stats.metric as MastraMetric]}"
             ) AS score
-            FROM ${this.bucketName}.${this.scopeName}.${this.collectionName} AS c
+            FROM \`${this.bucketName}\`.\`${this.scopeName}\`.\`${this.collectionName}\` AS c
             ${transformed_filter.length > 0 ? `WHERE ${transformed_filter}` : ''}
             ORDER BY score ASC
             LIMIT ${topK};`;
@@ -458,6 +459,15 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ id, update }: UpdateVectorParams): Promise<void> {
+    if (!id) {
+      throw new MastraError({
+        id: 'COUCHBASE_QUERY_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'id is required for CouchbaseQueryStore updateVector',
+        details: {},
+      });
+    }
     try {
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');
@@ -497,6 +507,20 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
         error,
       );
     }
+  }
+
+  async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams<QV_CouchbaseVectorFilter>): Promise<void> {
+    throw new MastraError({
+      id: 'COUCHBASE_QUERY_VECTOR_DELETE_VECTORS_NOT_SUPPORTED',
+      text: 'deleteVectors is not yet implemented for CouchbaseQueryStore',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      details: {
+        indexName,
+        ...(filter && { filter: JSON.stringify(filter) }),
+        ...(ids && { idsCount: ids.length }),
+      },
+    });
   }
 
   /**

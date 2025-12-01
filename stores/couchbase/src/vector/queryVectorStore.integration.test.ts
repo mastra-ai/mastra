@@ -1,104 +1,105 @@
-// Integration tests for CouchbaseVector
+// Integration tests for CouchbaseQueryStore
 // IMPORTANT: These tests require Docker Engine to be running.
 // The tests will automatically start and configure the required Couchbase container.
 
-import { randomUUID } from 'crypto';
-
+import { execSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import axios from 'axios';
 import type { Cluster, Bucket, Scope, Collection } from 'couchbase';
 import { connect } from 'couchbase';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { CouchbaseQueryStore, QUERY_VECTOR_INDEX_DISTANCE_MAPPING } from './queryVectorStore';
 
-// const containerName = 'mastra_couchbase_testing';
+const containerName = 'mastra_couchbase_testing';
 
 const connectionString = 'couchbase://localhost';
-const username = 'test';
-const password = 'Tester@123';
+const username = 'Administrator';
+const password = 'password';
 
-const test_bucketName = 'demos';
-const test_scopeName = 'movies';
-const test_collectionName = 'default';
-const test_indexName = 'custom_index';
+const test_bucketName = 'test-bucket-2';
+const test_scopeName = 'test-scope-2';
+const test_collectionName = 'test-collection-2';
+const test_indexName = 'test-index-2';
 
-// async function setupCluster() {
-//   try {
-//     // Initialize the cluster
-//     execSync(
-//       `docker exec -i ${containerName} couchbase-cli cluster-init --cluster "${connectionString}" \
-//       --cluster-username "${username}" --cluster-password "${password}" --cluster-ramsize 512 \
-//       --cluster-index-ramsize 512 --cluster-fts-ramsize 512 --services data,index,query,fts`,
-//       { stdio: 'inherit' },
-//     );
-//   } catch (error) {
-//     console.error('Error initializing Couchbase cluster:', error.message);
-//     // Decide if you want to re-throw or handle specific errors here
-//   }
+async function setupCluster() {
+  try {
+    // Initialize the cluster
+    execSync(
+      `docker exec -i ${containerName} couchbase-cli cluster-init --cluster "${connectionString}" \
+      --cluster-username "${username}" --cluster-password "${password}" --cluster-ramsize 512 \
+      --cluster-index-ramsize 512 --cluster-fts-ramsize 512 --services data,index,query,fts`,
+      { stdio: 'inherit' },
+    );
+  } catch (error: any) {
+    console.error('Error initializing Couchbase cluster:', error.message);
+    // Decide if you want to re-throw or handle specific errors here
+  }
 
-//   try {
-//     // Create the bucket
-//     execSync(
-//       `docker exec -i ${containerName} couchbase-cli bucket-create -c "${connectionString}" \
-//       --username "${username}" --password "${password}" \
-//       --bucket "${test_bucketName}" --bucket-type couchbase --bucket-ramsize 200`,
-//       { stdio: 'inherit' },
-//     );
-//   } catch (error) {
-//     console.error('Error creating bucket:', error.message);
-//     // Decide if you want to re-throw or handle specific errors here
-//   }
+  try {
+    // Create the bucket
+    execSync(
+      `docker exec -i ${containerName} couchbase-cli bucket-create -c "${connectionString}" \
+      --username "${username}" --password "${password}" \
+      --bucket "${test_bucketName}" --bucket-type couchbase --bucket-ramsize 200`,
+      { stdio: 'inherit' },
+    );
+  } catch (error: any) {
+    console.error('Error creating bucket:', error.message);
+    // Decide if you want to re-throw or handle specific errors here
+  }
 
-//   // Wait for cluster to be fully available after potential operations
-//   await new Promise(resolve => setTimeout(resolve, 10000));
-// }
+  // Wait for cluster to be fully available after potential operations
+  await new Promise(resolve => setTimeout(resolve, 10000));
+}
 
-// async function checkBucketHealth(
-//   connectionString: string,
-//   username: string,
-//   password: string,
-//   bucketName: string,
-// ): Promise<void> {
-//   const maxAttempts = 20;
-//   let attempt = 0;
+async function checkBucketHealth(
+  connectionString: string,
+  username: string,
+  password: string,
+  bucketName: string,
+): Promise<void> {
+  const maxAttempts = 20;
+  let attempt = 0;
 
-//   // Parse the connection string to get the host
-//   const parsedUrl = new URL(connectionString);
-//   const host = parsedUrl.hostname;
-//   const url = `http://${host}:8091/pools/default/buckets/${bucketName}`;
+  // Parse the connection string to get the host
+  const parsedUrl = new URL(connectionString.replace('couchbase://', 'http://'));
+  const host = parsedUrl.hostname;
+  const url = `http://${host}:8091/pools/default/buckets/${bucketName}`;
 
-//   while (attempt < maxAttempts) {
-//     try {
-//       const response = await axios.get(url, {
-//         auth: {
-//           username,
-//           password,
-//         },
-//         validateStatus: () => true, // Don't throw on any status code
-//       });
+  while (attempt < maxAttempts) {
+    try {
+      const response = await axios.get(url, {
+        auth: {
+          username,
+          password,
+        },
+        validateStatus: () => true, // Don't throw on any status code
+      });
 
-//       const responseData = response.data;
-//       if (
-//         response.status === 200 &&
-//         responseData.nodes &&
-//         responseData.nodes.length > 0 &&
-//         responseData.nodes[0].status === 'healthy'
-//       ) {
-//         return;
-//       } else {
-//         console.log(`Attempt ${attempt + 1}/${maxAttempts}: Bucket '${bucketName}' health check failed`);
-//         await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
-//         attempt++;
-//       }
-//     } catch (error) {
-//       console.log(
-//         `Attempt ${attempt + 1}/${maxAttempts}: Bucket '${bucketName}' health check failed with error: ${error.message}`,
-//       );
-//       await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
-//       attempt++;
-//     }
-//   }
+      const responseData = response.data;
+      if (
+        response.status === 200 &&
+        responseData.nodes &&
+        responseData.nodes.length > 0 &&
+        responseData.nodes[0].status === 'healthy'
+      ) {
+        return;
+      } else {
+        console.log(`Attempt ${attempt + 1}/${maxAttempts}: Bucket '${bucketName}' health check failed`);
+        await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
+        attempt++;
+      }
+    } catch (error: any) {
+      console.log(
+        `Attempt ${attempt + 1}/${maxAttempts}: Bucket '${bucketName}' health check failed with error: ${error.message}`,
+      );
+      await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
+      attempt++;
+    }
+  }
 
-//   throw new Error(`Bucket '${bucketName}' health check failed after ${maxAttempts} attempts.`);
-// }
+  throw new Error(`Bucket '${bucketName}' health check failed after ${maxAttempts} attempts.`);
+}
 
 describe('Integration Testing CouchbaseQueryStore', async () => {
   // Use Couchbase Enterprise 7.6+ which supports vector search
@@ -123,6 +124,12 @@ describe('Integration Testing CouchbaseQueryStore', async () => {
   beforeAll(
     async () => {
       try {
+        // Initialize the cluster (may already be done by index.integration.test.ts)
+        await setupCluster();
+
+        // Check cluster health before trying to connect
+        await checkBucketHealth(connectionString, username, password, test_bucketName);
+
         // Connect to the cluster
         cluster = await connect(connectionString, {
           username: username,
@@ -134,7 +141,7 @@ describe('Integration Testing CouchbaseQueryStore', async () => {
         const bucketmanager = cluster.buckets();
         try {
           await bucketmanager.getBucket(test_bucketName);
-        } catch (e) {
+        } catch (e: any) {
           if (e.message.includes('not found')) {
             await bucketmanager.createBucket({
               name: test_bucketName,
@@ -149,45 +156,51 @@ describe('Integration Testing CouchbaseQueryStore', async () => {
 
         // If scope or collection are not there, then create it
         const all_scopes = await bucket.collections().getAllScopes();
-        const scope_info = all_scopes.find(scope => scope.name === test_scopeName);
+        const scope_info = all_scopes.find(s => s.name === test_scopeName);
         if (!scope_info) {
           await bucket.collections().createScope(test_scopeName);
+          await new Promise(resolve => setTimeout(resolve, 1000));
           scope = bucket.scope(test_scopeName);
           await bucket.collections().createCollection(test_collectionName, test_scopeName);
+          await new Promise(resolve => setTimeout(resolve, 1000));
           collection = scope.collection(test_collectionName);
         } else {
           scope = bucket.scope(test_scopeName);
-          if (!scope_info.collections.some(collection => collection.name === test_collectionName)) {
+          if (!scope_info.collections.some(c => c.name === test_collectionName)) {
             await bucket.collections().createCollection(test_collectionName, test_scopeName);
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
           collection = scope.collection(test_collectionName);
         }
+
+        // Initialize the CouchbaseQueryStore client after cluster setup
+        couchbase_client = new CouchbaseQueryStore({
+          id: 'couchbase-query-store-integration-test',
+          connectionString,
+          username,
+          password,
+          bucketName: test_bucketName,
+          scopeName: test_scopeName,
+          collectionName: test_collectionName,
+        });
+        await couchbase_client.getCollection();
       } catch (error) {
         console.error('Failed to start Couchbase container:', error);
+        throw error; // Re-throw to fail the tests properly
       }
-
-      couchbase_client = new CouchbaseQueryStore({
-        connectionString,
-        username,
-        password,
-        bucketName: test_bucketName,
-        scopeName: test_scopeName,
-        collectionName: test_collectionName,
-      });
-      await couchbase_client.getCollection();
-      await couchbase_client.upsert({
-        indexName: test_indexName,
-        vectors: testVectors,
-        metadata: testMetadata,
-        ids: testVectorIds,
-      });
     },
     5 * 60 * 1000,
   ); // 5 minutes
 
   afterAll(async () => {
-    await bucket.collections().dropCollection(test_collectionName, test_scopeName);
-    await bucket.collections().createCollection(test_collectionName, test_scopeName);
+    if (bucket) {
+      try {
+        await bucket.collections().dropCollection(test_collectionName, test_scopeName);
+        await bucket.collections().createCollection(test_collectionName, test_scopeName);
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
 
     if (cluster) {
       await cluster.close();
@@ -195,9 +208,22 @@ describe('Integration Testing CouchbaseQueryStore', async () => {
   }, 50000);
 
   describe('Index Operations', () => {
-    it('should create BHIVE index', async () => {
+    beforeAll(async () => {
+      // Insert documents directly into the collection
+      for (let i = 0; i < testVectors.length; i++) {
+        await collection.upsert(testVectorIds[i], {
+          embedding: testVectors[i],
+          metadata: testMetadata[i],
+        });
+      }
+
+      // Wait for documents to be persisted
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }, 50000);
+
+    it('should create Hyperscale index', async () => {
       await couchbase_client.createIndex({
-        indexName: test_indexName + '_bhive',
+        indexName: test_indexName + '_hyperscale',
         dimension: test_dimension,
         metric: 'euclidean',
         fields_to_index: ['num1', 'num2', 'num3', 'label'],
@@ -205,20 +231,18 @@ describe('Integration Testing CouchbaseQueryStore', async () => {
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       let index_definition: Record<string, any> = {};
-      const sqlpp_query = `SELECT idx.* FROM system:indexes AS idx WHERE idx.bucket_id = "${test_bucketName}" AND idx.scope_id = "${test_scopeName}" AND idx.keyspace_id = "${test_collectionName}" AND idx.name = "${test_indexName}_bhive";`;
+      const sqlpp_query = `SELECT idx.* FROM system:indexes AS idx WHERE idx.bucket_id = "${test_bucketName}" AND idx.scope_id = "${test_scopeName}" AND idx.keyspace_id = "${test_collectionName}" AND idx.name = "${test_indexName}_hyperscale";`;
       const results = await cluster.query(sqlpp_query);
       results.rows.forEach((row: any) => {
-        if (row.name === test_indexName + '_bhive') {
+        if (row.name === test_indexName + '_hyperscale') {
           index_definition = row;
         }
       });
 
       expect(index_definition).toBeDefined();
-      expect(index_definition.name).toBe(test_indexName + '_bhive');
+      expect(index_definition.name).toBe(test_indexName + '_hyperscale');
       expect(index_definition.with.dimension).toBe(test_dimension);
-      expect(index_definition.with.similarity.toUpperCase()).toBe('L2_SQUARED'); // TODO: BHIVE is strangely even showing L2 on UI, but on SQL++ result giving L2_SQUARED
-      // TODO: In the info I get of the index I do not get the indexed fields except the embedding field. I have checked the index does have the indexed fields.
-      // expect(index_definition.index_key).toEqual(['`embedding` VECTOR', '`metadata.num1`', '`metadata.num2`', '`metadata.num3`', '`metadata.label`']);
+      expect(index_definition.with.similarity.toUpperCase()).toBe('L2_SQUARED');
     }, 50000);
 
     it('should create COMPOSITE index', async () => {
@@ -243,7 +267,7 @@ describe('Integration Testing CouchbaseQueryStore', async () => {
       expect(index_definition).toBeDefined();
       expect(index_definition.name).toBe(test_indexName + '_composite');
       expect(index_definition.with.dimension).toBe(test_dimension);
-      expect(index_definition.with.similarity.toUpperCase()).toBe('L2_SQUARED'); // TODO: COMPOSITE is strangely even showing L2 on UI, but the SQL++ result is giving L2_SQUARED
+      expect(index_definition.with.similarity.toUpperCase()).toBe('L2_SQUARED');
       expect(index_definition.index_key).toEqual([
         '(`metadata`.`num1`)',
         '(`metadata`.`num2`)',
@@ -254,14 +278,34 @@ describe('Integration Testing CouchbaseQueryStore', async () => {
     }, 50000);
 
     it('should delete index', async () => {
-      await couchbase_client.deleteIndex({ indexName: test_indexName + '_bhive' });
+      await couchbase_client.deleteIndex({ indexName: test_indexName + '_hyperscale' });
       await couchbase_client.deleteIndex({ indexName: test_indexName + '_composite' });
       await new Promise(resolve => setTimeout(resolve, 5000));
+    }, 50000);
+
+    afterAll(async () => {
+      // Clean up any test vectors that may have been created
+      try {
+        for (const id of testVectorIds) {
+          await collection.remove(id).catch(() => {
+            // Ignore errors if document doesn't exist
+          });
+        }
+      } catch (error) {
+        console.error('Error cleaning up test vectors:', error);
+      }
     }, 50000);
   });
 
   describe('Vector Operations', () => {
     beforeAll(async () => {
+      await couchbase_client.upsert({
+        indexName: test_indexName,
+        vectors: testVectors,
+        metadata: testMetadata,
+        ids: testVectorIds,
+      });
+
       await couchbase_client.createIndex({
         indexName: test_indexName,
         dimension: test_dimension,
@@ -273,18 +317,20 @@ describe('Integration Testing CouchbaseQueryStore', async () => {
     }, 50000);
 
     afterAll(async () => {
+      // Clean up test vectors
+      try {
+        for (const id of testVectorIds) {
+          await collection.remove(id).catch(() => {
+            // Ignore errors if document doesn't exist
+          });
+        }
+      } catch (error) {
+        console.error('Error cleaning up test vectors:', error);
+      }
+
       await couchbase_client.deleteIndex({ indexName: test_indexName });
       await new Promise(resolve => setTimeout(resolve, 5000));
     }, 50000);
-
-    beforeEach(async () => {
-      return await couchbase_client.upsert({
-        indexName: test_indexName,
-        vectors: testVectors,
-        metadata: testMetadata,
-        ids: testVectorIds,
-      });
-    }, 10000);
 
     it('should upsert vectors with metadata', async () => {
       // Verify vectors were stored correctly by retrieving them directly through the collection
@@ -785,6 +831,29 @@ describe('Integration Testing CouchbaseQueryStore', async () => {
           await new Promise(resolve => setTimeout(resolve, 5000));
         }
       }
+
+      // Upsert test vectors with metadata
+      await couchbase_client.upsert({
+        indexName: test_indexName,
+        vectors: testVectors,
+        metadata: testMetadata,
+        ids: testVectorIds,
+      });
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }, 50000);
+
+    afterAll(async () => {
+      // Clean up test vectors
+      try {
+        for (const id of testVectorIds) {
+          await collection.remove(id).catch(() => {
+            // Ignore errors if document doesn't exist
+          });
+        }
+      } catch (error) {
+        console.error('Error cleaning up test vectors:', error);
+      }
+      await new Promise(resolve => setTimeout(resolve, 5000));
     }, 50000);
 
     it('should handle metric mapping correctly', async () => {

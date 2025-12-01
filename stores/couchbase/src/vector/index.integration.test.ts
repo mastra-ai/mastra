@@ -1,4 +1,4 @@
-// Integration tests for CouchbaseVector
+// Integration tests for CouchbaseSearchStore
 // IMPORTANT: These tests require Docker Engine to be running.
 // The tests will automatically start and configure the required Couchbase container.
 
@@ -160,7 +160,7 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
         }
 
         // Initialize the CouchbaseVector client after cluster setup
-        couchbase_client = new CouchbaseVector({
+        couchbase_client = new CouchbaseSearchStore({
           connectionString,
           username,
           password,
@@ -185,7 +185,8 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
 
   describe('Connection', () => {
     it('should connect to couchbase', async () => {
-      couchbase_client = new CouchbaseSearchStore({
+      const testClient = new CouchbaseSearchStore({
+        id: 'couchbase-connection-test',
         connectionString,
         username,
         password,
@@ -193,9 +194,9 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
         scopeName: test_scopeName,
         collectionName: test_collectionName,
       });
-      expect(couchbase_client).toBeDefined();
-      const collection = await couchbase_client.getCollection();
-      expect(collection).toBeDefined();
+      expect(testClient).toBeDefined();
+      const testCollection = await testClient.getCollection();
+      expect(testCollection).toBeDefined();
     }, 50000);
   });
 
@@ -945,6 +946,20 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
       await bucket.collections().dropCollection(collectionName, scopeName);
       await bucket.collections().createCollection(collectionName, scopeName);
       collection = bucket.scope(scopeName).collection(collectionName);
+
+      // Wait for collection to be ready
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Reinitialize the couchbase_client to use the fresh collection
+      couchbase_client = new CouchbaseSearchStore({
+        id: 'couchbase-filter-test',
+        connectionString,
+        username,
+        password,
+        bucketName: test_bucketName,
+        scopeName: test_scopeName,
+        collectionName: test_collectionName,
+      });
 
       // Create a search index with all needed fields for filtering
       await couchbase_client.createIndex({
