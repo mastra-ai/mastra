@@ -13,6 +13,10 @@ const PORT = portIndex !== -1 && args[portIndex + 1] ? parseInt(args[portIndex +
 
 const BASE_URL = `http://localhost:${PORT}`;
 
+// Auth token for protected endpoints
+const AUTH_TOKEN = process.env.TEST_AUTH_TOKEN || '';
+const authHeaders: Record<string, string> = AUTH_TOKEN ? { Authorization: `Bearer ${AUTH_TOKEN}` } : {};
+
 // Output file setup
 const OUTPUT_DIR = path.join(import.meta.dirname, '..', 'output');
 const serverType = PORT === 3001 ? 'hono' : PORT === 3002 ? 'express' : `port-${PORT}`;
@@ -79,9 +83,11 @@ async function testHttpTransport() {
     servers: {
       main: {
         url: new URL(`${BASE_URL}/api/mcp/${mainServerId}/mcp`),
+        requestInit: { headers: authHeaders },
       },
       secondary: {
         url: new URL(`${BASE_URL}/api/mcp/${secondaryServerId}/mcp`),
+        requestInit: { headers: authHeaders },
       },
     },
   });
@@ -190,6 +196,7 @@ async function testSseTransport() {
     servers: {
       main: {
         url: new URL(`${BASE_URL}/api/mcp/${mainServerId}/sse`),
+        requestInit: { headers: authHeaders },
       },
     },
   });
@@ -255,6 +262,7 @@ async function testSseConnectionLifecycle() {
       servers: {
         main: {
           url: new URL(`${BASE_URL}/api/mcp/${mainServerId}/sse`),
+          requestInit: { headers: authHeaders },
         },
       },
     });
@@ -287,6 +295,7 @@ async function testToolResponseFormat() {
     servers: {
       main: {
         url: new URL(`${BASE_URL}/api/mcp/${mainServerId}/mcp`),
+        requestInit: { headers: authHeaders },
       },
     },
   });
@@ -355,6 +364,7 @@ async function testErrorHandling() {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json, text/event-stream',
+        ...authHeaders,
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
@@ -378,7 +388,9 @@ async function testErrorHandling() {
 
   try {
     // Test 404 for non-existent SSE server
-    const res = await fetch(`${BASE_URL}/api/mcp/non-existent-server/sse`);
+    const res = await fetch(`${BASE_URL}/api/mcp/non-existent-server/sse`, {
+      headers: authHeaders,
+    });
     if (res.status === 404) {
       success('SSE: Returns 404 for non-existent server');
     } else {

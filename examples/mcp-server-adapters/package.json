@@ -5,10 +5,11 @@
   "description": "Example demonstrating MCP server endpoints with Hono and Express adapters",
   "main": "index.js",
   "scripts": {
-    "start:hono": "tsx src/hono-server.ts",
-    "start:express": "tsx src/express-server.ts",
-    "test:hono": "tsx src/test-mcp.ts --port 3001",
-    "test:express": "tsx src/test-mcp.ts --port 3002",
+    "start:env": "tsx --env-file .env",
+    "start:hono": "pnpm start:env src/hono-server.ts",
+    "start:express": "pnpm start:env src/express-server.ts",
+    "test:hono": "pnpm start:env src/test-mcp.ts --port 3001",
+    "test:express": "pnpm start:env src/test-mcp.ts --port 3002",
     "dev": "mastra dev"
   },
   "keywords": [],
