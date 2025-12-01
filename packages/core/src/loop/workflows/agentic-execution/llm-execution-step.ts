@@ -328,6 +328,38 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         }
         break;
 
+      case 'tool-call':
+        {
+          // Add tool call to messageList immediately to preserve ordering with text parts
+          // This fixes GitHub issue #9909 where tool calls were batched at the end
+          const toolCallPayload = chunk.payload;
+          const message: MastraDBMessage = {
+            id: messageId,
+            role: 'assistant' as const,
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'tool-invocation' as const,
+                  toolInvocation: {
+                    state: 'call' as const,
+                    toolCallId: toolCallPayload.toolCallId,
+                    toolName: toolCallPayload.toolName,
+                    args: toolCallPayload.args,
+                  },
+                  ...(toolCallPayload.providerMetadata ? { providerMetadata: toolCallPayload.providerMetadata } : {}),
+                },
+              ],
+            },
+            createdAt: new Date(),
+          };
+          messageList.add(message, 'response');
+          if (isControllerOpen(controller)) {
+            controller.enqueue(chunk);
+          }
+        }
+        break;
+
       case 'finish':
         runState.setState({
           providerOptions: chunk.payload.metadata.providerMetadata,
@@ -751,37 +783,11 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
         });
       }
 
-      /**
-       * Add tool calls to the message list
-       */
-
+      // Tool calls are now added to messageList during streaming (in the 'tool-call' case)
+      // to preserve correct ordering with text parts. See GitHub issue #9909.
       const toolCalls = outputStream._getImmediateToolCalls()?.map(chunk => {
         return chunk.payload;
       });
-
-      if (toolCalls.length > 0) {
-        const message: MastraDBMessage = {
-          id: messageId,
-          role: 'assistant' as const,
-          content: {
-            format: 2,
-            parts: toolCalls.map(toolCall => {
-              return {
-                type: 'tool-invocation' as const,
-                toolInvocation: {
-                  state: 'call' as const,
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  args: toolCall.args,
-                },
-                ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
-              };
-            }),
-          },
-          createdAt: new Date(),
-        };
-        messageList.add(message, 'response');
-      }
 
       const finishReason = runState?.state?.stepResult?.reason ?? outputStream._getImmediateFinishReason();
       const hasErrored = runState.state.hasErrored;
