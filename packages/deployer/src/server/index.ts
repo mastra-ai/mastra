@@ -61,6 +61,7 @@ export async function createHonoServer(
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
+  const apiRootPath = server?.apiRootPath ?? '/api';
   const a2aTaskStore = new InMemoryTaskStore();
   const routes = server?.apiRoutes;
 
@@ -194,20 +195,6 @@ export async function createHonoServer(
     app.use(logger());
   }
 
-  // Register adapter routes (adapter was created earlier with configuration)
-  // Cast needed due to Hono type variance - safe because registerRoutes is generic
-  await honoServerAdapter.registerRoutes(app as any, { openapiPath: '/openapi.json' });
-
-  // Register MCP routes (separate from SERVER_ROUTES due to fetch-to-node bundling requirements)
-  for (const route of MCP_ROUTES) {
-    await honoServerAdapter.registerRoute(app as any, route, { prefix: '' });
-  }
-
-  // Register MCP standalone handlers (these use raw Hono Context, not createRoute pattern)
-  app.all('/api/mcp/:serverId/mcp', getMcpServerMessageHandler);
-  app.get('/api/mcp/:serverId/sse', getMcpServerSseHandler);
-  app.post('/api/mcp/:serverId/messages', getMcpServerSseHandler);
-
   if (options?.isDev || server?.build?.swaggerUI) {
     app.get(
       '/swagger-ui',
@@ -285,7 +272,8 @@ export async function createHonoServer(
   app.get('*', async (c, next) => {
     // Skip if it's an API route
     if (
-      c.req.path.startsWith('/api/') ||
+      c.req.path.startsWith(`${apiRootPath}/`) ||
+      c.req.path === apiRootPath ||
       c.req.path.startsWith('/swagger-ui') ||
       c.req.path.startsWith('/openapi.json')
     ) {
@@ -334,6 +322,7 @@ export async function createHonoServer(
 export async function createNodeServer(mastra: Mastra, options: ServerBundleOptions = { tools: {} }) {
   const app = await createHonoServer(mastra, options);
   const serverOptions = mastra.getServer();
+  const apiRootPath = serverOptions?.apiRootPath ?? '/api';
 
   const key =
     serverOptions?.https?.key ??
@@ -364,7 +353,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     },
     () => {
       const logger = mastra.getLogger();
-      logger.info(` Mastra API running on port ${protocol}://${host}:${port}/api`);
+      logger.info(` Mastra API running on port ${protocol}://${host}:${port}${apiRootPath}`);
       if (options?.playground) {
         const studioUrl = `${protocol}://${host}:${port}`;
         logger.info(`👨‍💻 Studio available at ${studioUrl}`);
