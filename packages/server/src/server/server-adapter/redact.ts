@@ -1,6 +1,37 @@
 import type { ChunkType, OutputSchema } from '@mastra/core/stream';
 
 /**
+ * Redacts request data from a v2 format payload.
+ * Removes `metadata.request` and `output.steps[].request` from the payload.
+ */
+function redactV2Payload(payload: Record<string, unknown>): Record<string, unknown> {
+  const redactedPayload = { ...payload };
+
+  // Remove metadata.request
+  if (redactedPayload.metadata && typeof redactedPayload.metadata === 'object') {
+    const { request, ...metadataRest } = redactedPayload.metadata as Record<string, unknown>;
+    redactedPayload.metadata = metadataRest;
+  }
+
+  // Remove request from output.steps[]
+  if (redactedPayload.output && typeof redactedPayload.output === 'object') {
+    const output = { ...(redactedPayload.output as Record<string, unknown>) };
+    if (Array.isArray(output.steps)) {
+      output.steps = output.steps.map((step: Record<string, unknown>) => {
+        if (step && typeof step === 'object') {
+          const { request, ...stepRest } = step;
+          return stepRest;
+        }
+        return step;
+      });
+    }
+    redactedPayload.output = output;
+  }
+
+  return redactedPayload;
+}
+
+/**
  * Redacts sensitive data from stream chunks before they are sent to clients.
  *
  * This function strips out request bodies that may contain sensitive information
@@ -66,33 +97,10 @@ export function redactStreamChunk<OUTPUT extends OutputSchema = undefined>(
       if ('payload' in typedChunk && typedChunk.payload && typeof typedChunk.payload === 'object') {
         // v2 format: Remove request from metadata and output.steps[].request
         const { payload, ...rest } = typedChunk;
-        const redactedPayload = { ...(payload as Record<string, unknown>) };
-
-        // Remove metadata.request
-        if (redactedPayload.metadata && typeof redactedPayload.metadata === 'object') {
-          const { request, ...metadataRest } = redactedPayload.metadata as Record<string, unknown>;
-          redactedPayload.metadata = metadataRest;
-        }
-
-        // Remove request from output.steps[]
-        if (redactedPayload.output && typeof redactedPayload.output === 'object') {
-          const output = { ...(redactedPayload.output as Record<string, unknown>) };
-          if (Array.isArray(output.steps)) {
-            output.steps = output.steps.map((step: Record<string, unknown>) => {
-              if (step && typeof step === 'object') {
-                const { request, ...stepRest } = step;
-                return stepRest;
-              }
-              return step;
-            });
-          }
-          redactedPayload.output = output;
-        }
-
         return {
           ...rest,
           type: 'step-finish',
-          payload: redactedPayload,
+          payload: redactV2Payload(payload as Record<string, unknown>),
         } as ChunkType<OUTPUT>;
       } else if ('request' in typedChunk) {
         // v1 format: Remove request at root level
@@ -110,33 +118,10 @@ export function redactStreamChunk<OUTPUT extends OutputSchema = undefined>(
       if ('payload' in typedChunk && typedChunk.payload && typeof typedChunk.payload === 'object') {
         // v2 format: Remove request from metadata and output.steps[].request
         const { payload, ...rest } = typedChunk;
-        const redactedPayload = { ...(payload as Record<string, unknown>) };
-
-        // Remove metadata.request
-        if (redactedPayload.metadata && typeof redactedPayload.metadata === 'object') {
-          const { request, ...metadataRest } = redactedPayload.metadata as Record<string, unknown>;
-          redactedPayload.metadata = metadataRest;
-        }
-
-        // Remove request from output.steps[]
-        if (redactedPayload.output && typeof redactedPayload.output === 'object') {
-          const output = { ...(redactedPayload.output as Record<string, unknown>) };
-          if (Array.isArray(output.steps)) {
-            output.steps = output.steps.map((step: Record<string, unknown>) => {
-              if (step && typeof step === 'object') {
-                const { request, ...stepRest } = step;
-                return stepRest;
-              }
-              return step;
-            });
-          }
-          redactedPayload.output = output;
-        }
-
         return {
           ...rest,
           type: 'finish',
-          payload: redactedPayload,
+          payload: redactV2Payload(payload as Record<string, unknown>),
         } as ChunkType<OUTPUT>;
       } else if ('request' in typedChunk) {
         // v1 format: Remove request at root level
