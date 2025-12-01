@@ -1,10 +1,3 @@
----
-title: "Example: Supervisor Agent | Agents"
-description: Example of creating a supervisor agent using Mastra, where agents interact through tool functions.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
 # Supervisor Agent
 
 When building complex AI applications, you often need multiple specialized agents to collaborate on different aspects of a task. A supervisor agent enables one agent to act as a supervisor, coordinating the work of other agents, each focused on their own area of expertise. This structure allows agents to delegate, collaborate, and produce more advanced outputs than any single agent alone.
@@ -19,7 +12,7 @@ In this example, this system consists of three agents:
 
 This example uses the `openai` model. Make sure to add `OPENAI_API_KEY` to your `.env` file.
 
-```bash title=".env" copy
+```bash
 OPENAI_API_KEY=<your-api-key>
 ```
 
@@ -27,7 +20,7 @@ OPENAI_API_KEY=<your-api-key>
 
 This `copywriterAgent` is responsible for writing the initial blog post content based on a given topic.
 
-```typescript title="src/mastra/agents/example-copywriter-agent.ts" showLineNumbers copy
+```typescript
 import { Agent } from "@mastra/core/agent";
 
 export const copywriterAgent = new Agent({
@@ -42,7 +35,7 @@ export const copywriterAgent = new Agent({
 
 The `copywriterTool` provides an interface to call the `copywriterAgent` and passes in the `topic`.
 
-```typescript title="src/mastra/tools/example-copywriter-tool.ts"
+```typescript
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -72,7 +65,7 @@ export const copywriterTool = createTool({
 
 This `editorAgent` takes the initial copy and refines it to improve quality and readability.
 
-```typescript title="src/mastra/agents/example-editor-agent.ts" showLineNumbers copy
+```typescript
 import { Agent } from "@mastra/core/agent";
 
 export const editorAgent = new Agent({
@@ -87,7 +80,7 @@ export const editorAgent = new Agent({
 
 The `editorTool` provides an interface to call the `editorAgent` and passes in the `copy`.
 
-```typescript title="src/mastra/tools/example-editor-tool.ts" showLineNumbers copy
+```typescript
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -119,7 +112,7 @@ export const editorTool = createTool({
 
 This `publisherAgent` coordinates the entire process by calling the `copywriterTool` first, then the `editorTool`.
 
-```typescript title="src/mastra/agents/example-publisher-agent.ts" showLineNumbers copy
+```typescript
 import { Agent } from "@mastra/core/agent";
 
 import { copywriterTool } from "../tools/example-copywriter-tool";
@@ -139,7 +132,7 @@ export const publisherAgent = new Agent({
 
 All three agents are registered in the main Mastra instance so they can be accessed by each other.
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript
 import { Mastra } from "@mastra/core";
 
 import { publisherAgent } from "./agents/example-publisher-agent";
@@ -155,7 +148,7 @@ export const mastra = new Mastra({
 
 Use `getAgent()` to retrieve a reference to the agent, then call `generate()` with a prompt.
 
-```typescript title="src/test-publisher-agent.ts" showLineNumbers copy
+```typescript
 import "dotenv/config";
 
 import { mastra } from "./mastra";
@@ -168,10 +161,3 @@ const response = await agent.generate(
 
 console.log(response.text);
 ```
-
-<GithubLink
-  outdated={true}
-  marginTop="mt-16"
-  href="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/hierarchical-multi-agent"
-/>
-
