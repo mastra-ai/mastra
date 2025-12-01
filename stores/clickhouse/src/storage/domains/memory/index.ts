@@ -125,7 +125,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     // Normalize threadId to array, coerce to strings, trim, and filter out empty/non-string values
     const rawThreadIds = Array.isArray(threadId) ? threadId : [threadId];
     const threadIds = rawThreadIds
-      .filter((id): id is string | number | boolean => id !== undefined && id !== null)
+      .filter(id => id !== undefined && id !== null)
       .map(id => (typeof id === 'string' ? id : String(id)).trim())
       .filter(id => id.length > 0);
 
@@ -148,7 +148,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           id: 'STORAGE_CLICKHOUSE_LIST_MESSAGES_INVALID_THREAD_ID',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId: Array.isArray(threadId) ? threadId : String(threadId) },
+          details: { threadId: Array.isArray(threadId) ? JSON.stringify(threadId) : String(threadId) },
         },
         new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
