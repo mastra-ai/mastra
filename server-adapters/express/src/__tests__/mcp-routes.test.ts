@@ -13,7 +13,7 @@ describe('Express MCP Registry Routes Integration', () => {
   createMCPRouteTestSuite({
     suiteName: 'Express Adapter',
 
-    setupAdapter: (context: AdapterTestContext) => {
+    setupAdapter: async (context: AdapterTestContext) => {
       // Create Express app
       const app = express();
       app.use(express.json());
@@ -29,7 +29,7 @@ describe('Express MCP Registry Routes Integration', () => {
       });
 
       // Register context middleware
-      adapter.init();
+      await adapter.init();
 
       return { app, adapter };
     },

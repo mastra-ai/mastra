@@ -338,7 +338,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
           result = a * b;
           break;
         case 'divide':
-          result = a / b;
+          result = b !== 0 ? a / b : Infinity;
           break;
       }
       return { result };
