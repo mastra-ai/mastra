@@ -752,11 +752,48 @@ export interface TraceState {
 }
 
 /**
+ * Langfuse prompt metadata for linking generations to Langfuse Prompt Management.
+ * @see https://langfuse.com/docs/prompt-management
+ */
+export interface LangfusePromptMetadata {
+  /** Prompt name in Langfuse */
+  name?: string;
+  /** Prompt version number */
+  version?: number;
+  /** Prompt UUID for direct linking */
+  id?: string;
+}
+
+/**
+ * Langfuse-specific metadata fields.
+ * These are extracted by the Langfuse exporter and mapped to Langfuse-native fields.
+ */
+export interface LangfuseMetadata {
+  /** Prompt linking metadata - links MODEL_GENERATION spans to Langfuse prompts */
+  prompt?: LangfusePromptMetadata;
+}
+
+/**
+ * Tracing metadata with typed support for observability platform-specific fields.
+ * Allows arbitrary string keys while providing autocomplete for known fields.
+ */
+export interface TracingMetadata {
+  /** Langfuse-specific metadata */
+  langfuse?: LangfuseMetadata;
+  /** User ID for the trace (used by Langfuse) */
+  userId?: string;
+  /** Session ID for the trace (used by Langfuse) */
+  sessionId?: string;
+  /** Allow arbitrary additional metadata fields */
+  [key: string]: any;
+}
+
+/**
  * Options passed when starting a new agent or workflow execution
  */
 export interface TracingOptions {
   /** Metadata to add to the root trace span */
-  metadata?: Record<string, any>;
+  metadata?: TracingMetadata;
   /**
    * Additional RequestContext keys to extract as metadata for this trace.
    * These keys are added to the requestContextKeys config.

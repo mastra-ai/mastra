@@ -107,7 +107,93 @@ new LangfuseExporter({
 });
 ```
 
+## Prompt Linking
+
+You can link LLM generations to prompts stored in [Langfuse Prompt Management](https://langfuse.com/docs/prompt-management). This enables version tracking and metrics for your prompts.
+
+### Basic Usage
+
+Add a `langfuse.prompt` object to your trace metadata with `name` and `version`:
+
+```typescript title="src/agents/support-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+export const supportAgent = new Agent({
+  name: "support-agent",
+  instructions: "You are a helpful support assistant.",
+  model: openai("gpt-4o"),
+  defaultGenerateOptions: {
+    tracingOptions: {
+      metadata: {
+        langfuse: {
+          prompt: {
+            name: "support-prompt",
+            version: 1,
+          },
+        },
+      },
+    },
+  },
+});
+```
+
+### Using the Langfuse Client
+
+For dynamic prompt management, fetch prompts directly from Langfuse:
+
+```typescript title="src/agents/dynamic-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { Langfuse } from "langfuse";
+
+const langfuse = new Langfuse({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+});
+
+// Fetch the prompt from Langfuse Prompt Management
+const prompt = await langfuse.getPrompt("customer-support");
+
+export const dynamicAgent = new Agent({
+  name: "dynamic-agent",
+  instructions: prompt.prompt, // Use the prompt text from Langfuse
+  model: openai("gpt-4o"),
+  defaultGenerateOptions: {
+    tracingOptions: {
+      metadata: {
+        langfuse: {
+          prompt: {
+            name: prompt.name,
+            version: prompt.version,
+            id: prompt.id, // Optional: include prompt ID for direct linking
+          },
+        },
+      },
+    },
+  },
+});
+```
+
+### Prompt Object Fields
+
+The `langfuse.prompt` object supports these fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | The prompt name in Langfuse |
+| `version` | number | The prompt version number |
+| `id` | string | The prompt UUID for direct linking |
+
+You can link prompts using either:
+- `id` alone (the UUID uniquely identifies a prompt version)
+- `name` + `version` together
+- All three fields
+
+When set on a `MODEL_GENERATION` span, the Langfuse exporter automatically links the generation to the corresponding prompt.
+
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
 - [Langfuse Documentation](https://langfuse.com/docs)
+- [Langfuse Prompt Management](https://langfuse.com/docs/prompt-management)

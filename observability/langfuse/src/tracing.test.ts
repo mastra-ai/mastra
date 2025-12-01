@@ -1422,6 +1422,214 @@ describe('LangfuseExporter', () => {
     });
   });
 
+  describe('Langfuse Prompt Linking', () => {
+    it('should link prompt to generation when metadata.langfuse.prompt is set', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-with-prompt',
+        name: 'gpt-4-call-with-prompt',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: { messages: [{ role: 'user', content: 'Hello' }] },
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+        },
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'greeting-prompt',
+              version: 3,
+            },
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'llm-with-prompt',
+          name: 'gpt-4-call-with-prompt',
+          model: 'gpt-4',
+          prompt: {
+            name: 'greeting-prompt',
+            version: 3,
+          },
+        }),
+      );
+    });
+
+    it('should link prompt with all fields when name, version, and id are set', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-with-prompt-id',
+        name: 'gpt-4-call-with-prompt-id',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: { messages: [{ role: 'user', content: 'Hello' }] },
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+        },
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'customer-support',
+              version: 5,
+              id: 'prompt-uuid-12345',
+            },
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'llm-with-prompt-id',
+          prompt: {
+            name: 'customer-support',
+            version: 5,
+            id: 'prompt-uuid-12345',
+          },
+        }),
+      );
+    });
+
+    it('should link prompt with id alone', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-with-id-only',
+        name: 'gpt-4-call-id-only',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'gpt-4',
+        },
+        metadata: {
+          langfuse: {
+            prompt: {
+              id: 'prompt-uuid-only',
+            },
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'llm-with-id-only',
+          prompt: {
+            id: 'prompt-uuid-only',
+          },
+        }),
+      );
+    });
+
+    it('should not include prompt field for non-MODEL_GENERATION spans', async () => {
+      const toolSpan = createMockSpan({
+        id: 'tool-with-prompt-metadata',
+        name: 'calculator-tool',
+        type: SpanType.TOOL_CALL,
+        isRoot: true,
+        input: { operation: 'add', a: 2, b: 3 },
+        attributes: {
+          toolId: 'calculator',
+        },
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'some-prompt',
+              version: 1,
+            },
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: toolSpan,
+      });
+
+      // Should not include prompt in non-generation spans
+      const call = mockTrace.span.mock.calls[0][0];
+      expect(call.prompt).toBeUndefined();
+    });
+
+    it('should omit langfuse property from metadata after extracting prompt', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-clean-metadata',
+        name: 'gpt-4-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'gpt-4',
+        },
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'test-prompt',
+              version: 1,
+            },
+          },
+          customField: 'should-remain',
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      const call = mockTrace.generation.mock.calls[0][0];
+      // Should have prompt at top level
+      expect(call.prompt).toEqual({
+        name: 'test-prompt',
+        version: 1,
+      });
+      // Should not have langfuse in metadata (it's been extracted)
+      expect(call.metadata.langfuse).toBeUndefined();
+      // Should preserve other metadata
+      expect(call.metadata.customField).toBe('should-remain');
+    });
+
+    it('should handle metadata.langfuse without prompt gracefully', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-no-prompt',
+        name: 'gpt-4-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'gpt-4',
+        },
+        metadata: {
+          langfuse: {
+            someOtherField: 'value',
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      const call = mockTrace.generation.mock.calls[0][0];
+      // Should not have prompt
+      expect(call.prompt).toBeUndefined();
+      // Should preserve langfuse metadata if no prompt was extracted
+      expect(call.metadata.langfuse).toEqual({ someOtherField: 'value' });
+    });
+  });
+
   describe('Shutdown', () => {
     it('should shutdown Langfuse client and clear maps', async () => {
       // Add some data to internal maps

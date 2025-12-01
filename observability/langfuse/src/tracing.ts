@@ -418,9 +418,11 @@ export class LangfuseExporter extends BaseExporter {
     if (span.endTime !== undefined) payload.endTime = span.endTime;
 
     const attributes = (span.attributes ?? {}) as Record<string, any>;
+    const metadata = span.metadata ?? {};
 
     // Strip special fields from metadata if used in top-level keys
     const attributesToOmit: string[] = [];
+    const metadataToOmit: string[] = [];
 
     if (span.type === SpanType.MODEL_GENERATION) {
       const modelAttr = attributes as ModelGenerationAttributes;
@@ -443,12 +445,35 @@ export class LangfuseExporter extends BaseExporter {
         payload.modelParameters = modelAttr.parameters;
         attributesToOmit.push('parameters');
       }
+
+      // Handle Langfuse prompt linking
+      // Users can set metadata.langfuse.prompt to link generations to Langfuse Prompt Management
+      // Supported formats:
+      // - { id } - link by prompt UUID alone
+      // - { name, version } - link by name and version
+      // - { name, version, id } - link with all fields
+      const langfuseData = metadata.langfuse as
+        | { prompt?: { name?: string; version?: number; id?: string } }
+        | undefined;
+      const promptData = langfuseData?.prompt;
+      const hasNameAndVersion = promptData?.name !== undefined && promptData?.version !== undefined;
+      const hasId = promptData?.id !== undefined;
+
+      if (hasNameAndVersion || hasId) {
+        payload.prompt = {};
+
+        if (promptData?.name !== undefined) payload.prompt.name = promptData.name;
+        if (promptData?.version !== undefined) payload.prompt.version = promptData.version;
+        if (promptData?.id !== undefined) payload.prompt.id = promptData.id;
+
+        metadataToOmit.push('langfuse');
+      }
     }
 
     payload.metadata = {
       spanType: span.type,
       ...omitKeys(attributes, attributesToOmit),
-      ...span.metadata,
+      ...omitKeys(metadata, metadataToOmit),
     };
 
     if (span.errorInfo) {
