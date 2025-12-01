@@ -722,13 +722,16 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     // Normalize threadId to array
     const threadIds = Array.isArray(threadId) ? threadId : [threadId];
 
-    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
+    // Validate each threadId is a non-empty string (avoid TypeError on non-string inputs)
+    const isValidThreadId = (id: unknown): boolean => typeof id === 'string' && id.trim().length > 0;
+
+    if (threadIds.length === 0 || threadIds.some(id => !isValidThreadId(id))) {
       throw new MastraError(
         {
           id: 'STORAGE_CLOUDFLARE_LIST_MESSAGES_INVALID_THREAD_ID',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
+          details: { threadId: Array.isArray(threadId) ? String(threadId) : String(threadId) },
         },
         new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
