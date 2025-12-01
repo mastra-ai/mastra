@@ -189,7 +189,7 @@ export function generateProviderOptionsSection(providerId: string): string {
     const exportedDeclarations = sourceFile.getExportedDeclarations();
     const typeExport = exportedDeclarations.get(providerInfo.typeName);
     if (typeExport && typeExport.length > 0) {
-      targetType = typeExport[0].getType();
+      targetType = typeExport[0]?.getType();
       break;
     }
   }
