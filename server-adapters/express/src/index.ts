@@ -127,7 +127,8 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
 
         if (value) {
           // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
-          const outputValue = this.streamOptions.redact ? redactStreamChunk(value) : value;
+          const shouldRedact = this.streamOptions?.redact ?? true;
+          const outputValue = shouldRedact ? redactStreamChunk(value) : value;
           if (streamFormat === 'sse') {
             res.write(`data: ${JSON.stringify(outputValue)}\n\n`);
           } else {

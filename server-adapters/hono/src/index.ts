@@ -138,7 +138,8 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
 
             if (value) {
               // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
-              const outputValue = this.streamOptions.redact ? redactStreamChunk(value) : value;
+              const shouldRedact = this.streamOptions?.redact ?? true;
+              const outputValue = shouldRedact ? redactStreamChunk(value) : value;
               if (streamFormat === 'sse') {
                 await stream.write(`data: ${JSON.stringify(outputValue)}\n\n`);
               } else {
