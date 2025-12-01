@@ -33,17 +33,32 @@ export class MastraAuthAuth0 extends MastraAuthProvider<Auth0User> {
   }
 
   async authenticateToken(token: string): Promise<Auth0User | null> {
-    const JWKS = createRemoteJWKSet(new URL(`https://${this.domain}/.well-known/jwks.json`));
+    if (!token || typeof token !== 'string') {
+      return null; // immediate safe fail
+    }
 
-    const { payload } = await jwtVerify(token, JWKS, {
-      issuer: `https://${this.domain}/`,
-      audience: this.audience,
-    });
+    try {
+      const JWKS = createRemoteJWKSet(new URL(`https://${this.domain}/.well-known/jwks.json`));
 
-    return payload;
+      const { payload } = await jwtVerify(token, JWKS, {
+        issuer: `https://${this.domain}/`,
+        audience: this.audience,
+      });
+
+      return payload;
+    } catch (err) {
+      console.error('Auth0 token verification failed:', err);
+      return null;
+    }
   }
 
-  async authorizeUser(user: Auth0User) {
-    return !!user;
+  async authorizeUser(user: Auth0User): Promise<boolean> {
+    if (!user || !user.sub) return false;
+
+    if (user.exp && user.exp * 1000 < Date.now()) {
+      return false;
+    }
+
+    return true;
   }
 }
