@@ -44,8 +44,7 @@
     "@ai-sdk/ui-utils": "^1.2.11",
     "@lukeed/uuid": "^2.0.1",
     "@mastra/core": "workspace:*",
-    "json-schema": "^0.4.0",
-    "zod-to-json-schema": "^3.24.6"
+    "json-schema": "^0.4.0"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
