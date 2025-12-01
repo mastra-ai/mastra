@@ -485,7 +485,7 @@ export const ragAgent = new Agent({
 
   </TabItem>
 
-<Tabs.Tab>
+  <TabItem value="couchbase" label="Couchbase">
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { COUCHBASE_SEARCH_STORE_PROMPT, COUCHBASE_QUERY_STORE_PROMPT } from "@mastra/couchbase";
@@ -503,7 +503,7 @@ export const ragAgent = new Agent({
   tools: { vectorQueryTool },
 });
 ```
-</Tabs.Tab>
+  </TabItem>
 
 </Tabs>
 
