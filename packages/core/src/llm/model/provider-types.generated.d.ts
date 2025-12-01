@@ -1005,25 +1005,6 @@ export type ProviderModelsMap = {
     'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
   ];
-  readonly 'io-intelligence': readonly [
-    'deepseek-ai-deepseek-r1-0528',
-    'intel-qwen3-coder-480b-a35b-instruct-int4-mixed-ar',
-    'meta-llama-llama-3-2-90b-vision-instruct',
-    'meta-llama-llama-3-3-70b-instruct',
-    'meta-llama-llama-4-maverick-17b-128e-instruct-fp8',
-    'mistralai-devstral-small-2505',
-    'mistralai-magistral-small-2506',
-    'mistralai-mistral-large-instruct-2411',
-    'mistralai-mistral-nemo-instruct-2407',
-    'moonshotai-kimi-k2-instruct-0905',
-    'moonshotai-kimi-k2-thinking',
-    'openai-gpt-oss-120b',
-    'openai-gpt-oss-20b',
-    'qwen-qwen2-5-vl-32b-instruct',
-    'qwen-qwen3-235b-a22b-thinking-2507',
-    'qwen-qwen3-next-80b-a3b-instruct',
-    'zai-org-glm-4-6',
-  ];
   readonly 'fireworks-ai': readonly [
     'accounts/fireworks/models/deepseek-r1-0528',
     'accounts/fireworks/models/deepseek-v3-0324',
@@ -1037,6 +1018,25 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/minimax-m2',
     'accounts/fireworks/models/qwen3-235b-a22b',
     'accounts/fireworks/models/qwen3-coder-480b-a35b-instruct',
+  ];
+  readonly 'io-net': readonly [
+    'Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar',
+    'Qwen/Qwen2.5-VL-32B-Instruct',
+    'Qwen/Qwen3-235B-A22B-Thinking-2507',
+    'Qwen/Qwen3-Next-80B-A3B-Instruct',
+    'deepseek-ai/DeepSeek-R1-0528',
+    'meta-llama/Llama-3.2-90B-Vision-Instruct',
+    'meta-llama/Llama-3.3-70B-Instruct',
+    'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8',
+    'mistralai/Devstral-Small-2505',
+    'mistralai/Magistral-Small-2506',
+    'mistralai/Mistral-Large-Instruct-2411',
+    'mistralai/Mistral-Nemo-Instruct-2407',
+    'moonshotai/Kimi-K2-Instruct-0905',
+    'moonshotai/Kimi-K2-Thinking',
+    'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
+    'zai-org/GLM-4.6',
   ];
   readonly modelscope: readonly [
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
