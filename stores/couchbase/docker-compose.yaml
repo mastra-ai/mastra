@@ -1,6 +1,6 @@
 services:
   mastra_couchbase_testing:
-    image: couchbase:enterprise-7.6.4
+    image: couchbase:enterprise-8.0.0
     ports:
       - '8091-8095:8091-8095'
       - '11210:11210'
