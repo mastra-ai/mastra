@@ -10757,7 +10757,6 @@ Use `configSelector` to choose the appropriate tracing configuration based on re
 ```ts title="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: new Observability({
-    default: { enabled: true }, // Provides 'default' instance
     configs: {
       langfuse: {
         serviceName: "langfuse-service",
@@ -10790,7 +10789,7 @@ export const mastra = new Mastra({
         return "langfuse";
       }
 
-      return "default";
+      throw new Error('no config found')
     },
   }),
 });
@@ -23898,6 +23897,7 @@ export async function POST(req: Request) {
 
   // Transform stream into AI SDK format and create UI messages stream
   const uiMessageStream = createUIMessageStream({
+    originalMessages: messages,
     execute: async ({ writer }) => {
       for await (const part of toAISdkStream(stream, { from: "agent" })!) {
         writer.write(part);
@@ -23990,6 +23990,7 @@ export async function POST(req: Request) {
   });
 
   const uiMessageStream = createUIMessageStream({
+    initialMessages: messages,
     execute: async ({ writer }) => {
       for await (const part of toAISdkStream(stream, {
         from: "agent",
