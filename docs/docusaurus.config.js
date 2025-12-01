@@ -19,7 +19,7 @@ const config = {
   url: "https://mastra.ai",
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
-  baseUrl: "/",
+  baseUrl: "/v1/",
 
   onBrokenLinks: "throw",
 
@@ -183,7 +183,6 @@ const config = {
               output: {
                 filename: join("v1", outputFilename),
                 chunkFilename: join("v1", outputChunkFilename),
-                publicPath: "/v1/",
               },
             };
           }
