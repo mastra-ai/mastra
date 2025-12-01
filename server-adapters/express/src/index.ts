@@ -2,8 +2,8 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { Tool } from '@mastra/core/tools';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import type { ServerRoute, BodyLimitOptions } from '@mastra/server/server-adapter';
-import { MastraServerAdapter } from '@mastra/server/server-adapter';
+import type { ServerRoute, BodyLimitOptions, StreamOptions } from '@mastra/server/server-adapter';
+import { MastraServerAdapter, redactStreamChunk } from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
 
 // Extend Express types to include Mastra context
@@ -36,6 +36,7 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
     playground,
     isDev,
     bodyLimitOptions,
+    streamOptions,
   }: {
     mastra: Mastra;
     tools?: Record<string, Tool>;
@@ -44,8 +45,9 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
     playground?: boolean;
     isDev?: boolean;
     bodyLimitOptions?: BodyLimitOptions;
+    streamOptions?: StreamOptions;
   }) {
-    super({ mastra, bodyLimitOptions, tools });
+    super({ mastra, bodyLimitOptions, tools, streamOptions });
     this.taskStore = taskStore || new InMemoryTaskStore();
     this.customRouteAuthConfig = customRouteAuthConfig;
     this.playground = playground;
@@ -124,10 +126,13 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
         if (done) break;
 
         if (value) {
+          // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
+          const shouldRedact = this.streamOptions?.redact ?? true;
+          const outputValue = shouldRedact ? redactStreamChunk(value) : value;
           if (streamFormat === 'sse') {
-            res.write(`data: ${JSON.stringify(value)}\n\n`);
+            res.write(`data: ${JSON.stringify(outputValue)}\n\n`);
           } else {
-            res.write(JSON.stringify(value) + '\x1E');
+            res.write(JSON.stringify(outputValue) + '\x1E');
           }
         }
       }
