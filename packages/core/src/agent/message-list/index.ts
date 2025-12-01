@@ -1518,8 +1518,25 @@ export class MessageList {
 
     if (MessageList.isAIV5CoreMessage(message)) {
       const dbMsg = MessageList.aiV5ModelMessageToMastraDBMessage(message, messageSource);
+      // Only use the original createdAt from input message metadata, not the generated one from the static method
+      // This fixes issue #10683 where messages without createdAt would get shuffled
+      const rawCreatedAt =
+        'metadata' in message &&
+        message.metadata &&
+        typeof message.metadata === 'object' &&
+        'createdAt' in message.metadata
+          ? message.metadata.createdAt
+          : undefined;
+      // Convert string timestamps to Date objects
+      const originalCreatedAt =
+        typeof rawCreatedAt === 'string'
+          ? new Date(rawCreatedAt)
+          : rawCreatedAt instanceof Date || typeof rawCreatedAt === 'number'
+            ? rawCreatedAt
+            : undefined;
       const result = {
         ...dbMsg,
+        createdAt: this.generateCreatedAt(messageSource, originalCreatedAt),
         threadId: this.memoryInfo?.threadId,
         resourceId: this.memoryInfo?.resourceId,
       };
@@ -1527,8 +1544,19 @@ export class MessageList {
     }
     if (MessageList.isAIV5UIMessage(message)) {
       const dbMsg = MessageList.aiV5UIMessageToMastraDBMessage(message);
+      // Only use the original createdAt from input message, not the generated one from the static method
+      // This fixes issue #10683 where messages without createdAt would get shuffled
+      const rawCreatedAt = 'createdAt' in message ? message.createdAt : undefined;
+      // Convert string timestamps to Date objects
+      const originalCreatedAt =
+        typeof rawCreatedAt === 'string'
+          ? new Date(rawCreatedAt)
+          : rawCreatedAt instanceof Date || typeof rawCreatedAt === 'number'
+            ? rawCreatedAt
+            : undefined;
       return {
         ...dbMsg,
+        createdAt: this.generateCreatedAt(messageSource, originalCreatedAt),
         threadId: this.memoryInfo?.threadId,
         resourceId: this.memoryInfo?.resourceId,
       };
@@ -1910,10 +1938,27 @@ export class MessageList {
       content.metadata = coreMessage.metadata as Record<string, unknown>;
     }
 
+    // Extract createdAt from metadata if provided
+    // This fixes issue #10683 where messages without createdAt would get shuffled
+    const rawCreatedAt =
+      'metadata' in coreMessage &&
+      coreMessage.metadata &&
+      typeof coreMessage.metadata === 'object' &&
+      'createdAt' in coreMessage.metadata
+        ? coreMessage.metadata.createdAt
+        : undefined;
+    // Convert string timestamps to Date objects
+    const originalCreatedAt =
+      typeof rawCreatedAt === 'string'
+        ? new Date(rawCreatedAt)
+        : rawCreatedAt instanceof Date || typeof rawCreatedAt === 'number'
+          ? rawCreatedAt
+          : undefined;
+
     return {
       id,
       role: MessageList.getRole(coreMessage),
-      createdAt: this.generateCreatedAt(messageSource),
+      createdAt: this.generateCreatedAt(messageSource, originalCreatedAt),
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
       content,
