@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import type { ZodLikeSchema } from '../types/zod-compat';
+import { isOptional } from '@mastra/schema-compat';
 
 export interface ValidationError<T = any> {
   error: true;
@@ -80,6 +81,19 @@ export function validateToolInput<T = any>(
   // If no schema, return input as-is
   if (!schema || !('safeParse' in schema)) {
     return { data: input };
+  }
+
+  /* If input schema is a Zod object with all optional fields and undefined is passed normalize input to {}. This handles cases where LLMs (and some tool calls) send undefined instead of an empty object for all optional arguments. */
+  if (schema && typeof schema === 'object' && 'shape' in schema) {
+    const shapeObj = (schema as z.ZodObject<any>).shape;
+    if (shapeObj && typeof shapeObj === 'object') {
+      // Check if all fields in the shape are optional
+      const allOptional = (Object.values(shapeObj) as z.ZodTypeAny[]).every(field => field && isOptional(field));
+
+      if (allOptional && input === undefined) {
+        input = {};
+      }
+    }
   }
 
   // Validate the input directly - no unwrapping needed in v1.0

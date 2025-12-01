@@ -502,6 +502,25 @@ describe('Tool Input Validation Integration Tests', () => {
         action: 'create',
       });
     });
+
+    +it('should accept undefined input when all schema fields are optional', async () => {
+      const testTool = createTool({
+        id: 'fetch_data',
+        description: 'Fetches data with optional filters',
+        inputSchema: z.object({
+          startTime: z.string().optional(),
+          endTime: z.string().optional(),
+          limit: z.number().optional(),
+        }),
+        execute: async args => {
+          return { message: 'Success', args };
+        },
+      });
+      const result = await testTool.execute?.(undefined as any);
+      expect(result.error).toBeUndefined();
+      +expect(result.message).toBe('Success');
+      +expect(result.args).toEqual({});
+    });
   });
 });
 
