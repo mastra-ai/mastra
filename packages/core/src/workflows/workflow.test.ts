@@ -8205,7 +8205,6 @@ describe('Workflow', () => {
         await run.start({
           inputData: {
             required: 'test',
-            // @ts-expect-error
             nested: { value: 'not-a-number' },
           },
         });
@@ -9105,7 +9104,7 @@ describe('Workflow', () => {
 
       const randomTool = createTool({
         id: 'random-tool',
-        execute: toolAction,
+        execute: toolAction as any,
         description: 'random-tool',
         inputSchema: z.object({ name: z.string() }),
         outputSchema: z.object({ name: z.string() }),
@@ -13833,8 +13832,7 @@ describe('Workflow', () => {
         id: 'suspendingStep',
         execute: async ({ suspend, resumeData }) => {
           if (!resumeData) {
-            await suspend({});
-            return undefined;
+            return suspend({});
           }
           return { resumed: true, data: resumeData };
         },
@@ -14923,8 +14921,8 @@ describe('Workflow', () => {
             createStep({
               id: 'last-step',
               inputSchema: z.object({
-                'nested-workflow-a': wfA.outputSchema,
-                'nested-workflow-b': wfB.outputSchema,
+                'nested-workflow-a': wfA.outputSchema.optional(),
+                'nested-workflow-b': wfB.outputSchema.optional(),
               }),
               outputSchema: z.object({ success: z.boolean() }),
               execute: last,
@@ -15067,8 +15065,8 @@ describe('Workflow', () => {
             createStep({
               id: 'last-step',
               inputSchema: z.object({
-                'nested-workflow-a': wfA.outputSchema,
-                'nested-workflow-b': wfB.outputSchema,
+                'nested-workflow-a': wfA.outputSchema.optional(),
+                'nested-workflow-b': wfB.outputSchema.optional(),
               }),
               outputSchema: z.object({ success: z.boolean() }),
               execute: last,
@@ -15216,14 +15214,14 @@ describe('Workflow', () => {
             createStep({
               id: 'map-results',
               inputSchema: z.object({
-                'nested-workflow-c': otherStep.outputSchema,
-                'nested-workflow-d': otherStep.outputSchema,
+                'nested-workflow-c': otherStep.outputSchema.optional(),
+                'nested-workflow-d': otherStep.outputSchema.optional(),
               }),
               outputSchema: otherStep.outputSchema,
               execute: async ({ inputData }) => {
                 return {
-                  newValue: inputData['nested-workflow-c']?.newValue ?? inputData['nested-workflow-d']?.newValue,
-                  other: inputData['nested-workflow-c']?.other ?? inputData['nested-workflow-d']?.other,
+                  newValue: inputData['nested-workflow-c']?.newValue ?? inputData['nested-workflow-d']?.newValue ?? 0,
+                  other: inputData['nested-workflow-c']?.other ?? inputData['nested-workflow-d']?.other ?? 0,
                 };
               },
             }),
@@ -15248,8 +15246,8 @@ describe('Workflow', () => {
             createStep({
               id: 'last-step',
               inputSchema: z.object({
-                'nested-workflow-a': wfA.outputSchema,
-                'nested-workflow-b': wfB.outputSchema,
+                'nested-workflow-a': wfA.outputSchema.optional(),
+                'nested-workflow-b': wfB.outputSchema.optional(),
               }),
               outputSchema: z.object({ success: z.boolean() }),
               execute: last,
