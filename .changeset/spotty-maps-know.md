@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Fix weird tool list UI when there are no agents
+Fixed tool list empty state when there are no agents so the page renders correctly.
