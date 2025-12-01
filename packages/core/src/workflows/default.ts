@@ -322,14 +322,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }
 
   /**
-   * Whether to include input in the workflow result.
-   * Override to false in subclasses that don't need input in the result.
-   */
-  protected get includeInputInResult(): boolean {
-    return true;
-  }
-
-  /**
    * Format an error for the workflow result.
    * Override to customize error formatting (e.g., include stack traces).
    */
@@ -352,7 +344,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const base: any = {
       status: lastOutput.status,
       steps: stepResults,
-      ...(this.includeInputInResult && { input: stepResults.input }),
+      input: stepResults.input,
     };
 
     if (lastOutput.status === 'success') {

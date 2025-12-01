@@ -6,6 +6,7 @@ import { SERVER_ROUTES } from './routes';
 import type { ServerRoute } from './routes';
 
 export * from './routes';
+export { redactStreamChunk } from './redact';
 
 export { WorkflowRegistry } from '../utils';
 
@@ -21,23 +22,40 @@ export interface BodyLimitOptions {
   onError: (error: unknown) => unknown;
 }
 
+export interface StreamOptions {
+  /**
+   * When true (default), redacts sensitive data from stream chunks
+   * (system prompts, tool definitions, API keys) before sending to clients.
+   *
+   * Set to false to include full request data in stream chunks (useful for
+   * debugging or internal services that need access to this data).
+   *
+   * @default true
+   */
+  redact?: boolean;
+}
+
 export abstract class MastraServerAdapter<TApp, TRequest, TResponse> {
   protected mastra: Mastra;
   protected bodyLimitOptions?: BodyLimitOptions;
   protected tools?: Record<string, Tool>;
+  protected streamOptions: StreamOptions;
 
   constructor({
     mastra,
     bodyLimitOptions,
     tools,
+    streamOptions,
   }: {
     mastra: Mastra;
     bodyLimitOptions?: BodyLimitOptions;
     tools?: Record<string, Tool>;
+    streamOptions?: StreamOptions;
   }) {
     this.mastra = mastra;
     this.bodyLimitOptions = bodyLimitOptions;
     this.tools = tools;
+    this.streamOptions = { redact: true, ...streamOptions };
   }
 
   protected mergeRequestContext({

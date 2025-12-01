@@ -217,7 +217,6 @@ Use `configSelector` to choose the appropriate tracing configuration based on re
 ```ts title="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: new Observability({
-    default: { enabled: true }, // Provides 'default' instance
     configs: {
       langfuse: {
         serviceName: "langfuse-service",
@@ -250,7 +249,7 @@ export const mastra = new Mastra({
         return "langfuse";
       }
 
-      return "default";
+      throw new Error('no config found')
     },
   }),
 });

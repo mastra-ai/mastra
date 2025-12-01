@@ -13,7 +13,7 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
     return next();
   }
 
-  if (isDevPlaygroundRequest(c.req)) {
+  if (isDevPlaygroundRequest(c.req, authConfig)) {
     // Skip authentication for dev playground requests
     return next();
   }
@@ -78,7 +78,7 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
   const path = c.req.path;
   const method = c.req.method;
 
-  if (isDevPlaygroundRequest(c.req)) {
+  if (isDevPlaygroundRequest(c.req, authConfig)) {
     // Skip authorization for dev playground requests
     return next();
   }

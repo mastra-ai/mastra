@@ -2,8 +2,12 @@ import type { MastraAuthConfig } from '@mastra/core/server';
 import type { HonoRequest } from 'hono';
 import { defaultAuthConfig } from './defaults';
 
-export const isDevPlaygroundRequest = (req: HonoRequest): boolean => {
-  return req.header('x-mastra-dev-playground') === 'true' && process.env.MASTRA_DEV === 'true';
+export const isDevPlaygroundRequest = (req: HonoRequest, authConfig: MastraAuthConfig): boolean => {
+  const protectedAccess = [...(defaultAuthConfig.protected || []), ...(authConfig.protected || [])];
+  return (
+    process.env.MASTRA_DEV === 'true' &&
+    (!isAnyMatch(req.path, req.method, protectedAccess) || req.header('x-mastra-dev-playground') === 'true')
+  );
 };
 
 export const isCustomRoutePublic = (
