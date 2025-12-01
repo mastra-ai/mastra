@@ -35,7 +35,6 @@ function openInClaude(
 }
 
 function openInCursor() {
-  // Cursor deeplink to install Mastra MCP docs server
   const cursorUrl =
     "cursor://anysphere.cursor-deeplink/mcp/install?name=mastra&config=eyJjb21tYW5kIjoibnB4IC15IEBtYXN0cmEvbWNwLWRvY3Mtc2VydmVyIn0%3D";
   return cursorUrl;
