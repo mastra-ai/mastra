@@ -64,8 +64,8 @@ const sidebars = {
       items: [
         {
           type: "doc",
-          id: "migrations/upgrade-to-v1",
-          label: "v1.0",
+          id: "migrations/upgrade-to-latest-0x",
+          label: "Upgrade to Latest 0.x",
         },
         {
           type: "doc",
