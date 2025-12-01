@@ -1,4 +1,5 @@
 import React from "react";
+import { cn } from "../lib/utils";
 
 export const ChatGPTIcon = ({ className }: { className?: string }) => (
   <svg
@@ -45,6 +46,19 @@ export const ClaudeIcon = ({ className }: { className?: string }) => (
   >
     <title>Anthropic</title>
     <path d="M13.827 3.52h3.603L24 20h-3.603l-6.57-16.48zm-7.258 0h3.767L16.906 20h-3.674l-1.343-3.461H5.017l-1.344 3.46H0L6.57 3.522zm4.132 9.959L8.453 7.687 6.205 13.48H10.7z"></path>
+  </svg>
+);
+
+export const CursorIcon = ({ className }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 466.7 532.1"
+    className={cn("size-4 text-[#26251e] dark:text-[#edecec]", className)}
+  >
+    <path
+      d="M457.4 126 244.4 3c-6.8-4-15.3-4-22.1 0L9.3 126A18.6 18.6 0 0 0 0 142v248c0 6.7 3.6 12.8 9.3 16.2l213 123c6.8 3.9 15.3 3.9 22.1 0l213-123c5.8-3.4 9.3-9.5 9.3-16.2V142c0-6.6-3.5-12.7-9.3-16Zm-13.3 26L238.4 508.2c-1.4 2.4-5 1.4-5-1.4V273.6c0-4.7-2.5-9-6.6-11.3l-202-116.6c-2.3-1.4-1.3-5 1.4-5h411.3c5.8 0 9.5 6.2 6.6 11.3Z"
+      fill="currentColor"
+    />
   </svg>
 );
 
