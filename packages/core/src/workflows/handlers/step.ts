@@ -57,6 +57,21 @@ export interface ExecuteStepParams {
   iterationCount?: number;
 }
 
+/**
+ * Execute a single workflow step, performing input validation, optional resume/time-travel handling,
+ * nested-workflow delegation, retry-backed execution, scorer invocation, result emission, and durable
+ * context synchronization.
+ *
+ * @param engine - The execution engine instance used to run and coordinate the step
+ * @param params - Execution parameters and context (identifiers, step definition, inputs/previous results,
+ *   executionContext, resume/restart/time-travel data, emitter/IO handles, requestContext, tracing,
+ *   and control flags such as `skipEmits` and `disableScorers`)
+ * @returns A `StepExecutionResult` containing:
+ *   - `result`: the final `StepResult` for this step (status, output/suspendPayload, timestamps, etc.)
+ *   - `stepResults`: a map with this step's result keyed by step id
+ *   - `mutableContext`: a mutable view of the workflow context after execution
+ *   - `requestContext`: the serialized request context after execution
+ */
 export async function executeStep(
   engine: DefaultExecutionEngine,
   params: ExecuteStepParams,
