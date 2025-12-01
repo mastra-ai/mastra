@@ -83,15 +83,15 @@ const config = {
     // PostHog analytics (only enabled if POSTHOG_API_KEY is set)
     ...(process.env.POSTHOG_API_KEY
       ? [
-          [
-            "posthog-docusaurus",
-            {
-              apiKey: process.env.POSTHOG_API_KEY,
-              appUrl: process.env.POSTHOG_HOST || "https://us.i.posthog.com",
-              enableInDevelopment: false,
-            },
-          ],
-        ]
+        [
+          "posthog-docusaurus",
+          {
+            apiKey: process.env.POSTHOG_API_KEY,
+            appUrl: process.env.POSTHOG_HOST || "https://us.i.posthog.com",
+            enableInDevelopment: false,
+          },
+        ],
+      ]
       : []),
     // Vercel Analytics (automatically enabled in production on Vercel)
     [
@@ -146,21 +146,44 @@ const config = {
         name: "asset-plugin",
         configureWebpack(config, isServer, utils, content) {
           if (!isServer) {
-            for (const plugin of config.plugins) {
-              if (plugin.constructor.name === "CssExtractRspackPlugin") {
-                plugin.options.filename = join("v1", plugin.options.filename);
-                plugin.options.chunkFilename = join(
-                  "v1",
-                  plugin.options.chunkFilename,
-                );
+            // Modify CSS extraction plugin filenames
+            if (config.plugins) {
+              for (const plugin of config.plugins) {
+                if (
+                  plugin &&
+                  typeof plugin === "object" &&
+                  "constructor" in plugin &&
+                  plugin.constructor.name === "CssExtractRspackPlugin" &&
+                  "options" in plugin &&
+                  plugin.options &&
+                  typeof plugin.options === "object"
+                ) {
+                  const options = plugin.options;
+                  if (typeof options.filename === "string") {
+                    options.filename = join("v1", options.filename);
+                  }
+                  if (typeof options.chunkFilename === "string") {
+                    options.chunkFilename = join("v1", options.chunkFilename);
+                  }
+                }
               }
             }
+
+            const outputFilename =
+              typeof config.output?.filename === "string"
+                ? config.output.filename
+                : "main.js";
+            const outputChunkFilename =
+              typeof config.output?.chunkFilename === "string"
+                ? config.output.chunkFilename
+                : "[name].chunk.js";
 
             return {
               plugins: config.plugins,
               output: {
-                filename: join("v1", config.output?.filename),
-                chunkFilename: join("v1", config.output?.chunkFilename),
+                filename: join("v1", outputFilename),
+                chunkFilename: join("v1", outputChunkFilename),
+                publicPath: "/v1/",
               },
             };
           }
