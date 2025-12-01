@@ -566,6 +566,46 @@ describe('Tool Input Validation Integration Tests', () => {
       expect(result.error).toBe(true);
       expect(result.message).toContain('Tool input validation failed');
     });
+
+    it('should accept undefined input when schema is an array', async () => {
+      const tool = createTool({
+        id: 'array-schema',
+        description: 'Tool with array schema',
+        inputSchema: z.array(
+          z.object({
+            id: z.string().optional(),
+          }),
+        ),
+        execute: async inputData => {
+          return { success: true, receivedArgs: inputData };
+        },
+      });
+
+      // LLM might send undefined for an array schema too
+      const result = await tool.execute!(undefined as any);
+
+      expect(result.error).toBeUndefined();
+      expect(result.success).toBe(true);
+      expect(result.receivedArgs).toEqual([]);
+    });
+
+    it('should accept null input when schema is an array', async () => {
+      const tool = createTool({
+        id: 'array-schema-null',
+        description: 'Tool with array schema',
+        inputSchema: z.array(z.string()),
+        execute: async inputData => {
+          return { success: true, receivedArgs: inputData };
+        },
+      });
+
+      // LLM might send null for an array schema
+      const result = await tool.execute!(null as any);
+
+      expect(result.error).toBeUndefined();
+      expect(result.success).toBe(true);
+      expect(result.receivedArgs).toEqual([]);
+    });
   });
 
   describe('Edge cases', () => {
