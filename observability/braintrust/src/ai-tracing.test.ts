@@ -16,7 +16,8 @@ import type {
   ToolCallAttributes,
 } from '@mastra/core/ai-tracing';
 import { AISpanType, AITracingEventType } from '@mastra/core/ai-tracing';
-import { initLogger } from 'braintrust';
+import { initLogger, currentSpan } from 'braintrust';
+import type { Logger } from 'braintrust';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BraintrustExporter } from './ai-tracing';
 import type { BraintrustExporterConfig } from './ai-tracing';
@@ -967,6 +968,245 @@ describe('BraintrustExporter', () => {
       await exporter.shutdown();
       expect(mockSpan.end).toHaveBeenCalledTimes(3);
     });
+  });
+});
+
+// ==============================================================================
+// Tests: braintrustLogger Parameter
+// ==============================================================================
+// These tests verify the braintrustLogger parameter integration works correctly.
+
+describe('BraintrustExporter with braintrustLogger parameter', () => {
+  let mockLogger: any;
+  let mockExternalSpan: any;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    // Set up mock logger
+    mockLogger = {
+      startSpan: vi.fn(),
+    };
+
+    // Set up mock external span (simulating logger.traced() or Eval context)
+    mockExternalSpan = {
+      id: 'external-span-id',
+      startSpan: vi.fn(),
+      log: vi.fn(),
+      end: vi.fn(),
+    };
+  });
+
+  it('should use provided logger when no external span exists', async () => {
+    // Set up mock span that will be returned
+    const mockSpan = {
+      startSpan: vi.fn(),
+      log: vi.fn(),
+      end: vi.fn(),
+    };
+    mockSpan.startSpan.mockReturnValue(mockSpan);
+    mockLogger.startSpan.mockReturnValue(mockSpan);
+
+    // Create exporter with braintrustLogger parameter
+    const config: BraintrustExporterConfig = {
+      braintrustLogger: mockLogger as Logger<true>,
+    };
+    const exporter = new BraintrustExporter(config);
+
+    // Verify initLogger was NOT called (because braintrustLogger is provided)
+    const mockInitLogger = vi.mocked(initLogger);
+    expect(mockInitLogger).not.toHaveBeenCalled();
+
+    // Create and export a root span
+    const rootSpan = createMockSpan({
+      id: 'root-span-id',
+      name: 'root-agent',
+      type: AISpanType.AGENT_RUN,
+      isRoot: true,
+      attributes: { agentId: 'test-agent' },
+    });
+
+    await exporter.exportEvent({
+      type: AITracingEventType.SPAN_STARTED,
+      exportedSpan: rootSpan,
+    });
+
+    // Verify the provided logger was used to create the span
+    expect(mockLogger.startSpan).toHaveBeenCalledWith({
+      spanId: 'root-span-id',
+      name: 'root-agent',
+      type: 'task',
+      parentSpanIds: {
+        spanId: rootSpan.traceId,
+        rootSpanId: rootSpan.traceId,
+      },
+      metadata: {
+        spanType: 'agent_run',
+        agentId: 'test-agent',
+      },
+    });
+
+    // Verify mastra-trace-id metadata was logged
+    expect(mockSpan.log).toHaveBeenCalledWith({
+      metadata: {
+        'mastra-trace-id': rootSpan.traceId,
+      },
+    });
+
+    // Verify the trace is NOT marked as external
+    const spanData = (exporter as any).traceMap.get(rootSpan.traceId);
+    expect(spanData).toBeDefined();
+    expect(spanData.isExternal).toBe(false);
+    expect(spanData.logger).toBe(mockLogger);
+  });
+
+  it('should attach to external span when detected via currentSpan()', async () => {
+    // Mock currentSpan to return an external span (simulating logger.traced() or Eval context)
+    const mockedCurrentSpan = vi.mocked(currentSpan);
+
+    // Set up mock external span
+    mockExternalSpan.startSpan.mockReturnValue(mockExternalSpan);
+    mockedCurrentSpan.mockReturnValue(mockExternalSpan);
+
+    // Create exporter with braintrustLogger parameter
+    const config: BraintrustExporterConfig = {
+      braintrustLogger: mockLogger as Logger<true>,
+    };
+    const exporter = new BraintrustExporter(config);
+
+    // Create a Mastra root span
+    const rootSpan = createMockSpan({
+      id: 'mastra-span-id',
+      name: 'mastra-agent',
+      type: AISpanType.AGENT_RUN,
+      isRoot: true,
+      attributes: { agentId: 'test-agent' },
+    });
+
+    // Export the span - should detect external span and attach to it
+    await exporter.exportEvent({
+      type: AITracingEventType.SPAN_STARTED,
+      exportedSpan: rootSpan,
+    });
+
+    // Verify currentSpan was called to detect external context
+    expect(mockedCurrentSpan).toHaveBeenCalled();
+
+    // Verify the external span was used (not the provided logger)
+    expect(mockExternalSpan.startSpan).toHaveBeenCalledWith({
+      spanId: 'mastra-span-id',
+      name: 'mastra-agent',
+      type: 'task',
+      // When attaching to external span, parentSpanIds should be omitted
+      // (checked by NOT having parentSpanIds in the call)
+      metadata: {
+        spanType: 'agent_run',
+        agentId: 'test-agent',
+      },
+    });
+
+    // Verify the trace IS marked as external
+    const spanData = (exporter as any).traceMap.get(rootSpan.traceId);
+    expect(spanData).toBeDefined();
+    expect(spanData.isExternal).toBe(true);
+    expect(spanData.logger).toBe(mockExternalSpan);
+
+    // Verify mastra-trace-id metadata was logged
+    expect(mockExternalSpan.log).toHaveBeenCalledWith({
+      metadata: {
+        'mastra-trace-id': rootSpan.traceId,
+      },
+    });
+  });
+
+  it('should nest child spans correctly with external parent', async () => {
+    // Mock currentSpan to return an external span
+    const mockedCurrentSpan = vi.mocked(currentSpan);
+
+    // Set up mock external span with child span support
+    const mockChildSpan = {
+      startSpan: vi.fn(),
+      log: vi.fn(),
+      end: vi.fn(),
+    };
+    mockChildSpan.startSpan.mockReturnValue(mockChildSpan); // Allow nested spans
+    mockExternalSpan.startSpan.mockReturnValue(mockChildSpan);
+    mockedCurrentSpan.mockReturnValue(mockExternalSpan);
+
+    // Create exporter with braintrustLogger parameter
+    const config: BraintrustExporterConfig = {
+      braintrustLogger: mockLogger as Logger<true>,
+    };
+    const exporter = new BraintrustExporter(config);
+
+    // Create parent and child Mastra spans
+    const parentSpan = createMockSpan({
+      id: 'parent-span-id',
+      name: 'parent-agent',
+      type: AISpanType.AGENT_RUN,
+      isRoot: true,
+      attributes: { agentId: 'parent-agent' },
+    });
+
+    const childSpan = createMockSpan({
+      id: 'child-span-id',
+      name: 'child-tool',
+      type: AISpanType.TOOL_CALL,
+      isRoot: false,
+      attributes: { toolId: 'calculator' },
+    });
+    childSpan.traceId = parentSpan.traceId;
+    childSpan.parentSpanId = parentSpan.id;
+
+    // Export parent span (should attach to external span)
+    await exporter.exportEvent({
+      type: AITracingEventType.SPAN_STARTED,
+      exportedSpan: parentSpan,
+    });
+
+    // Export child span (should nest inside parent)
+    await exporter.exportEvent({
+      type: AITracingEventType.SPAN_STARTED,
+      exportedSpan: childSpan,
+    });
+
+    // Verify parent was attached to external span without parentSpanIds
+    expect(mockExternalSpan.startSpan).toHaveBeenCalledWith({
+      spanId: 'parent-span-id',
+      name: 'parent-agent',
+      type: 'task',
+      metadata: {
+        spanType: 'agent_run',
+        agentId: 'parent-agent',
+      },
+    });
+
+    // Verify child span was created with proper parent relationship
+    expect(mockChildSpan.startSpan).toHaveBeenCalledWith({
+      spanId: 'child-span-id',
+      name: 'child-tool',
+      type: 'tool',
+      parentSpanIds: {
+        spanId: parentSpan.id,
+        rootSpanId: parentSpan.traceId,
+      },
+      metadata: {
+        spanType: 'tool_call',
+        toolId: 'calculator',
+      },
+    });
+
+    // Verify both spans have mastra-trace-id metadata
+    expect(mockChildSpan.log).toHaveBeenCalledWith({
+      metadata: {
+        'mastra-trace-id': parentSpan.traceId,
+      },
+    });
+
+    // Verify trace is marked as external
+    const spanData = (exporter as any).traceMap.get(parentSpan.traceId);
+    expect(spanData).toBeDefined();
+    expect(spanData.isExternal).toBe(true);
   });
 });
 
