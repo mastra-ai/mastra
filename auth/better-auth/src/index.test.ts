@@ -2,11 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MastraAuthBetterAuth } from './index';
 import type { BetterAuthUser } from './index';
 
-// Mock the Better Auth module
-vi.mock('better-auth', () => ({
-  betterAuth: vi.fn(),
-}));
-
 describe('MastraAuthBetterAuth', () => {
   const mockSession = {
     id: 'session-123',
