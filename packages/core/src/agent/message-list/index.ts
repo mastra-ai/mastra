@@ -1574,7 +1574,7 @@ export class MessageList {
     }
 
     const now = new Date();
-    const nowTime = startDate ? startDate.getTime() : now.getTime();
+    const nowTime = startDate?.getTime() || now.getTime();
     // find the latest createdAt in all stored messages
     const lastTime = this.messages.reduce((p, m) => {
       if (m.createdAt.getTime() > p) return m.createdAt.getTime();
