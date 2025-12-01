@@ -2,6 +2,34 @@ type RecordToTuple<T> = {
   [K in keyof T]: [K, T[K]];
 }[keyof T][];
 
+/**
+ * Reserved key for setting resourceId from middleware.
+ * When set in RequestContext, this takes precedence over client-provided values
+ * for security (prevents attackers from hijacking another user's memory).
+ *
+ * @example
+ * ```typescript
+ * // In your auth middleware:
+ * const requestContext = c.get('requestContext');
+ * requestContext.set(MASTRA_RESOURCE_ID_KEY, authenticatedUser.id);
+ * ```
+ */
+export const MASTRA_RESOURCE_ID_KEY = 'mastra__resourceId';
+
+/**
+ * Reserved key for setting threadId from middleware.
+ * When set in RequestContext, this takes precedence over client-provided values
+ * for security (prevents attackers from hijacking another user's memory).
+ *
+ * @example
+ * ```typescript
+ * // In your auth middleware:
+ * const requestContext = c.get('requestContext');
+ * requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+ * ```
+ */
+export const MASTRA_THREAD_ID_KEY = 'mastra__threadId';
+
 export class RequestContext<Values extends Record<string, any> | unknown = unknown> {
   private registry = new Map<string, unknown>();
 
