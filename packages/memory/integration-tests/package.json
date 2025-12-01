@@ -14,7 +14,6 @@
     "test:libsql": "vitest run ./src/with-libsql-storage.test.ts",
     "test:streaming": "vitest run ./src/streaming-memory.test.ts",
     "test:working-memory": "vitest run ./src/working-memory.test.ts",
-    "test:working-memory-additive": "vitest run ./src/working-memory-additive.test.ts",
     "pretest:pg:perf": "docker compose up -d postgres && (for i in $(seq 1 30); do docker compose exec -T postgres pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
     "test:processors": "echo 'processors have moved into core. we can delete this command after the pr it came in on is merged.'",
     "test:pg:perf": "vitest run ./src/performance-testing/with-pg-storage.test.ts",

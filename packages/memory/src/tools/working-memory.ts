@@ -12,7 +12,7 @@ import type { ZodType } from 'zod';
  * - Arrays are replaced entirely (not merged element-by-element)
  * - Primitive values are overwritten
  */
-function deepMergeWorkingMemory(
+export function deepMergeWorkingMemory(
   existing: Record<string, unknown> | null | undefined,
   update: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -134,7 +134,20 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
           }
         }
 
-        const newData = typeof inputData.memory === 'string' ? JSON.parse(inputData.memory) : inputData.memory;
+        let newData: unknown;
+        if (typeof inputData.memory === 'string') {
+          try {
+            newData = JSON.parse(inputData.memory);
+          } catch (parseError) {
+            const errorMessage = parseError instanceof Error ? parseError.message : String(parseError);
+            throw new Error(
+              `Failed to parse working memory input as JSON: ${errorMessage}. ` +
+                `Raw input: ${inputData.memory.length > 500 ? inputData.memory.slice(0, 500) + '...' : inputData.memory}`,
+            );
+          }
+        } else {
+          newData = inputData.memory;
+        }
         const mergedData = deepMergeWorkingMemory(existingData, newData as Record<string, unknown>);
         workingMemory = JSON.stringify(mergedData);
       } else {
