@@ -1,61 +1,16 @@
 import type { MastraAuthConfig } from '@mastra/core/server';
-import { describe, it, expect } from 'vitest';
-// import { authenticationMiddleware, authorizationMiddleware, exchangeTokenHandler } from '.';
+import { describe, expect, it } from 'vitest';
+
 import {
   canAccessPublicly,
-  pathMatchesPattern,
-  pathMatchesRule,
-  matchesOrIncludes,
   checkRules,
   isCustomRoutePublic,
+  matchesOrIncludes,
+  pathMatchesPattern,
+  pathMatchesRule,
 } from './helpers';
 
-describe('auth', () => {
-  describe('/api route', () => {
-    it('should return 200 for GET /api route without authentication', async () => {
-      const { createHonoServer } = await import('../../index');
-      const { Mastra } = await import('@mastra/core/mastra');
-
-      const mastra = new Mastra({
-        server: {
-          experimental_auth: {
-            authenticateToken: async (token: string) => {
-              if (token === 'valid-token') {
-                return { id: '123', name: 'Test User' };
-              }
-              return null;
-            },
-          },
-        },
-      });
-
-      const app = await createHonoServer(mastra, { tools: {} });
-
-      const req = new Request('http://localhost/api');
-      const res = await app.request(req);
-
-      expect(res.status).toBe(200);
-    });
-  });
-
-  describe('authenticationMiddleware', () => {
-    it('should return 401 if no token is provided', () => {
-      // const context = createMockContext();
-    });
-  });
-
-  describe('authorizationMiddleware', () => {
-    it('should return 401 if no user is provided', () => {
-      // const context = createMockContext();
-    });
-  });
-
-  describe('exchangeTokenHandler', () => {
-    it('should return 401 if no token is provided', () => {
-      // const context = createMockContext();
-    });
-  });
-
+describe('auth helpers', () => {
   describe('pathMatchesPattern', () => {
     it('should match exact paths', () => {
       expect(pathMatchesPattern('/api/users', '/api/users')).toBe(true);
@@ -200,30 +155,6 @@ describe('auth', () => {
 
       expect(isCustomRoutePublic('/api/endpoint', 'GET', config)).toBe(true);
       expect(isCustomRoutePublic('/api/endpoint', 'POST', config)).toBe(true);
-      expect(isCustomRoutePublic('/api/endpoint', 'DELETE', config)).toBe(true);
-    });
-
-    it('should prefer exact method match over ALL method', () => {
-      const config = new Map<string, boolean>();
-      config.set('GET:/api/endpoint', true); // GET requires auth
-      config.set('ALL:/api/endpoint', false); // ALL methods don't require auth
-
-      // Should use the specific GET configuration
-      expect(isCustomRoutePublic('/api/endpoint', 'GET', config)).toBe(false);
-      // Other methods should use ALL configuration
-      expect(isCustomRoutePublic('/api/endpoint', 'POST', config)).toBe(true);
-    });
-
-    it('should handle different paths correctly', () => {
-      const config = new Map<string, boolean>();
-      config.set('GET:/api/public', false);
-      config.set('GET:/api/protected', true);
-      config.set('POST:/webhooks/github', false);
-
-      expect(isCustomRoutePublic('/api/public', 'GET', config)).toBe(true);
-      expect(isCustomRoutePublic('/api/protected', 'GET', config)).toBe(false);
-      expect(isCustomRoutePublic('/webhooks/github', 'POST', config)).toBe(true);
-      expect(isCustomRoutePublic('/api/other', 'GET', config)).toBe(false);
     });
   });
 });

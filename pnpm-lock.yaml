@@ -3230,6 +3230,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       '@mastra/server':
         specifier: workspace:*
         version: link:../../packages/server
@@ -3321,6 +3324,9 @@ importers:
       express:
         specifier: ^5.1.0
         version: 5.1.0
+      fetch-to-node:
+        specifier: ^2.1.0
+        version: 2.1.0
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.62

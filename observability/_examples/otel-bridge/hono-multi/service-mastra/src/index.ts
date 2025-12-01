@@ -8,7 +8,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { swaggerUI } from '@hono/swagger-ui';
-import { HonoServerAdapter } from '@mastra/hono';
+import { MastraServer } from '@mastra/hono';
 
 export const mastra: Mastra = new Mastra({
   observability: new Observability({
@@ -30,7 +30,7 @@ app.use('*', httpInstrumentationMiddleware());
 app.use('*', cors());
 
 // Register Mastra routes via the HonoServerAdapter
-const honoServerAdapter = new HonoServerAdapter({ mastra });
+const honoServerAdapter = new MastraServer({ app, mastra });
 honoServerAdapter.registerContextMiddleware(app);
 await honoServerAdapter.registerRoutes(app, { openapiPath: '/openapi.json' });
 
