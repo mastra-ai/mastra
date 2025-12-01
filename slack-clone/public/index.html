@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pulse • Team Messaging</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Auth Screen -->
+  <div id="auth-screen" class="screen active">
+    <div class="auth-container">
+      <div class="auth-header">
+        <div class="logo">
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+            <rect width="48" height="48" rx="12" fill="url(#logo-gradient)"/>
+            <path d="M14 24C14 18.477 18.477 14 24 14C29.523 14 34 18.477 34 24" stroke="white" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="24" cy="28" r="6" fill="white"/>
+            <circle cx="24" cy="28" r="3" fill="url(#logo-gradient)"/>
+            <defs>
+              <linearGradient id="logo-gradient" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#6366F1"/>
+                <stop offset="1" stop-color="#EC4899"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <h1>Pulse</h1>
+        <p class="tagline">Where teams come alive</p>
+      </div>
+      
+      <div class="auth-tabs">
+        <button class="tab-btn active" data-tab="login">Sign In</button>
+        <button class="tab-btn" data-tab="register">Create Account</button>
+      </div>
+      
+      <form id="login-form" class="auth-form active">
+        <div class="form-group">
+          <label for="login-username">Username</label>
+          <input type="text" id="login-username" placeholder="Enter your username" required>
+        </div>
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" placeholder="Enter your password" required>
+        </div>
+        <button type="submit" class="btn-primary">Sign In</button>
+        <p class="auth-error" id="login-error"></p>
+      </form>
+      
+      <form id="register-form" class="auth-form">
+        <div class="form-group">
+          <label for="register-username">Username</label>
+          <input type="text" id="register-username" placeholder="Choose a username" required minlength="3" maxlength="20">
+        </div>
+        <div class="form-group">
+          <label for="register-display">Display Name</label>
+          <input type="text" id="register-display" placeholder="How should we call you?" required>
+        </div>
+        <div class="form-group">
+          <label for="register-password">Password</label>
+          <input type="password" id="register-password" placeholder="Create a password" required minlength="6">
+        </div>
+        <button type="submit" class="btn-primary">Create Account</button>
+        <p class="auth-error" id="register-error"></p>
+      </form>
+    </div>
+    
+    <div class="auth-decoration">
+      <div class="floating-shapes">
+        <div class="shape shape-1"></div>
+        <div class="shape shape-2"></div>
+        <div class="shape shape-3"></div>
+        <div class="shape shape-4"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main App -->
+  <div id="app-screen" class="screen">
+    <div class="app-layout">
+      <!-- Workspace Sidebar -->
+      <aside class="workspace-bar">
+        <div class="workspace-logo">
+          <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+            <rect width="48" height="48" rx="12" fill="url(#logo-gradient-sm)"/>
+            <path d="M14 24C14 18.477 18.477 14 24 14C29.523 14 34 18.477 34 24" stroke="white" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="24" cy="28" r="6" fill="white"/>
+            <circle cx="24" cy="28" r="3" fill="url(#logo-gradient-sm)"/>
+            <defs>
+              <linearGradient id="logo-gradient-sm" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#6366F1"/>
+                <stop offset="1" stop-color="#EC4899"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        
+        <nav class="workspace-nav">
+          <button class="nav-btn active" data-view="channels" title="Channels">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 9h16M4 15h16M10 3L8 21M16 3l-2 18"/>
+            </svg>
+          </button>
+          <button class="nav-btn" data-view="dms" title="Direct Messages">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          </button>
+          <button class="nav-btn" data-view="search" title="Search">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="M21 21l-4.35-4.35"/>
+            </svg>
+          </button>
+        </nav>
+        
+        <div class="workspace-user">
+          <button class="user-avatar-btn" id="user-menu-btn">
+            <div class="avatar" id="current-user-avatar"></div>
+            <span class="status-dot online"></span>
+          </button>
+        </div>
+      </aside>
+
+      <!-- Channels Sidebar -->
+      <aside class="channels-sidebar" id="channels-sidebar">
+        <div class="sidebar-header">
+          <h2>Channels</h2>
+          <button class="icon-btn" id="create-channel-btn" title="Create Channel">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
+        </div>
+        
+        <div class="channels-list" id="channels-list">
+          <!-- Channels will be rendered here -->
+        </div>
+        
+        <div class="sidebar-section">
+          <h3>Online <span id="online-count">0</span></h3>
+          <div class="users-list" id="online-users-list">
+            <!-- Online users will be rendered here -->
+          </div>
+        </div>
+      </aside>
+
+      <!-- DMs Sidebar -->
+      <aside class="channels-sidebar" id="dms-sidebar" style="display: none;">
+        <div class="sidebar-header">
+          <h2>Direct Messages</h2>
+        </div>
+        
+        <div class="channels-list" id="dm-list">
+          <!-- DM conversations will be rendered here -->
+        </div>
+        
+        <div class="sidebar-section">
+          <h3>All Members</h3>
+          <div class="users-list" id="all-users-list">
+            <!-- All users for starting DMs -->
+          </div>
+        </div>
+      </aside>
+
+      <!-- Search Sidebar -->
+      <aside class="channels-sidebar" id="search-sidebar" style="display: none;">
+        <div class="sidebar-header">
+          <h2>Search</h2>
+        </div>
+        
+        <div class="search-container">
+          <div class="search-input-wrapper">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="M21 21l-4.35-4.35"/>
+            </svg>
+            <input type="text" id="search-input" placeholder="Search messages...">
+          </div>
+          
+          <div class="search-results" id="search-results">
+            <p class="search-hint">Enter a search term to find messages across all channels</p>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Content -->
+      <main class="main-content">
+        <!-- Channel Header -->
+        <header class="content-header" id="content-header">
+          <div class="header-left">
+            <span class="channel-hash">#</span>
+            <h2 id="channel-name">general</h2>
+            <span class="header-divider"></span>
+            <p id="channel-description">General discussion for everyone</p>
+          </div>
+          <div class="header-right">
+            <button class="icon-btn" id="channel-members-btn" title="View Members">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+              </svg>
+              <span id="member-count">0</span>
+            </button>
+          </div>
+        </header>
+
+        <!-- Messages Container -->
+        <div class="messages-wrapper">
+          <div class="messages-container" id="messages-container">
+            <!-- Messages will be rendered here -->
+          </div>
+          
+          <div class="typing-indicator" id="typing-indicator" style="display: none;">
+            <div class="typing-dots">
+              <span></span><span></span><span></span>
+            </div>
+            <span id="typing-text">Someone is typing...</span>
+          </div>
+        </div>
+
+        <!-- Message Input -->
+        <div class="message-input-container">
+          <div class="message-input-wrapper">
+            <button class="input-action-btn" id="emoji-btn" title="Add emoji">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                <line x1="9" y1="9" x2="9.01" y2="9"/>
+                <line x1="15" y1="9" x2="15.01" y2="9"/>
+              </svg>
+            </button>
+            <textarea id="message-input" placeholder="Message #general" rows="1"></textarea>
+            <button class="send-btn" id="send-btn" title="Send message">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="22" y1="2" x2="11" y2="13"/>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Channel Modal -->
+  <div class="modal" id="channel-modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Create a Channel</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <form id="create-channel-form">
+        <div class="form-group">
+          <label for="channel-name-input">Channel Name</label>
+          <div class="input-with-prefix">
+            <span class="input-prefix">#</span>
+            <input type="text" id="channel-name-input" placeholder="e.g. project-alpha" required>
+          </div>
+          <p class="form-hint">Names should be lowercase. Spaces will be replaced with dashes.</p>
+        </div>
+        <div class="form-group">
+          <label for="channel-desc-input">Description <span class="optional">(optional)</span></label>
+          <input type="text" id="channel-desc-input" placeholder="What's this channel about?">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary modal-cancel">Cancel</button>
+          <button type="submit" class="btn-primary">Create Channel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Members Modal -->
+  <div class="modal" id="members-modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Channel Members</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="members-list" id="modal-members-list">
+        <!-- Members will be rendered here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- User Menu -->
+  <div class="user-menu" id="user-menu" style="display: none;">
+    <div class="user-menu-header">
+      <div class="avatar" id="menu-user-avatar"></div>
+      <div class="user-info">
+        <span class="display-name" id="menu-display-name"></span>
+        <span class="username" id="menu-username"></span>
+      </div>
+    </div>
+    <div class="user-menu-divider"></div>
+    <button class="user-menu-item" id="logout-btn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+        <polyline points="16,17 21,12 16,7"/>
+        <line x1="21" y1="12" x2="9" y2="12"/>
+      </svg>
+      Sign Out
+    </button>
+  </div>
+
+  <!-- Emoji Picker -->
+  <div class="emoji-picker" id="emoji-picker" style="display: none;">
+    <div class="emoji-grid">
+      <button class="emoji-btn">👍</button>
+      <button class="emoji-btn">❤️</button>
+      <button class="emoji-btn">😂</button>
+      <button class="emoji-btn">🎉</button>
+      <button class="emoji-btn">🚀</button>
+      <button class="emoji-btn">👀</button>
+      <button class="emoji-btn">🔥</button>
+      <button class="emoji-btn">✨</button>
+      <button class="emoji-btn">💯</button>
+      <button class="emoji-btn">🙌</button>
+      <button class="emoji-btn">👏</button>
+      <button class="emoji-btn">💪</button>
+      <button class="emoji-btn">🤔</button>
+      <button class="emoji-btn">😊</button>
+      <button class="emoji-btn">🤝</button>
+      <button class="emoji-btn">⭐</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
