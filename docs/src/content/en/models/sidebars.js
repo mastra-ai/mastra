@@ -93,6 +93,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/agentrouter",
+          label: "AgentRouter",
+        },
+        {
+          type: "doc",
           id: "providers/aihubmix",
           label: "AIHubMix",
         },
@@ -198,6 +203,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/io-net",
+          label: "IO.NET",
+        },
+        {
+          type: "doc",
           id: "providers/llama",
           label: "Llama",
         },
@@ -214,7 +224,12 @@ const sidebars = {
         {
           type: "doc",
           id: "providers/minimax",
-          label: "Minimax",
+          label: "MiniMax",
+        },
+        {
+          type: "doc",
+          id: "providers/minimax-cn",
+          label: "MiniMax (China)",
         },
         {
           type: "doc",

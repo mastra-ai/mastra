@@ -34,7 +34,7 @@ Provide keywords in the following comma-separated format: 'KEYWORDS: <keywords>'
 export const defaultQuestionExtractPrompt = new PromptTemplate({
   templateVars: ['numQuestions', 'context'],
   template: `(
-  "Given the contextual informations below, generate {numQuestions} questions this context can provides specific answers to which are unlikely to be found else where. Higher-level summaries of surrounding context may be provided as well. "
+  "Given the contextual information below, generate {numQuestions} questions this context can provide specific answers to which are unlikely to be found elsewhere. Higher-level summaries of surrounding context may be provided as well. "
   "Try using these summaries to generate better questions that this context can answer."
   "---------------------"
   "{context}"

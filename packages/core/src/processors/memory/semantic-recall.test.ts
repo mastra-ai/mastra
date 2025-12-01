@@ -30,7 +30,7 @@ describe('SemanticRecall', () => {
   let mockStorage: MemoryStorage;
   let mockVector: MastraVector;
   let mockEmbedder: MastraEmbeddingModel<string>;
-  let runtimeContext: RequestContext;
+  let requestContext: RequestContext;
 
   beforeEach(() => {
     // Mock storage
@@ -53,8 +53,8 @@ describe('SemanticRecall', () => {
     } as any;
 
     // Setup runtime context with memory data
-    runtimeContext = new RequestContext();
-    runtimeContext.set('MastraMemory', {
+    requestContext = new RequestContext();
+    requestContext.set('MastraMemory', {
       thread: { id: 'thread-1', resourceId: 'resource-1' },
       resourceId: 'resource-1',
     });
@@ -130,7 +130,7 @@ describe('SemanticRecall', () => {
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Should prepend similar messages
@@ -223,7 +223,7 @@ describe('SemanticRecall', () => {
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Verify topK was passed to vector query
@@ -272,7 +272,7 @@ describe('SemanticRecall', () => {
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Should only include messages above threshold
@@ -320,7 +320,7 @@ describe('SemanticRecall', () => {
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Verify thread scope filter was applied
@@ -363,7 +363,7 @@ describe('SemanticRecall', () => {
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Verify resource scope filter was applied
@@ -399,7 +399,7 @@ describe('SemanticRecall', () => {
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Should return MessageList with original messages unchanged
@@ -436,7 +436,7 @@ describe('SemanticRecall', () => {
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Should return original messages on error
@@ -472,7 +472,7 @@ describe('SemanticRecall', () => {
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Should return MessageList with original messages unchanged
@@ -504,7 +504,7 @@ describe('SemanticRecall', () => {
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
-        runtimeContext: emptyContext,
+        requestContext: emptyContext,
       });
 
       // Should return MessageList with original messages unchanged
@@ -554,7 +554,7 @@ describe('SemanticRecall', () => {
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Should combine text parts
@@ -632,7 +632,7 @@ describe('SemanticRecall', () => {
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Should not duplicate msg-1
@@ -676,7 +676,7 @@ describe('SemanticRecall', () => {
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Verify custom messageRange was used
@@ -719,7 +719,7 @@ describe('SemanticRecall', () => {
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Verify index was created
@@ -754,7 +754,7 @@ describe('SemanticRecall', () => {
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Verify custom index name was used
@@ -818,7 +818,7 @@ describe('SemanticRecall', () => {
           content: 'Same thread message',
           parts: [{ type: 'text', text: 'Same thread message' }],
         },
-        threadId: 'thread-1', // Same as current thread in runtimeContext
+        threadId: 'thread-1', // Same as current thread in requestContext
         createdAt: new Date('2024-01-15T11:00:00.000Z'),
       };
 
@@ -848,7 +848,7 @@ describe('SemanticRecall', () => {
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Should have: system message (cross-thread) + same-thread message + original message
@@ -925,7 +925,7 @@ describe('SemanticRecall', () => {
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Should NOT add cross-thread messages when scope is 'thread'
@@ -995,8 +995,8 @@ describe('SemanticRecall', () => {
         createdAt: new Date('2024-01-01T10:00:01Z'),
       };
 
-      const runtimeContext = new RequestContext();
-      runtimeContext.set('MastraMemory', {
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
         thread: { id: 'thread-123' },
         resourceId: 'user-456',
       });
@@ -1008,7 +1008,7 @@ describe('SemanticRecall', () => {
         messages: [userMessage, assistantMessage],
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Should return messageList (not an array) to signal no transformation
@@ -1104,8 +1104,8 @@ describe('SemanticRecall', () => {
         createdAt: new Date('2024-01-01T10:00:01Z'),
       };
 
-      const runtimeContext = new RequestContext();
-      runtimeContext.set('MastraMemory', {
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
         thread: { id: 'thread-123' },
         resourceId: 'user-456',
       });
@@ -1117,7 +1117,7 @@ describe('SemanticRecall', () => {
         messages: [systemMessage, userMessage],
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Should only create embedding for user message, not system
@@ -1190,8 +1190,8 @@ describe('SemanticRecall', () => {
         createdAt: new Date('2024-01-01T10:00:01Z'),
       };
 
-      const runtimeContext = new RequestContext();
-      runtimeContext.set('MastraMemory', {
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
         thread: { id: 'thread-123' },
         resourceId: 'user-456',
       });
@@ -1203,7 +1203,7 @@ describe('SemanticRecall', () => {
         messages: [emptyMessage, validMessage],
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Should only create embedding for message with content
@@ -1260,8 +1260,8 @@ describe('SemanticRecall', () => {
         createdAt: new Date('2024-01-01T10:00:00Z'),
       };
 
-      const runtimeContext = new RequestContext();
-      runtimeContext.set('MastraMemory', {
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
         thread: { id: 'thread-123' },
         resourceId: 'user-456',
       });
@@ -1273,7 +1273,7 @@ describe('SemanticRecall', () => {
         messages: [userMessage],
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Should create index with correct dimension
@@ -1322,8 +1322,8 @@ describe('SemanticRecall', () => {
         createdAt: new Date('2024-01-01T10:00:00Z'),
       };
 
-      const runtimeContext = new RequestContext();
-      runtimeContext.set('MastraMemory', {
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
         thread: { id: 'thread-123' },
         resourceId: 'user-456',
       });
@@ -1335,7 +1335,7 @@ describe('SemanticRecall', () => {
         messages: [userMessage],
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Should use custom index name
@@ -1387,7 +1387,7 @@ describe('SemanticRecall', () => {
         createdAt: new Date('2024-01-01T10:00:00Z'),
       };
 
-      const runtimeContext = new RequestContext();
+      const requestContext = new RequestContext();
       // No memory context set
 
       const messageList = new MessageList();
@@ -1397,7 +1397,7 @@ describe('SemanticRecall', () => {
         messages: [userMessage],
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Should return messageList to signal no transformation
@@ -1443,8 +1443,8 @@ describe('SemanticRecall', () => {
         createdAt: new Date('2024-01-01T10:00:00Z'),
       };
 
-      const runtimeContext = new RequestContext();
-      runtimeContext.set('MastraMemory', {
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
         thread: { id: 'thread-123' },
         resourceId: 'user-456',
       });
@@ -1456,7 +1456,7 @@ describe('SemanticRecall', () => {
         messages: [userMessage],
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Should return messageList even on error to signal no transformation
@@ -1517,8 +1517,8 @@ describe('SemanticRecall', () => {
         createdAt: new Date('2024-01-01T10:00:01Z'),
       };
 
-      const runtimeContext = new RequestContext();
-      runtimeContext.set('MastraMemory', {
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
         thread: { id: 'thread-123' },
         resourceId: 'user-456',
       });
@@ -1533,7 +1533,7 @@ describe('SemanticRecall', () => {
         messages: [assistantMessage], // Only response messages passed (like runOutputProcessors does)
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       expect(result).toBe(messageList);
@@ -1605,8 +1605,8 @@ describe('SemanticRecall', () => {
         createdAt: new Date('2024-01-01T10:00:00Z'),
       };
 
-      const runtimeContext = new RequestContext();
-      runtimeContext.set('MastraMemory', {
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
         thread: { id: 'thread-123' },
         resourceId: 'user-456',
       });
@@ -1618,7 +1618,7 @@ describe('SemanticRecall', () => {
         messages: [userMessage],
         messageList,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Should return messageList even on error to signal no transformation
@@ -1643,8 +1643,8 @@ describe('SemanticRecall', () => {
         topK: 3,
       });
 
-      const runtimeContext = new RequestContext();
-      runtimeContext.set('MastraMemory', {
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
         thread: { id: 'thread-123' },
         resourceId: 'user-456',
       });
@@ -1694,7 +1694,7 @@ describe('SemanticRecall', () => {
         messages: [message1],
         messageList: messageList1,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
@@ -1710,7 +1710,7 @@ describe('SemanticRecall', () => {
         messages: [message2],
         messageList: messageList2,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Should still be 1 call (cached)
@@ -1724,7 +1724,7 @@ describe('SemanticRecall', () => {
         messages: [message3],
         messageList: messageList3,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Should now be 2 calls (new content)
@@ -1749,8 +1749,8 @@ describe('SemanticRecall', () => {
         topK: 3,
       });
 
-      const runtimeContext = new RequestContext();
-      runtimeContext.set('MastraMemory', {
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
         thread: { id: 'thread-123' },
         resourceId: 'user-456',
       });
@@ -1774,7 +1774,7 @@ describe('SemanticRecall', () => {
         messages: [message],
         messageList: messageList1,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
@@ -1787,7 +1787,7 @@ describe('SemanticRecall', () => {
         messages: [message],
         messageList: messageList2,
         abort: vi.fn() as any,
-        runtimeContext,
+        requestContext,
       });
 
       // Should still be 1 call (cached)

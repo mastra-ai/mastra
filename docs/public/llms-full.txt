@@ -927,6 +927,10 @@ const scrubbedAgent = new Agent({
 
 > See [SystemPromptScrubber](/reference/v1/processors/system-prompt-scrubber) for a full list of configuration options.
 
+:::note
+When streaming responses over HTTP, Mastra redacts sensitive request data (system prompts, tool definitions, API keys) from stream chunks at the server level by default. See [Stream data redaction](/docs/v1/server-db/mastra-server#stream-data-redaction) for details.
+:::
+
 ## Hybrid processors
 
 Hybrid processors can be applied either before messages are sent to the language model or before responses are returned to the user. They are useful for tasks like content moderation and PII redaction.
@@ -1762,6 +1766,287 @@ Use [Studio](/docs/v1/getting-started/studio) to test agents with different mess
 - [Agent Memory](/docs/v1/agents/agent-memory)
 - [Request Context](/docs/v1/server-db/request-context)
 
+
+---
+title: "Processors | Agents | Mastra Docs"
+description: "Learn how to use input and output processors to transform, validate, and control messages in Mastra agents."
+---
+
+# Processors
+[EN] Source: https://mastra.ai/en/docs/agents/processors
+
+Processors transform, validate, or control messages as they pass through an agent. They run at specific points in the agent's execution pipeline, allowing you to modify inputs before they reach the language model or outputs before they're returned to users.
+
+Processors are configured as:
+
+- **`inputProcessors`**: Run before messages reach the language model.
+- **`outputProcessors`**: Run after the language model generates a response, but before it's returned to users.
+
+Some processors implement both input and output logic and can be used in either array depending on where the transformation should occur.
+
+## When to use processors
+
+Use processors to:
+
+- Normalize or validate user input
+- Add guardrails to your agent
+- Detect and prevent prompt injection or jailbreak attempts
+- Moderate content for safety or compliance
+- Transform messages (e.g., translate languages, filter tool calls)
+- Limit token usage or message history length
+- Redact sensitive information (PII)
+- Apply custom business logic to messages
+
+Mastra includes several processors for common use cases. You can also create custom processors for application-specific requirements.
+
+## Adding processors to an agent
+
+Import and instantiate the processor, then pass it to the agent's `inputProcessors` or `outputProcessors` array:
+
+```typescript {3,9-15} title="src/mastra/agents/moderated-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { ModerationProcessor } from "@mastra/core/processors";
+
+export const moderatedAgent = new Agent({
+  name: "moderated-agent",
+  instructions: "You are a helpful assistant",
+  model: openai("gpt-4o-mini"),
+  inputProcessors: [
+    new ModerationProcessor({
+      model: openai("gpt-4.1-nano"),
+      categories: ["hate", "harassment", "violence"],
+      threshold: 0.7,
+      strategy: "block",
+    }),
+  ],
+});
+```
+
+## Execution order
+
+Processors run in the order they appear in the array:
+
+```typescript
+inputProcessors: [
+  new UnicodeNormalizer(),
+  new PromptInjectionDetector(),
+  new ModerationProcessor(),
+];
+```
+
+For output processors, the order determines the sequence of transformations applied to the model's response.
+
+### With memory enabled
+
+When memory is enabled on an agent, memory processors are automatically added to the pipeline:
+
+**Input processors:**
+```
+[Memory Processors] → [Your inputProcessors]
+```
+Memory loads conversation history first, then your processors run.
+
+**Output processors:**
+```
+[Your outputProcessors] → [Memory Processors]
+```
+Your processors run first, then memory persists messages.
+
+This ordering ensures that if your output guardrail calls `abort()`, memory processors are skipped and no messages are saved. See [Memory Processors](/docs/v1/memory/memory-processors#processor-execution-order) for details.
+
+## Creating custom processors
+
+Custom processors implement the `Processor` interface:
+
+### Custom input processor
+
+```typescript title="src/mastra/processors/custom-input.ts" showLineNumbers copy
+import type {
+  Processor,
+  MastraDBMessage,
+  RequestContext,
+} from "@mastra/core";
+
+export class CustomInputProcessor implements Processor {
+  id = "custom-input";
+
+  async processInput({
+    messages,
+    systemMessages,
+    context,
+  }: {
+    messages: MastraDBMessage[];
+    systemMessages: CoreMessage[];
+    context: RequestContext;
+  }): Promise<MastraDBMessage[]> {
+    // Transform messages before they reach the LLM
+    return messages.map((msg) => ({
+      ...msg,
+      content: {
+        ...msg.content,
+        content: msg.content.content.toLowerCase(),
+      },
+    }));
+  }
+}
+```
+
+The `processInput` method receives:
+- `messages`: User and assistant messages (not system messages)
+- `systemMessages`: All system messages (agent instructions, memory context, user-provided system prompts)
+- `messageList`: The full MessageList instance for advanced use cases
+- `abort`: Function to stop processing and return early
+- `requestContext`: Execution metadata like `threadId` and `resourceId`
+
+The method can return:
+- `MastraDBMessage[]` — Transformed messages array (backward compatible)
+- `{ messages: MastraDBMessage[]; systemMessages: CoreMessage[] }` — Both messages and modified system messages
+
+The framework handles both return formats, so modifying system messages is optional and existing processors continue to work.
+
+### Modifying system messages
+
+To modify system messages (e.g., trim verbose prompts for smaller models), return an object with both `messages` and `systemMessages`:
+
+```typescript title="src/mastra/processors/system-trimmer.ts" showLineNumbers copy
+import type { Processor, CoreMessage, MastraDBMessage } from "@mastra/core";
+
+export class SystemTrimmer implements Processor {
+  id = "system-trimmer";
+
+  async processInput({
+    messages,
+    systemMessages,
+  }): Promise<{ messages: MastraDBMessage[]; systemMessages: CoreMessage[] }> {
+    // Trim system messages for smaller models
+    const trimmedSystemMessages = systemMessages.map((msg) => ({
+      ...msg,
+      content:
+        typeof msg.content === "string"
+          ? msg.content.substring(0, 500)
+          : msg.content,
+    }));
+
+    return { messages, systemMessages: trimmedSystemMessages };
+  }
+}
+```
+
+This is useful for:
+- Trimming verbose system prompts for models with smaller context windows
+- Filtering or modifying semantic recall content to prevent "prompt too long" errors
+- Dynamically adjusting system instructions based on the conversation
+
+### Custom output processor
+
+```typescript title="src/mastra/processors/custom-output.ts" showLineNumbers copy
+import type {
+  Processor,
+  MastraDBMessage,
+  RequestContext,
+} from "@mastra/core";
+
+export class CustomOutputProcessor implements Processor {
+  id = "custom-output";
+
+  async processOutputResult({
+    messages,
+    context,
+  }: {
+    messages: MastraDBMessage[];
+    context: RequestContext;
+  }): Promise<MastraDBMessage[]> {
+    // Transform messages after the LLM generates them
+    return messages.filter((msg) => msg.role !== "system");
+  }
+
+  async processOutputStream({
+    stream,
+    context,
+  }: {
+    stream: ReadableStream;
+    context: RequestContext;
+  }): Promise<ReadableStream> {
+    // Transform streaming responses
+    return stream;
+  }
+}
+```
+
+## Built-in Utility Processors
+
+Mastra provides utility processors for common tasks:
+
+**For security and validation processors**, see the [Guardrails](/docs/v1/agents/guardrails) page for input/output guardrails and moderation processors.
+**For memory-specific processors**, see the [Memory Processors](/docs/v1/memory/memory-processors) page for processors that handle message history, semantic recall, and working memory.
+
+### TokenLimiter
+
+Prevents context window overflow by removing older messages when the total token count exceeds a specified limit.
+
+```typescript copy showLineNumbers {9-12}
+import { Agent } from "@mastra/core/agent";
+import { TokenLimiter } from "@mastra/core/processors";
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  name: "my-agent",
+  model: openai("gpt-4o"),
+  inputProcessors: [
+    // Ensure the total tokens don't exceed ~127k
+    new TokenLimiter(127000),
+  ],
+});
+```
+
+The `TokenLimiter` uses the `o200k_base` encoding by default (suitable for GPT-4o). You can specify other encodings for different models:
+
+```typescript copy showLineNumbers {6-9}
+import cl100k_base from "js-tiktoken/ranks/cl100k_base";
+
+const agent = new Agent({
+  name: "my-agent",
+  inputProcessors: [
+    new TokenLimiter({
+      limit: 16000, // Example limit for a 16k context model
+      encoding: cl100k_base,
+    }),
+  ],
+});
+```
+
+### ToolCallFilter
+
+Removes tool calls from messages sent to the LLM, saving tokens by excluding potentially verbose tool interactions.
+
+```typescript copy showLineNumbers {5-14}
+import { Agent } from "@mastra/core/agent";
+import { ToolCallFilter, TokenLimiter } from "@mastra/core/processors";
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  name: "my-agent",
+  model: openai("gpt-4o"),
+  inputProcessors: [
+    // Example 1: Remove all tool calls/results
+    new ToolCallFilter(),
+
+    // Example 2: Remove only specific tool calls
+    new ToolCallFilter({ exclude: ["generateImageTool"] }),
+
+    // Always place TokenLimiter last
+    new TokenLimiter(127000),
+  ],
+});
+```
+
+> **Note:** The example above filters tool calls and limits tokens for the LLM, but these filtered messages will still be saved to memory. To also filter messages before they're saved to memory, manually add memory processors before utility processors. See [Memory Processors](/docs/v1/memory/memory-processors#manual-control-and-deduplication) for details.
+
+## Related documentation
+
+- [Guardrails](/docs/v1/agents/guardrails) - Security and validation processors
+- [Memory Processors](/docs/v1/memory/memory-processors) - Memory-specific processors and automatic integration
 
 ---
 title: "Using Tools | Agents"
@@ -7018,133 +7303,319 @@ description: "Learn how to use memory processors in Mastra to filter, trim, and 
 # Memory Processors
 [EN] Source: https://mastra.ai/en/docs/memory/memory-processors
 
-Memory Processors allow you to modify the list of messages retrieved from memory _before_ they are added to the agent's context window and sent to the LLM. This is useful for managing context size, filtering content, and optimizing performance.
+Memory processors transform and filter messages as they pass through an agent with memory enabled. They manage context window limits, remove unnecessary content, and optimize the information sent to the language model.
 
-Processors operate on the messages retrieved based on your memory configuration (e.g., `lastMessages`, `semanticRecall`). They do **not** affect the new incoming user message.
+When memory is enabled on an agent, Mastra adds memory processors to the agent's processor pipeline. These processors retrieve conversation history, working memory, and semantically relevant messages, then persist new messages after the model responds.
 
-## Built-in Processors
+Memory processors are [processors](/docs/v1/agents/processors) that operate specifically on memory-related messages and state.
 
-Mastra provides built-in processors:
+## Built-in Memory Processors
 
-### `TokenLimiter`
+Mastra automatically adds these processors when memory is enabled:
 
-This processor is used to prevent errors caused by exceeding the LLM's context window limit. It counts the tokens in the retrieved memory messages and removes the oldest messages until the total count is below the specified `limit`.
+### MessageHistory
 
-```typescript copy showLineNumbers {9-12}
-import { Memory } from "@mastra/memory";
-import { TokenLimiter } from "@mastra/memory/processors";
+Retrieves conversation history and persists new messages.
+
+**When you configure:**
+
+```typescript
+memory: new Memory({
+  lastMessages: 10,
+});
+```
+
+**Mastra internally:**
+
+1. Creates a `MessageHistory` processor with `limit: 10`
+2. Adds it to the agent's input processors (runs before the LLM)
+3. Adds it to the agent's output processors (runs after the LLM)
+
+**What it does:**
+
+- **Input**: Fetches the last 10 messages from storage and prepends them to the conversation
+- **Output**: Persists new messages to storage after the model responds
+
+**Example:**
+
+```typescript copy showLineNumbers
 import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
   id: "test-agent",
   name: "Test Agent",
-  model: "openai/gpt-5.1",
+  instructions: "You are a helpful assistant",
+  model: 'openai/gpt-4o',
   memory: new Memory({
-    processors: [
-      // Ensure the total tokens from memory don't exceed ~127k
-      new TokenLimiter(127000),
-    ],
+    storage: new LibSQLStore({
+      id: "memory-store",
+      url: "file:memory.db",
+    }),
+    lastMessages: 10, // MessageHistory processor automatically added
   }),
 });
 ```
 
-The `TokenLimiter` uses the `o200k_base` encoding by default (suitable for GPT-4o). You can specify other encodings if needed for different models:
+### SemanticRecall
 
-```typescript copy showLineNumbers {6-9}
-// Import the encoding you need (e.g., for older OpenAI models)
-import cl100k_base from "js-tiktoken/ranks/cl100k_base";
+Retrieves semantically relevant messages based on the current input and creates embeddings for new messages.
 
-const memoryForOlderModel = new Memory({
-  processors: [
-    new TokenLimiter({
-      limit: 16000, // Example limit for a 16k context model
-      encoding: cl100k_base,
+**When you configure:**
+
+```typescript
+memory: new Memory({
+  semanticRecall: { enabled: true },
+  vector: myVectorStore,
+  embedder: myEmbedder,
+});
+```
+
+**Mastra internally:**
+
+1. Creates a `SemanticRecall` processor
+2. Adds it to the agent's input processors (runs before the LLM)
+3. Adds it to the agent's output processors (runs after the LLM)
+4. Requires both a vector store and embedder to be configured
+
+**What it does:**
+
+- **Input**: Performs vector similarity search to find relevant past messages and prepends them to the conversation
+- **Output**: Creates embeddings for new messages and stores them in the vector store for future retrieval
+
+**Example:**
+
+```typescript copy showLineNumbers
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+import { PineconeVector } from "@mastra/pinecone";
+import { OpenAIEmbedder } from "@mastra/openai";
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  name: "semantic-agent",
+  instructions: "You are a helpful assistant with semantic memory",
+  model: 'openai/gpt-4o',
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: "memory-store",
+      url: "file:memory.db",
     }),
-  ],
+    vector: new PineconeVector({
+      id: "memory-vector",
+      apiKey: process.env.PINECONE_API_KEY!,
+      environment: "us-east-1",
+    }),
+    embedder: new OpenAIEmbedder({
+      model: "text-embedding-3-small",
+      apiKey: process.env.OPENAI_API_KEY!,
+    }),
+    semanticRecall: { enabled: true }, // SemanticRecall processor automatically added
+  }),
 });
 ```
 
-See the [OpenAI cookbook](https://cookbook.openai.com/examples/how_to_count_tokens_with_tiktoken#encodings) or [`js-tiktoken` repo](https://github.com/dqbd/tiktoken) for more on encodings.
+### WorkingMemory
 
-### `ToolCallFilter`
+Manages working memory state across conversations.
 
-This processor removes tool calls from the memory messages sent to the LLM. It saves tokens by excluding potentially verbose tool interactions from the context, which is useful if the details aren't needed for future interactions. It's also useful if you always want your agent to call a specific tool again and not rely on previous tool results in memory.
+**When you configure:**
 
-```typescript copy showLineNumbers {5-14}
+```typescript
+memory: new Memory({
+  workingMemory: { enabled: true },
+});
+```
+
+**Mastra internally:**
+
+1. Creates a `WorkingMemory` processor
+2. Adds it to the agent's input processors (runs before the LLM)
+3. Requires a storage adapter to be configured
+
+**What it does:**
+
+- **Input**: Retrieves working memory state for the current thread and prepends it to the conversation
+- **Output**: No output processing
+
+**Example:**
+
+```typescript copy showLineNumbers
+import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { ToolCallFilter, TokenLimiter } from "@mastra/memory/processors";
+import { LibSQLStore } from "@mastra/libsql";
+import { openai } from "@ai-sdk/openai";
 
-const memoryFilteringTools = new Memory({
-  processors: [
-    // Example 1: Remove all tool calls/results
-    new ToolCallFilter(),
-
-    // Example 2: Remove only noisy image generation tool calls/results
-    new ToolCallFilter({ exclude: ["generateImageTool"] }),
-
-    // Always place TokenLimiter last
-    new TokenLimiter(127000),
-  ],
+const agent = new Agent({
+  name: "working-memory-agent",
+  instructions: "You are an assistant with working memory",
+  model: 'openai/gpt-4o',
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: "memory-store",
+      url: "file:memory.db",
+    }),
+    workingMemory: { enabled: true }, // WorkingMemory processor automatically added
+  }),
 });
 ```
 
-## Applying Multiple Processors
+## Manual Control and Deduplication
 
-You can chain multiple processors. They execute in the order they appear in the `processors` array. The output of one processor becomes the input for the next.
+If you manually add a memory processor to `inputProcessors` or `outputProcessors`, Mastra will **not** automatically add it. This gives you full control over processor ordering:
 
-**Order matters!** It's generally best practice to place `TokenLimiter` **last** in the chain. This ensures it operates on the final set of messages after other filtering has occurred, providing the most accurate token limit enforcement.
-
-```typescript copy showLineNumbers {7-14}
+```typescript copy showLineNumbers
+import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { ToolCallFilter, TokenLimiter } from "@mastra/memory/processors";
-// Assume a hypothetical 'PIIFilter' custom processor exists
-// import { PIIFilter } from './custom-processors';
+import { MessageHistory } from "@mastra/memory/processors";
+import { TokenLimiter } from "@mastra/core/processors";
+import { LibSQLStore } from "@mastra/libsql";
+import { openai } from "@ai-sdk/openai";
 
-const memoryWithMultipleProcessors = new Memory({
-  processors: [
-    // 1. Filter specific tool calls first
-    new ToolCallFilter({ exclude: ["verboseDebugTool"] }),
-    // 2. Apply custom filtering (e.g., remove hypothetical PII - use with caution)
-    // new PIIFilter(),
-    // 3. Apply token limiting as the final step
-    new TokenLimiter(127000),
+// Custom MessageHistory with different configuration
+const customMessageHistory = new MessageHistory({
+  storage: new LibSQLStore({ id: "memory-store", url: "file:memory.db" }),
+  lastMessages: 20,
+});
+
+const agent = new Agent({
+  name: "custom-memory-agent",
+  instructions: "You are a helpful assistant",
+  model: 'openai/gpt-4o',
+  memory: new Memory({
+    storage: new LibSQLStore({ id: "memory-store", url: "file:memory.db" }),
+    lastMessages: 10, // This would normally add MessageHistory(10)
+  }),
+  inputProcessors: [
+    customMessageHistory, // Your custom one is used instead
+    new TokenLimiter({ limit: 4000 }), // Runs after your custom MessageHistory
   ],
 });
 ```
 
-## Creating Custom Processors
+## Processor Execution Order
 
-You can create custom logic by extending the base `MemoryProcessor` class.
+Understanding the execution order is important when combining guardrails with memory:
 
-```typescript copy showLineNumbers {5-20,24-27}
-import { Memory, MemoryProcessorOpts, MemoryProcessor } from "@mastra/memory";
-import { CoreMessage } from "@mastra/core/llm";
+### Input Processors
 
-class ConversationOnlyFilter extends MemoryProcessor {
-  constructor() {
-    // Provide a name for easier debugging if needed
-    super({ name: "ConversationOnlyFilter" });
-  }
+```
+[Memory Processors] → [Your inputProcessors]
+```
 
-  process(
-    messages: CoreMessage[],
-    _opts: MemoryProcessorOpts = {}, // Options passed during memory retrieval, rarely needed here
-  ): CoreMessage[] {
-    // Filter messages based on role
-    return messages.filter(
-      (msg) => msg.role === "user" || msg.role === "assistant",
+1. **Memory processors run FIRST**: `WorkingMemory`, `MessageHistory`, `SemanticRecall`
+2. **Your input processors run AFTER**: guardrails, filters, validators
+
+This means memory loads conversation history before your processors can validate or filter the input.
+
+### Output Processors
+
+```
+[Your outputProcessors] → [Memory Processors]
+```
+
+1. **Your output processors run FIRST**: guardrails, filters, validators
+2. **Memory processors run AFTER**: `SemanticRecall` (embeddings), `MessageHistory` (persistence)
+
+This ordering is designed to be **safe by default**: if your output guardrail calls `abort()`, the memory processors never run and **no messages are saved**.
+
+## Guardrails and Memory
+
+The default execution order provides safe guardrail behavior:
+
+### Output guardrails (recommended)
+
+Output guardrails run **before** memory processors save messages. If a guardrail aborts:
+
+- The tripwire is triggered
+- Memory processors are skipped
+- **No messages are persisted to storage**
+
+```typescript copy showLineNumbers
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+
+// Output guardrail that blocks inappropriate content
+const contentBlocker = {
+  id: "content-blocker",
+  processOutputResult: async ({ messages, abort }) => {
+    const hasInappropriateContent = messages.some((msg) =>
+      containsBadContent(msg)
     );
-  }
-}
+    if (hasInappropriateContent) {
+      abort("Content blocked by guardrail");
+    }
+    return messages;
+  },
+};
 
-// Use the custom processor
-const memoryWithCustomFilter = new Memory({
-  processors: [
-    new ConversationOnlyFilter(),
-    new TokenLimiter(127000), // Still apply token limiting
-  ],
+const agent = new Agent({
+  name: "safe-agent",
+  instructions: "You are a helpful assistant",
+  model: 'openai/gpt-4o',
+  memory: new Memory({ lastMessages: 10 }),
+  // Your guardrail runs BEFORE memory saves
+  outputProcessors: [contentBlocker],
+});
+
+// If the guardrail aborts, nothing is saved to memory
+const result = await agent.generate("Hello");
+if (result.tripwire) {
+  console.log("Blocked:", result.tripwireReason);
+  // Memory is empty - no messages were persisted
+}
+```
+
+### Input guardrails
+
+Input guardrails run **after** memory processors load history. If a guardrail aborts:
+
+- The tripwire is triggered
+- The LLM is never called
+- Output processors (including memory persistence) are skipped
+- **No messages are persisted to storage**
+
+```typescript copy showLineNumbers
+// Input guardrail that validates user input
+const inputValidator = {
+  id: "input-validator",
+  processInput: async ({ messages, abort }) => {
+    const lastUserMessage = messages.findLast((m) => m.role === "user");
+    if (isInvalidInput(lastUserMessage)) {
+      abort("Invalid input detected");
+    }
+    return messages;
+  },
+};
+
+const agent = new Agent({
+  name: "validated-agent",
+  instructions: "You are a helpful assistant",
+  model: 'openai/gpt-4o',
+  memory: new Memory({ lastMessages: 10 }),
+  // Your guardrail runs AFTER memory loads history
+  inputProcessors: [inputValidator],
 });
 ```
+
+### Summary
+
+| Guardrail Type | When it runs | If it aborts |
+| -------------- | ------------ | ------------ |
+| Input | After memory loads history | LLM not called, nothing saved |
+| Output | Before memory saves | Nothing saved to storage |
+
+Both scenarios are safe - guardrails prevent inappropriate content from being persisted to memory
+
+## Related documentation
+
+- [Processors](/docs/v1/agents/processors) - General processor concepts and custom processor creation
+- [Guardrails](/docs/v1/agents/guardrails) - Security and validation processors
+- [Memory Overview](/docs/v1/memory/overview) - Memory types and configuration
 
 When creating custom processors avoid mutating the input `messages` array or its objects directly.
 
@@ -8461,10 +8932,18 @@ When a schema is provided, the agent receives the working memory as a JSON objec
 }
 ```
 
+### Merge Semantics for Schema-Based Memory
+
+Schema-based working memory uses **merge semantics**, meaning the agent only needs to include fields it wants to add or update. Existing fields are preserved automatically.
+
+- **Object fields are deep merged:** Only provided fields are updated; others remain unchanged
+- **Set a field to `null` to delete it:** This explicitly removes the field from memory
+- **Arrays are replaced entirely:** When an array field is provided, it replaces the existing array (arrays are not merged element-by-element)
+
 ## Choosing Between Template and Schema
 
-- Use a **template** (Markdown) if you want the agent to maintain memory as a free-form text block, such as a user profile or scratchpad.
-- Use a **schema** if you need structured, type-safe data that can be validated and programmatically accessed as JSON.
+- Use a **template** (Markdown) if you want the agent to maintain memory as a free-form text block, such as a user profile or scratchpad. Templates use **replace semantics** — the agent must provide the complete memory content on each update.
+- Use a **schema** if you need structured, type-safe data that can be validated and programmatically accessed as JSON. Schemas use **merge semantics** — the agent only provides fields to update, and existing fields are preserved.
 - Only one mode can be active at a time: setting both `template` and `schema` is not supported.
 
 ## Example: Multi-step Retention
@@ -10282,7 +10761,6 @@ Use `configSelector` to choose the appropriate tracing configuration based on re
 ```ts title="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: new Observability({
-    default: { enabled: true }, // Provides 'default' instance
     configs: {
       langfuse: {
         serviceName: "langfuse-service",
@@ -10315,7 +10793,7 @@ export const mastra = new Mastra({
         return "langfuse";
       }
 
-      return "default";
+      throw new Error('no config found')
     },
   }),
 });
@@ -12569,6 +13047,64 @@ Key metadata considerations:
 - Only include fields you plan to filter or sort by - extra fields add overhead
 - Add timestamps (e.g., 'createdAt', 'lastUpdated') to track content freshness
 
+## Deleting Vectors
+
+When building RAG applications, you often need to clean up stale vectors when documents are deleted or updated. Mastra provides the `deleteVectors` method that supports deleting vectors by metadata filters, making it easy to remove all embeddings associated with a specific document.
+
+### Delete by Metadata Filter
+
+The most common use case is deleting all vectors for a specific document when a user deletes it:
+
+```ts title="delete-vectors.ts" showLineNumbers copy
+// Delete all vectors for a specific document
+await store.deleteVectors({
+  indexName: "myCollection",
+  filter: { docId: "document-123" },
+});
+```
+
+This is particularly useful when:
+- A user deletes a document and you need to remove all its chunks
+- You're re-indexing a document and want to remove old vectors first
+- You need to clean up vectors for a specific user or tenant
+
+### Delete Multiple Documents
+
+You can also use complex filters to delete vectors matching multiple conditions:
+
+```ts title="delete-vectors-advanced.ts" showLineNumbers copy
+// Delete all vectors for multiple documents
+await store.deleteVectors({
+  indexName: "myCollection",
+  filter: {
+    docId: { $in: ["doc-1", "doc-2", "doc-3"] },
+  },
+});
+
+// Delete vectors for a specific user's documents
+await store.deleteVectors({
+  indexName: "myCollection",
+  filter: {
+    $and: [
+      { userId: "user-123" },
+      { status: "archived" },
+    ],
+  },
+});
+```
+
+### Delete by Vector IDs
+
+If you have specific vector IDs to delete, you can pass them directly:
+
+```ts title="delete-by-ids.ts" showLineNumbers copy
+// Delete specific vectors by their IDs
+await store.deleteVectors({
+  indexName: "myCollection",
+  ids: ["vec-1", "vec-2", "vec-3"],
+});
+```
+
 ## Best Practices
 
 - Create indexes before bulk insertions
@@ -12965,7 +13501,7 @@ export const mastra = new Mastra({
   // ...
   server: {
     port: 3000, // Defaults to 4111
-    timeout: 10000, // Defaults to 30000 (30s)
+    timeout: 10000, // Defaults to 3 * 60 * 1000 (3 minutes)
   },
 });
 ```
@@ -13016,6 +13552,35 @@ export const mastra = new Mastra({
   },
 });
 ```
+
+## Stream data redaction
+
+When streaming agent responses over HTTP, Mastra automatically redacts sensitive information from stream chunks before sending them to clients. This prevents accidental exposure of:
+
+- System prompts and agent instructions
+- Tool definitions and their parameters
+- API keys and other credentials in request bodies
+- Internal configuration data
+
+This redaction happens at the HTTP boundary, so internal callbacks like `onStepFinish` still have access to the full request data for debugging and observability purposes.
+
+### Configuring redaction
+
+By default, redaction is enabled. If you're using the server adapters directly (e.g., `@mastra/hono` or `@mastra/express`), you can configure this behavior:
+
+```typescript title="Custom server setup" copy
+import { HonoServerAdapter } from "@mastra/hono";
+import { mastra } from "./mastra";
+
+const adapter = new HonoServerAdapter({
+  mastra,
+  streamOptions: {
+    redact: true,
+  },
+});
+```
+
+Set `redact: false` only for internal services or debugging scenarios where you need access to the full request data in stream responses.
 
 
 ---
@@ -13388,7 +13953,6 @@ export const weatherTool = createTool({
 
 ## Related
 
-- [Request Context Example](/examples/v1/agents/request-context)
 - [Agent Request Context](/docs/v1/agents/overview#using-requestcontext)
 - [Workflow Request Context](../workflows/overview#using-requestcontext)
 - [Tool Request Context](../mcp/overview#using-requestcontext)
@@ -13887,11 +14451,22 @@ console.log(result.messages); // MastraDBMessage[]
 console.log(result.total); // Total count
 console.log(result.hasMore); // Whether more pages exist
 
+// Get messages from multiple threads at once
+const multiThreadResult = await mastra
+  .getStorage()
+  .listMessages({
+    threadId: ["thread-1", "thread-2", "thread-3"],
+    page: 0,
+    perPage: 100
+  });
+
 // Get messages by their IDs
 const messages = await mastra
   .getStorage()
   .listMessagesById({ messageIds: messageIdArr });
 ```
+
+The `threadId` parameter accepts either a single thread ID string or an array of thread IDs to query messages from multiple threads in a single request.
 
 All message queries return `MastraDBMessage[]` format. If you need to convert messages to AI SDK formats for UI rendering, use the conversion utilities from `@mastra/ai-sdk/ui`:
 
@@ -14505,7 +15080,7 @@ For detailed documentation on all lifecycle hooks, see the [createTool() referen
 
 ## Tool using an agent
 
-Pipe an agent's `textStream` to the tool's `writer`. This streams partial output, and Mastra automatically aggregates the agent's usage into the tool run.
+Pipe an agent's `fullStream` to the tool's `writer`. This streams partial output, and Mastra automatically aggregates the agent's usage into the tool run.
 
 ```typescript showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
@@ -14519,7 +15094,7 @@ export const testTool = createTool({
     const testAgent = context?.mastra?.getAgent("testAgent");
     const stream = await testAgent?.stream(`What is the weather in ${city}?`);
 
-    await stream!.textStream.pipeTo(context?.writer!);
+    await stream!.fullStream.pipeTo(context?.writer!);
 
     return {
       value: await stream!.text,
@@ -17420,6 +17995,7 @@ for await (const chunk of stream.stream) {
 
 - [Control Flow](/docs/v1/workflows/control-flow)
 - [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+- [Time Travel](/docs/v1/workflows/time-travel)
 - [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)
 
 
@@ -17437,7 +18013,7 @@ Some workflows need to pause for human input before continuing. When a workflow 
 
 Human-in-the-loop input works much like [pausing a workflow](/docs/v1/workflows/suspend-and-resume) using `suspend()`. The key difference is that when human input is required, you can return `suspend()` with a payload that provides context or guidance to the user on how to continue.
 
-![Pausing a workflow with suspend()](/img/workflows/workflows-suspend-resume-suspend.jpg)
+![Pausing a workflow with suspend()](/img/workflows/workflows-suspend.jpg)
 
 ```typescript {12-17,22-26} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -17519,7 +18095,7 @@ The data returned by the step can include a reason and help the user understand 
 
 As with [restarting a workflow](/docs/v1/workflows/suspend-and-resume#restarting-a-workflow-with-resume), use `resume()` with `resumeData` to continue a workflow after receiving input from a human. The workflow resumes from the step where it was paused.
 
-![Restarting a workflow with resume()](/img/workflows/workflows-suspend-resume-resume.jpg)
+![Restarting a workflow with resume()](/img/workflows/workflows-resume.jpg)
 
 ```typescript {13} showLineNumbers copy
 const workflow = mastra.getWorkflow("testWorkflow");
@@ -18213,59 +18789,27 @@ Workflows can be composed using a number of different methods. The method you ch
 
 ## Workflow state
 
-Workflow state lets you share values across steps without passing them through every step’s inputSchema and outputSchema. All state values are defined in the workflow’s stateSchema, but each step only declares the values it needs. To set initial values, use initialState when running the workflow.
+Workflow state lets you share values across steps without passing them through every step's inputSchema and outputSchema. Use state for tracking progress, accumulating results, or sharing configuration across the entire workflow.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
-  // ...
-  stateSchema: z.object({
-    processedItems: z.array(z.string()),
-  }),
+  id: "step-1",
+  inputSchema: z.object({ message: z.string() }),
+  outputSchema: z.object({ formatted: z.string() }),
+  stateSchema: z.object({ counter: z.number() }),
   execute: async ({ inputData, state, setState }) => {
-    const { message } = inputData;
-    const { processedItems } = state;
+    // Read from state
+    console.log(state.counter);
 
-    setState({
-      ...state,
-      processedItems: [...processedItems, "item-1", "item-2"],
-    });
+    // Update state for subsequent steps
+    setState({ ...state, counter: state.counter + 1 });
 
-    return {
-      formatted: message.toUpperCase(),
-    };
+    return { formatted: inputData.message.toUpperCase() };
   },
 });
-
-const step2 = createStep({
-  // ...
-  stateSchema: z.object({
-    metadata: z.object({
-      processedBy: z.string(),
-    }),
-  }),
-  execute: async ({ inputData, state }) => {
-    const { formatted } = inputData;
-    const { metadata } = state;
-
-    return {
-      emphasized: `${formatted}!! ${metadata.processedBy}`,
-    };
-  },
-});
-
-export const testWorkflow = createWorkflow({
-  // ...
-  stateSchema: z.object({
-    processedItems: z.array(z.string()),
-    metadata: z.object({
-      processedBy: z.string(),
-    }),
-  }),
-})
-  .then(step1)
-  .then(step2)
-  .commit();
 ```
+
+> See [Workflow State](/docs/v1/workflows/workflow-state) for complete documentation on state schemas, initial state, persistence across suspend/resume, and nested workflows.
 
 ## Workflows as steps
 
@@ -18501,6 +19045,7 @@ Use [Studio](/docs/v1/getting-started/studio) to easily run workflows with diffe
 
 For a closer look at workflows, see our [Workflow Guide](/guides/v1/guide/ai-recruiter), which walks through the core concepts with a practical example.
 
+- [Workflow State](/docs/v1/workflows/workflow-state)
 - [Control Flow](/docs/v1/workflows/control-flow)
 - [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
 - [Error Handling](/docs/v1/workflows/error-handling)
@@ -18777,6 +19322,7 @@ if (result.status === "suspended") {
 
 - [Control Flow](/docs/v1/workflows/control-flow)
 - [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+- [Time Travel](/docs/v1/workflows/time-travel)
 - [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)
 
 
@@ -18796,7 +19342,7 @@ Use `suspend()` to pause workflow execution at a specific step. You can define a
 - If the condition isn’t met, the workflow pauses and returns `suspend()`.
 - If the condition is met, the workflow continues with the remaining logic in the step.
 
-![Pausing a workflow with suspend()](/img/workflows/workflows-suspend-resume-suspend.jpg)
+![Pausing a workflow with suspend()](/img/workflows/workflows-suspend.jpg)
 
 ```typescript {9-11,16-18} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
@@ -18841,7 +19387,7 @@ export const testWorkflow = createWorkflow({
 
 Use `resume()` to restart a suspended workflow from the step where it paused. To satisfy the step’s suspend condition, pass a value using `resumeData` that matches the step's `resumeSchema`, allowing execution to continue from the suspended step.
 
-![Restarting a workflow with resume()](/img/workflows/workflows-suspend-resume-resume.jpg)
+![Restarting a workflow with resume()](/img/workflows/workflows-resume.jpg)
 
 ```typescript {13} showLineNumbers copy
 const workflow = mastra.getWorkflow("testWorkflow");
@@ -18922,301 +19468,518 @@ Sleep and event methods can be used to pause execution at the workflow level, wh
 
 - [Control Flow](/docs/v1/workflows/control-flow)
 - [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)
+- [Snapshots](/docs/v1/workflows/snapshots)
+- [Time Travel](/docs/v1/workflows/time-travel)
 
 
 ---
-title: "Example: Request Context | Agents"
-description: Learn how to create and configure dynamic agents using request context to adapt behavior based on user subscription tiers.
+title: "Time Travel | Workflows"
+description: "Re-execute workflow steps from a specific point using time travel debugging in Mastra"
 ---
 
-# Request Context
-[EN] Source: https://mastra.ai/en/examples/agents/request-context
+# Time Travel
+[EN] Source: https://mastra.ai/en/docs/workflows/time-travel
 
-This example demonstrates how to use request context to create a single agent that dynamically adapts its behavior, capabilities, model selection, tools, memory configuration, input/output processing, and quality scoring based on user subscription tiers.
+Time travel allows you to re-execute a workflow starting from any specific step, using either stored snapshot data or custom context you provide. This is useful for debugging failed workflows, testing individual steps with different inputs, or recovering from errors without re-running the entire workflow.
+You can also use time travel to execute a workflow that has not been run yet, starting from any specific step.
 
-## Prerequisites
+## How time travel works
 
-This example uses OpenAI models through Mastra's model router. Make sure to add `OPENAI_API_KEY` to your `.env` file.
+When you call `timeTravel()` on a workflow run:
 
-```bash title=".env" copy
-OPENAI_API_KEY=<your-api-key>
+1. The workflow loads the existing snapshot from storage (if available)
+2. Step results before the target step are reconstructed from the snapshot or provided context
+3. Execution begins from the specified step with the provided or reconstructed input data
+4. The workflow continues to completion from that point forward
+
+Time travel requires storage to be configured since it relies on persisted workflow snapshots.
+
+## Basic usage
+
+Use `run.timeTravel()` to re-execute a workflow from a specific step:
+
+```typescript showLineNumbers copy
+import { mastra } from "./mastra";
+
+const workflow = mastra.getWorkflow("myWorkflow");
+const run = await workflow.createRun();
+
+const result = await run.timeTravel({
+  step: "step2",
+  inputData: { previousStepResult: "custom value" },
+});
 ```
 
-## Creating the Dynamic Agent
+## Specifying the target step
 
-Create an agent that adapts all its properties based on the user's subscription tier:
+You can specify the target step using either a step reference or a step ID:
 
-```typescript title="src/mastra/agents/support-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/libsql";
-import { TokenLimiterProcessor } from "@mastra/core/processors";
-import { RequestContext } from "@mastra/core/request-context";
-import {
-  knowledgeBase,
-  ticketSystem,
-  advancedAnalytics,
-  customIntegration,
-} from "../tools/support-tools";
-import { CharacterLimiterProcessor } from "../processors/character-limiter";
-import { responseQualityScorer } from "../scorers/response-quality";
+### Using step reference
 
-export type UserTier = "free" | "pro" | "enterprise";
-export type SupportRequestContext = {
-  "user-tier": UserTier;
-  language: "en" | "es" | "ja" | "fr";
-};
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: step2,
+  inputData: { value: 10 },
+});
+```
 
-export const supportAgent = new Agent({
-  id: "support-agent",
-  name: "Support Agent",
-  description: "AI support agent that adapts to user subscription tiers",
+### Using step ID
 
-  instructions: async ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
-    const language = requestContext.get("language");
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: "step2",
+  inputData: { value: 10 },
+});
+```
 
-    return `You are a customer support agent for our SaaS platform.
-    The current user is on the ${userTier} tier and prefers ${language} language.
+### Nested workflow steps
 
-    Support guidance based on tier:
-    ${userTier === "free" ? "- Provide basic support and documentation links" : ""}
-    ${userTier === "pro" ? "- Offer detailed technical support and best practices" : ""}
-    ${userTier === "enterprise" ? "- Provide priority support with custom solutions and dedicated assistance" : ""}
+For steps inside nested workflows, use dot notation, an array of step IDS or an array of step references:
 
-    Always respond in ${language} language.
-    ${userTier === "enterprise" ? "You have access to custom integrations and advanced analytics." : ""}`;
-  },
+```typescript showLineNumbers copy
+// Using dot notation
+const result = await run.timeTravel({
+  step: "nestedWorkflow.step3",
+  inputData: { value: 10 },
+});
 
-  model: ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
+// Using array of step IDs
+const result = await run.timeTravel({
+  step: ["nestedWorkflow", "step3"],
+  inputData: { value: 10 },
+});
 
-    if (userTier === "enterprise") return "openai/gpt-5.1";
-    if (userTier === "pro") return "openai/gpt-4.1";
-    return "openai/gpt-4.1-nano";
-  },
+// Using array of step references
+const result = await run.timeTravel({
+  step: [nestedWorkflow, step3],
+  inputData: { value: 10 },
+});
+```
 
-  tools: ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
-    const baseTools = [knowledgeBase, ticketSystem];
+## Providing execution context
 
-    if (userTier === "pro" || userTier === "enterprise") {
-      baseTools.push(advancedAnalytics);
-    }
+You can provide context to specify the state of previous steps when time traveling:
 
-    if (userTier === "enterprise") {
-      baseTools.push(customIntegration);
-    }
-
-    return baseTools;
-  },
-
-  memory: ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
-
-    switch (userTier) {
-      case "enterprise":
-        return new Memory({
-          storage: new LibSQLStore({ id: 'enterprise-storage', url: "file:enterprise.db" }),
-          options: {
-            semanticRecall: { topK: 15, messageRange: 8 },
-            workingMemory: { enabled: true },
-          },
-        });
-      case "pro":
-        return new Memory({
-          storage: new LibSQLStore({ id: 'pro-storage', url: "file:pro.db" }),
-          options: {
-            semanticRecall: { topK: 8, messageRange: 4 },
-            workingMemory: { enabled: true },
-          },
-        });
-      case "free":
-      default:
-        return new Memory({
-          storage: new LibSQLStore({ id: 'free-storage', url: "file:free.db" }),
-          options: {
-            semanticRecall: { topK: 3, messageRange: 2 },
-            workingMemory: { enabled: false },
-          },
-        });
-    }
-  },
-
-  inputProcessors: ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
-
-    switch (userTier) {
-      case "enterprise":
-        return [];
-      case "pro":
-        return [new CharacterLimiterProcessor(2000)];
-      case "free":
-      default:
-        return [new CharacterLimiterProcessor(500)];
-    }
-  },
-
-  outputProcessors: ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
-
-    switch (userTier) {
-      case "enterprise":
-        return [
-          new TokenLimiterProcessor({ limit: 2000, strategy: "truncate" }),
-        ];
-      case "pro":
-        return [
-          new TokenLimiterProcessor({ limit: 500, strategy: "truncate" }),
-        ];
-      case "free":
-      default:
-        return [
-          new TokenLimiterProcessor({ limit: 100, strategy: "truncate" }),
-        ];
-    }
-  },
-
-  scorers: ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
-
-    if (userTier === "enterprise") {
-      return [responseQualityScorer];
-    }
-
-    return [];
+```typescript {3-13} showLineNumbers copy
+const result = await run.timeTravel({
+  step: "step2",
+  context: {
+    step1: {
+      status: "success",
+      payload: { value: 0 },
+      output: { step1Result: 2 },
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+    },
   },
 });
 ```
 
-> See [Agent](/reference/v1/agents/agent) for a full list of configuration options.
+The context object contains step results keyed by step ID. Each step result includes:
 
-## Registering the Agent
+- `status`: The step's execution status (`success`, `failed`, `suspended`)
+- `payload`: The input data passed to the step
+- `output`: The step's output data (for successful steps)
+- `startedAt`: Timestamp when the step started
+- `endedAt`: Timestamp when the step ended (for completed steps)
+- `suspendPayload`: Data passed to `suspend()` (for suspended steps)
+- `resumePayload`: Data passed to `resume()` (for resumed steps)
 
-Register the agent in your main Mastra instance:
+## Re-running failed workflows
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
-import { supportAgent } from "./agents/support-agent";
+Time travel is particularly useful for debugging and recovering from failed workflow executions:
 
-export const mastra = new Mastra({
-  agents: { supportAgent },
+```typescript showLineNumbers copy
+const workflow = mastra.getWorkflow("myWorkflow");
+const run = await workflow.createRun();
+
+// Initial run fails at step2
+const failedResult = await run.start({
+  inputData: { value: 1 },
+});
+
+if (failedResult.status === "failed") {
+  // Re-run from step2 with corrected input
+  const recoveredResult = await run.timeTravel({
+    step: "step2",
+    inputData: { step1Result: 5 }, // Provide corrected input
+  });
+}
+```
+
+## Time travel with suspended workflows
+
+You can time travel to resume a suspended workflow from an earlier step:
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+
+// Start workflow - suspends at promptAgent step
+const initialResult = await run.start({
+  inputData: { input: "test" },
+});
+
+if (initialResult.status === "suspended") {
+  // Time travel back to an earlier step with resume data
+  const result = await run.timeTravel({
+    step: "getUserInput",
+    resumeData: {
+      userInput: "corrected input",
+    },
+  });
+}
+```
+
+## Streaming time travel results
+
+Use `timeTravelStream()` to receive streaming events during time travel execution:
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+
+const output = run.timeTravelStream({
+  step: "step2",
+  inputData: { value: 10 },
+});
+
+// Access the stream
+for await (const event of output.fullStream) {
+  console.log(event.type, event.payload);
+}
+
+// Get final result
+const result = await output.result;
+```
+
+## Time travel with initial state
+
+You can provide initial state when time traveling to set workflow-level state:
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: "step2",
+  inputData: { value: 10 },
+  initialState: {
+    counter: 5,
+    metadata: { source: "time-travel" },
+  },
 });
 ```
 
-## Usage Examples
+## Error handling
 
-### Free Tier User
+Time travel throws errors in specific situations:
 
-```typescript title="src/examples/free-tier-usage.ts" showLineNumbers copy
-import "dotenv/config";
-import { mastra } from "../mastra";
-import { RequestContext } from "@mastra/core/request-context";
-import type { SupportRequestContext } from "../mastra/agents/support-agent";
+### Running workflow
 
-const agent = mastra.getAgent("supportAgent");
-const requestContext = new RequestContext<SupportRequestContext>();
+You cannot time travel to a workflow that is currently running:
 
-requestContext.set("user-tier", "free");
-requestContext.set("language", "en");
-
-const response = await agent.generate(
-  "I'm having trouble with API rate limits. Can you help?",
-  { requestContext },
-);
-
-console.log(response.text);
+```typescript showLineNumbers copy
+try {
+  await run.timeTravel({ step: "step2" });
+} catch (error) {
+  // "This workflow run is still running, cannot time travel"
+}
 ```
 
-### Pro Tier User
+### Invalid step ID
 
-```typescript title="src/examples/pro-tier-usage.ts" showLineNumbers copy
-import "dotenv/config";
-import { mastra } from "../mastra";
-import { RequestContext } from "@mastra/core/request-context";
-import type { SupportRequestContext } from "../mastra/agents/support-agent";
+Time travel throws if the target step doesn't exist in the workflow:
 
-const agent = mastra.getAgent("supportAgent");
-const requestContext = new RequestContext<SupportRequestContext>();
-
-requestContext.set("user-tier", "pro");
-requestContext.set("language", "es");
-
-const response = await agent.generate(
-  "I need detailed analytics on my API usage patterns and optimization recommendations.",
-  { requestContext },
-);
-
-console.log(response.text);
+```typescript showLineNumbers copy
+try {
+  await run.timeTravel({ step: "nonExistentStep" });
+} catch (error) {
+  // "Time travel target step not found in execution graph: 'nonExistentStep'. Verify the step id/path."
+}
 ```
 
-### Enterprise Tier User
+### Invalid input data
 
-```typescript title="src/examples/enterprise-tier-usage.ts" showLineNumbers copy
-import "dotenv/config";
-import { mastra } from "../mastra";
-import { RequestContext } from "@mastra/core/request-context";
-import type { SupportRequestContext } from "../mastra/agents/support-agent";
+When `validateInputs` is enabled, time travel validates the input data against the step's schema:
 
-const agent = mastra.getAgent("supportAgent");
-const requestContext = new RequestContext<SupportRequestContext>();
-
-requestContext.set("user-tier", "enterprise");
-requestContext.set("language", "ja");
-
-const response = await agent.generate(
-  "I need to integrate our custom webhook system with your platform and get real-time analytics on our usage across multiple environments.",
-  { requestContext },
-);
-
-console.log(response.text);
+```typescript showLineNumbers copy
+try {
+  await run.timeTravel({
+    step: "step2",
+    inputData: { invalidField: "value" },
+  });
+} catch (error) {
+  // "Invalid inputData: \n- step1Result: Required"
+}
 ```
 
-## Key Benefits
+## Nested workflows context
 
-This request context approach provides:
+When time traveling into a nested workflow, you can provide context for both the parent and nested workflow steps:
 
-- **Cost Optimization**: Enterprise users get premium models and features while free users get basic functionality
-- **Resource Management**: Input and output limits prevent abuse on lower subscription tiers
-- **Quality Assurance**: Response quality scoring only where it adds business value (enterprise tier)
-- **Scalable Architecture**: A single agent definition serves all user segments without code duplication
-- **Personalization**: Language preferences and tier-specific instructions create tailored experiences
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: "nestedWorkflow.step3",
+  context: {
+    step1: {
+      status: "success",
+      payload: { value: 0 },
+      output: { step1Result: 2 },
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+    },
+    nestedWorkflow: {
+      status: "running",
+      payload: { step1Result: 2 },
+      startedAt: Date.now(),
+    },
+  },
+  nestedStepsContext: {
+    nestedWorkflow: {
+      step2: {
+        status: "success",
+        payload: { step1Result: 2 },
+        output: { step2Result: 3 },
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+      },
+    },
+  },
+});
+```
+
+## Use cases
+
+### Debugging failed steps
+
+Re-run a failed step with the same or modified input to diagnose issues:
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: failedStepId,
+  context: originalContext, // Use context from the failed run
+});
+```
+
+### Testing step logic on new workflow run
+
+Test individual steps with specific inputs on a new workflow run, useful for testing a step logic without starting workflow execution from the beginning.
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: "processData",
+  inputData: { testData: "specific test case" },
+});
+```
+
+### Recovering from transient failures
+
+Re-run steps that failed due to temporary issues (network errors, rate limits):
+
+```typescript showLineNumbers copy
+// After fixing the external service issue
+const result = await run.timeTravel({
+  step: "callExternalApi",
+  inputData: savedInputData,
+});
+```
 
 ## Related
 
-- [Request Context Documentation](/docs/v1/server-db/request-context)
-- [Agent Reference](/reference/v1/agents/agent)
-- [Input Processors](/docs/v1/agents/guardrails)
-- [Output Processors](/docs/v1/agents/guardrails)
-- [Scorers](/docs/v1/evals/overview)
+- [Snapshots](/docs/v1/workflows/snapshots)
+- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+- [Error Handling](/docs/v1/workflows/error-handling)
+- [Control Flow](/docs/v1/workflows/control-flow)
+
+
+---
+title: "Workflow state | Workflows"
+description: "Share values across workflow steps using global state that persists through the entire workflow run."
+---
+
+# Workflow State
+[EN] Source: https://mastra.ai/en/docs/workflows/workflow-state
+
+Workflow state lets you share values across steps without passing them through every step's inputSchema and outputSchema. This is useful for tracking progress, accumulating results, or sharing configuration across the entire workflow.
+
+## State vs step input/output
+
+It's important to understand the difference between **state** and **step input/output**:
+
+- **Step input/output**: Data flows sequentially between steps. Each step receives the previous step's output as its `inputData`, and returns an output for the next step.
+- **State**: A shared store that all steps can read and update via `state` and `setState`. State persists across the entire workflow run, including suspend/resume cycles.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  id: "step-1",
+  inputSchema: z.object({ workflowInput: z.string() }),
+  outputSchema: z.object({ step1Output: z.string() }),
+  stateSchema: z.object({ sharedCounter: z.number() }),
+  execute: async ({ inputData, state, setState }) => {
+    // inputData comes from workflow input or previous step's output
+    console.log(inputData.workflowInput);
+
+    // state is the shared workflow state
+    console.log(state.sharedCounter);
+
+    // Update state for subsequent steps
+    setState({ ...state, sharedCounter: state.sharedCounter + 1 });
+
+    // Return output that flows to next step's inputData
+    return { step1Output: "processed" };
+  },
+});
+```
+
+## Defining state schemas
+
+Define a `stateSchema` on both the workflow and individual steps. The workflow's stateSchema is the master schema containing all possible state values, while each step declares only the subset it needs:
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  // ...
+  stateSchema: z.object({
+    processedItems: z.array(z.string()),
+  }),
+  execute: async ({ inputData, state, setState }) => {
+    const { message } = inputData;
+    const { processedItems } = state;
+
+    setState({
+      ...state,
+      processedItems: [...processedItems, "item-1", "item-2"],
+    });
+
+    return {
+      formatted: message.toUpperCase(),
+    };
+  },
+});
+
+const step2 = createStep({
+  // ...
+  stateSchema: z.object({
+    metadata: z.object({
+      processedBy: z.string(),
+    }),
+  }),
+  execute: async ({ inputData, state }) => {
+    const { formatted } = inputData;
+    const { metadata } = state;
+
+    return {
+      emphasized: `${formatted}!! ${metadata.processedBy}`,
+    };
+  },
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+  stateSchema: z.object({
+    processedItems: z.array(z.string()),
+    metadata: z.object({
+      processedBy: z.string(),
+    }),
+  }),
+})
+  .then(step1)
+  .then(step2)
+  .commit();
+```
+
+## Setting initial state
+
+Pass `initialState` when starting a workflow run to set the starting values:
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+
+const result = await run.start({
+  inputData: { message: "Hello" },
+  initialState: {
+    processedItems: [],
+    metadata: { processedBy: "system" },
+  },
+});
+```
+
+The `initialState` object should match the structure defined in the workflow's `stateSchema`.
+
+## State persistence across suspend/resume
+
+State automatically persists across suspend and resume cycles. When a workflow suspends and later resumes, all state updates made before the suspension are preserved:
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  id: "step-1",
+  inputSchema: z.object({}),
+  outputSchema: z.object({}),
+  stateSchema: z.object({ count: z.number(), items: z.array(z.string()) }),
+  resumeSchema: z.object({ proceed: z.boolean() }),
+  execute: async ({ state, setState, suspend, resumeData }) => {
+    if (!resumeData) {
+      // First run: update state and suspend
+      setState({ ...state, count: state.count + 1, items: [...state.items, "item-1"] });
+      await suspend({});
+      return {};
+    }
+    // After resume: state changes are preserved (count: 1, items: ["item-1"])
+    return {};
+  },
+});
+```
+
+## State in nested workflows
+
+When using nested workflows, state propagates from parent to child. Changes made by the parent workflow before calling a nested workflow are visible to steps inside the nested workflow:
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const nestedStep = createStep({
+  id: "nested-step",
+  inputSchema: z.object({}),
+  outputSchema: z.object({ result: z.string() }),
+  stateSchema: z.object({ sharedValue: z.string() }),
+  execute: async ({ state }) => {
+    // Receives state modified by parent workflow
+    return { result: `Received: ${state.sharedValue}` };
+  },
+});
+
+const nestedWorkflow = createWorkflow({
+  id: "nested-workflow",
+  inputSchema: z.object({}),
+  outputSchema: z.object({ result: z.string() }),
+  stateSchema: z.object({ sharedValue: z.string() }),
+})
+  .then(nestedStep)
+  .commit();
+
+const parentStep = createStep({
+  id: "parent-step",
+  inputSchema: z.object({}),
+  outputSchema: z.object({}),
+  stateSchema: z.object({ sharedValue: z.string() }),
+  execute: async ({ state, setState }) => {
+    // Modify state before nested workflow runs
+    setState({ ...state, sharedValue: "modified-by-parent" });
+    return {};
+  },
+});
+
+const parentWorkflow = createWorkflow({
+  id: "parent-workflow",
+  inputSchema: z.object({}),
+  outputSchema: z.object({ result: z.string() }),
+  stateSchema: z.object({ sharedValue: z.string() }),
+})
+  .then(parentStep)
+  .then(nestedWorkflow)
+  .commit();
+```
+
+## Related
+
+- [Workflows overview](/docs/v1/workflows/overview)
+- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+- [Step Class](/reference/v1/workflows/step)
+- [Workflow Class](/reference/v1/workflows/workflow)
+
 
 
 ---
@@ -19394,7 +20157,7 @@ console.log(response.text);
 <GithubLink
   outdated={true}
   marginTop="mt-16"
-  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/hierarchical-multi-agent"
+  href="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/hierarchical-multi-agent"
 />
 
 
@@ -19427,7 +20190,6 @@ The Examples section is a short list of example projects demonstrating basic AI 
         title: "Image Analysis Agent",
         href: "/docs/v1/agents/overview#analyzing-images",
       },
-      { title: "Runtime Context", href: "/examples/v1/agents/request-context" },
       {
         title: "Deploying an MCP Server",
         href: "/docs/v1/mcp/publishing-mcp-server",
@@ -19605,7 +20367,7 @@ console.log("Chunk Metadata:", metaTwo);
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/metadata-extraction"
   }
 />
@@ -19705,7 +20467,7 @@ console.log("Results:", result);
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/hybrid-vector-search"
   }
 />
@@ -19935,7 +20697,7 @@ console.log("Response:", cleanedResponse.text);
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/cleanup-rag"
   }
 />
@@ -20125,7 +20887,7 @@ console.log("Response:", answerThree.text);
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/cot-rag"
   }
 />
@@ -20476,7 +21238,7 @@ console.log(workflowResult.results);
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/cot-workflow-rag"
   }
 />
@@ -21195,7 +21957,7 @@ console.log("Response:", answerThree.text);
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/filter-rag"
   }
 />
@@ -21385,7 +22147,7 @@ console.log("Response:", answerFour.text);
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/graph-rag"
   }
 />
@@ -21623,7 +22385,7 @@ To view the full example code, see the [Github repository](https://github.com/ma
 <br />
 <br />
 
-<GithubLink link="https://github.com/mastra-ai/voice-examples/tree/main/speech-to-speech/call-analysis" />
+<GithubLink href="https://github.com/mastra-ai/voice-examples/tree/main/speech-to-speech/call-analysis" />
 
 
 ---
@@ -21714,7 +22476,7 @@ You can view the complete implementation of the Smart Voice Memo App on our GitH
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/voice-examples/tree/main/speech-to-text/voice-memo-app"
   }
 />
@@ -21876,7 +22638,7 @@ You can view the complete implementation of the Interactive Story Generator on o
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech/interactive-story"
   }
 />
@@ -22352,7 +23114,7 @@ You can view the complete implementation of the AI Debate with Turn Taking on ou
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech/turn-taking"
   }
 />
@@ -23035,6 +23797,12 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
 });
 ```
 
+:::tip Agent streaming in workflows
+When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are automatically streamed to the UI in real-time. This provides a seamless streaming experience even when agents are running inside workflow steps.
+
+Learn more in [Workflow Streaming](/docs/v1/streaming/workflow-streaming#streaming-agent-text-chunks-to-ui).
+:::
+
 ### `networkRoute()`
 
 Use the `networkRoute()` utility to create a route handler that automatically formats the agent network stream into an AI SDK-compatible format.
@@ -23185,6 +23953,7 @@ export async function POST(req: Request) {
 
   // Transform stream into AI SDK format and create UI messages stream
   const uiMessageStream = createUIMessageStream({
+    originalMessages: messages,
     execute: async ({ writer }) => {
       for await (const part of toAISdkStream(stream, { from: "agent" })!) {
         writer.write(part);
@@ -23277,6 +24046,7 @@ export async function POST(req: Request) {
   });
 
   const uiMessageStream = createUIMessageStream({
+    initialMessages: messages,
     execute: async ({ writer }) => {
       for await (const part of toAISdkStream(stream, {
         from: "agent",
@@ -28466,6 +29236,7 @@ The bot maintains conversation context through memory and delivers responses tha
 ---
 title: "Overview"
 description: "Guides on building with Mastra"
+showCopyButton: false
 ---
 
 import { CardGrid, CardGridItem } from "@site/src/components/CardGrid";
@@ -28999,6 +29770,17 @@ const mastra = new Mastra({
 // Retrieve by ID
 const agent = mastra.getAgentById('my-agent');
 ```
+
+### Stream API responses now redact sensitive data
+
+The Mastra server now automatically redacts sensitive information from agent stream responses. This prevents accidental exposure of system prompts, tool definitions, and API keys in `step-start`, `step-finish`, and `finish` stream chunks.
+
+**What's redacted:**
+- `request.body` containing LLM request payloads (system prompts, tool schemas)
+- `metadata.request` in step results
+- `output.steps[].request` in nested step data
+
+This behavior is enabled by default. If you need access to the full request data (e.g., for debugging or internal services), you can disable redaction when using server adapters directly (e.g., `@mastra/hono` or `@mastra/express`).
 
 ## Removed
 
@@ -33190,7 +33972,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 55+ AI providers and 1117+ models through Mastra's model router."
+description: "Access 58+ AI providers and 1156+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -33203,7 +33985,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1117 models from 55 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1156 models from 58 providers through a single API.
 
 ## Features
 
@@ -33331,7 +34113,7 @@ Browse the directory of available models using the navigation on the left, or ex
             <span>Google</span>
           </div>
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 48 more</div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 51 more</div>
       </div>
     </CardGridItem>
 </CardGrid>
@@ -33499,6 +34281,336 @@ const agent = new Agent({
 })
 ```
 You can use an AI SDK model (e.g. `groq('gemma2-9b-it')`) anywhere that accepts a `"provider/model"` string, including within model router fallbacks and [scorers](/docs/v1/evals/overview).
+
+---
+title: "AgentRouter | Models | Mastra"
+description: "Use AgentRouter models with Mastra. 20 models available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+
+
+# <img src="https://models.dev/logos/agentrouter.svg" alt="AgentRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />AgentRouter
+[EN] Source: https://mastra.ai/en/models/providers/agentrouter
+
+Access 20 AgentRouter models through Mastra's model router. Authentication is handled automatically using the `AGENTROUTER_API_KEY` environment variable.
+
+Learn more in the [AgentRouter documentation](https://docs.agentrouter.org).
+
+```bash
+AGENTROUTER_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "agentrouter/claude-3-5-haiku-20241022"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [AgentRouter documentation](https://docs.agentrouter.org) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "agentrouter/claude-3-5-haiku-20241022",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": 1,
+    "outputCost": 5
+  },
+  {
+    "model": "agentrouter/claude-3-5-sonnet-20240620",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "agentrouter/claude-3-5-sonnet-20241022",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "agentrouter/claude-3-7-sonnet-20250219",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "agentrouter/claude-3-7-sonnet-20250219-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "agentrouter/claude-haiku-4-5-20251001",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 2,
+    "outputCost": 4
+  },
+  {
+    "model": "agentrouter/claude-opus-4-20250514",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": 21,
+    "outputCost": 105
+  },
+  {
+    "model": "agentrouter/claude-opus-4-20250514-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "model": "agentrouter/claude-sonnet-4-20250514",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "agentrouter/claude-sonnet-4-20250514-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "model": "agentrouter/claude-sonnet-4-5-20250929",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 64000,
+    "inputCost": 6,
+    "outputCost": 30
+  },
+  {
+    "model": "agentrouter/deepseek-r1-0528",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.3,
+    "outputCost": 0.045
+  },
+  {
+    "model": "agentrouter/deepseek-v3.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.3,
+    "outputCost": 0.045
+  },
+  {
+    "model": "agentrouter/deepseek-v3.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.3,
+    "outputCost": 0.045
+  },
+  {
+    "model": "agentrouter/gemini-3-pro-preview",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 64000,
+    "inputCost": 2,
+    "outputCost": 8
+  },
+  {
+    "model": "agentrouter/glm-4.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": 0.003,
+    "outputCost": null
+  },
+  {
+    "model": "agentrouter/glm-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.003,
+    "outputCost": null
+  },
+  {
+    "model": "agentrouter/gpt-5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1280000,
+    "maxOutput": 1280000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "agentrouter/gpt-5.1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 2
+  },
+  {
+    "model": "agentrouter/kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.002,
+    "outputCost": null
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://agentrouter.org/v1",
+    id: "agentrouter/claude-3-5-haiku-20241022",
+    apiKey: process.env.AGENTROUTER_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "agentrouter/kimi-k2-thinking"
+      : "agentrouter/claude-3-5-haiku-20241022";
+  }
+});
+```
+
+
+
 
 ---
 title: "AIHubMix"
@@ -34928,7 +36040,7 @@ npm install @ai-sdk/amazon-bedrock
 
 ---
 title: "Anthropic | Models | Mastra"
-description: "Use Anthropic models with Mastra. 20 models available."
+description: "Use Anthropic models with Mastra. 21 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -34939,7 +36051,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/anthropic.svg" alt="Anthropic logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Anthropic
 [EN] Source: https://mastra.ai/en/models/providers/anthropic
 
-Access 20 Anthropic models through Mastra's model router. Authentication is handled automatically using the `ANTHROPIC_API_KEY` environment variable.
+Access 21 Anthropic models through Mastra's model router. Authentication is handled automatically using the `ANTHROPIC_API_KEY` environment variable.
 
 Learn more in the [Anthropic documentation](https://docs.anthropic.com/en/docs/about-claude/models).
 
@@ -35153,6 +36265,18 @@ for await (const chunk of stream) {
   },
   {
     "model": "anthropic/claude-opus-4-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 5,
+    "outputCost": 25
+  },
+  {
+    "model": "anthropic/claude-opus-4-5-20251101",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -39737,7 +40861,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/openai.svg"
     />    <CardGridItem
       title="Anthropic"
-      description="20 models"
+      description="21 models"
       href="/models/v1/providers/anthropic"
       logo="https://models.dev/logos/anthropic.svg"
     />    <CardGridItem
@@ -39765,6 +40889,11 @@ Direct access to individual AI model providers. Each provider offers unique mode
       description="22 models"
       href="/models/v1/providers/xai"
       logo="https://models.dev/logos/xai.svg"
+    />    <CardGridItem
+      title="AgentRouter"
+      description="20 models"
+      href="/models/v1/providers/agentrouter"
+      logo="https://models.dev/logos/agentrouter.svg"
     />    <CardGridItem
       title="Alibaba"
       description="39 models"
@@ -39841,6 +40970,11 @@ Direct access to individual AI model providers. Each provider offers unique mode
       href="/models/v1/providers/inference"
       logo="https://models.dev/logos/inference.svg"
     />    <CardGridItem
+      title="IO.NET"
+      description="17 models"
+      href="/models/v1/providers/io-net"
+      logo="https://models.dev/logos/io-net.svg"
+    />    <CardGridItem
       title="Llama"
       description="7 models"
       href="/models/v1/providers/llama"
@@ -39856,10 +40990,15 @@ Direct access to individual AI model providers. Each provider offers unique mode
       href="/models/v1/providers/lucidquery"
       logo="https://models.dev/logos/lucidquery.svg"
     />    <CardGridItem
-      title="Minimax"
+      title="MiniMax"
       description="1 models"
       href="/models/v1/providers/minimax"
       logo="https://models.dev/logos/minimax.svg"
+    />    <CardGridItem
+      title="MiniMax (China)"
+      description="1 models"
+      href="/models/v1/providers/minimax-cn"
+      logo="https://models.dev/logos/minimax-cn.svg"
     />    <CardGridItem
       title="ModelScope"
       description="7 models"
@@ -40179,6 +41318,594 @@ const agent = new Agent({
     return useAdvanced
       ? "inference/qwen/qwen3-embedding-4b"
       : "inference/google/gemma-3";
+  }
+});
+```
+
+
+
+
+---
+title: "IO Intelligence | Models | Mastra"
+description: "Use IO Intelligence models with Mastra. 17 models available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+
+
+# <img src="https://models.dev/logos/io-intelligence.svg" alt="IO Intelligence logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />IO Intelligence
+[EN] Source: https://mastra.ai/en/models/providers/io-intelligence
+
+Access 17 IO Intelligence models through Mastra's model router. Authentication is handled automatically using the `IOINTELLIGENCE_API_KEY` environment variable.
+
+Learn more in the [IO Intelligence documentation](https://io.net/docs/guides/intelligence/io-intelligence).
+
+```bash
+IOINTELLIGENCE_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "io-intelligence/deepseek-ai-deepseek-r1-0528"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [IO Intelligence documentation](https://io.net/docs/guides/intelligence/io-intelligence) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "io-intelligence/deepseek-ai-deepseek-r1-0528",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 2,
+    "outputCost": 8.75
+  },
+  {
+    "model": "io-intelligence/intel-qwen3-coder-480b-a35b-instruct-int4-mixed-ar",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 106000,
+    "maxOutput": 4096,
+    "inputCost": 0.22,
+    "outputCost": 0.95
+  },
+  {
+    "model": "io-intelligence/meta-llama-llama-3-2-90b-vision-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 16000,
+    "maxOutput": 4096,
+    "inputCost": 0.35,
+    "outputCost": 0.4
+  },
+  {
+    "model": "io-intelligence/meta-llama-llama-3-3-70b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.13,
+    "outputCost": 0.38
+  },
+  {
+    "model": "io-intelligence/meta-llama-llama-4-maverick-17b-128e-instruct-fp8",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 430000,
+    "maxOutput": 4096,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "io-intelligence/mistralai-devstral-small-2505",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "io-intelligence/mistralai-magistral-small-2506",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.5,
+    "outputCost": 1.5
+  },
+  {
+    "model": "io-intelligence/mistralai-mistral-large-instruct-2411",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 2,
+    "outputCost": 6
+  },
+  {
+    "model": "io-intelligence/mistralai-mistral-nemo-instruct-2407",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.02,
+    "outputCost": 0.04
+  },
+  {
+    "model": "io-intelligence/moonshotai-kimi-k2-instruct-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 4096,
+    "inputCost": 0.39,
+    "outputCost": 1.9
+  },
+  {
+    "model": "io-intelligence/moonshotai-kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 32768,
+    "maxOutput": 4096,
+    "inputCost": 0.55,
+    "outputCost": 2.25
+  },
+  {
+    "model": "io-intelligence/openai-gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 4096,
+    "inputCost": 0.04,
+    "outputCost": 0.4
+  },
+  {
+    "model": "io-intelligence/openai-gpt-oss-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 64000,
+    "maxOutput": 4096,
+    "inputCost": 0.03,
+    "outputCost": 0.14
+  },
+  {
+    "model": "io-intelligence/qwen-qwen2-5-vl-32b-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 4096,
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "io-intelligence/qwen-qwen3-235b-a22b-thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 4096,
+    "inputCost": 0.11,
+    "outputCost": 0.6
+  },
+  {
+    "model": "io-intelligence/qwen-qwen3-next-80b-a3b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 4096,
+    "inputCost": 0.1,
+    "outputCost": 0.8
+  },
+  {
+    "model": "io-intelligence/zai-org-glm-4-6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 4096,
+    "inputCost": 0.4,
+    "outputCost": 1.75
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.intelligence.io.solutions/api/v1",
+    id: "io-intelligence/deepseek-ai-deepseek-r1-0528",
+    apiKey: process.env.IOINTELLIGENCE_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "io-intelligence/zai-org-glm-4-6"
+      : "io-intelligence/deepseek-ai-deepseek-r1-0528";
+  }
+});
+```
+
+
+
+
+---
+title: "IO.NET | Models | Mastra"
+description: "Use IO.NET models with Mastra. 17 models available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+
+
+# <img src="https://models.dev/logos/io-net.svg" alt="IO.NET logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />IO.NET
+[EN] Source: https://mastra.ai/en/models/providers/io-net
+
+Access 17 IO.NET models through Mastra's model router. Authentication is handled automatically using the `IOINTELLIGENCE_API_KEY` environment variable.
+
+Learn more in the [IO.NET documentation](https://io.net/docs/guides/intelligence/io-intelligence).
+
+```bash
+IOINTELLIGENCE_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "io-net/Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [IO.NET documentation](https://io.net/docs/guides/intelligence/io-intelligence) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "io-net/deepseek-ai/DeepSeek-R1-0528",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 2,
+    "outputCost": 8.75
+  },
+  {
+    "model": "io-net/Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 106000,
+    "maxOutput": 4096,
+    "inputCost": 0.22,
+    "outputCost": 0.95
+  },
+  {
+    "model": "io-net/meta-llama/Llama-3.2-90B-Vision-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 16000,
+    "maxOutput": 4096,
+    "inputCost": 0.35,
+    "outputCost": 0.4
+  },
+  {
+    "model": "io-net/meta-llama/Llama-3.3-70B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.13,
+    "outputCost": 0.38
+  },
+  {
+    "model": "io-net/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 430000,
+    "maxOutput": 4096,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "io-net/mistralai/Devstral-Small-2505",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "io-net/mistralai/Magistral-Small-2506",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.5,
+    "outputCost": 1.5
+  },
+  {
+    "model": "io-net/mistralai/Mistral-Large-Instruct-2411",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 2,
+    "outputCost": 6
+  },
+  {
+    "model": "io-net/mistralai/Mistral-Nemo-Instruct-2407",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.02,
+    "outputCost": 0.04
+  },
+  {
+    "model": "io-net/moonshotai/Kimi-K2-Instruct-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 4096,
+    "inputCost": 0.39,
+    "outputCost": 1.9
+  },
+  {
+    "model": "io-net/moonshotai/Kimi-K2-Thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 32768,
+    "maxOutput": 4096,
+    "inputCost": 0.55,
+    "outputCost": 2.25
+  },
+  {
+    "model": "io-net/openai/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 4096,
+    "inputCost": 0.04,
+    "outputCost": 0.4
+  },
+  {
+    "model": "io-net/openai/gpt-oss-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 64000,
+    "maxOutput": 4096,
+    "inputCost": 0.03,
+    "outputCost": 0.14
+  },
+  {
+    "model": "io-net/Qwen/Qwen2.5-VL-32B-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 4096,
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "io-net/Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 4096,
+    "inputCost": 0.11,
+    "outputCost": 0.6
+  },
+  {
+    "model": "io-net/Qwen/Qwen3-Next-80B-A3B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 4096,
+    "inputCost": 0.1,
+    "outputCost": 0.8
+  },
+  {
+    "model": "io-net/zai-org/GLM-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 4096,
+    "inputCost": 0.4,
+    "outputCost": 1.75
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.intelligence.io.solutions/api/v1",
+    id: "io-net/Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar",
+    apiKey: process.env.IOINTELLIGENCE_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "io-net/zai-org/GLM-4.6"
+      : "io-net/Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar";
   }
 });
 ```
@@ -40601,8 +42328,8 @@ const agent = new Agent({
 
 
 ---
-title: "Minimax | Models | Mastra"
-description: "Use Minimax models with Mastra. 1 model available."
+title: "MiniMax (China) | Models | Mastra"
+description: "Use MiniMax (China) models with Mastra. 1 model available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -40610,12 +42337,124 @@ description: "Use Minimax models with Mastra. 1 model available."
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-# <img src="https://models.dev/logos/minimax.svg" alt="Minimax logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Minimax
+# <img src="https://models.dev/logos/minimax-cn.svg" alt="MiniMax (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />MiniMax (China)
+[EN] Source: https://mastra.ai/en/models/providers/minimax-cn
+
+Access 1 MiniMax (China) model through Mastra's model router. Authentication is handled automatically using the `MINIMAX_API_KEY` environment variable.
+
+Learn more in the [MiniMax (China) documentation](https://platform.minimaxi.com/docs/guides/quickstart).
+
+```bash
+MINIMAX_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "minimax-cn/MiniMax-M2"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [MiniMax (China) documentation](https://platform.minimaxi.com/docs/guides/quickstart) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "minimax-cn/MiniMax-M2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 196608,
+    "maxOutput": 128000,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.minimaxi.com/anthropic/v1",
+    id: "minimax-cn/MiniMax-M2",
+    apiKey: process.env.MINIMAX_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "minimax-cn/MiniMax-M2"
+      : "minimax-cn/MiniMax-M2";
+  }
+});
+```
+
+
+
+## Direct Provider Installation
+
+This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/@ai-sdk/anthropic) for more details.
+
+```bash npm2yarn copy
+npm install @ai-sdk/anthropic
+```
+
+
+
+---
+title: "MiniMax | Models | Mastra"
+description: "Use MiniMax models with Mastra. 1 model available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# <img src="https://models.dev/logos/minimax.svg" alt="MiniMax logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />MiniMax
 [EN] Source: https://mastra.ai/en/models/providers/minimax
 
-Access 1 Minimax model through Mastra's model router. Authentication is handled automatically using the `MINIMAX_API_KEY` environment variable.
+Access 1 MiniMax model through Mastra's model router. Authentication is handled automatically using the `MINIMAX_API_KEY` environment variable.
 
-Learn more in the [Minimax documentation](https://platform.minimax.io/docs/guides/quickstart).
+Learn more in the [MiniMax documentation](https://platform.minimax.io/docs/guides/quickstart).
 
 ```bash
 MINIMAX_API_KEY=your-api-key
@@ -40643,7 +42482,7 @@ for await (const chunk of stream) {
 
 :::info
 
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Minimax documentation](https://platform.minimax.io/docs/guides/quickstart) for details.
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [MiniMax documentation](https://platform.minimax.io/docs/guides/quickstart) for details.
 
 :::
 
@@ -42976,8 +44815,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 128000,
+    "contextWindow": 262144,
+    "maxOutput": 32768,
     "inputCost": 0.5,
     "outputCost": 2
   },
@@ -43182,7 +45021,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.45,
+    "inputCost": 0.4,
     "outputCost": 2.5
   },
   {
@@ -43194,7 +45033,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.6,
+    "inputCost": 0.4,
     "outputCost": 2.5
   },
   {
@@ -49787,6 +51626,17 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "providerOptions",
+              type: "ProviderOptions",
+              isOptional: true,
+              description:
+                "Provider-specific options passed to the internal structuring agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`).",
+            },
+          ],
+        },
       ],
     },
     {
@@ -53962,7 +55812,7 @@ const workflows = await mastraClient.listWorkflows();
 
 ## Working with a Specific Workflow
 
-Get an instance of a specific workflow as defined by the const name:
+Get an instance of a specific workflow by its ID:
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 export const testWorkflow = createWorkflow({
@@ -53971,12 +55821,12 @@ export const testWorkflow = createWorkflow({
 ```
 
 ```typescript
-const workflow = mastraClient.getWorkflow("testWorkflow");
+const workflow = mastraClient.getWorkflow("city-workflow");
 ```
 
 ## Workflow Methods
 
-### Get Workflow Details
+### details()
 
 Retrieve detailed information about a workflow:
 
@@ -53984,9 +55834,20 @@ Retrieve detailed information about a workflow:
 const details = await workflow.details();
 ```
 
-### Start workflow run asynchronously
+### createRun()
 
-Start a workflow run with inputData and await full run results:
+Create a new workflow run instance:
+
+```typescript
+const run = await workflow.createRun();
+
+// Or with an existing runId
+const run = await workflow.createRun({ runId: "existing-run-id" });
+```
+
+### startAsync()
+
+Start a workflow run and await the full result:
 
 ```typescript
 const run = await workflow.createRun();
@@ -53998,12 +55859,47 @@ const result = await run.startAsync({
 });
 ```
 
-### Resume Workflow run asynchronously
+You can also pass `initialState` to set the starting values for the workflow's state:
 
-Resume a suspended workflow step and await full run result:
+```typescript
+const result = await run.startAsync({
+  inputData: {
+    city: "New York",
+  },
+  initialState: {
+    count: 0,
+    items: [],
+  },
+});
+```
+
+The `initialState` object should match the structure defined in the workflow's `stateSchema`. See [Workflow State](/docs/v1/workflows/workflow-state) for more details.
+
+### start()
+
+Start a workflow run without waiting for completion:
 
 ```typescript
 const run = await workflow.createRun();
+
+await run.start({
+  inputData: {
+    city: "New York",
+  },
+});
+
+// Poll for results later
+const result = await workflow.runExecutionResult(run.runId);
+```
+
+This is useful for long-running workflows where you want to start execution and check results later.
+
+### resumeAsync()
+
+Resume a suspended workflow step and await the full result:
+
+```typescript
+const run = await workflow.createRun({ runId: prevRunId });
 
 const result = await run.resumeAsync({
   step: "step-id",
@@ -54011,85 +55907,68 @@ const result = await run.resumeAsync({
 });
 ```
 
-### Resume Workflow
+### resume()
 
-Resume workflow run:
+Resume a suspended workflow step without waiting for completion:
 
 ```typescript
-try {
-  const workflow = mastraClient.getWorkflow("testWorkflow");
+const run = await workflow.createRun({ runId: prevRunId });
 
-  const run = await workflow.createRun({ runId: prevRunId });
-
-  run.resume({
-    step: "step-id",
-    resumeData: { key: "value" },
-  });
-} catch (e) {
-  console.error(e);
-}
+await run.resume({
+  step: "step-id",
+  resumeData: { key: "value" },
+});
 ```
 
-### Stream Workflow
+### stream()
 
 Stream workflow execution for real-time updates:
 
 ```typescript
-try {
-  const workflow = mastraClient.getWorkflow("testWorkflow");
+const run = await workflow.createRun();
 
-  const run = await workflow.createRun();
+const stream = await run.stream({
+  inputData: {
+    city: "New York",
+  },
+});
 
-  const stream = await run.stream({
-    inputData: {
-      city: "New York",
-    },
-  });
-
-  for await (const chunk of stream) {
-    console.log(JSON.stringify(chunk, null, 2));
-  }
-} catch (e) {
-  console.error("Workflow error:", e);
+for await (const chunk of stream) {
+  console.log(JSON.stringify(chunk, null, 2));
 }
 ```
 
-### Get Workflow Run result
+### runExecutionResult()
 
-Get the result of a workflow run:
+Get the execution result for a workflow run:
 
 ```typescript
-try {
-  const workflow = mastraClient.getWorkflow("testWorkflow");
-
-  const run = await workflow.createRun();
-
-  // start the workflow run
-  const startResult = await run.start({
-    inputData: {
-      city: "New York",
-    },
-  });
-
-  const result = await workflow.runExecutionResult(run.runId);
-
-  console.log(result);
-} catch (e) {
-  console.error(e);
-}
+const result = await workflow.runExecutionResult(runId);
 ```
 
-This is useful when dealing with long running workflows. You can use this to poll the result of the workflow run.
-
-### Workflow run result
+<h3>Run result format</h3>
 
 A workflow run result yields the following:
 
-| Field            | Type                                                                                                                                                                                                                                               | Description                                      |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `payload`        | `{currentStep?: {id: string, status: string, output?: Record<string, any>, payload?: Record<string, any>}, workflowState: {status: string, steps: Record<string, {status: string, output?: Record<string, any>, payload?: Record<string, any>}>}}` | The current step and workflow state of the run   |
-| `eventTimestamp` | `Date`                                                                                                                                                                                                                                             | The timestamp of the event                       |
-| `runId`          | `string`                                                                                                                                                                                                                                           | Unique identifier for this workflow run instance |
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "Unique identifier for this workflow run instance",
+    },
+    {
+      name: "eventTimestamp",
+      type: "Date",
+      description: "The timestamp of the event",
+    },
+    {
+      name: "payload",
+      type: "object",
+      description: "Contains currentStep (id, status, output, payload) and workflowState (status, steps record)",
+    },
+  ]}
+/>
 
 
 ---
@@ -60979,6 +62858,371 @@ const workflowResult = await runEvals({
 
 
 ---
+title: "Reference: Scorer Utils | Evals"
+description: Utility functions for extracting data from scorer run inputs and outputs, including text content, reasoning, system messages, and tool calls.
+---
+
+# Scorer Utils
+[EN] Source: https://mastra.ai/en/reference/evals/scorer-utils
+
+Mastra provides utility functions to help extract and process data from scorer run inputs and outputs. These utilities are particularly useful in the `preprocess` step of custom scorers.
+
+## Import
+
+```typescript
+import {
+  getAssistantMessageFromRunOutput,
+  getReasoningFromRunOutput,
+  getUserMessageFromRunInput,
+  getSystemMessagesFromRunInput,
+  getCombinedSystemPrompt,
+  extractToolCalls,
+  extractInputMessages,
+  extractAgentResponseMessages,
+} from "@mastra/evals/scorers/utils";
+```
+
+## Message Extraction
+
+### getAssistantMessageFromRunOutput
+
+Extracts the text content from the first assistant message in the run output.
+
+```typescript
+const scorer = createScorer({
+  id: "my-scorer",
+  description: "My scorer",
+  type: "agent",
+})
+  .preprocess(({ run }) => {
+    const response = getAssistantMessageFromRunOutput(run.output);
+    return { response };
+  })
+  .generateScore(({ results }) => {
+    return results.preprocessStepResult?.response ? 1 : 0;
+  });
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "output",
+      type: "ScorerRunOutputForAgent",
+      isOptional: true,
+      description: "The scorer run output (array of MastraDBMessage)",
+    },
+  ]}
+/>
+
+**Returns:** `string | undefined` - The assistant message text, or undefined if no assistant message is found.
+
+### getUserMessageFromRunInput
+
+Extracts the text content from the first user message in the run input.
+
+```typescript
+.preprocess(({ run }) => {
+  const userMessage = getUserMessageFromRunInput(run.input);
+  return { userMessage };
+})
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "ScorerRunInputForAgent",
+      isOptional: true,
+      description: "The scorer run input containing input messages",
+    },
+  ]}
+/>
+
+**Returns:** `string | undefined` - The user message text, or undefined if no user message is found.
+
+### extractInputMessages
+
+Extracts text content from all input messages as an array.
+
+```typescript
+.preprocess(({ run }) => {
+  const allUserMessages = extractInputMessages(run.input);
+  return { conversationHistory: allUserMessages.join("\n") };
+})
+```
+
+**Returns:** `string[]` - Array of text strings from each input message.
+
+### extractAgentResponseMessages
+
+Extracts text content from all assistant response messages as an array.
+
+```typescript
+.preprocess(({ run }) => {
+  const allResponses = extractAgentResponseMessages(run.output);
+  return { allResponses };
+})
+```
+
+**Returns:** `string[]` - Array of text strings from each assistant message.
+
+## Reasoning Extraction
+
+### getReasoningFromRunOutput
+
+Extracts reasoning text from the run output. This is particularly useful when evaluating responses from reasoning models like `deepseek-reasoner` that produce chain-of-thought reasoning.
+
+Reasoning can be stored in two places:
+1. `content.reasoning` - a string field on the message content
+2. `content.parts` - as parts with `type: 'reasoning'` containing `details`
+
+```typescript
+import { 
+  getReasoningFromRunOutput, 
+  getAssistantMessageFromRunOutput 
+} from "@mastra/evals/scorers/utils";
+
+const reasoningQualityScorer = createScorer({
+  id: "reasoning-quality",
+  name: "Reasoning Quality",
+  description: "Evaluates the quality of model reasoning",
+  type: "agent",
+})
+  .preprocess(({ run }) => {
+    const reasoning = getReasoningFromRunOutput(run.output);
+    const response = getAssistantMessageFromRunOutput(run.output);
+    return { reasoning, response };
+  })
+  .analyze(({ results }) => {
+    const { reasoning } = results.preprocessStepResult || {};
+    return {
+      hasReasoning: !!reasoning,
+      reasoningLength: reasoning?.length || 0,
+      hasStepByStep: reasoning?.includes("step") || false,
+    };
+  })
+  .generateScore(({ results }) => {
+    const { hasReasoning, reasoningLength } = results.analyzeStepResult || {};
+    if (!hasReasoning) return 0;
+    // Score based on reasoning length (normalized to 0-1)
+    return Math.min(reasoningLength / 500, 1);
+  })
+  .generateReason(({ results, score }) => {
+    const { hasReasoning, reasoningLength } = results.analyzeStepResult || {};
+    if (!hasReasoning) {
+      return "No reasoning was provided by the model.";
+    }
+    return `Model provided ${reasoningLength} characters of reasoning. Score: ${score}`;
+  });
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "output",
+      type: "ScorerRunOutputForAgent",
+      isOptional: true,
+      description: "The scorer run output (array of MastraDBMessage)",
+    },
+  ]}
+/>
+
+**Returns:** `string | undefined` - The reasoning text, or undefined if no reasoning is present.
+
+## System Message Extraction
+
+### getSystemMessagesFromRunInput
+
+Extracts all system messages from the run input, including both standard system messages and tagged system messages (specialized prompts like memory instructions).
+
+```typescript
+.preprocess(({ run }) => {
+  const systemMessages = getSystemMessagesFromRunInput(run.input);
+  return { 
+    systemPromptCount: systemMessages.length,
+    systemPrompts: systemMessages 
+  };
+})
+```
+
+**Returns:** `string[]` - Array of system message strings.
+
+### getCombinedSystemPrompt
+
+Combines all system messages into a single prompt string, joined with double newlines.
+
+```typescript
+.preprocess(({ run }) => {
+  const fullSystemPrompt = getCombinedSystemPrompt(run.input);
+  return { fullSystemPrompt };
+})
+```
+
+**Returns:** `string` - Combined system prompt string.
+
+## Tool Call Extraction
+
+### extractToolCalls
+
+Extracts information about all tool calls from the run output, including tool names, call IDs, and their positions in the message array.
+
+```typescript
+const toolUsageScorer = createScorer({
+  id: "tool-usage",
+  description: "Evaluates tool usage patterns",
+  type: "agent",
+})
+  .preprocess(({ run }) => {
+    const { tools, toolCallInfos } = extractToolCalls(run.output);
+    return {
+      toolsUsed: tools,
+      toolCount: tools.length,
+      toolDetails: toolCallInfos,
+    };
+  })
+  .generateScore(({ results }) => {
+    const { toolCount } = results.preprocessStepResult || {};
+    // Score based on appropriate tool usage
+    return toolCount > 0 ? 1 : 0;
+  });
+```
+
+**Returns:**
+
+```typescript
+{
+  tools: string[];           // Array of tool names
+  toolCallInfos: ToolCallInfo[];  // Detailed tool call information
+}
+```
+
+Where `ToolCallInfo` is:
+
+```typescript
+type ToolCallInfo = {
+  toolName: string;      // Name of the tool
+  toolCallId: string;    // Unique call identifier
+  messageIndex: number;  // Index in the output array
+  invocationIndex: number; // Index within message's tool invocations
+};
+```
+
+## Test Utilities
+
+These utilities help create test data for scorer development.
+
+### createTestMessage
+
+Creates a `MastraDBMessage` object for testing purposes.
+
+```typescript
+import { createTestMessage } from "@mastra/evals/scorers/utils";
+
+const userMessage = createTestMessage({
+  content: "What is the weather?",
+  role: "user",
+});
+
+const assistantMessage = createTestMessage({
+  content: "The weather is sunny.",
+  role: "assistant",
+  toolInvocations: [
+    {
+      toolCallId: "call-1",
+      toolName: "weatherTool",
+      args: { location: "London" },
+      result: { temp: 20 },
+      state: "result",
+    },
+  ],
+});
+```
+
+### createAgentTestRun
+
+Creates a complete test run object for testing scorers.
+
+```typescript
+import { createAgentTestRun, createTestMessage } from "@mastra/evals/scorers/utils";
+
+const testRun = createAgentTestRun({
+  inputMessages: [
+    createTestMessage({ content: "Hello", role: "user" }),
+  ],
+  output: [
+    createTestMessage({ content: "Hi there!", role: "assistant" }),
+  ],
+});
+
+// Run your scorer with the test data
+const result = await myScorer.run({
+  input: testRun.input,
+  output: testRun.output,
+});
+```
+
+## Complete Example
+
+Here's a complete example showing how to use multiple utilities together:
+
+```typescript
+import { createScorer } from "@mastra/core/evals";
+import {
+  getAssistantMessageFromRunOutput,
+  getReasoningFromRunOutput,
+  getUserMessageFromRunInput,
+  getCombinedSystemPrompt,
+  extractToolCalls,
+} from "@mastra/evals/scorers/utils";
+
+const comprehensiveScorer = createScorer({
+  id: "comprehensive-analysis",
+  name: "Comprehensive Analysis",
+  description: "Analyzes all aspects of an agent response",
+  type: "agent",
+})
+  .preprocess(({ run }) => {
+    // Extract all relevant data
+    const userMessage = getUserMessageFromRunInput(run.input);
+    const response = getAssistantMessageFromRunOutput(run.output);
+    const reasoning = getReasoningFromRunOutput(run.output);
+    const systemPrompt = getCombinedSystemPrompt(run.input);
+    const { tools, toolCallInfos } = extractToolCalls(run.output);
+
+    return {
+      userMessage,
+      response,
+      reasoning,
+      systemPrompt,
+      toolsUsed: tools,
+      toolCount: tools.length,
+    };
+  })
+  .generateScore(({ results }) => {
+    const { response, reasoning, toolCount } = results.preprocessStepResult || {};
+    
+    let score = 0;
+    if (response && response.length > 0) score += 0.4;
+    if (reasoning) score += 0.3;
+    if (toolCount > 0) score += 0.3;
+    
+    return score;
+  })
+  .generateReason(({ results, score }) => {
+    const { response, reasoning, toolCount } = results.preprocessStepResult || {};
+    
+    const parts = [];
+    if (response) parts.push("provided a response");
+    if (reasoning) parts.push("included reasoning");
+    if (toolCount > 0) parts.push(`used ${toolCount} tool(s)`);
+    
+    return `Score: ${score}. The agent ${parts.join(", ")}.`;
+  });
+```
+
+
+
+---
 title: "Reference: Textual Difference Scorer | Evals"
 description: Documentation for the Textual Difference Scorer in Mastra, which measures textual differences between strings using sequence matching.
 ---
@@ -61999,6 +64243,7 @@ To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overvi
 ---
 title: "Reference: Overview"
 description: "Reference documentation on Mastra's APIs and tools"
+showCopyButton: false
 ---
 
 import { ReferenceCards } from "@site/src/components/ReferenceCards";
@@ -66802,6 +69047,13 @@ const processor = new LanguageDetector({
       isOptional: true,
       default: "'quality'",
     },
+    {
+      name: "providerOptions",
+      type: "ProviderOptions",
+      description: "Provider-specific options passed to the internal detection agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`)",
+      isOptional: true,
+      default: "undefined",
+    },
   ]}
 />
 
@@ -66948,6 +69200,13 @@ const processor = new ModerationProcessor({
       description: "Number of previous chunks to include for context when moderating stream chunks. If set to 1, includes the previous part, etc.",
       isOptional: true,
       default: "0 (no context window)",
+    },
+    {
+      name: "providerOptions",
+      type: "ProviderOptions",
+      description: "Provider-specific options passed to the internal moderation agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`)",
+      isOptional: true,
+      default: "undefined",
     },
   ]}
 />
@@ -67135,6 +69394,13 @@ const processor = new PIIDetector({
       isOptional: true,
       default: "true",
     },
+    {
+      name: "providerOptions",
+      type: "ProviderOptions",
+      description: "Provider-specific options passed to the internal detection agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`)",
+      isOptional: true,
+      default: "undefined",
+    },
   ]}
 />
 
@@ -67228,6 +69494,511 @@ export const agent = new Agent({
 
 
 ---
+title: "Reference: Processor Interface | Processors"
+description: "API reference for the Processor interface in Mastra, which defines the contract for transforming, validating, and controlling messages in agent pipelines."
+---
+
+# Processor Interface
+[EN] Source: https://mastra.ai/en/reference/processors/processor-interface
+
+The `Processor` interface defines the contract for all processors in Mastra. Processors can implement one or more methods to handle different stages of the agent execution pipeline.
+
+## When processor methods run
+
+The four processor methods run at different points in the agent execution lifecycle:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Agent Execution Flow                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  User Input                                                     │
+│      │                                                          │
+│      ▼                                                          │
+│  ┌─────────────────┐                                            │
+│  │  processInput   │  ← Runs ONCE at start                      │
+│  └────────┬────────┘                                            │
+│           │                                                     │
+│           ▼                                                     │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │                   Agentic Loop                          │    │
+│  │  ┌─────────────────────┐                                │    │
+│  │  │  processInputStep   │  ← Runs at EACH step           │    │
+│  │  └──────────┬──────────┘                                │    │
+│  │             │                                           │    │
+│  │             ▼                                           │    │
+│  │       LLM Execution                                     │    │
+│  │             │                                           │    │
+│  │             ▼                                           │    │
+│  │  ┌──────────────────────┐                               │    │
+│  │  │ processOutputStream  │  ← Runs on EACH stream chunk  │    │
+│  │  └──────────┬───────────┘                               │    │
+│  │             │                                           │    │
+│  │             ▼                                           │    │
+│  │     Tool Execution (if needed)                          │    │
+│  │             │                                           │    │
+│  │             └──────── Loop back if tools called ────────│    │
+│  └─────────────────────────────────────────────────────────┘    │
+│           │                                                     │
+│           ▼                                                     │
+│  ┌─────────────────────┐                                        │
+│  │ processOutputResult │  ← Runs ONCE after completion          │
+│  └─────────────────────┘                                        │
+│           │                                                     │
+│           ▼                                                     │
+│     Final Response                                              │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+| Method | When it runs | Use case |
+|--------|--------------|----------|
+| `processInput` | Once at the start, before the agentic loop | Validate/transform initial user input, add context |
+| `processInputStep` | At each step of the agentic loop, before each LLM call | Transform messages between steps, handle tool results |
+| `processOutputStream` | On each streaming chunk during LLM response | Filter/modify streaming content, detect patterns in real-time |
+| `processOutputResult` | Once after generation completes | Post-process final response, log results |
+
+## Interface definition
+
+```typescript copy
+interface Processor<TId extends string = string> {
+  readonly id: TId;
+  readonly name?: string;
+
+  processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInputResult;
+  processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined>;
+  processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
+  processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
+}
+```
+
+## Properties
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for the processor. Used for tracing and debugging.",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Optional display name for the processor. Falls back to id if not provided.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Methods
+
+### processInput
+
+Processes input messages before they are sent to the LLM. Runs once at the start of agent execution.
+
+```typescript copy
+processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInputResult;
+```
+
+#### ProcessInputArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description: "User and assistant messages to process (excludes system messages).",
+      isOptional: false,
+    },
+    {
+      name: "systemMessages",
+      type: "CoreMessage[]",
+      description: "All system messages (agent instructions, memory context, user-provided). Can be modified and returned.",
+      isOptional: false,
+    },
+    {
+      name: "messageList",
+      type: "MessageList",
+      description: "Full MessageList instance for advanced message management.",
+      isOptional: false,
+    },
+    {
+      name: "abort",
+      type: "(reason?: string) => never",
+      description: "Function to abort processing. Throws a TripWire error that stops execution.",
+      isOptional: false,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      description: "Tracing context for observability.",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request-scoped context with execution metadata like threadId and resourceId.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### ProcessInputResult
+
+The method can return one of three types:
+
+<PropertiesTable
+  content={[
+    {
+      name: "MastraDBMessage[]",
+      type: "array",
+      description: "Transformed messages array. System messages remain unchanged.",
+    },
+    {
+      name: "MessageList",
+      type: "MessageList",
+      description: "The same messageList instance passed in. Indicates you've mutated it directly.",
+    },
+    {
+      name: "{ messages, systemMessages }",
+      type: "object",
+      description: "Object with both transformed messages and modified system messages.",
+    },
+  ]}
+/>
+
+---
+
+### processInputStep
+
+Processes input messages at each step of the agentic loop, before they are sent to the LLM. Unlike `processInput` which runs once at the start, this runs at every step including tool call continuations.
+
+```typescript copy
+processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
+```
+
+#### Execution order in the agentic loop
+
+1. `processInput` (once at start)
+2. `processInputStep` (at each step, before LLM call)
+3. `prepareStep` callback (if provided)
+4. LLM execution
+5. Tool execution (if needed)
+6. Repeat from step 2 if tools were called
+
+#### ProcessInputStepArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description: "All messages including tool calls and results from previous steps.",
+      isOptional: false,
+    },
+    {
+      name: "messageList",
+      type: "MessageList",
+      description: "MessageList instance for managing messages.",
+      isOptional: false,
+    },
+    {
+      name: "stepNumber",
+      type: "number",
+      description: "Current step number (0-indexed). Step 0 is the initial LLM call.",
+      isOptional: false,
+    },
+    {
+      name: "systemMessages",
+      type: "CoreMessage[]",
+      description: "All system messages for read/modify access.",
+      isOptional: false,
+    },
+    {
+      name: "abort",
+      type: "(reason?: string) => never",
+      description: "Function to abort processing.",
+      isOptional: false,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      description: "Tracing context for observability.",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request-scoped context with execution metadata.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### Use cases
+
+- Transforming message part types between providers (e.g., `reasoning` → `thinking` for Anthropic)
+- Modifying messages based on step number or accumulated context
+- Implementing per-step message filtering or enrichment
+- Adding step-specific context or instructions
+
+---
+
+### processOutputStream
+
+Processes streaming output chunks with built-in state management. Allows processors to accumulate chunks and make decisions based on larger context.
+
+```typescript copy
+processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined>;
+```
+
+#### ProcessOutputStreamArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "part",
+      type: "ChunkType",
+      description: "The current stream chunk being processed.",
+      isOptional: false,
+    },
+    {
+      name: "streamParts",
+      type: "ChunkType[]",
+      description: "All chunks seen so far in the stream.",
+      isOptional: false,
+    },
+    {
+      name: "state",
+      type: "Record<string, unknown>",
+      description: "Mutable state object that persists across chunks within a single stream.",
+      isOptional: false,
+    },
+    {
+      name: "abort",
+      type: "(reason?: string) => never",
+      description: "Function to abort the stream.",
+      isOptional: false,
+    },
+    {
+      name: "messageList",
+      type: "MessageList",
+      description: "MessageList instance for accessing conversation history.",
+      isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      description: "Tracing context for observability.",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request-scoped context with execution metadata.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### Return value
+
+- Return the `ChunkType` to emit it (possibly modified)
+- Return `null` or `undefined` to skip emitting the chunk
+
+---
+
+### processOutputResult
+
+Processes the complete output result after streaming or generation is finished.
+
+```typescript copy
+processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
+```
+
+#### ProcessOutputResultArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description: "The generated response messages.",
+      isOptional: false,
+    },
+    {
+      name: "messageList",
+      type: "MessageList",
+      description: "MessageList instance for managing messages.",
+      isOptional: false,
+    },
+    {
+      name: "abort",
+      type: "(reason?: string) => never",
+      description: "Function to abort processing.",
+      isOptional: false,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      description: "Tracing context for observability.",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request-scoped context with execution metadata.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Processor types
+
+Mastra provides type aliases to ensure processors implement the required methods:
+
+```typescript copy
+// Must implement processInput OR processInputStep (or both)
+type InputProcessor = Processor & (
+  | { processInput: required }
+  | { processInputStep: required }
+);
+
+// Must implement processOutputStream OR processOutputResult (or both)
+type OutputProcessor = Processor & (
+  | { processOutputStream: required }
+  | { processOutputResult: required }
+);
+```
+
+## Usage examples
+
+### Basic input processor
+
+```typescript title="src/mastra/processors/lowercase.ts" showLineNumbers copy
+import type { Processor, MastraDBMessage } from "@mastra/core";
+
+export class LowercaseProcessor implements Processor {
+  id = "lowercase";
+
+  async processInput({ messages }): Promise<MastraDBMessage[]> {
+    return messages.map((msg) => ({
+      ...msg,
+      content: {
+        ...msg.content,
+        parts: msg.content.parts?.map((part) =>
+          part.type === "text"
+            ? { ...part, text: part.text.toLowerCase() }
+            : part
+        ),
+      },
+    }));
+  }
+}
+```
+
+### Per-step processor with processInputStep
+
+```typescript title="src/mastra/processors/reasoning-transformer.ts" showLineNumbers copy
+import type { Processor, MastraDBMessage } from "@mastra/core";
+
+export class ReasoningTransformer implements Processor {
+  id = "reasoning-transformer";
+
+  async processInputStep({ messages, messageList, stepNumber }) {
+    // Transform reasoning parts to thinking parts at each step
+    // This is useful when switching between model providers
+    for (const msg of messages) {
+      if (msg.role === "assistant" && msg.content.parts) {
+        for (const part of msg.content.parts) {
+          if (part.type === "reasoning") {
+            (part as any).type = "thinking";
+          }
+        }
+      }
+    }
+    return messageList;
+  }
+}
+```
+
+### Hybrid processor (input and output)
+
+```typescript title="src/mastra/processors/content-filter.ts" showLineNumbers copy
+import type { Processor, MastraDBMessage, ChunkType } from "@mastra/core";
+
+export class ContentFilter implements Processor {
+  id = "content-filter";
+  private blockedWords: string[];
+
+  constructor(blockedWords: string[]) {
+    this.blockedWords = blockedWords;
+  }
+
+  async processInput({ messages, abort }): Promise<MastraDBMessage[]> {
+    for (const msg of messages) {
+      const text = msg.content.parts
+        ?.filter((p) => p.type === "text")
+        .map((p) => p.text)
+        .join(" ");
+
+      if (this.blockedWords.some((word) => text?.includes(word))) {
+        abort("Blocked content detected in input");
+      }
+    }
+    return messages;
+  }
+
+  async processOutputStream({ part, abort }): Promise<ChunkType | null> {
+    if (part.type === "text-delta") {
+      if (this.blockedWords.some((word) => part.textDelta.includes(word))) {
+        abort("Blocked content detected in output");
+      }
+    }
+    return part;
+  }
+}
+```
+
+### Stream accumulator with state
+
+```typescript title="src/mastra/processors/word-counter.ts" showLineNumbers copy
+import type { Processor, ChunkType } from "@mastra/core";
+
+export class WordCounter implements Processor {
+  id = "word-counter";
+
+  async processOutputStream({ part, state }): Promise<ChunkType> {
+    // Initialize state on first chunk
+    if (!state.wordCount) {
+      state.wordCount = 0;
+    }
+
+    // Count words in text chunks
+    if (part.type === "text-delta") {
+      const words = part.textDelta.split(/\s+/).filter(Boolean);
+      state.wordCount += words.length;
+    }
+
+    // Log word count on finish
+    if (part.type === "finish") {
+      console.log(`Total words: ${state.wordCount}`);
+    }
+
+    return part;
+  }
+}
+```
+
+## Related
+
+- [Processors overview](/docs/v1/agents/processors) - Conceptual guide to processors
+- [Guardrails](/docs/v1/agents/guardrails) - Security and validation processors
+- [Memory Processors](/docs/v1/memory/memory-processors) - Memory-specific processors
+
+
+---
 title: "Reference: Prompt Injection Detector | Processors"
 description: "Documentation for the PromptInjectionDetector in Mastra, which detects prompt injection attempts in user input."
 ---
@@ -67307,6 +70078,13 @@ const processor = new PromptInjectionDetector({
       description: "Whether to include confidence scores in logs. Useful for tuning thresholds and debugging",
       isOptional: true,
       default: "false",
+    },
+    {
+      name: "providerOptions",
+      type: "ProviderOptions",
+      description: "Provider-specific options passed to the internal detection agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`)",
+      isOptional: true,
+      default: "undefined",
     },
   ]}
 />
@@ -73845,6 +76623,17 @@ const aiSdkStream = await agent.stream("message for agent", {
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "providerOptions",
+              type: "ProviderOptions",
+              isOptional: true,
+              description:
+                "Provider-specific options passed to the internal structuring agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`).",
+            },
+          ],
+        },
       ],
     },
     {
@@ -76971,23 +79760,6 @@ mcpClient.resources.onListChanged("myWeatherServer", () => {
 });
 ```
 
-### `prompts` Property
-
-The `MCPClient` instance has a `prompts` property that provides access to prompt-related operations.
-
-```typescript
-const mcpClient = new MCPClient({
-  /* ...servers configuration... */
-});
-
-// Access prompt methods via mcpClient.prompts
-const allPromptsByServer = await mcpClient.prompts.list();
-const { prompt, messages } = await mcpClient.prompts.get({
-  serverName: "myWeatherServer",
-  name: "current",
-});
-```
-
 ### `elicitation` Property
 
 The `MCPClient` instance has an `elicitation` property that provides access to elicitation-related operations. Elicitation allows MCP servers to request structured information from users.
@@ -77131,6 +79903,23 @@ await mcpClient.elicitation.onRequest("interactiveServer", async (request) => {
 });
 ```
 
+### `prompts` Property
+
+The `MCPClient` instance has a `prompts` property that provides access to prompt-related operations.
+
+```typescript
+const mcpClient = new MCPClient({
+  /* ...servers configuration... */
+});
+
+// Access prompt methods via mcpClient.prompts
+const allPromptsByServer = await mcpClient.prompts.list();
+const { prompt, messages } = await mcpClient.prompts.get({
+  serverName: "myWeatherServer",
+  name: "current",
+});
+```
+
 #### `prompts.list()`
 
 Retrieves all available prompts from all connected MCP servers, grouped by server name.
@@ -77193,6 +79982,63 @@ mcpClient.prompts.onListChanged("myWeatherServer", () => {
   console.log("Prompt list changed on myWeatherServer.");
   // You should re-fetch the list of prompts
   // await mcpClient.prompts.list();
+});
+```
+
+### `progress` Property
+
+The `MCPClient` instance has a `progress` property for subscribing to progress notifications emitted by MCP servers while tools execute.
+
+```typescript
+const mcpClient = new MCPClient({
+  servers: {
+    myServer: {
+      url: new URL('http://localhost:4111/api/mcp/myServer/mcp'),
+      // Enabled by default; set to false to disable
+      enableProgressTracking: true,
+    },
+  },
+});
+
+// Subscribe to progress updates for a specific server
+await mcpClient.progress.onUpdate('myServer', (params) => {
+  console.log('📊 Progress:', params.progress, '/', params.total);
+  if (params.message) console.log('Message:', params.message);
+  if (params.progressToken) console.log('Token:', params.progressToken);
+});
+```
+
+#### `progress.onUpdate(serverName: string, handler)`
+
+Registers a handler function to receive progress updates from the specified server.
+
+```typescript
+async onUpdate(
+  serverName: string,
+  handler: (params: {
+    progressToken: string;
+    progress: number;
+    total?: number;
+    message?: string;
+  }) => void,
+): Promise<void>
+```
+
+Notes:
+
+- When `enableProgressTracking` is true (default), tool calls include a `progressToken` so you can correlate updates to a specific run.
+- If you pass a `runId` when executing a tool, it will be used as the `progressToken`.
+
+To disable progress tracking for a server:
+
+```typescript
+const mcpClient = new MCPClient({
+  servers: {
+    myServer: {
+      url: new URL('http://localhost:4111/api/mcp/myServer/mcp'),
+      enableProgressTracking: false,
+    },
+  },
 });
 ```
 
@@ -86637,13 +89483,13 @@ voice.on("toolCall", ({ name, args, id }) => {
 
 ---
 title: "Reference: Google | Voice"
-description: "Documentation for the Google Voice implementation, providing text-to-speech and speech-to-text capabilities."
+description: "Documentation for the Google Voice implementation, providing text-to-speech and speech-to-text capabilities with support for both API key and Vertex AI authentication."
 ---
 
 # Google
 [EN] Source: https://mastra.ai/en/reference/voice/google
 
-The Google Voice implementation in Mastra provides both text-to-speech (TTS) and speech-to-text (STT) capabilities using Google Cloud services. It supports multiple voices, languages, and advanced audio configuration options.
+The Google Voice implementation in Mastra provides both text-to-speech (TTS) and speech-to-text (STT) capabilities using Google Cloud services. It supports multiple voices, languages, advanced audio configuration options, and both standard API key authentication and Vertex AI mode for enterprise deployments.
 
 ## Usage Example
 
@@ -86652,17 +89498,6 @@ import { GoogleVoice } from "@mastra/voice-google";
 
 // Initialize with default configuration (uses GOOGLE_API_KEY environment variable)
 const voice = new GoogleVoice();
-
-// Initialize with custom configuration
-const voice = new GoogleVoice({
-  speechModel: {
-    apiKey: "your-speech-api-key",
-  },
-  listeningModel: {
-    apiKey: "your-listening-api-key",
-  },
-  speaker: "en-US-Casual-K",
-});
 
 // Text-to-Speech
 const audioStream = await voice.speak("Hello, world!", {
@@ -86709,6 +89544,29 @@ const voices = await voice.getSpeakers({ languageCode: "en-US" });
       isOptional: true,
       defaultValue: "'en-US-Casual-K'",
     },
+    {
+      name: "vertexAI",
+      type: "boolean",
+      description:
+        "Enable Vertex AI mode for enterprise deployments. Uses project-based authentication instead of API keys. Requires 'project' to be set.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "project",
+      type: "string",
+      description:
+        "Google Cloud project ID (required when vertexAI is true). Falls back to GOOGLE_CLOUD_PROJECT environment variable.",
+      isOptional: true,
+    },
+    {
+      name: "location",
+      type: "string",
+      description:
+        "Google Cloud region for Vertex AI. Falls back to GOOGLE_CLOUD_LOCATION environment variable.",
+      isOptional: true,
+      defaultValue: "'us-central1'",
+    },
   ]}
 />
 
@@ -86720,7 +89578,21 @@ const voices = await voice.getSpeakers({ languageCode: "en-US" });
       name: "apiKey",
       type: "string",
       description:
-        "Google Cloud API key. Falls back to GOOGLE_API_KEY environment variable",
+        "Google Cloud API key. Falls back to GOOGLE_API_KEY environment variable. Not used when vertexAI is true.",
+      isOptional: true,
+    },
+    {
+      name: "keyFilename",
+      type: "string",
+      description:
+        "Path to service account JSON key file. Falls back to GOOGLE_APPLICATION_CREDENTIALS environment variable.",
+      isOptional: true,
+    },
+    {
+      name: "credentials",
+      type: "object",
+      description:
+        "In-memory service account credentials object with client_email and private_key properties.",
       isOptional: true,
     },
   ]}
@@ -86831,14 +89703,127 @@ Returns an array of available voice options, where each node contains:
   ]}
 />
 
+### isUsingVertexAI()
+
+Checks if Vertex AI mode is enabled.
+
+Returns: `boolean` - `true` if using Vertex AI, `false` otherwise
+
+### getProject()
+
+Gets the configured Google Cloud project ID.
+
+Returns: `string | undefined` - The project ID or `undefined` if not set
+
+### getLocation()
+
+Gets the configured Google Cloud location/region.
+
+Returns: `string` - The location (default: `'us-central1'`)
+
+## Authentication
+
+The Google Voice provider supports two authentication methods:
+
+### Standard Mode (API Key)
+
+Uses a Google Cloud API key for authentication. Suitable for development and simple use cases.
+
+```typescript
+// Using environment variable (GOOGLE_API_KEY)
+const voice = new GoogleVoice();
+
+// Using explicit API key
+const voice = new GoogleVoice({
+  speechModel: { apiKey: "your-api-key" },
+  listeningModel: { apiKey: "your-api-key" },
+  speaker: "en-US-Casual-K",
+});
+```
+
+### Vertex AI Mode (Service Account)
+
+Uses Google Cloud project-based authentication with service accounts. Recommended for production and enterprise deployments.
+
+**Benefits:**
+- Better security (no API keys in code)
+- IAM-based access control
+- Project-level billing and quotas
+- Audit logging
+- Enterprise features
+
+**Configuration Options:**
+
+```typescript
+// Using Application Default Credentials (ADC)
+// Set GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_CLOUD_PROJECT env vars
+const voice = new GoogleVoice({
+  vertexAI: true,
+  project: "your-gcp-project",
+  location: "us-central1", // Optional, defaults to 'us-central1'
+});
+
+// Using service account key file
+const voice = new GoogleVoice({
+  vertexAI: true,
+  project: "your-gcp-project",
+  speechModel: {
+    keyFilename: "/path/to/service-account.json",
+  },
+  listeningModel: {
+    keyFilename: "/path/to/service-account.json",
+  },
+});
+
+// Using in-memory credentials
+const voice = new GoogleVoice({
+  vertexAI: true,
+  project: "your-gcp-project",
+  speechModel: {
+    credentials: {
+      client_email: "service-account@project.iam.gserviceaccount.com",
+      private_key: "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
+    },
+  },
+});
+```
+
+**Required Permissions:**
+
+**IAM Roles:**
+
+For Text-to-Speech:
+- `roles/texttospeech.admin` - Text-to-Speech Admin (full access)
+- `roles/texttospeech.editor` - Text-to-Speech Editor (create and manage)
+- `roles/texttospeech.viewer` - Text-to-Speech Viewer (read-only)
+
+For Speech-to-Text:
+- `roles/speech.client` - Speech-to-Text Client
+
+**OAuth Scopes:**
+
+For synchronous Text-to-Speech synthesis:
+- `https://www.googleapis.com/auth/cloud-platform` - Full access to Google Cloud Platform services
+
+For long-audio Text-to-Speech operations:
+- `locations.longAudioSynthesize` - Create long-audio synthesis operations
+- `operations.get` - Get operation status
+- `operations.list` - List operations
+
 ## Important Notes
 
-1. A Google Cloud API key is required. Set it via the `GOOGLE_API_KEY` environment variable or pass it in the constructor.
-2. The default voice is set to 'en-US-Casual-K'.
-3. Both text-to-speech and speech-to-text services use LINEAR16 as the default audio encoding.
-4. The `speak()` method supports advanced audio configuration through the Google Cloud Text-to-Speech API.
-5. The `listen()` method supports various recognition configurations through the Google Cloud Speech-to-Text API.
-6. Available voices can be filtered by language code using the `getSpeakers()` method.
+1. **Authentication**: Either a Google Cloud API key (standard mode) or service account credentials (Vertex AI mode) is required.
+2. **Environment Variables**:
+   - `GOOGLE_API_KEY` - API key for standard mode
+   - `GOOGLE_CLOUD_PROJECT` - Project ID for Vertex AI mode
+   - `GOOGLE_CLOUD_LOCATION` - Location for Vertex AI mode (defaults to 'us-central1')
+   - `GOOGLE_APPLICATION_CREDENTIALS` - Path to service account key file
+3. The default voice is set to `'en-US-Casual-K'`.
+4. Both text-to-speech and speech-to-text services use LINEAR16 as the default audio encoding.
+5. The `speak()` method supports advanced audio configuration through the Google Cloud Text-to-Speech API.
+6. The `listen()` method supports various recognition configurations through the Google Cloud Speech-to-Text API.
+7. Available voices can be filtered by language code using the `getSpeakers()` method.
+8. Vertex AI mode provides enterprise features including IAM control, audit logs, and project-level billing.
 
 
 ---
@@ -91014,6 +93999,12 @@ const step1 = createStep({
       description: "Function to pause workflow execution",
     },
     {
+      name: "state",
+      type: "z.infer<TState>",
+      description:
+        "The current workflow state. Contains shared values that persist across all steps and suspend/resume cycles. The structure is defined by the step's stateSchema.",
+    },
+    {
       name: "setState",
       type: "(state: z.infer<TState>) => void",
       description:
@@ -91043,6 +94034,7 @@ const step1 = createStep({
 
 ## Related
 
+- [Workflow state](/docs/v1/workflows/workflow-state)
 - [Control flow](/docs/v1/workflows/control-flow)
 - [Using agents and tools](/docs/v1/workflows/agents-and-tools)
 
@@ -91944,6 +94936,24 @@ export const workflow = createWorkflow({
   ]}
 />
 
+## Running with initial state
+
+When starting a workflow run, you can pass `initialState` to set the starting values for the workflow's state:
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+
+const result = await run.start({
+  inputData: { value: "hello" },
+  initialState: {
+    counter: 0,
+    items: [],
+  },
+});
+```
+
+The `initialState` object should match the structure defined in the workflow's `stateSchema`. See [Workflow State](/docs/v1/workflows/workflow-state) for more details.
+
 ## Workflow status
 
 A workflow's `status` indicates its current execution state. The possible values are:
@@ -91974,4 +94984,5 @@ A workflow's `status` indicates its current execution state. The possible values
 ## Related
 
 - [Step Class](./step)
+- [Workflow State](/docs/v1/workflows/workflow-state)
 - [Control flow](/docs/v1/workflows/control-flow)

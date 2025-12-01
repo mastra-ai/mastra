@@ -399,6 +399,28 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.6',
   ];
+  readonly agentrouter: readonly [
+    'claude-3-5-haiku-20241022',
+    'claude-3-5-sonnet-20240620',
+    'claude-3-5-sonnet-20241022',
+    'claude-3-7-sonnet-20250219',
+    'claude-3-7-sonnet-20250219-thinking',
+    'claude-haiku-4-5-20251001',
+    'claude-opus-4-20250514',
+    'claude-opus-4-20250514-thinking',
+    'claude-sonnet-4-20250514',
+    'claude-sonnet-4-20250514-thinking',
+    'claude-sonnet-4-5-20250929',
+    'deepseek-r1-0528',
+    'deepseek-v3.1',
+    'deepseek-v3.2',
+    'gemini-3-pro-preview',
+    'glm-4.5',
+    'glm-4.6',
+    'gpt-5',
+    'gpt-5.1',
+    'kimi-k2-thinking',
+  ];
   readonly cortecs: readonly [
     'claude-4-5-sonnet',
     'claude-sonnet-4',
@@ -691,6 +713,7 @@ export type ProviderModelsMap = {
     'text-embedding-ada-002',
   ];
   readonly 'zhipuai-coding-plan': readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6'];
+  readonly 'minimax-cn': readonly ['MiniMax-M2'];
   readonly perplexity: readonly ['sonar', 'sonar-pro', 'sonar-reasoning', 'sonar-reasoning-pro'];
   readonly openrouter: readonly [
     'anthropic/claude-3.5-haiku',
@@ -976,6 +999,7 @@ export type ProviderModelsMap = {
     'claude-opus-4-1-20250805',
     'claude-opus-4-20250514',
     'claude-opus-4-5',
+    'claude-opus-4-5-20251101',
     'claude-sonnet-4-0',
     'claude-sonnet-4-20250514',
     'claude-sonnet-4-5',
@@ -994,6 +1018,25 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/minimax-m2',
     'accounts/fireworks/models/qwen3-235b-a22b',
     'accounts/fireworks/models/qwen3-coder-480b-a35b-instruct',
+  ];
+  readonly 'io-net': readonly [
+    'Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar',
+    'Qwen/Qwen2.5-VL-32B-Instruct',
+    'Qwen/Qwen3-235B-A22B-Thinking-2507',
+    'Qwen/Qwen3-Next-80B-A3B-Instruct',
+    'deepseek-ai/DeepSeek-R1-0528',
+    'meta-llama/Llama-3.2-90B-Vision-Instruct',
+    'meta-llama/Llama-3.3-70B-Instruct',
+    'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8',
+    'mistralai/Devstral-Small-2505',
+    'mistralai/Magistral-Small-2506',
+    'mistralai/Mistral-Large-Instruct-2411',
+    'mistralai/Mistral-Nemo-Instruct-2407',
+    'moonshotai/Kimi-K2-Instruct-0905',
+    'moonshotai/Kimi-K2-Thinking',
+    'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
+    'zai-org/GLM-4.6',
   ];
   readonly modelscope: readonly [
     'Qwen/Qwen3-235B-A22B-Instruct-2507',

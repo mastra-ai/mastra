@@ -1,12 +1,12 @@
-import { readFile } from 'fs/promises';
+import { readFile } from 'node:fs/promises';
 import * as https from 'node:https';
-import { join } from 'path/posix';
+import { join } from 'node:path/posix';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core/mastra';
 import { Tool } from '@mastra/core/tools';
-import { HonoServerAdapter } from '@mastra/hono';
+import { MastraServer } from '@mastra/hono';
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { Context, MiddlewareHandler } from 'hono';
@@ -15,11 +15,9 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
 import { describeRoute } from 'hono-openapi';
-import { authenticationMiddleware, authorizationMiddleware } from './handlers/auth';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
-import { MCP_ROUTES, getMcpServerMessageHandler, getMcpServerSseHandler } from './handlers/mcp';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
@@ -85,14 +83,16 @@ export async function createHonoServer(
   };
 
   // Create server adapter with all configuration
-  const honoServerAdapter = new HonoServerAdapter({
+  const honoServerAdapter = new MastraServer({
+    app: app as any,
     mastra,
     tools: options.tools,
     taskStore: a2aTaskStore,
-    customRouteAuthConfig,
     playground: options.playground,
     isDev: options.isDev,
     bodyLimitOptions,
+    openapiPath: '/openapi.json',
+    customRouteAuthConfig,
   });
 
   // Store the app on the adapter and register the adapter with Mastra
@@ -102,7 +102,7 @@ export async function createHonoServer(
 
   // Register context middleware FIRST - this sets mastra, requestContext, tools, taskStore in context
   // Cast needed due to Hono type variance - safe because registerContextMiddleware is generic
-  honoServerAdapter.registerContextMiddleware(app as any);
+  honoServerAdapter.registerContextMiddleware();
 
   // Apply custom server middleware from Mastra instance
   const serverMiddleware = mastra.getServerMiddleware?.();
@@ -144,9 +144,9 @@ export async function createHonoServer(
     healthHandler,
   );
 
-  // Run AUTH middlewares after CORS middleware
-  app.use('*', authenticationMiddleware);
-  app.use('*', authorizationMiddleware);
+  // Register auth middleware (authentication and authorization)
+  // This is handled by the server adapter now
+  honoServerAdapter.registerAuthMiddleware();
 
   if (server?.middleware) {
     const normalizedMiddlewares = Array.isArray(server.middleware) ? server.middleware : [server.middleware];
@@ -201,17 +201,7 @@ export async function createHonoServer(
 
   // Register adapter routes (adapter was created earlier with configuration)
   // Cast needed due to Hono type variance - safe because registerRoutes is generic
-  await honoServerAdapter.registerRoutes(app as any, { openapiPath: '/openapi.json' });
-
-  // Register MCP routes (separate from SERVER_ROUTES due to fetch-to-node bundling requirements)
-  for (const route of MCP_ROUTES) {
-    await honoServerAdapter.registerRoute(app as any, route, { prefix: '' });
-  }
-
-  // Register MCP standalone handlers (these use raw Hono Context, not createRoute pattern)
-  app.all('/api/mcp/:serverId/mcp', getMcpServerMessageHandler);
-  app.get('/api/mcp/:serverId/sse', getMcpServerSseHandler);
-  app.post('/api/mcp/:serverId/messages', getMcpServerSseHandler);
+  await honoServerAdapter.registerRoutes();
 
   if (options?.isDev || server?.build?.swaggerUI) {
     app.get(

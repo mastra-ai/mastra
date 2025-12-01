@@ -9,9 +9,10 @@ export { MastraAuthProvider } from './auth';
 export type { MastraAuthProviderOptions } from './auth';
 export { CompositeAuth } from './composite-auth';
 export { MastraServerAdapterBase } from './adapter-base';
+export { SimpleAuth } from './simple-auth';
+export type { SimpleAuthOptions } from './simple-auth';
 
 // Helper type for inferring parameters from a path
-// Thank you Claude!
 type ParamsFromPath<P extends string> = {
   [K in P extends `${string}:${infer Param}/${string}` | `${string}:${infer Param}` ? Param : never]: string;
 };

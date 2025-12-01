@@ -13,7 +13,7 @@ Use `suspend()` to pause workflow execution at a specific step. You can define a
 - If the condition isn’t met, the workflow pauses and returns `suspend()`.
 - If the condition is met, the workflow continues with the remaining logic in the step.
 
-![Pausing a workflow with suspend()](/img/workflows/workflows-suspend-resume-suspend.jpg)
+![Pausing a workflow with suspend()](/img/workflows/workflows-suspend.jpg)
 
 ```typescript {9-11,16-18} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
@@ -58,7 +58,7 @@ export const testWorkflow = createWorkflow({
 
 Use `resume()` to restart a suspended workflow from the step where it paused. To satisfy the step’s suspend condition, pass a value using `resumeData` that matches the step's `resumeSchema`, allowing execution to continue from the suspended step.
 
-![Restarting a workflow with resume()](/img/workflows/workflows-suspend-resume-resume.jpg)
+![Restarting a workflow with resume()](/img/workflows/workflows-resume.jpg)
 
 ```typescript {13} showLineNumbers copy
 const workflow = mastra.getWorkflow("testWorkflow");
@@ -139,3 +139,5 @@ Sleep and event methods can be used to pause execution at the workflow level, wh
 
 - [Control Flow](/docs/v1/workflows/control-flow)
 - [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)
+- [Snapshots](/docs/v1/workflows/snapshots)
+- [Time Travel](/docs/v1/workflows/time-travel)

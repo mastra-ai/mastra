@@ -1,5 +1,5 @@
-import { EventEmitter } from 'events';
-import { ReadableStream, TransformStream } from 'stream/web';
+import { EventEmitter } from 'node:events';
+import { ReadableStream, TransformStream } from 'node:stream/web';
 import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
 import { MastraBase } from '../../base';
@@ -250,7 +250,13 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 part: processed,
                 blocked,
                 reason,
-              } = await processorRunner.processPart(chunk, processorStates, options.tracingContext);
+              } = await processorRunner.processPart(
+                chunk,
+                processorStates,
+                options.tracingContext,
+                options.requestContext,
+                self.messageList,
+              );
               if (blocked) {
                 // Emit a tripwire chunk so downstream knows about the abort
                 controller.enqueue({

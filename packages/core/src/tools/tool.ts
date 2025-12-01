@@ -108,6 +108,20 @@ export class Tool<
   requireApproval?: boolean;
 
   /**
+   * Provider-specific options passed to the model when this tool is used.
+   * Keys are provider names (e.g., 'anthropic', 'openai'), values are provider-specific configs.
+   * @example
+   * ```typescript
+   * providerOptions: {
+   *   anthropic: {
+   *     cacheControl: { type: 'ephemeral' }
+   *   }
+   * }
+   * ```
+   */
+  providerOptions?: Record<string, Record<string, unknown>>;
+
+  /**
    * Creates a new Tool instance with input validation wrapper.
    *
    * @param opts - Tool configuration and execute function
@@ -130,6 +144,7 @@ export class Tool<
     this.resumeSchema = opts.resumeSchema;
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
+    this.providerOptions = opts.providerOptions;
 
     // Tools receive two parameters:
     // 1. input - The raw, validated input data

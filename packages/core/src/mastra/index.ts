@@ -30,6 +30,27 @@ import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-proc
 import { createOnScorerHook } from './hooks';
 
 /**
+ * Creates an error for when a null/undefined value is passed to an add* method.
+ * This commonly occurs when config is spread ({ ...config }) and the original
+ * object had getters or non-enumerable properties.
+ */
+function createUndefinedPrimitiveError(
+  type: 'agent' | 'tool' | 'processor' | 'vector' | 'scorer' | 'workflow' | 'mcp-server' | 'gateway',
+  value: null | undefined,
+  key?: string,
+): MastraError {
+  const typeLabel = type === 'mcp-server' ? 'MCP server' : type;
+  const errorId = `MASTRA_ADD_${type.toUpperCase().replace('-', '_')}_UNDEFINED` as Uppercase<string>;
+  return new MastraError({
+    id: errorId,
+    domain: ErrorDomain.MASTRA,
+    category: ErrorCategory.USER,
+    text: `Cannot add ${typeLabel}: ${typeLabel} is ${value === null ? 'null' : 'undefined'}. This may occur if config was spread ({ ...config }) and the original object had getters or non-enumerable properties.`,
+    details: { status: 400, ...(key && { key }) },
+  });
+}
+
+/**
  * Configuration interface for initializing a Mastra instance.
  *
  * The Config interface defines all the optional components that can be registered
@@ -461,58 +482,78 @@ export class Mastra<
 
     // Now add primitives - order matters for auto-registration
     // Tools and processors should be added before agents and MCP servers that might use them
+    // Note: We validate each entry to handle cases where config was spread ({ ...config })
+    // which can cause undefined values if the source object had getters or non-enumerable properties
     if (config?.tools) {
       Object.entries(config.tools).forEach(([key, tool]) => {
-        this.addTool(tool, key);
+        if (tool != null) {
+          this.addTool(tool, key);
+        }
       });
     }
 
     if (config?.processors) {
       Object.entries(config.processors).forEach(([key, processor]) => {
-        this.addProcessor(processor, key);
+        if (processor != null) {
+          this.addProcessor(processor, key);
+        }
       });
     }
 
     if (config?.vectors) {
       Object.entries(config.vectors).forEach(([key, vector]) => {
-        this.addVector(vector, key);
+        if (vector != null) {
+          this.addVector(vector, key);
+        }
       });
     }
 
     if (config?.scorers) {
       Object.entries(config.scorers).forEach(([key, scorer]) => {
-        this.addScorer(scorer, key);
+        if (scorer != null) {
+          this.addScorer(scorer, key);
+        }
       });
     }
 
     if (config?.workflows) {
       Object.entries(config.workflows).forEach(([key, workflow]) => {
-        this.addWorkflow(workflow, key);
+        if (workflow != null) {
+          this.addWorkflow(workflow, key);
+        }
       });
     }
 
     if (config?.gateways) {
       Object.entries(config.gateways).forEach(([key, gateway]) => {
-        this.addGateway(gateway, key);
+        if (gateway != null) {
+          this.addGateway(gateway, key);
+        }
       });
     }
 
     // Add MCP servers and agents last since they might reference other primitives
     if (config?.mcpServers) {
       Object.entries(config.mcpServers).forEach(([key, server]) => {
-        this.addMCPServer(server, key);
+        if (server != null) {
+          this.addMCPServer(server, key);
+        }
       });
     }
 
     if (config?.agents) {
       Object.entries(config.agents).forEach(([key, agent]) => {
-        this.addAgent(agent, key);
+        if (agent != null) {
+          this.addAgent(agent, key);
+        }
       });
     }
 
     if (config?.tts) {
       Object.entries(config.tts).forEach(([key, tts]) => {
-        (this.#tts as Record<string, MastraTTS>)[key] = tts;
+        if (tts != null) {
+          (this.#tts as Record<string, MastraTTS>)[key] = tts;
+        }
       });
     }
 
@@ -673,6 +714,9 @@ export class Mastra<
    * ```
    */
   public addAgent<A extends Agent<any>>(agent: A, key?: string): void {
+    if (!agent) {
+      throw createUndefinedPrimitiveError('agent', agent, key);
+    }
     const agentKey = key || agent.id;
     const agents = this.#agents as Record<string, Agent<any>>;
     if (agents[agentKey]) {
@@ -846,6 +890,9 @@ export class Mastra<
    * ```
    */
   public addVector<V extends MastraVector>(vector: V, key?: string): void {
+    if (!vector) {
+      throw createUndefinedPrimitiveError('vector', vector, key);
+    }
     const vectorKey = key || vector.id;
     const vectors = this.#vectors as Record<string, MastraVector>;
     if (vectors[vectorKey]) {
@@ -1134,6 +1181,9 @@ export class Mastra<
    * ```
    */
   public addScorer<S extends MastraScorer<any, any, any, any>>(scorer: S, key?: string): void {
+    if (!scorer) {
+      throw createUndefinedPrimitiveError('scorer', scorer, key);
+    }
     const scorerKey = key || scorer.id;
     const scorers = this.#scorers as Record<string, MastraScorer<any, any, any, any>>;
     if (scorers[scorerKey]) {
@@ -1374,6 +1424,9 @@ export class Mastra<
    * ```
    */
   public addTool<T extends ToolAction<any, any, any, any>>(tool: T, key?: string): void {
+    if (!tool) {
+      throw createUndefinedPrimitiveError('tool', tool, key);
+    }
     const toolKey = key || tool.id;
     const tools = this.#tools as Record<string, ToolAction<any, any, any, any>>;
     if (tools[toolKey]) {
@@ -1522,6 +1575,9 @@ export class Mastra<
    * ```
    */
   public addProcessor<P extends Processor>(processor: P, key?: string): void {
+    if (!processor) {
+      throw createUndefinedPrimitiveError('processor', processor, key);
+    }
     const processorKey = key || processor.id;
     const processors = this.#processors as Record<string, Processor>;
     if (processors[processorKey]) {
@@ -1589,6 +1645,9 @@ export class Mastra<
    * ```
    */
   public addWorkflow<W extends Workflow<any, any, any, any, any, any>>(workflow: W, key?: string): void {
+    if (!workflow) {
+      throw createUndefinedPrimitiveError('workflow', workflow, key);
+    }
     const workflowKey = key || workflow.id;
     const workflows = this.#workflows as Record<string, Workflow<any, any, any, any, any, any>>;
     if (workflows[workflowKey]) {
@@ -2009,6 +2068,9 @@ export class Mastra<
    * ```
    */
   public addMCPServer<M extends MCPServerBase>(server: M, key?: string): void {
+    if (!server) {
+      throw createUndefinedPrimitiveError('mcp-server', server, key);
+    }
     // If a key is provided, try to set it as the ID
     // The setId method will only update if the ID wasn't explicitly set by the user
     if (key) {
@@ -2353,6 +2415,9 @@ export class Mastra<
    * ```
    */
   public addGateway(gateway: MastraModelGateway, key?: string): void {
+    if (!gateway) {
+      throw createUndefinedPrimitiveError('gateway', gateway, key);
+    }
     const gatewayKey = key || gateway.getId();
     const gateways = this.#gateways as Record<string, MastraModelGateway>;
     if (gateways[gatewayKey]) {

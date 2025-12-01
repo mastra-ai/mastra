@@ -1,5 +1,5 @@
-import { randomUUID } from 'crypto';
-import type { WritableStream } from 'stream/web';
+import { randomUUID } from 'node:crypto';
+import type { WritableStream } from 'node:stream/web';
 import type { TextPart, UIMessage, StreamObjectResult } from '@internal/ai-sdk-v4';
 import { OpenAIReasoningSchemaCompatLayer, OpenAISchemaCompatLayer } from '@mastra/schema-compat';
 import type { ModelInformation } from '@mastra/schema-compat';
@@ -32,7 +32,7 @@ import type { TracingContext, TracingProperties } from '../observability';
 import { SpanType, getOrCreateSpan } from '../observability';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
-import { RequestContext } from '../request-context';
+import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
@@ -117,7 +117,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
-  #defaultOptions: DynamicArgument<AgentExecutionOptions>;
+  #defaultOptions: DynamicArgument<AgentExecutionOptions<OutputSchema>>;
   #tools: DynamicArgument<TTools>;
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
@@ -2404,12 +2404,21 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     }
     const requestContext = options.requestContext || new RequestContext();
 
-    const threadFromArgs = resolveThreadIdFromArgs({
-      threadId: options.threadId || snapshotMemoryInfo?.threadId,
-      memory: options.memory,
-    });
+    // Reserved keys from requestContext take precedence for security.
+    // This allows middleware to securely set resourceId/threadId based on authenticated user,
+    // preventing attackers from hijacking another user's memory by passing different values in the body.
+    const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
 
-    const resourceId = options.memory?.resource || options.resourceId || snapshotMemoryInfo?.resourceId;
+    const threadFromArgs = threadIdFromContext
+      ? { id: threadIdFromContext }
+      : resolveThreadIdFromArgs({
+          threadId: options.threadId || snapshotMemoryInfo?.threadId,
+          memory: options.memory,
+        });
+
+    const resourceId =
+      resourceIdFromContext || options.memory?.resource || options.resourceId || snapshotMemoryInfo?.resourceId;
     const memoryConfig = options.memory?.options;
 
     if (resourceId && threadFromArgs && !this.hasOwnMemory()) {

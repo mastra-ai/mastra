@@ -1,9 +1,9 @@
-import type { Server } from 'http';
+import type { Server } from 'node:http';
 import { Mastra } from '@mastra/core/mastra';
 import express from 'express';
 import type { Application } from 'express';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ExpressServerAdapter } from '../index';
+import { afterEach, describe, expect, it } from 'vitest';
+import { MastraServer } from '../index';
 
 /**
  * These tests verify that the ExpressServerAdapter properly supports
@@ -16,21 +16,21 @@ describe('ExpressServerAdapter - Server App Access', () => {
   describe('setApp() and getApp()', () => {
     it('should have setApp method', () => {
       const mastra = new Mastra({ logger: false });
-      const adapter = new ExpressServerAdapter({ mastra });
+      const adapter = new MastraServer({ mastra });
 
       expect(typeof adapter.setApp).toBe('function');
     });
 
     it('should have getApp method', () => {
       const mastra = new Mastra({ logger: false });
-      const adapter = new ExpressServerAdapter({ mastra });
+      const adapter = new MastraServer({ mastra });
 
       expect(typeof adapter.getApp).toBe('function');
     });
 
     it('should return undefined when no app is set', () => {
       const mastra = new Mastra({ logger: false });
-      const adapter = new ExpressServerAdapter({ mastra });
+      const adapter = new MastraServer({ mastra });
 
       const app = adapter.getApp();
       expect(app).toBeUndefined();
@@ -38,7 +38,7 @@ describe('ExpressServerAdapter - Server App Access', () => {
 
     it('should store and retrieve an Express app', () => {
       const mastra = new Mastra({ logger: false });
-      const adapter = new ExpressServerAdapter({ mastra });
+      const adapter = new MastraServer({ mastra });
 
       const app = express();
       adapter.setApp(app);
@@ -49,7 +49,7 @@ describe('ExpressServerAdapter - Server App Access', () => {
 
     it('should support generic type parameter for getApp', () => {
       const mastra = new Mastra({ logger: false });
-      const adapter = new ExpressServerAdapter({ mastra });
+      const adapter = new MastraServer({ mastra });
 
       const app = express();
       adapter.setApp(app);
@@ -66,7 +66,7 @@ describe('ExpressServerAdapter - Server App Access', () => {
   describe('Integration with Mastra instance', () => {
     it('should work when registered with Mastra via setServerAdapter', () => {
       const mastra = new Mastra({ logger: false });
-      const adapter = new ExpressServerAdapter({ mastra });
+      const adapter = new MastraServer({ mastra });
 
       const app = express();
       adapter.setApp(app);
@@ -81,7 +81,7 @@ describe('ExpressServerAdapter - Server App Access', () => {
 
     it('should return the same app from both adapter and mastra', () => {
       const mastra = new Mastra({ logger: false });
-      const adapter = new ExpressServerAdapter({ mastra });
+      const adapter = new MastraServer({ mastra });
 
       const app = express();
       adapter.setApp(app);
@@ -112,7 +112,7 @@ describe('ExpressServerAdapter - Server App Access', () => {
 
     it('should allow starting a server and making requests using the stored app', async () => {
       const mastra = new Mastra({ logger: false });
-      const adapter = new ExpressServerAdapter({ mastra });
+      const adapter = new MastraServer({ mastra });
 
       const app = express();
       app.use(express.json());
@@ -151,7 +151,7 @@ describe('ExpressServerAdapter - Server App Access', () => {
 
     it('should support the Inngest use case - starting server from stored app', async () => {
       const mastra = new Mastra({ logger: false });
-      const adapter = new ExpressServerAdapter({ mastra });
+      const adapter = new MastraServer({ mastra });
 
       const app = express();
       app.use(express.json());
@@ -220,7 +220,7 @@ describe('ExpressServerAdapter - Server App Access', () => {
 
     it('should expose the app after registering middleware', async () => {
       const mastra = new Mastra({ logger: false });
-      const adapter = new ExpressServerAdapter({ mastra });
+      const adapter = new MastraServer({ mastra });
 
       const app = express();
       app.use(express.json());

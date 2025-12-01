@@ -1,6 +1,6 @@
-import type { Server } from 'http';
-import { createServer } from 'http';
-import type { AddressInfo } from 'net';
+import type { Server } from 'node:http';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { BaseResource } from './base';
 
@@ -72,5 +72,52 @@ describe('BaseResource', () => {
       contentType: 'text/plain',
       responseBody: 'Internal Server Error',
     });
+  });
+
+  it('should use custom fetch function when provided', async () => {
+    // Arrange: Create a custom fetch that adds a custom header
+    const customFetch = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      const response = await fetch(url, {
+        ...init,
+        headers: {
+          ...init?.headers,
+          'X-Custom-Fetch': 'true',
+        },
+      });
+      return response;
+    };
+
+    const customResource = new BaseResource({
+      baseUrl: serverUrl,
+      retries: 0,
+      fetch: customFetch,
+    });
+
+    // Set up server to respond successfully
+    server.on('request', (req, res) => {
+      const customHeader = req.headers['x-custom-fetch'];
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ customFetchUsed: customHeader === 'true' }));
+    });
+
+    // Act: Make request
+    const result = await customResource.request('/test');
+
+    // Assert: Verify custom fetch was used
+    expect(result).toEqual({ customFetchUsed: true });
+  });
+
+  it('should fall back to global fetch when custom fetch is not provided', async () => {
+    // Arrange: Set up server to respond successfully
+    server.on('request', (_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true }));
+    });
+
+    // Act: Make request without custom fetch
+    const result = await resource.request('/test');
+
+    // Assert: Verify request succeeded using global fetch
+    expect(result).toEqual({ success: true });
   });
 });

@@ -90,7 +90,7 @@ describe('Server App Access', () => {
 
       // Create a mock app (simulating Hono)
       const mockApp = {
-        fetch: (request: Request) => Promise.resolve(new Response('ok')),
+        fetch: () => Promise.resolve(new Response('ok')),
       };
 
       // Create a mock adapter
@@ -120,8 +120,8 @@ describe('Server App Access', () => {
       }
 
       const mockApp: MockHonoApp = {
-        fetch: (request: Request) => Promise.resolve(new Response('ok')),
-        get: (path: string, handler: () => void) => {},
+        fetch: () => Promise.resolve(new Response('ok')),
+        get: () => {},
       };
 
       const mockAdapter = {

@@ -40,6 +40,9 @@ export function inferFieldType(schema: z.ZodTypeAny, fieldConfig?: FieldConfig):
     }
     return 'union';
   }
+  if (schema instanceof z.ZodDiscriminatedUnion) {
+    return 'discriminated-union';
+  }
 
   return 'string'; // Default to string for unknown types
 }
