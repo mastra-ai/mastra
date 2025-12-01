@@ -352,7 +352,7 @@ Before storing embeddings, you need to create an index with the appropriate dime
 await store.createIndex({
   indexName: "myCollection",
   dimension: 1536,
-})
+});
 ```
 
 The dimension size must match the output dimension of your chosen embedding model. Common dimension sizes are:
