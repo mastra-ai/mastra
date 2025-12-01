@@ -1,4 +1,4 @@
-import type { Readable } from 'stream';
+import type { Readable } from 'node:stream';
 import { MastraVoice } from '@mastra/core/voice';
 
 interface GladiaConfig {

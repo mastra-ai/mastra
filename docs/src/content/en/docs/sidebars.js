@@ -125,6 +125,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "workflows/time-travel",
+          label: "Time Travel",
+        },
+        {
+          type: "doc",
           id: "workflows/error-handling",
           label: "Error Handling",
         },

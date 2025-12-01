@@ -1,8 +1,14 @@
 import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
-import { createRouteAdapterTestSuite } from '@internal/server-adapter-test-utils';
+import {
+  createRouteAdapterTestSuite,
+  createDefaultTestContext,
+  createStreamWithSensitiveData,
+  consumeSSEStream,
+} from '@internal/server-adapter-test-utils';
 import { SERVER_ROUTES } from '@mastra/server/server-adapter';
+import type { ServerRoute } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
-import { describe } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { HonoServerAdapter } from '../index';
 
 // Wrapper describe block so the factory can call describe() inside
@@ -120,5 +126,198 @@ describe('Hono Server Adapter', () => {
         };
       }
     },
+  });
+
+  describe('Stream Data Redaction', () => {
+    let context: AdapterTestContext;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    it('should redact sensitive data from stream chunks by default', async () => {
+      const app = new Hono();
+
+      const adapter = new HonoServerAdapter({
+        mastra: context.mastra,
+        // Default: streamOptions.redact = true
+      });
+
+      // Create a test route that returns a stream with sensitive data
+      const testRoute: ServerRoute = {
+        method: 'POST',
+        path: '/test/stream',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => createStreamWithSensitiveData('v2'),
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/test/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+
+      const chunks = await consumeSSEStream(response.body);
+
+      // Verify chunks exist
+      expect(chunks.length).toBeGreaterThan(0);
+
+      // Check that sensitive data is NOT present in any chunk
+      const allChunksStr = JSON.stringify(chunks);
+      expect(allChunksStr).not.toContain('SECRET_SYSTEM_PROMPT');
+      expect(allChunksStr).not.toContain('secret_tool');
+
+      // Verify step-start chunk has empty request
+      const stepStart = chunks.find(c => c.type === 'step-start');
+      expect(stepStart).toBeDefined();
+      expect(stepStart.payload.request).toEqual({});
+
+      // Verify step-finish chunk has no request in metadata
+      const stepFinish = chunks.find(c => c.type === 'step-finish');
+      expect(stepFinish).toBeDefined();
+      expect(stepFinish.payload.metadata.request).toBeUndefined();
+      expect(stepFinish.payload.output.steps[0].request).toBeUndefined();
+
+      // Verify finish chunk has no request in metadata
+      const finish = chunks.find(c => c.type === 'finish');
+      expect(finish).toBeDefined();
+      expect(finish.payload.metadata.request).toBeUndefined();
+    });
+
+    it('should NOT redact sensitive data when streamOptions.redact is false', async () => {
+      const app = new Hono();
+
+      const adapter = new HonoServerAdapter({
+        mastra: context.mastra,
+        streamOptions: { redact: false },
+      });
+
+      // Create a test route that returns a stream with sensitive data
+      const testRoute: ServerRoute = {
+        method: 'POST',
+        path: '/test/stream',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => createStreamWithSensitiveData('v2'),
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/test/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+
+      const chunks = await consumeSSEStream(response.body);
+
+      // Verify chunks exist
+      expect(chunks.length).toBeGreaterThan(0);
+
+      // Check that sensitive data IS present (not redacted)
+      const allChunksStr = JSON.stringify(chunks);
+      expect(allChunksStr).toContain('SECRET_SYSTEM_PROMPT');
+      expect(allChunksStr).toContain('secret_tool');
+
+      // Verify step-start chunk has full request
+      const stepStart = chunks.find(c => c.type === 'step-start');
+      expect(stepStart).toBeDefined();
+      expect(stepStart.payload.request.body).toContain('SECRET_SYSTEM_PROMPT');
+    });
+
+    it('should redact v1 format stream chunks', async () => {
+      const app = new Hono();
+
+      const adapter = new HonoServerAdapter({
+        mastra: context.mastra,
+        // Default: streamOptions.redact = true
+      });
+
+      // Create a test route that returns a v1 format stream
+      const testRoute: ServerRoute = {
+        method: 'POST',
+        path: '/test/stream-v1',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => createStreamWithSensitiveData('v1'),
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/test/stream-v1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+
+      const chunks = await consumeSSEStream(response.body);
+
+      // Check that sensitive data is NOT present
+      const allChunksStr = JSON.stringify(chunks);
+      expect(allChunksStr).not.toContain('SECRET_SYSTEM_PROMPT');
+      expect(allChunksStr).not.toContain('secret_tool');
+
+      // Verify step-start chunk has empty request (v1 format)
+      const stepStart = chunks.find(c => c.type === 'step-start');
+      expect(stepStart).toBeDefined();
+      expect(stepStart.request).toEqual({});
+
+      // Verify step-finish chunk has no request (v1 format)
+      const stepFinish = chunks.find(c => c.type === 'step-finish');
+      expect(stepFinish).toBeDefined();
+      expect(stepFinish.request).toBeUndefined();
+    });
+
+    it('should pass through non-sensitive chunk types unchanged', async () => {
+      const app = new Hono();
+
+      const adapter = new HonoServerAdapter({
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute = {
+        method: 'POST',
+        path: '/test/stream',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => createStreamWithSensitiveData('v2'),
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/test/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        }),
+      );
+
+      const chunks = await consumeSSEStream(response.body);
+
+      // Verify text-delta chunk is unchanged
+      const textDelta = chunks.find(c => c.type === 'text-delta');
+      expect(textDelta).toBeDefined();
+      expect(textDelta.textDelta).toBe('Hello');
+    });
   });
 });

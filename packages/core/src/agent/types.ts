@@ -80,6 +80,19 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
    * Optional logger instance for structured logging
    */
   logger?: IMastraLogger;
+
+  /**
+   * Provider-specific options passed to the internal structuring agent.
+   * Use this to control model behavior like reasoning effort for thinking models.
+   *
+   * @example
+   * ```ts
+   * providerOptions: {
+   *   openai: { reasoningEffort: 'low' }
+   * }
+   * ```
+   */
+  providerOptions?: ProviderOptions;
 } & FallbackFields<OUTPUT>;
 
 export type SerializableStructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = Omit<
@@ -157,7 +170,7 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
   /**
    * Default options used when calling `stream()` in vNext mode.
    */
-  defaultOptions?: DynamicArgument<AgentExecutionOptions>;
+  defaultOptions?: DynamicArgument<AgentExecutionOptions<OutputSchema>>;
   /**
    * Reference to the Mastra runtime instance (injected automatically).
    */

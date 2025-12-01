@@ -88,13 +88,22 @@ export function getLastMessage(messages: MessageListInput) {
     const lastMessage = Array.isArray(messages) ? messages[messages.length - 1] : messages;
     if (typeof lastMessage === 'string') {
       message = lastMessage;
-    } else if (lastMessage && `content` in lastMessage && lastMessage?.content) {
+    } else if (lastMessage && 'content' in lastMessage && lastMessage?.content) {
       const lastMessageContent = lastMessage.content;
       if (typeof lastMessageContent === 'string') {
         message = lastMessageContent;
       } else if (Array.isArray(lastMessageContent)) {
         const lastPart = lastMessageContent[lastMessageContent.length - 1];
         if (lastPart?.type === 'text') {
+          message = lastPart.text;
+        }
+      }
+    } else if (lastMessage && 'parts' in lastMessage && lastMessage?.parts) {
+      // Handle messages with 'parts' format (e.g. from MessageList)
+      const parts = lastMessage.parts;
+      if (Array.isArray(parts)) {
+        const lastPart = parts[parts.length - 1];
+        if (lastPart?.type === 'text' && lastPart?.text) {
           message = lastPart.text;
         }
       }

@@ -7,7 +7,7 @@ import {
   ScoresStorage,
   calculatePagination,
   normalizePerPage,
-  safelyParseJSON,
+  transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsLibSQL } from '../operations';
@@ -176,46 +176,14 @@ export class ScoresLibSQL extends ScoresStorage {
     }
   }
 
+  /**
+   * LibSQL-specific score row transformation.
+   * Maps additionalLLMContext column to additionalContext field.
+   */
   private transformScoreRow(row: Record<string, any>): ScoreRowData {
-    const scorerValue = safelyParseJSON(row.scorer);
-    const inputValue = safelyParseJSON(row.input ?? '{}');
-    const outputValue = safelyParseJSON(row.output ?? '{}');
-    const additionalLLMContextValue = row.additionalLLMContext ? safelyParseJSON(row.additionalLLMContext) : null;
-    const requestContextValue = row.requestContext ? safelyParseJSON(row.requestContext) : null;
-    const metadataValue = row.metadata ? safelyParseJSON(row.metadata) : null;
-    const entityValue = row.entity ? safelyParseJSON(row.entity) : null;
-    const preprocessStepResultValue = row.preprocessStepResult ? safelyParseJSON(row.preprocessStepResult) : null;
-    const analyzeStepResultValue = row.analyzeStepResult ? safelyParseJSON(row.analyzeStepResult) : null;
-
-    return {
-      id: row.id,
-      traceId: row.traceId,
-      spanId: row.spanId,
-      runId: row.runId,
-      scorer: scorerValue,
-      score: row.score,
-      reason: row.reason,
-      preprocessStepResult: preprocessStepResultValue,
-      analyzeStepResult: analyzeStepResultValue,
-      analyzePrompt: row.analyzePrompt,
-      preprocessPrompt: row.preprocessPrompt,
-      generateScorePrompt: row.generateScorePrompt,
-      generateReasonPrompt: row.generateReasonPrompt,
-      metadata: metadataValue,
-      input: inputValue,
-      output: outputValue,
-      additionalContext: additionalLLMContextValue,
-      requestContext: requestContextValue,
-      entityType: row.entityType,
-      entity: entityValue,
-      entityId: row.entityId,
-      scorerId: row.scorerId,
-      source: row.source,
-      resourceId: row.resourceId,
-      threadId: row.threadId,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-    };
+    return coreTransformScoreRow(row, {
+      fieldMappings: { additionalContext: 'additionalLLMContext' },
+    });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {

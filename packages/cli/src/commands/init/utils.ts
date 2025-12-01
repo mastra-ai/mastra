@@ -1,7 +1,7 @@
-import fs from 'fs/promises';
 import child_process from 'node:child_process';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import util from 'node:util';
-import path from 'path';
 import * as p from '@clack/prompts';
 import type { ModelRouterModelId } from '@mastra/core/llm/model';
 import fsExtra from 'fs-extra/esm';

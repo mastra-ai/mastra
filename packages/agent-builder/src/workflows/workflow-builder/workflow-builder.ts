@@ -1,6 +1,6 @@
-import { existsSync } from 'fs';
-import { readFile, readdir } from 'fs/promises';
-import { join } from 'path';
+import { existsSync } from 'node:fs';
+import { readFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { stepCountIs } from 'ai';

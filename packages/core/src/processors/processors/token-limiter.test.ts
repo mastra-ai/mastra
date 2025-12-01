@@ -615,7 +615,7 @@ describe('TokenLimiterProcessor', () => {
       const result = await processor.processInput({
         messages,
         abort: mockAbort,
-        runtimeContext: new RequestContext(),
+        requestContext: new RequestContext(),
       });
 
       // Should prioritize newest messages (higher ids) and exclude oldest
@@ -635,7 +635,7 @@ describe('TokenLimiterProcessor', () => {
       const result = await processor.processInput({
         messages: [],
         abort: mockAbort,
-        runtimeContext: new RequestContext(),
+        requestContext: new RequestContext(),
       });
       expect(result).toEqual([]);
     });
@@ -681,7 +681,7 @@ describe('TokenLimiterProcessor', () => {
       const result = await processor.processInput({
         messages,
         abort: mockAbort,
-        runtimeContext: new RequestContext(),
+        requestContext: new RequestContext(),
       });
 
       // System message should always be included
@@ -752,7 +752,7 @@ describe('TokenLimiterProcessor', () => {
       const result = await processor.processInput({
         messages,
         abort: mockAbort,
-        runtimeContext: new RequestContext(),
+        requestContext: new RequestContext(),
       });
 
       // All messages should fit within the limit
@@ -790,7 +790,7 @@ describe('TokenLimiterProcessor', () => {
       const result = await processor.processInput({
         messages,
         abort: mockAbort,
-        runtimeContext: new RequestContext(),
+        requestContext: new RequestContext(),
       });
 
       // Should apply input limit (150 tokens)

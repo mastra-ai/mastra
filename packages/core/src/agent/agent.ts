@@ -1,5 +1,5 @@
-import { randomUUID } from 'crypto';
-import type { WritableStream } from 'stream/web';
+import { randomUUID } from 'node:crypto';
+import type { WritableStream } from 'node:stream/web';
 import type { TextPart, UIMessage, StreamObjectResult } from '@internal/ai-sdk-v4';
 import { OpenAIReasoningSchemaCompatLayer, OpenAISchemaCompatLayer } from '@mastra/schema-compat';
 import type { ModelInformation } from '@mastra/schema-compat';
@@ -117,7 +117,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
-  #defaultOptions: DynamicArgument<AgentExecutionOptions>;
+  #defaultOptions: DynamicArgument<AgentExecutionOptions<OutputSchema>>;
   #tools: DynamicArgument<TTools>;
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;

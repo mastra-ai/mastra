@@ -5,34 +5,25 @@ import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import {
   calculatePagination,
   normalizePerPage,
-  safelyParseJSON,
-  SCORERS_SCHEMA,
   ScoresStorage,
   TABLE_SCORERS,
+  transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
 import { getTableName } from '../utils';
 
+/**
+ * PostgreSQL-specific score row transformation.
+ * Uses Z-suffix timestamps (createdAtZ, updatedAtZ) when available.
+ */
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  const data = {
-    ...row,
-    input: safelyParseJSON(row.input),
-    scorer: safelyParseJSON(row.scorer),
-    preprocessStepResult: safelyParseJSON(row.preprocessStepResult),
-    analyzeStepResult: safelyParseJSON(row.analyzeStepResult),
-    output: safelyParseJSON(row.output),
-    requestContext: safelyParseJSON(row.requestContext),
-    entity: safelyParseJSON(row.entity),
-    createdAt: row.createdAtZ || row.createdAt,
-    updatedAt: row.updatedAtZ || row.updatedAt,
-  };
-
-  const result: Record<string, any> = {};
-  for (const key in SCORERS_SCHEMA) {
-    result[key] = data[key as keyof typeof data];
-  }
-  return result as ScoreRowData;
+  return coreTransformScoreRow(row, {
+    preferredTimestampFields: {
+      createdAt: 'createdAtZ',
+      updatedAt: 'updatedAtZ',
+    },
+  });
 }
 
 export class ScoresPG extends ScoresStorage {

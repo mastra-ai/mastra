@@ -2,8 +2,8 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { Tool } from '@mastra/core/tools';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { MastraServerAdapter } from '@mastra/server/server-adapter';
-import type { BodyLimitOptions, ServerRoute } from '@mastra/server/server-adapter';
+import { MastraServerAdapter, redactStreamChunk } from '@mastra/server/server-adapter';
+import type { BodyLimitOptions, ServerRoute, StreamOptions } from '@mastra/server/server-adapter';
 import type { Context, Env, Hono, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
@@ -36,6 +36,7 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
     playground,
     isDev,
     bodyLimitOptions,
+    streamOptions,
   }: {
     mastra: Mastra;
     tools?: Record<string, Tool>;
@@ -44,8 +45,9 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
     playground?: boolean;
     isDev?: boolean;
     bodyLimitOptions?: BodyLimitOptions;
+    streamOptions?: StreamOptions;
   }) {
-    super({ mastra, bodyLimitOptions, tools });
+    super({ mastra, bodyLimitOptions, tools, streamOptions });
     this.taskStore = taskStore || new InMemoryTaskStore();
     this.customRouteAuthConfig = customRouteAuthConfig;
     this.playground = playground;
@@ -135,10 +137,13 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
             if (done) break;
 
             if (value) {
+              // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
+              const shouldRedact = this.streamOptions?.redact ?? true;
+              const outputValue = shouldRedact ? redactStreamChunk(value) : value;
               if (streamFormat === 'sse') {
-                await stream.write(`data: ${JSON.stringify(value)}\n\n`);
+                await stream.write(`data: ${JSON.stringify(outputValue)}\n\n`);
               } else {
-                await stream.write(JSON.stringify(value) + '\x1E');
+                await stream.write(JSON.stringify(outputValue) + '\x1E');
               }
             }
           }

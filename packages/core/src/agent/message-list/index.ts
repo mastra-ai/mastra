@@ -818,6 +818,34 @@ export class MessageList {
     return this.systemMessages;
   }
 
+  /**
+   * Get all system messages (both tagged and untagged)
+   * @returns Array of all system messages
+   */
+  public getAllSystemMessages(): CoreMessageV4[] {
+    return [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()];
+  }
+
+  /**
+   * Replace all system messages with new ones
+   * This clears both tagged and untagged system messages and replaces them with the provided array
+   * @param messages - Array of system messages to set
+   */
+  public replaceAllSystemMessages(messages: CoreMessageV4[]): this {
+    // Clear existing system messages
+    this.systemMessages = [];
+    this.taggedSystemMessages = {};
+
+    // Add all new messages as untagged (processors don't need to preserve tags)
+    for (const message of messages) {
+      if (message.role === 'system') {
+        this.systemMessages.push(message);
+      }
+    }
+
+    return this;
+  }
+
   public addSystem(
     messages:
       | CoreMessageV4

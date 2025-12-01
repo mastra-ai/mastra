@@ -1,4 +1,4 @@
-import type { ConnectionOptions } from 'tls';
+import type { ConnectionOptions } from 'node:tls';
 import type { ClientConfig } from 'pg';
 import type * as pg from 'pg';
 import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';

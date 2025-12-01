@@ -1,4 +1,4 @@
-import type { WritableStream } from 'stream/web';
+import type { WritableStream } from 'node:stream/web';
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { CallSettings, IdGenerator, StopCondition, ToolChoice, ToolSet, StepResult, ModelMessage } from 'ai-v5';
 import z from 'zod';
@@ -11,7 +11,7 @@ import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory, MemoryConfig } from '../memory';
 import type { IModelSpanTracker } from '../observability';
-import type { OutputProcessor, ProcessorState } from '../processors';
+import type { InputProcessor, OutputProcessor, ProcessorState } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream/base/schema';
 import type {
@@ -83,6 +83,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   providerOptions?: SharedV2ProviderOptions;
   tools?: Tools;
   outputProcessors?: OutputProcessor[];
+  inputProcessors?: InputProcessor[];
   experimental_generateMessageId?: () => string;
   stopWhen?: StopCondition<NoInfer<Tools>> | Array<StopCondition<NoInfer<Tools>>>;
   maxSteps?: number;

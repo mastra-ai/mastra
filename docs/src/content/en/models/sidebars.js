@@ -203,8 +203,8 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "providers/io-intelligence",
-          label: "IO Intelligence",
+          id: "providers/io-net",
+          label: "IO.NET",
         },
         {
           type: "doc",
@@ -224,7 +224,12 @@ const sidebars = {
         {
           type: "doc",
           id: "providers/minimax",
-          label: "Minimax",
+          label: "MiniMax",
+        },
+        {
+          type: "doc",
+          id: "providers/minimax-cn",
+          label: "MiniMax (China)",
         },
         {
           type: "doc",

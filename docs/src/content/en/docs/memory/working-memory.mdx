@@ -267,10 +267,18 @@ When a schema is provided, the agent receives the working memory as a JSON objec
 }
 ```
 
+### Merge Semantics for Schema-Based Memory
+
+Schema-based working memory uses **merge semantics**, meaning the agent only needs to include fields it wants to add or update. Existing fields are preserved automatically.
+
+- **Object fields are deep merged:** Only provided fields are updated; others remain unchanged
+- **Set a field to `null` to delete it:** This explicitly removes the field from memory
+- **Arrays are replaced entirely:** When an array field is provided, it replaces the existing array (arrays are not merged element-by-element)
+
 ## Choosing Between Template and Schema
 
-- Use a **template** (Markdown) if you want the agent to maintain memory as a free-form text block, such as a user profile or scratchpad.
-- Use a **schema** if you need structured, type-safe data that can be validated and programmatically accessed as JSON.
+- Use a **template** (Markdown) if you want the agent to maintain memory as a free-form text block, such as a user profile or scratchpad. Templates use **replace semantics** — the agent must provide the complete memory content on each update.
+- Use a **schema** if you need structured, type-safe data that can be validated and programmatically accessed as JSON. Schemas use **merge semantics** — the agent only provides fields to update, and existing fields are preserved.
 - Only one mode can be active at a time: setting both `template` and `schema` is not supported.
 
 ## Example: Multi-step Retention

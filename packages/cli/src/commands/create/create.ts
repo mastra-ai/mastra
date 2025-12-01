@@ -1,5 +1,5 @@
-import fsSync from 'fs';
-import fs from 'fs/promises';
+import fsSync from 'node:fs';
+import fs from 'node:fs/promises';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
 import pkgJson from '../../../package.json';
