@@ -292,6 +292,21 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       let includeMessages: MastraDBMessage[] = [];
 
       if (include && include.length > 0) {
+        // Batch lookup threadIds for includes that don't have one (avoids N+1 queries)
+        const includesNeedingThread = include.filter(inc => !inc.threadId);
+        const threadByMessageId = new Map<string, string>();
+
+        if (includesNeedingThread.length > 0) {
+          const { messages: includeLookup } = await this.listMessagesById({
+            messageIds: includesNeedingThread.map(inc => inc.id),
+          });
+          for (const msg of includeLookup) {
+            if (msg.threadId) {
+              threadByMessageId.set(msg.id, msg.threadId);
+            }
+          }
+        }
+
         const unionQueries: string[] = [];
         const params: any[] = [];
         let paramIdx = 1;
@@ -300,19 +315,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
 
           // Get the threadId for this included message
-          // If inc.threadId is provided, use it; otherwise look up the message first
-          let searchThreadId = inc.threadId;
-          if (!searchThreadId) {
-            // Look up the message to find its threadId
-            const lookupResult = await this.client.query({
-              query: `SELECT thread_id FROM ${TABLE_MESSAGES} WHERE id = {msgId:String} LIMIT 1`,
-              query_params: { msgId: id },
-            });
-            const lookupRows = (await lookupResult.json()) as { data: { thread_id: string }[] };
-            if (lookupRows.data && lookupRows.data.length > 0) {
-              searchThreadId = lookupRows.data[0]!.thread_id;
-            }
-          }
+          // If inc.threadId is provided, use it; otherwise use the batched lookup
+          const searchThreadId = inc.threadId ?? threadByMessageId.get(id);
 
           if (!searchThreadId) continue; // Skip if message not found
 

@@ -262,6 +262,17 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
+  /**
+   * Searches all threads in the KV store to find a message by its ID.
+   *
+   * **Performance Warning**: This method sequentially scans all threads to locate
+   * the message. For stores with many threads, this can result in significant
+   * latency and API calls. When possible, callers should provide the `threadId`
+   * directly to avoid this full scan.
+   *
+   * @param messageId - The globally unique message ID to search for
+   * @returns The message with its threadId if found, null otherwise
+   */
   private async findMessageInAnyThread(messageId: string): Promise<MastraMessageV1 | null> {
     try {
       // List all threads to search for the message
@@ -570,6 +581,16 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     return this.getRange(orderKey, 0, -1);
   }
 
+  /**
+   * Retrieves messages specified in the include array along with their surrounding context.
+   *
+   * **Performance Note**: When `threadId` is not provided in an include entry, this method
+   * must call `findMessageInAnyThread` which sequentially scans all threads in the KV store.
+   * For optimal performance, callers should provide `threadId` in include entries when known.
+   *
+   * @param include - Array of message IDs to include, optionally with context windows
+   * @param messageIds - Set to accumulate the message IDs that should be fetched
+   */
   private async getIncludedMessagesWithContext(
     include: { id: string; threadId?: string; withPreviousMessages?: number; withNextMessages?: number }[],
     messageIds: Set<string>,
@@ -577,6 +598,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     await Promise.all(
       include.map(async item => {
         // Look up the message to get its threadId (message IDs are globally unique)
+        // Note: When threadId is not provided, this triggers a full scan of all threads
         let targetThreadId = item.threadId;
         if (!targetThreadId) {
           const foundMessage = await this.findMessageInAnyThread(item.id);
@@ -624,6 +646,13 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
+  /**
+   * Fetches and parses messages from one or more threads.
+   *
+   * **Performance Note**: When neither `include` entries with `threadId` nor `targetThreadId`
+   * are provided, this method falls back to `findMessageInAnyThread` which scans all threads.
+   * For optimal performance, provide `threadId` in include entries or specify `targetThreadId`.
+   */
   private async fetchAndParseMessagesFromMultipleThreads(
     messageIds: string[],
     include?: { id: string; threadId?: string; withPreviousMessages?: number; withNextMessages?: number }[],
@@ -652,7 +681,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
               // If we have a target thread, only look in that thread
               threadId = targetThreadId;
             } else {
-              // Search for the message in any thread
+              // Search for the message in any thread (expensive: scans all threads)
               const foundMessage = await this.findMessageInAnyThread(id);
               if (foundMessage) {
                 threadId = foundMessage.threadId;
@@ -680,11 +709,19 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     return messages.filter((msg): msg is MastraMessageV1 & { _index?: number } => msg !== null);
   }
 
+  /**
+   * Retrieves messages by their IDs.
+   *
+   * **Performance Warning**: This method calls `findMessageInAnyThread` for each message ID,
+   * which scans all threads in the KV store. For large numbers of messages or threads,
+   * this can result in significant latency. Consider using `listMessages` with specific
+   * thread IDs when the thread context is known.
+   */
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
 
     try {
-      // Fetch and parse all messages from their respective threads
+      // Fetch and parse all messages from their respective threads (expensive: scans all threads per message)
       const messages = (await Promise.all(messageIds.map(id => this.findMessageInAnyThread(id)))).filter(
         result => !!result,
       ) as (MastraMessageV1 & { _index: string })[];
