@@ -122,8 +122,12 @@ export class MemoryStorageClickhouse extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    // Normalize threadId to array
-    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+    // Normalize threadId to array, coerce to strings, trim, and filter out empty/non-string values
+    const rawThreadIds = Array.isArray(threadId) ? threadId : [threadId];
+    const threadIds = rawThreadIds
+      .filter((id): id is string | number | boolean => id !== undefined && id !== null)
+      .map(id => (typeof id === 'string' ? id : String(id)).trim())
+      .filter(id => id.length > 0);
 
     if (page < 0) {
       throw new MastraError(
@@ -137,13 +141,14 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       );
     }
 
-    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
+    // Validate that we have at least one valid threadId
+    if (threadIds.length === 0) {
       throw new MastraError(
         {
           id: 'STORAGE_CLICKHOUSE_LIST_MESSAGES_INVALID_THREAD_ID',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
+          details: { threadId: Array.isArray(threadId) ? threadId : String(threadId) },
         },
         new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
