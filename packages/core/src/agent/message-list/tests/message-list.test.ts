@@ -88,101 +88,101 @@ describe('MessageList', () => {
 
   describe('add message', () => {
     it('should not filter out reasoning items from OpenAi that contain no content when the message id is the same', () => {
-      // Additional fix for bug detailed in https://github.com/mastra-ai/mastra/issues/9005 
+      // Additional fix for bug detailed in https://github.com/mastra-ai/mastra/issues/9005
       // pushNewMessagePart calls cacheKeyFromAIV4Parts to check if new message parts need to be appended.
-      // cacheKeyFromAIV4Parts failed to account for 'providerMetadata/openai/itemId' 
+      // cacheKeyFromAIV4Parts failed to account for 'providerMetadata/openai/itemId'
       // (which is not part of the UIMessageV4 type), thus filtering out subsequent messages
 
       const list = new MessageList().add(
         {
-            id: "sharedID",
-            role: "assistant",
-            content: {
-              format: 2,
-              parts: [
-                {
-                  type: "reasoning",
-                  reasoning: "",
-                  details: [
-                    {
-                      type: "text",
-                      text: "",
-                    },
-                  ],
-                  providerMetadata: {
-                    openai: {
-                      itemId: "rs_ONE",
-                      reasoningEncryptedContent: null,
-                    },
+          id: 'sharedID',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'reasoning',
+                reasoning: '',
+                details: [
+                  {
+                    type: 'text',
+                    text: '',
+                  },
+                ],
+                providerMetadata: {
+                  openai: {
+                    itemId: 'rs_ONE',
+                    reasoningEncryptedContent: null,
                   },
                 },
-              ],
-            },
-            createdAt: new Date(),
-            threadId: "thread-123",
+              },
+            ],
+          },
+          createdAt: new Date(),
+          threadId: 'thread-123',
         },
-        'response'
-      )
+        'response',
+      );
 
       let dbMessages = list.get.all.db();
       expect(dbMessages).toHaveLength(1);
       expect(dbMessages[0].content.parts).toHaveLength(1);
       expect(dbMessages[0].content.parts[0].type).toBe('reasoning');
-      expect(
-        (dbMessages[0].content.parts[0] as any).providerMetadata?.openai?.itemId,
-      ).toBe('rs_ONE');
+      expect((dbMessages[0].content.parts[0] as any).providerMetadata?.openai?.itemId).toBe('rs_ONE');
 
-      list.add(        {
-            id: "sharedID",
-            role: "assistant",
-            content: {
-              format: 2,
-              parts: [
-                {
-                  type: "reasoning",
-                  reasoning: "",
-                  details: [
-                    {
-                      type: "text",
-                      text: "",
-                    },
-                  ],
-                  providerMetadata: {
-                    openai: {
-                      itemId: "rs_TWO",
-                      reasoningEncryptedContent: null,
-                    },
+      list.add(
+        {
+          id: 'sharedID',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'reasoning',
+                reasoning: '',
+                details: [
+                  {
+                    type: 'text',
+                    text: '',
+                  },
+                ],
+                providerMetadata: {
+                  openai: {
+                    itemId: 'rs_TWO',
+                    reasoningEncryptedContent: null,
                   },
                 },
-              ],
-            },
-            createdAt: new Date(),
-            threadId: "thread-123",
+              },
+            ],
+          },
+          createdAt: new Date(),
+          threadId: 'thread-123',
         },
-        'response')
+        'response',
+      );
 
-        dbMessages = list.get.all.db();
-        expect(dbMessages).toHaveLength(1);
-        expect(dbMessages[0].content.parts).toHaveLength(2);
+      dbMessages = list.get.all.db();
+      expect(dbMessages).toHaveLength(1);
+      expect(dbMessages[0].content.parts).toHaveLength(2);
 
-        const [firstRs, secondRs] = dbMessages[0].content.parts as any[];
+      const [firstRs, secondRs] = dbMessages[0].content.parts as any[];
 
-        expect(firstRs.type).toBe('reasoning');
-        expect(firstRs.providerMetadata.openai.itemId).toBe('rs_ONE');
+      expect(firstRs.type).toBe('reasoning');
+      expect(firstRs.providerMetadata.openai.itemId).toBe('rs_ONE');
 
-        expect(secondRs.type).toBe('reasoning');
-        expect(secondRs.providerMetadata.openai.itemId).toBe('rs_TWO');
+      expect(secondRs.type).toBe('reasoning');
+      expect(secondRs.providerMetadata.openai.itemId).toBe('rs_TWO');
 
-        const modelMessages = list.get.all.aiV5.model();
-        expect(modelMessages).toHaveLength(1);
-        const content = modelMessages[0].content;
-        expect(Array.isArray(content)).toBe(true);
-        if (!Array.isArray(content)) {
-          throw new Error('Expected modelMessages[0].content to be an array');
-        }
-        expect(content).toHaveLength(2);
-        expect(content[0].type).toBe('reasoning');
-        expect(content[1].type).toBe('reasoning');
+      const modelMessages = list.get.all.aiV5.model();
+      expect(modelMessages).toHaveLength(1);
+      const content = modelMessages[0].content;
+      expect(Array.isArray(content)).toBe(true);
+      if (!Array.isArray(content)) {
+        throw new Error('Expected modelMessages[0].content to be an array');
+      }
+      expect(content).toHaveLength(2);
+      expect(content[0].type).toBe('reasoning');
+      expect(content[1].type).toBe('reasoning');
     });
 
     it('should skip over system messages that are retrieved from the db', async () => {

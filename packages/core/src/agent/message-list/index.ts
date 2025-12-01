@@ -1995,7 +1995,6 @@ export class MessageList {
           return prev;
         }, 0);
 
-
         // OpenAI sends reasoning items (rs_...) inside part.providerMetadata.openai.itemId.
         // When the reasoning text is empty, the default cache key logic produces "reasoning0"
         // for *all* reasoning parts. This makes distinct rs_ entries appear identical, so the
