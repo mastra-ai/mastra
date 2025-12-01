@@ -207,6 +207,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Providers](https://mastra.ai/en/models/providers): Direct access to AI model providers.
 - [Inference | Models | Mastra](https://mastra.ai/en/models/providers/inference): Use Inference models with Mastra. 9 models available.
 - [IO Intelligence | Models | Mastra](https://mastra.ai/en/models/providers/io-intelligence): Use IO Intelligence models with Mastra. 17 models available.
+- [IO.NET | Models | Mastra](https://mastra.ai/en/models/providers/io-net): Use IO.NET models with Mastra. 17 models available.
 - [Llama | Models | Mastra](https://mastra.ai/en/models/providers/llama): Use Llama models with Mastra. 7 models available.
 - [LMStudio | Models | Mastra](https://mastra.ai/en/models/providers/lmstudio): Use LMStudio models with Mastra. 3 models available.
 - [LucidQuery AI | Models | Mastra](https://mastra.ai/en/models/providers/lucidquery): Use LucidQuery AI models with Mastra. 2 models available.
@@ -359,6 +360,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Language Detector | Processors](https://mastra.ai/en/reference/processors/language-detector): Documentation for the LanguageDetector in Mastra, which detects language and can translate content in AI responses.
 - [Reference: Moderation Processor | Processors](https://mastra.ai/en/reference/processors/moderation-processor): Documentation for the ModerationProcessor in Mastra, which provides content moderation using LLM to detect inappropriate content across multiple categories.
 - [Reference: PII Detector | Processors](https://mastra.ai/en/reference/processors/pii-detector): Documentation for the PIIDetector in Mastra, which detects and redacts personally identifiable information (PII) from AI responses.
+- [Reference: Processor Interface | Processors](https://mastra.ai/en/reference/processors/processor-interface): API reference for the Processor interface in Mastra, which defines the contract for transforming, validating, and controlling messages in agent pipelines.
 - [Reference: Prompt Injection Detector | Processors](https://mastra.ai/en/reference/processors/prompt-injection-detector): Documentation for the PromptInjectionDetector in Mastra, which detects prompt injection attempts in user input.
 - [Reference: System Prompt Scrubber | Processors](https://mastra.ai/en/reference/processors/system-prompt-scrubber): Documentation for the SystemPromptScrubber in Mastra, which detects and redacts system prompts from AI responses.
 - [Reference: Token Limiter Processor | Processors](https://mastra.ai/en/reference/processors/token-limiter-processor): Documentation for the TokenLimiterProcessor in Mastra, which limits the number of tokens in AI responses.
