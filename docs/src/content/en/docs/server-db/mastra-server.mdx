@@ -37,7 +37,7 @@ export const mastra = new Mastra({
     port: 3000, // Defaults to 4111
     host: "0.0.0.0", // Defaults to 'localhost'
     base: "/my-mastra-studio", // Sub-path for the studio (optional)
-    timeout: 10000, // Defaults to 30000 (30s)
+    timeout: 10000, // Defaults to 3 * 60 * 1000 (3 minutes)
   },
 });
 ```

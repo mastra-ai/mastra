@@ -1,6 +1,6 @@
-import type { ChildProcess } from 'child_process';
+import type { ChildProcess } from 'node:child_process';
+import { join } from 'node:path';
 import process from 'node:process';
-import { join } from 'path';
 import devcert from '@expo/devcert';
 import { FileService } from '@mastra/deployer';
 import { getServerOptions, normalizeServerBase } from '@mastra/deployer/build';

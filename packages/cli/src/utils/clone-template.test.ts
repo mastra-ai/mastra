@@ -156,7 +156,7 @@ describe('clone-template', () => {
         projectName: 'test-project',
       });
 
-      const fs = await import('fs/promises');
+      const fs = await import('node:fs/promises');
       const packageJsonContent = await fs.readFile('/test-project/package.json', 'utf-8');
       const packageJson = JSON.parse(packageJsonContent);
 
@@ -314,7 +314,7 @@ describe('clone-template', () => {
         llmProvider: 'anthropic',
       });
 
-      const fs = await import('fs/promises');
+      const fs = await import('node:fs/promises');
       const envContent = await fs.readFile('/test-project/.env', 'utf-8');
 
       expect(envContent).toContain('MODEL=anthropic/claude-sonnet-4-5');

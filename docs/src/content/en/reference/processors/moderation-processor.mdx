@@ -85,6 +85,13 @@ const processor = new ModerationProcessor({
       isOptional: true,
       default: "0 (no context window)",
     },
+    {
+      name: "providerOptions",
+      type: "ProviderOptions",
+      description: "Provider-specific options passed to the internal moderation agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`)",
+      isOptional: true,
+      default: "undefined",
+    },
   ]}
 />
 

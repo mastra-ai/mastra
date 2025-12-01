@@ -2,8 +2,8 @@
 // Adjusted from https://github.com/vercel/ai/blob/main/packages/codemod/src/test/test-utils.ts
 // License: Apache-2.0
 
-import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { API, FileInfo } from 'jscodeshift';
 import jscodeshift from 'jscodeshift';
 import ts from 'typescript';

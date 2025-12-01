@@ -1,6 +1,6 @@
-import EventEmitter from 'events';
 import { randomUUID } from 'node:crypto';
-import { WritableStream, ReadableStream, TransformStream } from 'stream/web';
+import EventEmitter from 'node:events';
+import { WritableStream, ReadableStream, TransformStream } from 'node:stream/web';
 import { z } from 'zod';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
@@ -1037,6 +1037,12 @@ export class Workflow<
 
     const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
+    // If a snapshot exists in storage, update the run's status to reflect the actual state
+    // This fixes the issue where createRun checks storage but doesn't use the snapshot data
+    if (workflowSnapshotInStorage && workflowSnapshotInStorage.status) {
+      run.workflowRunStatus = workflowSnapshotInStorage.status as WorkflowRunStatus;
+    }
+
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
         workflowName: this.id,
@@ -1495,7 +1501,7 @@ export class Run<
 
   readonly workflowSteps: Record<string, StepWithComponent>;
 
-  readonly workflowRunStatus: WorkflowRunStatus;
+  workflowRunStatus: WorkflowRunStatus;
 
   readonly workflowEngineType: WorkflowEngineType;
 

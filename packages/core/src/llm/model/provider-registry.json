@@ -843,7 +843,7 @@
       "url": "https://api.minimax.io/anthropic/v1",
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
-      "name": "Minimax",
+      "name": "MiniMax",
       "models": ["MiniMax-M2"],
       "docUrl": "https://platform.minimax.io/docs/guides/quickstart",
       "gateway": "models.dev"
@@ -960,6 +960,15 @@
       "name": "Zhipu AI Coding Plan",
       "models": ["glm-4.5", "glm-4.5-air", "glm-4.5-flash", "glm-4.5v", "glm-4.6"],
       "docUrl": "https://docs.bigmodel.cn/cn/coding-plan/overview",
+      "gateway": "models.dev"
+    },
+    "minimax-cn": {
+      "url": "https://api.minimaxi.com/anthropic/v1",
+      "apiKeyEnvVar": "MINIMAX_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "MiniMax (China)",
+      "models": ["MiniMax-M2"],
+      "docUrl": "https://platform.minimaxi.com/docs/guides/quickstart",
       "gateway": "models.dev"
     },
     "perplexity": {
@@ -1361,39 +1370,13 @@
         "claude-opus-4-1-20250805",
         "claude-opus-4-20250514",
         "claude-opus-4-5",
+        "claude-opus-4-5-20251101",
         "claude-sonnet-4-0",
         "claude-sonnet-4-20250514",
         "claude-sonnet-4-5",
         "claude-sonnet-4-5-20250929"
       ],
       "docUrl": "https://docs.anthropic.com/en/docs/about-claude/models",
-      "gateway": "models.dev"
-    },
-    "io-intelligence": {
-      "url": "https://api.intelligence.io.solutions/api/v1",
-      "apiKeyEnvVar": "IOINTELLIGENCE_API_KEY",
-      "apiKeyHeader": "Authorization",
-      "name": "IO Intelligence",
-      "models": [
-        "deepseek-ai-deepseek-r1-0528",
-        "intel-qwen3-coder-480b-a35b-instruct-int4-mixed-ar",
-        "meta-llama-llama-3-2-90b-vision-instruct",
-        "meta-llama-llama-3-3-70b-instruct",
-        "meta-llama-llama-4-maverick-17b-128e-instruct-fp8",
-        "mistralai-devstral-small-2505",
-        "mistralai-magistral-small-2506",
-        "mistralai-mistral-large-instruct-2411",
-        "mistralai-mistral-nemo-instruct-2407",
-        "moonshotai-kimi-k2-instruct-0905",
-        "moonshotai-kimi-k2-thinking",
-        "openai-gpt-oss-120b",
-        "openai-gpt-oss-20b",
-        "qwen-qwen2-5-vl-32b-instruct",
-        "qwen-qwen3-235b-a22b-thinking-2507",
-        "qwen-qwen3-next-80b-a3b-instruct",
-        "zai-org-glm-4-6"
-      ],
-      "docUrl": "https://io.net/docs/guides/intelligence/io-intelligence",
       "gateway": "models.dev"
     },
     "fireworks-ai": {
@@ -1416,6 +1399,33 @@
         "accounts/fireworks/models/qwen3-coder-480b-a35b-instruct"
       ],
       "docUrl": "https://fireworks.ai/docs/",
+      "gateway": "models.dev"
+    },
+    "io-net": {
+      "url": "https://api.intelligence.io.solutions/api/v1",
+      "apiKeyEnvVar": "IOINTELLIGENCE_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "IO.NET",
+      "models": [
+        "Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar",
+        "Qwen/Qwen2.5-VL-32B-Instruct",
+        "Qwen/Qwen3-235B-A22B-Thinking-2507",
+        "Qwen/Qwen3-Next-80B-A3B-Instruct",
+        "deepseek-ai/DeepSeek-R1-0528",
+        "meta-llama/Llama-3.2-90B-Vision-Instruct",
+        "meta-llama/Llama-3.3-70B-Instruct",
+        "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
+        "mistralai/Devstral-Small-2505",
+        "mistralai/Magistral-Small-2506",
+        "mistralai/Mistral-Large-Instruct-2411",
+        "mistralai/Mistral-Nemo-Instruct-2407",
+        "moonshotai/Kimi-K2-Instruct-0905",
+        "moonshotai/Kimi-K2-Thinking",
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+        "zai-org/GLM-4.6"
+      ],
+      "docUrl": "https://io.net/docs/guides/intelligence/io-intelligence",
       "gateway": "models.dev"
     },
     "modelscope": {
@@ -2352,6 +2362,7 @@
       "text-embedding-ada-002"
     ],
     "zhipuai-coding-plan": ["glm-4.5", "glm-4.5-air", "glm-4.5-flash", "glm-4.5v", "glm-4.6"],
+    "minimax-cn": ["MiniMax-M2"],
     "perplexity": ["sonar", "sonar-pro", "sonar-reasoning", "sonar-reasoning-pro"],
     "openrouter": [
       "anthropic/claude-3.5-haiku",
@@ -2637,29 +2648,11 @@
       "claude-opus-4-1-20250805",
       "claude-opus-4-20250514",
       "claude-opus-4-5",
+      "claude-opus-4-5-20251101",
       "claude-sonnet-4-0",
       "claude-sonnet-4-20250514",
       "claude-sonnet-4-5",
       "claude-sonnet-4-5-20250929"
-    ],
-    "io-intelligence": [
-      "deepseek-ai-deepseek-r1-0528",
-      "intel-qwen3-coder-480b-a35b-instruct-int4-mixed-ar",
-      "meta-llama-llama-3-2-90b-vision-instruct",
-      "meta-llama-llama-3-3-70b-instruct",
-      "meta-llama-llama-4-maverick-17b-128e-instruct-fp8",
-      "mistralai-devstral-small-2505",
-      "mistralai-magistral-small-2506",
-      "mistralai-mistral-large-instruct-2411",
-      "mistralai-mistral-nemo-instruct-2407",
-      "moonshotai-kimi-k2-instruct-0905",
-      "moonshotai-kimi-k2-thinking",
-      "openai-gpt-oss-120b",
-      "openai-gpt-oss-20b",
-      "qwen-qwen2-5-vl-32b-instruct",
-      "qwen-qwen3-235b-a22b-thinking-2507",
-      "qwen-qwen3-next-80b-a3b-instruct",
-      "zai-org-glm-4-6"
     ],
     "fireworks-ai": [
       "accounts/fireworks/models/deepseek-r1-0528",
@@ -2674,6 +2667,25 @@
       "accounts/fireworks/models/minimax-m2",
       "accounts/fireworks/models/qwen3-235b-a22b",
       "accounts/fireworks/models/qwen3-coder-480b-a35b-instruct"
+    ],
+    "io-net": [
+      "Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar",
+      "Qwen/Qwen2.5-VL-32B-Instruct",
+      "Qwen/Qwen3-235B-A22B-Thinking-2507",
+      "Qwen/Qwen3-Next-80B-A3B-Instruct",
+      "deepseek-ai/DeepSeek-R1-0528",
+      "meta-llama/Llama-3.2-90B-Vision-Instruct",
+      "meta-llama/Llama-3.3-70B-Instruct",
+      "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
+      "mistralai/Devstral-Small-2505",
+      "mistralai/Magistral-Small-2506",
+      "mistralai/Mistral-Large-Instruct-2411",
+      "mistralai/Mistral-Nemo-Instruct-2407",
+      "moonshotai/Kimi-K2-Instruct-0905",
+      "moonshotai/Kimi-K2-Thinking",
+      "openai/gpt-oss-120b",
+      "openai/gpt-oss-20b",
+      "zai-org/GLM-4.6"
     ],
     "modelscope": [
       "Qwen/Qwen3-235B-A22B-Instruct-2507",

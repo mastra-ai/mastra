@@ -90,59 +90,27 @@ Workflows can be composed using a number of different methods. The method you ch
 
 ## Workflow state
 
-Workflow state lets you share values across steps without passing them through every step’s inputSchema and outputSchema. All state values are defined in the workflow’s stateSchema, but each step only declares the values it needs. To set initial values, use initialState when running the workflow.
+Workflow state lets you share values across steps without passing them through every step's inputSchema and outputSchema. Use state for tracking progress, accumulating results, or sharing configuration across the entire workflow.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
-  // ...
-  stateSchema: z.object({
-    processedItems: z.array(z.string()),
-  }),
+  id: "step-1",
+  inputSchema: z.object({ message: z.string() }),
+  outputSchema: z.object({ formatted: z.string() }),
+  stateSchema: z.object({ counter: z.number() }),
   execute: async ({ inputData, state, setState }) => {
-    const { message } = inputData;
-    const { processedItems } = state;
+    // Read from state
+    console.log(state.counter);
 
-    setState({
-      ...state,
-      processedItems: [...processedItems, "item-1", "item-2"],
-    });
+    // Update state for subsequent steps
+    setState({ ...state, counter: state.counter + 1 });
 
-    return {
-      formatted: message.toUpperCase(),
-    };
+    return { formatted: inputData.message.toUpperCase() };
   },
 });
-
-const step2 = createStep({
-  // ...
-  stateSchema: z.object({
-    metadata: z.object({
-      processedBy: z.string(),
-    }),
-  }),
-  execute: async ({ inputData, state }) => {
-    const { formatted } = inputData;
-    const { metadata } = state;
-
-    return {
-      emphasized: `${formatted}!! ${metadata.processedBy}`,
-    };
-  },
-});
-
-export const testWorkflow = createWorkflow({
-  // ...
-  stateSchema: z.object({
-    processedItems: z.array(z.string()),
-    metadata: z.object({
-      processedBy: z.string(),
-    }),
-  }),
-})
-  .then(step1)
-  .then(step2)
-  .commit();
 ```
+
+> See [Workflow State](/docs/v1/workflows/workflow-state) for complete documentation on state schemas, initial state, persistence across suspend/resume, and nested workflows.
 
 ## Workflows as steps
 
@@ -378,6 +346,7 @@ Use [Studio](/docs/v1/getting-started/studio) to easily run workflows with diffe
 
 For a closer look at workflows, see our [Workflow Guide](/guides/v1/guide/ai-recruiter), which walks through the core concepts with a practical example.
 
+- [Workflow State](/docs/v1/workflows/workflow-state)
 - [Control Flow](/docs/v1/workflows/control-flow)
 - [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
 - [Error Handling](/docs/v1/workflows/error-handling)

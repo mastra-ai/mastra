@@ -1,4 +1,4 @@
-import type { InputProcessor } from '..';
+import type { Processor } from '..';
 import type { MessageList } from '../../agent/message-list';
 import type { IMastraLogger } from '../../logger';
 import { parseMemoryRuntimeContext } from '../../memory';
@@ -38,7 +38,7 @@ export interface WorkingMemoryConfig {
  * Note: Working memory updates happen via the updateWorkingMemory tool,
  * not through this processor. The tool is provided by the Memory class.
  */
-export class WorkingMemory implements InputProcessor {
+export class WorkingMemory implements Processor {
   readonly id = 'working-memory';
   name = 'WorkingMemory';
 
@@ -76,12 +76,12 @@ export class WorkingMemory implements InputProcessor {
     messages: MastraDBMessage[];
     messageList: MessageList;
     abort: (reason?: string) => never;
-    runtimeContext?: RequestContext;
+    requestContext?: RequestContext;
   }): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, runtimeContext } = args;
+    const { messageList, requestContext } = args;
 
     // Get threadId and resourceId from runtime context
-    const memoryContext = parseMemoryRuntimeContext(runtimeContext);
+    const memoryContext = parseMemoryRuntimeContext(requestContext);
     const threadId = memoryContext?.thread?.id;
     const resourceId = memoryContext?.resourceId;
 

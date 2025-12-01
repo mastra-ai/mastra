@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import type { UIMessage, CoreMessage, Message } from '@internal/ai-sdk-v4';
 import { appendClientMessage, appendResponseMessages } from '@internal/ai-sdk-v4';
 import { describe, expect, it } from 'vitest';
@@ -3804,6 +3804,101 @@ describe('MessageList', () => {
       await expect(list.get.all.aiV5.llmPrompt()).rejects.toThrow(
         'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
       );
+    });
+  });
+
+  describe('getAllSystemMessages', () => {
+    it('should return all untagged system messages when no tag is specified', () => {
+      const list = new MessageList();
+      list.addSystem('You are a helpful assistant.');
+      list.addSystem('Be concise.');
+
+      const systemMessages = list.getAllSystemMessages();
+
+      expect(systemMessages).toHaveLength(2);
+      expect(systemMessages[0].content).toBe('You are a helpful assistant.');
+      expect(systemMessages[1].content).toBe('Be concise.');
+    });
+
+    it('should return both tagged and untagged system messages', () => {
+      const list = new MessageList();
+      list.addSystem('You are a helpful assistant.'); // untagged
+      list.addSystem('Remember user preferences.', 'user-provided'); // tagged
+      list.addSystem('Relevant context from memory.', 'memory'); // tagged
+
+      const systemMessages = list.getAllSystemMessages();
+
+      expect(systemMessages).toHaveLength(3);
+      const contents = systemMessages.map(m => m.content);
+      expect(contents).toContain('You are a helpful assistant.');
+      expect(contents).toContain('Remember user preferences.');
+      expect(contents).toContain('Relevant context from memory.');
+    });
+
+    it('should return empty array when no system messages exist', () => {
+      const list = new MessageList();
+      list.add({ role: 'user', content: 'Hello' }, 'input');
+
+      const systemMessages = list.getAllSystemMessages();
+
+      expect(systemMessages).toHaveLength(0);
+    });
+  });
+
+  describe('replaceAllSystemMessages', () => {
+    it('should replace all system messages with new ones', () => {
+      const list = new MessageList();
+      list.addSystem('Original instruction 1');
+      list.addSystem('Original instruction 2', 'memory');
+
+      const newSystemMessages: AIV4Type.CoreSystemMessage[] = [
+        { role: 'system', content: 'New instruction 1' },
+        { role: 'system', content: 'New instruction 2' },
+      ];
+
+      list.replaceAllSystemMessages(newSystemMessages);
+
+      const systemMessages = list.getAllSystemMessages();
+      expect(systemMessages).toHaveLength(2);
+      expect(systemMessages[0].content).toBe('New instruction 1');
+      expect(systemMessages[1].content).toBe('New instruction 2');
+    });
+
+    it('should clear all existing system messages including tagged ones', () => {
+      const list = new MessageList();
+      list.addSystem('Instruction');
+      list.addSystem('Memory context', 'memory');
+      list.addSystem('User provided', 'user-provided');
+
+      list.replaceAllSystemMessages([]);
+
+      const systemMessages = list.getAllSystemMessages();
+      expect(systemMessages).toHaveLength(0);
+    });
+
+    it('should not affect non-system messages', () => {
+      const list = new MessageList();
+      list.addSystem('System instruction');
+      list.add({ role: 'user', content: 'Hello' }, 'input');
+      list.add({ role: 'assistant', content: 'Hi there!' }, 'response');
+
+      list.replaceAllSystemMessages([{ role: 'system', content: 'New instruction' }]);
+
+      const allMessages = list.get.all.db();
+      expect(allMessages).toHaveLength(2);
+      expect(allMessages[0].role).toBe('user');
+      expect(allMessages[1].role).toBe('assistant');
+
+      const systemMessages = list.getAllSystemMessages();
+      expect(systemMessages).toHaveLength(1);
+      expect(systemMessages[0].content).toBe('New instruction');
+    });
+
+    it('should return this for chaining', () => {
+      const list = new MessageList();
+      const result = list.replaceAllSystemMessages([{ role: 'system', content: 'Test' }]);
+
+      expect(result).toBe(list);
     });
   });
 });

@@ -766,7 +766,10 @@ export class MCPServer extends MCPServerBase {
           try {
             const proxiedContext = context?.requestContext || new RequestContext();
             if (context?.mcp?.extra) {
-              proxiedContext.set('mcp.extra', context.mcp.extra);
+              // Spread all keys from extra directly onto the RequestContext
+              Object.entries(context.mcp.extra).forEach(([key, value]) => {
+                proxiedContext.set(key, value);
+              });
             }
 
             const response = await agent.generate(inputData.message, {
@@ -846,11 +849,19 @@ export class MCPServer extends MCPServerBase {
             inputData,
           );
           try {
-            const run = await workflow.createRun({ runId: context?.requestContext?.get('runId') });
+            const proxiedContext = context?.requestContext || new RequestContext();
+            if (context?.mcp?.extra) {
+              // Spread all keys from extra directly onto the RequestContext
+              Object.entries(context.mcp.extra).forEach(([key, value]) => {
+                proxiedContext.set(key, value);
+              });
+            }
+
+            const run = await workflow.createRun({ runId: proxiedContext?.get('runId') });
 
             const response = await run.start({
               inputData: inputData,
-              requestContext: context?.requestContext,
+              requestContext: proxiedContext,
               tracingContext: context?.tracingContext,
             });
             return response;
@@ -1025,7 +1036,7 @@ export class MCPServer extends MCPServerBase {
    *
    * @example
    * ```typescript
-   * import http from 'http';
+   * import http from 'node:http';
    *
    * const httpServer = http.createServer(async (req, res) => {
    *   await server.startSSE({
@@ -1185,8 +1196,8 @@ export class MCPServer extends MCPServerBase {
    *
    * @example
    * ```typescript
-   * import http from 'http';
-   * import { randomUUID } from 'crypto';
+   * import http from 'node:http';
+   * import { randomUUID } from 'node:crypto';
    *
    * const httpServer = http.createServer(async (req, res) => {
    *   await server.startHTTP({

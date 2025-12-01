@@ -6,7 +6,7 @@ import {
   TABLE_SCORERS,
   calculatePagination,
   normalizePerPage,
-  safelyParseJSON,
+  transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
 import type Cloudflare from 'cloudflare';
@@ -19,22 +19,17 @@ export interface D1Client {
   query(args: { sql: string; params: string[] }): Promise<{ result: D1QueryResult }>;
 }
 
+/**
+ * Cloudflare D1-specific score row transformation.
+ * Uses Z-suffix timestamps (createdAtZ, updatedAtZ) when available.
+ */
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  const deserialized: Record<string, any> = { ...row };
-
-  // Reverse serialized JSON fields (stored as strings in D1)
-  deserialized.input = safelyParseJSON(row.input);
-  deserialized.output = safelyParseJSON(row.output);
-  deserialized.scorer = safelyParseJSON(row.scorer);
-  deserialized.preprocessStepResult = safelyParseJSON(row.preprocessStepResult);
-  deserialized.analyzeStepResult = safelyParseJSON(row.analyzeStepResult);
-  deserialized.requestContext = safelyParseJSON(row.requestContext);
-  deserialized.entity = safelyParseJSON(row.entity);
-
-  deserialized.createdAt = row.createdAtZ || row.createdAt;
-  deserialized.updatedAt = row.updatedAtZ || row.updatedAt;
-
-  return deserialized as ScoreRowData;
+  return coreTransformScoreRow(row, {
+    preferredTimestampFields: {
+      createdAt: 'createdAtZ',
+      updatedAt: 'updatedAtZ',
+    },
+  });
 }
 
 export class ScoresStorageD1 extends ScoresStorage {

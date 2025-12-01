@@ -262,6 +262,17 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
+  /**
+   * Searches all threads in the KV store to find a message by its ID.
+   *
+   * **Performance Warning**: This method sequentially scans all threads to locate
+   * the message. For stores with many threads, this can result in significant
+   * latency and API calls. When possible, callers should provide the `threadId`
+   * directly to avoid this full scan.
+   *
+   * @param messageId - The globally unique message ID to search for
+   * @returns The message with its threadId if found, null otherwise
+   */
   private async findMessageInAnyThread(messageId: string): Promise<MastraMessageV1 | null> {
     try {
       // List all threads to search for the message
@@ -570,16 +581,32 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     return this.getRange(orderKey, 0, -1);
   }
 
+  /**
+   * Retrieves messages specified in the include array along with their surrounding context.
+   *
+   * **Performance Note**: When `threadId` is not provided in an include entry, this method
+   * must call `findMessageInAnyThread` which sequentially scans all threads in the KV store.
+   * For optimal performance, callers should provide `threadId` in include entries when known.
+   *
+   * @param include - Array of message IDs to include, optionally with context windows
+   * @param messageIds - Set to accumulate the message IDs that should be fetched
+   */
   private async getIncludedMessagesWithContext(
-    threadId: string,
     include: { id: string; threadId?: string; withPreviousMessages?: number; withNextMessages?: number }[],
     messageIds: Set<string>,
   ): Promise<void> {
     await Promise.all(
       include.map(async item => {
-        // Use the item's threadId if provided, otherwise use the main threadId
-        const targetThreadId = item.threadId || threadId;
+        // Look up the message to get its threadId (message IDs are globally unique)
+        // Note: When threadId is not provided, this triggers a full scan of all threads
+        let targetThreadId = item.threadId;
+        if (!targetThreadId) {
+          const foundMessage = await this.findMessageInAnyThread(item.id);
+          if (!foundMessage) return;
+          targetThreadId = foundMessage.threadId;
+        }
         if (!targetThreadId) return;
+
         const threadMessagesKey = this.getThreadMessagesKey(targetThreadId);
 
         messageIds.add(item.id);
@@ -619,6 +646,13 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
+  /**
+   * Fetches and parses messages from one or more threads.
+   *
+   * **Performance Note**: When neither `include` entries with `threadId` nor `targetThreadId`
+   * are provided, this method falls back to `findMessageInAnyThread` which scans all threads.
+   * For optimal performance, provide `threadId` in include entries or specify `targetThreadId`.
+   */
   private async fetchAndParseMessagesFromMultipleThreads(
     messageIds: string[],
     include?: { id: string; threadId?: string; withPreviousMessages?: number; withNextMessages?: number }[],
@@ -647,7 +681,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
               // If we have a target thread, only look in that thread
               threadId = targetThreadId;
             } else {
-              // Search for the message in any thread
+              // Search for the message in any thread (expensive: scans all threads)
               const foundMessage = await this.findMessageInAnyThread(id);
               if (foundMessage) {
                 threadId = foundMessage.threadId;
@@ -675,11 +709,19 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     return messages.filter((msg): msg is MastraMessageV1 & { _index?: number } => msg !== null);
   }
 
+  /**
+   * Retrieves messages by their IDs.
+   *
+   * **Performance Warning**: This method calls `findMessageInAnyThread` for each message ID,
+   * which scans all threads in the KV store. For large numbers of messages or threads,
+   * this can result in significant latency. Consider using `listMessages` with specific
+   * thread IDs when the thread context is known.
+   */
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
 
     try {
-      // Fetch and parse all messages from their respective threads
+      // Fetch and parse all messages from their respective threads (expensive: scans all threads per message)
       const messages = (await Promise.all(messageIds.map(id => this.findMessageInAnyThread(id)))).filter(
         result => !!result,
       ) as (MastraMessageV1 & { _index: string })[];
@@ -714,15 +756,21 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    if (!threadId.trim()) {
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+
+    // Validate each threadId is a non-empty string (avoid TypeError on non-string inputs)
+    const isValidThreadId = (id: unknown): boolean => typeof id === 'string' && id.trim().length > 0;
+
+    if (threadIds.length === 0 || threadIds.some(id => !isValidThreadId(id))) {
       throw new MastraError(
         {
           id: 'STORAGE_CLOUDFLARE_LIST_MESSAGES_INVALID_THREAD_ID',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
+          details: { threadId: Array.isArray(threadId) ? JSON.stringify(threadId) : String(threadId) },
         },
-        new Error('threadId must be a non-empty string'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
 
@@ -746,21 +794,23 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
-      // Step 1: Get thread messages (for pagination)
+      // Step 1: Get thread messages from all specified threads (for pagination)
       const threadMessageIds = new Set<string>();
-      try {
-        const threadMessagesKey = this.getThreadMessagesKey(threadId);
-        const allIds = await this.getFullOrder(threadMessagesKey);
-        allIds.forEach(id => threadMessageIds.add(id));
-      } catch {
-        // If no message order found, continue with empty set
+      for (const tid of threadIds) {
+        try {
+          const threadMessagesKey = this.getThreadMessagesKey(tid);
+          const allIds = await this.getFullOrder(threadMessagesKey);
+          allIds.forEach(id => threadMessageIds.add(id));
+        } catch {
+          // If no message order found for this thread, continue
+        }
       }
 
-      // Fetch thread messages
+      // Fetch thread messages from all threads
       const threadMessages = await this.fetchAndParseMessagesFromMultipleThreads(
         Array.from(threadMessageIds),
         undefined,
-        threadId,
+        threadIds.length === 1 ? threadIds[0] : undefined,
       );
 
       // Filter thread messages by resourceId if specified
@@ -824,7 +874,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       let includedMessages: (MastraMessageV1 & { _index?: number })[] = [];
       if (include && include.length > 0) {
         const includedMessageIds = new Set<string>();
-        await this.getIncludedMessagesWithContext(threadId, include, includedMessageIds);
+        await this.getIncludedMessagesWithContext(include, includedMessageIds);
 
         // Remove IDs that are already in paginated messages to avoid duplicate fetches
         const paginatedIds = new Set(paginatedMessages.map(m => m.id));
@@ -886,7 +936,12 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       }));
 
       // Use MessageList for proper deduplication and format conversion to V2
-      const list = new MessageList({ threadId, resourceId }).add(prepared as MastraMessageV1[], 'memory');
+      // Use first threadId for context when multiple threads are provided
+      const primaryThreadId = Array.isArray(threadId) ? threadId[0] : threadId;
+      const list = new MessageList({ threadId: primaryThreadId, resourceId }).add(
+        prepared as MastraMessageV1[],
+        'memory',
+      );
       let finalMessages = list.get.all.db();
 
       // Sort final messages with type-aware comparator and stable tiebreaker
@@ -912,7 +967,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
       // Otherwise, check if there are more pages in the pagination window
-      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const threadIdSet = new Set(threadIds);
+      const returnedThreadMessageIds = new Set(
+        finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
+      );
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
       const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + paginatedCount < total;
 
@@ -929,11 +987,11 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           id: 'CLOUDFLARE_STORAGE_LIST_MESSAGES_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: `Failed to list messages for thread ${threadId}: ${
+          text: `Failed to list messages for thread ${Array.isArray(threadId) ? threadId.join(',') : threadId}: ${
             error instanceof Error ? error.message : String(error)
           }`,
           details: {
-            threadId,
+            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
           },
         },
