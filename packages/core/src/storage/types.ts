@@ -1,7 +1,7 @@
 import type { AISpanType } from '../ai-tracing';
 import type { MetricResult, TestInfo } from '../eval';
 import type { MemoryConfig } from '../memory/types';
-import type { WorkflowRunState } from '../workflows';
+import type { WorkflowRunState, WorkflowRunStatus } from '../workflows';
 import type { LegacyWorkflowRunState } from '../workflows/legacy';
 
 export type StoragePagination = {
@@ -37,6 +37,16 @@ export interface WorkflowRuns {
   runs: WorkflowRun[];
   total: number;
 }
+
+export type StorageListWorkflowRunsInput = {
+  workflowName?: string;
+  fromDate?: Date;
+  toDate?: Date;
+  limit?: number;
+  offset?: number;
+  resourceId?: string;
+  status?: WorkflowRunStatus;
+};
 
 export interface StorageWorkflowRun {
   workflow_name: string;

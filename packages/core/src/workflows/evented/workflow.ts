@@ -16,6 +16,7 @@ import type {
   WatchEvent,
   StepWithComponent,
   WorkflowStreamEvent,
+  WorkflowEngineType,
 } from '../../workflows/types';
 import { EMITTER_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
@@ -312,6 +313,7 @@ export class EventedWorkflow<
 > extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
   constructor(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
     super(params);
+    this.engineType = 'evented';
   }
 
   __registerMastra(mastra: Mastra) {
@@ -335,6 +337,7 @@ export class EventedWorkflow<
         retryConfig: this.retryConfig,
         cleanup: () => this.runs.delete(runIdToUse),
         workflowSteps: this.steps,
+        workflowEngineType: this.engineType,
       });
 
     this.runs.set(runIdToUse, run);
@@ -357,6 +360,7 @@ export class EventedWorkflow<
           context: {},
           activePaths: [],
           serializedStepGraph: this.serializedStepGraph,
+          activeStepsPath: {},
           suspendedPaths: {},
           resumeLabels: {},
           waitingPaths: {},
@@ -393,6 +397,7 @@ export class EventedRun<
     cleanup?: () => void;
     workflowSteps: Record<string, StepWithComponent>;
     validateInputs?: boolean;
+    workflowEngineType: WorkflowEngineType;
   }) {
     super(params);
     this.serializedStepGraph = params.serializedStepGraph;
@@ -425,15 +430,16 @@ export class EventedRun<
       snapshot: {
         runId: this.runId,
         serializedStepGraph: this.serializedStepGraph,
+        status: 'running',
         value: {},
         context: {} as any,
         runtimeContext: Object.fromEntries(runtimeContext.entries()),
         activePaths: [],
+        activeStepsPath: {},
         suspendedPaths: {},
         resumeLabels: {},
         waitingPaths: {},
         timestamp: Date.now(),
-        status: 'running',
       },
     });
 

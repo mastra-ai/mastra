@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import { ensureDate, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { createSqlBuilder } from '../../sql-builder';
@@ -179,20 +179,18 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
+    status,
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     const fullTableName = this.operations.getTableName(TABLE_WORKFLOW_SNAPSHOT);
     try {
       const builder = createSqlBuilder().select().from(fullTableName);
       const countBuilder = createSqlBuilder().count().from(fullTableName);
 
       if (workflowName) builder.whereAnd('workflow_name = ?', workflowName);
+      if (status) {
+        builder.whereAnd("json_extract(snapshot, '$.status') = ?", status);
+        countBuilder.whereAnd("json_extract(snapshot, '$.status') = ?", status);
+      }
       if (resourceId) {
         const hasResourceId = await this.operations.hasColumn(fullTableName, 'resourceId');
         if (hasResourceId) {

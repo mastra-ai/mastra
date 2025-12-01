@@ -31,6 +31,7 @@ import type {
   StepWithComponent,
   SuspendOptions,
   WorkflowStreamEvent,
+  WorkflowEngineType,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
@@ -128,6 +129,7 @@ export class InngestRun<
       };
       cleanup?: () => void;
       workflowSteps: Record<string, StepWithComponent>;
+      workflowEngineType: WorkflowEngineType;
     },
     inngest: Inngest,
   ) {
@@ -202,6 +204,7 @@ export class InngestRun<
         snapshot: {
           ...snapshot,
           status: 'canceled' as any,
+          value: snapshot.value,
         },
       });
     }
@@ -222,14 +225,15 @@ export class InngestRun<
       snapshot: {
         runId: this.runId,
         serializedStepGraph: this.serializedStepGraph,
+        status: 'running',
         value: {},
         context: {} as any,
         activePaths: [],
         suspendedPaths: {},
+        activeStepsPath: {},
         resumeLabels: {},
         waitingPaths: {},
         timestamp: Date.now(),
-        status: 'running',
       },
     });
 
@@ -495,6 +499,8 @@ export class InngestWorkflow<
 
     super(workflowParams as WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>);
 
+    this.engineType = 'inngest';
+
     const flowControlEntries = Object.entries({ concurrency, rateLimit, throttle, debounce, priority }).filter(
       ([_, value]) => value !== undefined,
     );
@@ -597,6 +603,7 @@ export class InngestWorkflow<
           retryConfig: this.retryConfig,
           cleanup: () => this.runs.delete(runIdToUse),
           workflowSteps: this.steps,
+          workflowEngineType: this.engineType,
         },
         this.inngest,
       );
@@ -621,6 +628,7 @@ export class InngestWorkflow<
           value: {},
           context: {},
           activePaths: [],
+          activeStepsPath: {},
           waitingPaths: {},
           serializedStepGraph: this.serializedStepGraph,
           suspendedPaths: {},
@@ -2030,14 +2038,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           resourceId,
           snapshot: {
             runId,
+            status: workflowStatus,
             value: executionContext.state,
             context: stepResults as any,
-            activePaths: [],
+            activePaths: executionContext.executionPath,
+            activeStepsPath: executionContext.activeStepsPath,
             suspendedPaths: executionContext.suspendedPaths,
             resumeLabels: executionContext.resumeLabels,
             waitingPaths: {},
             serializedStepGraph,
-            status: workflowStatus,
             result,
             error,
             // @ts-ignore
@@ -2200,6 +2209,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             workflowId,
             runId,
             executionPath: [...executionContext.executionPath, index],
+            activeStepsPath: executionContext.activeStepsPath,
             suspendedPaths: executionContext.suspendedPaths,
             resumeLabels: executionContext.resumeLabels,
             retryConfig: executionContext.retryConfig,

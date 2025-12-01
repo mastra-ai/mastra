@@ -20,6 +20,7 @@ import type {
   PaginationArgs,
   StorageResourceType,
   ThreadSortOptions,
+  StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
@@ -417,14 +418,7 @@ export class DynamoDBStore extends MastraStorage {
     return this.stores.workflows.loadWorkflowSnapshot({ workflowName, runId });
   }
 
-  async getWorkflowRuns(args?: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns> {
+  async getWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     return this.stores.workflows.getWorkflowRuns(args);
   }
 
