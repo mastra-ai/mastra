@@ -28,35 +28,25 @@ describe('Agent Type Tests', () => {
       expectTypeOf(options.structuredOutput?.schema).toEqualTypeOf<typeof mySchema | undefined>();
     });
 
-    it('BUG: should allow Zod schema in defaultOptions.structuredOutput (AgentConfig)', () => {
+    it('should allow Zod schema in defaultOptions.structuredOutput (AgentConfig)', () => {
       const mySchema = z.object({
         result: z.string(),
         confidence: z.number(),
       });
 
-      // This is the core issue from #9657:
+      // Issue #9657: This should compile without errors
       // When defaultOptions is used in AgentConfig, it should accept any valid OutputSchema
-      // for the structuredOutput.schema property, not just `undefined`
-      //
-      // BUG: The following code causes a TypeScript error:
-      // "Type 'ZodObject<...>' is not assignable to type 'undefined'"
-      //
-      // This is because AgentConfig.defaultOptions uses AgentExecutionOptions without
-      // a generic parameter, causing OUTPUT to default to `undefined`.
-      //
-      // EXPECTED BEHAVIOR: This should compile without errors
-      // ACTUAL BEHAVIOR: TypeScript error - schema expects `undefined` not a Zod schema
+      // for the structuredOutput.schema property
 
       const config: Partial<AgentConfig> = {
         defaultOptions: {
           structuredOutput: {
-            // @ts-expect-error - This line demonstrates the bug. Remove @ts-expect-error after fix.
-            schema: mySchema, // BUG: "Type 'ZodObject<...>' is not assignable to type 'undefined'"
+            schema: mySchema,
           },
         },
       };
 
-      // After the fix, the schema should accept any OutputSchema type
+      // The schema should accept any OutputSchema type
       assertType<Partial<AgentConfig>>(config);
     });
 
@@ -79,20 +69,17 @@ describe('Agent Type Tests', () => {
       expectTypeOf<typeof zodDiscriminatedUnion>().toExtend<OutputSchema>();
     });
 
-    it('should demonstrate the root cause: unparameterized AgentExecutionOptions defaults OUTPUT to undefined', () => {
-      // When AgentExecutionOptions is used without generic params, OUTPUT defaults to undefined
-      // This is the root cause - the schema type becomes `undefined` instead of `OutputSchema`
+    it('should allow any OutputSchema in AgentConfig.defaultOptions.structuredOutput.schema', () => {
+      // The fix changes AgentConfig.defaultOptions to use AgentExecutionOptions<OutputSchema>
+      // instead of AgentExecutionOptions (which defaults OUTPUT to undefined)
 
-      type DefaultOptions = AgentExecutionOptions; // No generic parameter
-      type StructuredOutputType = NonNullable<DefaultOptions['structuredOutput']>;
+      // AgentExecutionOptions<OutputSchema> should have schema: OutputSchema
+      type OptionsWithOutputSchema = AgentExecutionOptions<OutputSchema>;
+      type StructuredOutputType = NonNullable<OptionsWithOutputSchema['structuredOutput']>;
       type SchemaType = StructuredOutputType['schema'];
 
-      // BUG: SchemaType is `undefined` instead of `OutputSchema`
-      // After fix, this assertion should be removed and the one below should pass
-      expectTypeOf<SchemaType>().toEqualTypeOf<undefined>();
-
-      // After fix, uncomment this line and remove the one above:
-      // expectTypeOf<SchemaType>().toExtend<OutputSchema>();
+      // After fix: SchemaType is `OutputSchema` (accepts Zod schemas, JSONSchema7, etc.)
+      expectTypeOf<SchemaType>().toEqualTypeOf<OutputSchema>();
     });
   });
 });
