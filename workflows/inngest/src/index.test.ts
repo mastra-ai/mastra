@@ -4895,6 +4895,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result.status).toBe('success');
       expect(result).toEqual({
         status: 'success',
+        input: { value: 0 },
         steps: {
           input: {
             value: 0,
@@ -4949,6 +4950,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result2.status).toBe('success');
       expect(result2).toEqual({
         status: 'success',
+        input: {},
         steps: {
           input: {},
           step1: {
@@ -5096,6 +5098,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result.status).toBe('success');
       expect(result).toEqual({
         status: 'success',
+        input: { value: 0 },
         steps: {
           input: {
             value: 0,
@@ -5149,6 +5152,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result2.status).toBe('success');
       expect(result2).toEqual({
         status: 'success',
+        input: { value: 0 },
         steps: {
           input: { value: 0 },
           step1: {
@@ -5314,6 +5318,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result.status).toBe('success');
       expect(result).toEqual({
         status: 'success',
+        input: { value: 0 },
         steps: {
           input: { value: 0 },
           step1: {
@@ -5367,6 +5372,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result2.status).toBe('success');
       expect(result2).toEqual({
         status: 'success',
+        input: {},
         steps: {
           input: {},
           step1: {
@@ -5414,6 +5420,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result3.status).toBe('success');
       expect(result3).toEqual({
         status: 'success',
+        input: {},
         steps: {
           input: {},
           step1: {
@@ -5940,6 +5947,7 @@ describe('MastraInngestWorkflow', () => {
       });
       expect(result).toEqual({
         status: 'success',
+        input: { value: 0 },
         steps: {
           input: {
             value: 0,
@@ -6115,6 +6123,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result.status).toBe('success');
       expect(result).toEqual({
         status: 'success',
+        input: {},
         steps: {
           input: {},
           initialStep: {
@@ -6242,6 +6251,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result2.status).toBe('success');
       expect(result2).toEqual({
         status: 'success',
+        input: { input: 'start' },
         steps: {
           input: { input: 'start' },
           initialStep: {
@@ -6330,6 +6340,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result3.status).toBe('success');
       expect(result3).toEqual({
         status: 'success',
+        input: {},
         steps: {
           input: {},
           initialStep: {
