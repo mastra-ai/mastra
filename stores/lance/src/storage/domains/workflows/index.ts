@@ -1,7 +1,7 @@
 import type { Connection } from '@lancedb/lancedb';
 import type { StepResult, WorkflowRunState, WorkflowRuns } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { WorkflowRun } from '@mastra/core/storage';
+import type { StorageListWorkflowRunsInput, WorkflowRun } from '@mastra/core/storage';
 import { ensureDate, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 
 function parseWorkflowRun(row: any): WorkflowRun {
@@ -95,11 +95,13 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
         createdAt = now;
       }
 
+      const { status, value, ...rest } = snapshot;
+
       const record = {
         workflow_name: workflowName,
         run_id: runId,
         resourceId,
-        snapshot: JSON.stringify(snapshot),
+        snapshot: JSON.stringify({ status, value, ...rest }), // this is to ensure status is always just before value, for when querying the db by status
         createdAt,
         updatedAt: now,
       };
@@ -177,15 +179,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns(args?: {
-    namespace?: string;
-    resourceId?: string;
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-  }): Promise<WorkflowRuns> {
+  async getWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     try {
       const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
 
@@ -195,6 +189,17 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
 
       if (args?.workflowName) {
         conditions.push(`workflow_name = '${args.workflowName.replace(/'/g, "''")}'`);
+      }
+
+      if (args?.status) {
+        const escapedStatus = args.status
+          .replace(/\\/g, '\\\\')
+          .replace(/'/g, "''")
+          .replace(/%/g, '\\%')
+          .replace(/_/g, '\\_');
+        // Note: Using LIKE pattern since LanceDB doesn't support JSON extraction on string columns
+        // The pattern ensures we match the workflow status (which appears before "value") and not step status
+        conditions.push(`\`snapshot\` LIKE '%"status":"${escapedStatus}","value"%'`);
       }
 
       if (args?.resourceId) {
@@ -239,7 +244,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
           id: 'LANCE_STORE_GET_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { namespace: args?.namespace ?? '', workflowName: args?.workflowName ?? '' },
+          details: { resourceId: args?.resourceId ?? '', workflowName: args?.workflowName ?? '' },
         },
         error,
       );

@@ -285,6 +285,7 @@ describe('vNext Workflow Handlers', () => {
       });
 
       expect(result).toEqual({
+        activeStepsPath: {},
         error: undefined,
         status: 'success',
         result: { result: 'success' },

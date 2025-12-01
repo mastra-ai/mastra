@@ -1,4 +1,10 @@
-import type { StepResult, WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
+import type {
+  StepResult,
+  StorageListWorkflowRunsInput,
+  WorkflowRun,
+  WorkflowRuns,
+  WorkflowRunState,
+} from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import sql from 'mssql';
@@ -78,13 +84,14 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         snapshot = {
           context: {},
           activePaths: [],
+          activeStepsPath: {},
           timestamp: Date.now(),
           suspendedPaths: {},
           resumeLabels: {},
           serializedStepGraph: [],
+          status: 'pending',
           value: {},
           waitingPaths: {},
-          status: 'pending',
           runId: runId,
           runtimeContext: {},
         } as WorkflowRunState;
@@ -369,14 +376,8 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
+    status,
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
       const paramMap: Record<string, any> = {};
@@ -384,6 +385,11 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       if (workflowName) {
         conditions.push(`[workflow_name] = @workflowName`);
         paramMap['workflowName'] = workflowName;
+      }
+
+      if (status) {
+        conditions.push(`JSON_VALUE([snapshot], '$.status') = @status`);
+        paramMap['status'] = status;
       }
 
       if (resourceId) {

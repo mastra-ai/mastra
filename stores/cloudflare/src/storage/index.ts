@@ -26,6 +26,7 @@ import type {
   PaginationArgs,
   StorageDomains,
   StorageResourceType,
+  StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
@@ -347,29 +348,8 @@ export class CloudflareStore extends MastraStorage {
     return this.stores.legacyEvals.getEvals(options);
   }
 
-  async getWorkflowRuns({
-    workflowName,
-    limit = 20,
-    offset = 0,
-    resourceId,
-    fromDate,
-    toDate,
-  }: {
-    workflowName?: string;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-    fromDate?: Date;
-    toDate?: Date;
-  } = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.getWorkflowRuns({
-      workflowName,
-      limit,
-      offset,
-      resourceId,
-      fromDate,
-      toDate,
-    });
+  async getWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
+    return this.stores.workflows.getWorkflowRuns(args);
   }
 
   async getWorkflowRunById({

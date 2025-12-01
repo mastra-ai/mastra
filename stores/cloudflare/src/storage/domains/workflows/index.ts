@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { TABLE_WORKFLOW_SNAPSHOT, ensureDate, WorkflowsStorage } from '@mastra/core/storage';
-import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { StoreOperationsCloudflare } from '../operations';
 
@@ -72,7 +72,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
           workflow_name: workflowName,
           run_id: runId,
           resourceId,
-          snapshot: typeof snapshot === 'string' ? snapshot : JSON.stringify(snapshot),
+          snapshot: JSON.stringify(snapshot),
           createdAt: new Date(),
           updatedAt: new Date(),
         },
@@ -173,14 +173,8 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     resourceId,
     fromDate,
     toDate,
-  }: {
-    workflowName?: string;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-    fromDate?: Date;
-    toDate?: Date;
-  } = {}): Promise<WorkflowRuns> {
+    status,
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       // List all keys in the workflow snapshot table
       const prefix = this.buildWorkflowSnapshotPrefix({ workflowName });
@@ -205,12 +199,13 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
         try {
           // Additional check: if resourceId filter is provided but key doesn't have resourceId, skip
           if (resourceId && !keyResourceId) continue;
+          const snapshotData = typeof data.snapshot === 'string' ? JSON.parse(data.snapshot) : data.snapshot;
+          if (status && snapshotData.status !== status) continue;
           // Filter by fromDate/toDate
           const createdAt = ensureDate(data.createdAt);
           if (fromDate && createdAt && createdAt < fromDate) continue;
           if (toDate && createdAt && createdAt > toDate) continue;
           // Parse the snapshot from JSON string if needed
-          const snapshotData = typeof data.snapshot === 'string' ? JSON.parse(data.snapshot) : data.snapshot;
           const resourceIdToUse = keyResourceId || data.resourceId;
           const run = this.parseWorkflowRun({
             ...data,

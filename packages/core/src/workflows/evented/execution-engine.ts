@@ -5,6 +5,7 @@ import type {
   StepResult,
   Mastra,
   ExecutionEngineOptions,
+  RestartExecutionParams,
 } from '../..';
 import type { RuntimeContext } from '../../di';
 import type { Event } from '../../events/types';
@@ -45,6 +46,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
     graph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
+    restart?: RestartExecutionParams;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;

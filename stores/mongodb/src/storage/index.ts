@@ -21,6 +21,7 @@ import type {
   AITracesPaginatedArg,
   CreateAISpanRecord,
   UpdateAISpanRecord,
+  StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
@@ -274,14 +275,7 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.traces.batchTraceInsert({ records });
   }
 
-  async getWorkflowRuns(args?: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns> {
+  async getWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     return this.stores.workflows.getWorkflowRuns(args);
   }
 

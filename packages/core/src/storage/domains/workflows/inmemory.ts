@@ -1,6 +1,6 @@
 import type { StepResult, WorkflowRunState } from '../../../workflows';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../constants';
-import type { StorageWorkflowRun, WorkflowRun, WorkflowRuns } from '../../types';
+import type { StorageWorkflowRun, WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
 import type { StoreOperations } from '../operations';
 import { WorkflowsStorage } from './base';
 
@@ -41,6 +41,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       snapshot = {
         context: {},
         activePaths: [],
+        activeStepsPath: {},
         timestamp: Date.now(),
         suspendedPaths: {},
         resumeLabels: {},
@@ -100,6 +101,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       snapshot = {
         context: {},
         activePaths: [],
+        activeStepsPath: {},
         timestamp: Date.now(),
         suspendedPaths: {},
         resumeLabels: {},
@@ -181,17 +183,34 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
+    status,
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     let runs = Array.from(this.collection.values());
 
     if (workflowName) runs = runs.filter((run: any) => run.workflow_name === workflowName);
+    if (status) {
+      runs = runs.filter((run: any) => {
+        let snapshot: WorkflowRunState | string = run?.snapshot!;
+
+        if (!snapshot) {
+          return false;
+        }
+
+        if (typeof snapshot === 'string') {
+          try {
+            snapshot = JSON.parse(snapshot) as WorkflowRunState;
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          } catch (error) {
+            return false;
+          }
+        } else {
+          snapshot = JSON.parse(JSON.stringify(snapshot)) as WorkflowRunState;
+        }
+
+        return snapshot.status === status;
+      });
+    }
+
     if (fromDate && toDate) {
       runs = runs.filter(
         (run: any) =>

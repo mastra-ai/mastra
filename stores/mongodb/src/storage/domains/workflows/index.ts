@@ -1,6 +1,6 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
 import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT, safelyParseJSON } from '@mastra/core/storage';
-import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { StoreOperationsMongoDB } from '../operations';
 
@@ -123,19 +123,15 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns(args?: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns> {
+  async getWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     const options = args || {};
     try {
       const query: any = {};
       if (options.workflowName) {
         query['workflow_name'] = options.workflowName;
+      }
+      if (options.status) {
+        query['snapshot.status'] = options.status;
       }
       if (options.fromDate) {
         query['createdAt'] = { $gte: options.fromDate };
