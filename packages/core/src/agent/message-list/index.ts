@@ -78,6 +78,28 @@ export type UIMessageWithMetadata = UIMessageV4 & {
   metadata?: Record<string, unknown>;
 };
 
+// OpenAI raw API format types (tool_calls/tool_call_id)
+type OpenAIToolCall = {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+};
+
+type OpenAIAssistantMessageWithToolCalls = {
+  role: 'assistant';
+  content: string | null;
+  tool_calls: OpenAIToolCall[];
+};
+
+type OpenAIToolResultMessage = {
+  role: 'tool';
+  content: string;
+  tool_call_id: string;
+};
+
 export type MessageInput =
   | AIV5Type.UIMessage
   | AIV5Type.ModelMessage
@@ -1509,6 +1531,10 @@ export class MessageList {
     if (MessageList.isMastraDBMessage(message)) {
       return this.hydrateMastraDBMessageFields(message);
     }
+    // Check for OpenAI tool format before AIV4CoreMessage
+    if (MessageList.hasOpenAIToolFormat(message)) {
+      return this.openAIToolFormatToMastraDBMessage(message, messageSource);
+    }
     if (MessageList.isAIV4CoreMessage(message)) {
       return this.aiV4CoreMessageToMastraDBMessage(message, messageSource);
     }
@@ -1920,6 +1946,103 @@ export class MessageList {
     } satisfies MastraDBMessage;
   }
 
+  private openAIToolFormatToMastraDBMessage(message: MessageInput, messageSource: MessageSource): MastraDBMessage {
+    const id = 'id' in message ? (message.id as string) : this.newMessageId();
+    const parts: UIMessageV4['parts'] = [];
+    const toolInvocations: ToolInvocationV4[] = [];
+
+    if (MessageList.hasOpenAIToolCalls(message)) {
+      const msg = message as OpenAIAssistantMessageWithToolCalls;
+      if (msg.content) {
+        parts.push({
+          type: 'text',
+          text: msg.content,
+        });
+      }
+
+      for (const toolCall of msg.tool_calls) {
+        const args = toolCall.function.arguments ? JSON.parse(toolCall.function.arguments) : {};
+
+        parts.push({
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'call',
+            toolCallId: toolCall.id,
+            toolName: toolCall.function.name,
+            args,
+          },
+        });
+
+        toolInvocations.push({
+          state: 'call',
+          toolCallId: toolCall.id,
+          toolName: toolCall.function.name,
+          args,
+        });
+      }
+
+      const content: MastraMessageContentV2 = {
+        format: 2,
+        parts,
+      };
+
+      if (toolInvocations.length) {
+        content.toolInvocations = toolInvocations;
+      }
+
+      return {
+        id,
+        role: 'assistant',
+        createdAt: this.generateCreatedAt(messageSource),
+        threadId: this.memoryInfo?.threadId,
+        resourceId: this.memoryInfo?.resourceId,
+        content,
+      };
+    }
+
+    if (MessageList.hasOpenAIToolCallId(message)) {
+      const msg = message as OpenAIToolResultMessage;
+      parts.push({
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: msg.tool_call_id,
+          toolName: '',
+          args: {},
+          result: msg.content,
+        },
+      });
+
+      toolInvocations.push({
+        state: 'result',
+        toolCallId: msg.tool_call_id,
+        toolName: '',
+        args: {},
+        result: msg.content,
+      });
+
+      const content: MastraMessageContentV2 = {
+        format: 2,
+        parts,
+      };
+
+      if (toolInvocations.length) {
+        content.toolInvocations = toolInvocations;
+      }
+
+      return {
+        id,
+        role: 'assistant', // Tool results are stored as assistant messages internally
+        createdAt: this.generateCreatedAt(messageSource),
+        threadId: this.memoryInfo?.threadId,
+        resourceId: this.memoryInfo?.resourceId,
+        content,
+      };
+    }
+
+    throw new Error('openAIToolFormatToMastraDBMessage called without tool_calls or tool_call_id');
+  }
+
   static isAIV4UIMessage(msg: MessageInput): msg is UIMessageV4 {
     return (
       !MessageList.isMastraMessage(msg) &&
@@ -1932,18 +2055,20 @@ export class MessageList {
   static isAIV5CoreMessage(msg: MessageInput): msg is AIV5Type.ModelMessage {
     return (
       !MessageList.isMastraMessage(msg) &&
+      !MessageList.hasOpenAIToolFormat(msg) &&
       !(`parts` in msg) &&
       `content` in msg &&
-      MessageList.hasAIV5CoreMessageCharacteristics(msg)
+      MessageList.hasAIV5CoreMessageCharacteristics(msg as CoreMessageV4 | AIV5Type.ModelMessage)
     );
   }
   static isAIV4CoreMessage(msg: MessageInput): msg is CoreMessageV4 {
     // V4 CoreMessage has role and content like V5, but content can be array of parts
     return (
       !MessageList.isMastraMessage(msg) &&
+      !MessageList.hasOpenAIToolFormat(msg) &&
       !(`parts` in msg) &&
       `content` in msg &&
-      !MessageList.hasAIV5CoreMessageCharacteristics(msg)
+      !MessageList.hasAIV5CoreMessageCharacteristics(msg as CoreMessageV4 | AIV5Type.ModelMessage)
     );
   }
 
@@ -1964,6 +2089,25 @@ export class MessageList {
         `format` in msg.content &&
         msg.content.format === 2,
     );
+  }
+
+  private static hasOpenAIToolCalls(msg: unknown): msg is OpenAIAssistantMessageWithToolCalls {
+    const m = msg as Record<string, unknown>;
+    return (
+      m.role === 'assistant' &&
+      'tool_calls' in m &&
+      Array.isArray(m.tool_calls) &&
+      (m.tool_calls as unknown[]).length > 0
+    );
+  }
+
+  private static hasOpenAIToolCallId(msg: unknown): msg is OpenAIToolResultMessage {
+    const m = msg as Record<string, unknown>;
+    return m.role === 'tool' && 'tool_call_id' in m && typeof m.tool_call_id === 'string';
+  }
+
+  private static hasOpenAIToolFormat(msg: unknown): boolean {
+    return MessageList.hasOpenAIToolCalls(msg) || MessageList.hasOpenAIToolCallId(msg);
   }
 
   private static getRole(message: MessageInput): MastraDBMessage['role'] {
