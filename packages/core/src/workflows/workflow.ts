@@ -1223,6 +1223,7 @@ export class Workflow<
         step: resume.steps?.length > 0 ? (resume.steps as any) : undefined,
         requestContext,
         tracingContext,
+        writableStream: writer,
         outputOptions: { includeState: true, includeResumeLabels: true },
         label: resume.label,
       });

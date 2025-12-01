@@ -2025,6 +2025,36 @@ export class MessageList {
           }
           return prev;
         }, 0);
+
+        // OpenAI sends reasoning items (rs_...) inside part.providerMetadata.openai.itemId.
+        // When the reasoning text is empty, the default cache key logic produces "reasoning0"
+        // for *all* reasoning parts. This makes distinct rs_ entries appear identical, so the
+        // message-merging logic drops the latest reasoning item. The result is that subsequent
+        // OpenAI calls fail with:
+        //
+        //   "Item 'fc_...' was provided without its required 'reasoning' item"
+        //
+        // To fix this, we incorporate the OpenAI itemId into the cache key so each rs_ entry
+        // is treated as distinct.
+        //
+        // Note: We cast `part` to `any` here because the AI SDK’s ReasoningUIPart V4 type does
+        // NOT declare `providerMetadata` (even though Mastra attaches it at runtime). This
+        // access is safe in JavaScript, but TypeScript cannot type it without augmentation,
+        // so we intentionally narrow to `any` only for this metadata lookup.
+
+        const partAny = part as any;
+
+        if (
+          partAny &&
+          Object.hasOwn(partAny, 'providerMetadata') &&
+          partAny.providerMetadata &&
+          Object.hasOwn(partAny.providerMetadata, 'openai') &&
+          partAny.providerMetadata.openai &&
+          Object.hasOwn(partAny.providerMetadata.openai, 'itemId')
+        ) {
+          const itemId = partAny.providerMetadata.openai.itemId;
+          key += `|${itemId}`;
+        }
       }
       if (part.type === `file`) {
         key += part.data;
