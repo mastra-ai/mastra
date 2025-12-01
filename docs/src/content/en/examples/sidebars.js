@@ -22,7 +22,6 @@ const sidebars = {
           id: "agents/supervisor-agent",
           label: "Supervisor Agent",
         },
-        { type: "doc", id: "agents/request-context", label: "Request Context" },
       ],
     },
     {
