@@ -2,7 +2,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { Tool } from '@mastra/core/tools';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { MastraServerAdapter, sanitizeStreamChunk } from '@mastra/server/server-adapter';
+import { MastraServerAdapter, redactStreamChunk } from '@mastra/server/server-adapter';
 import type { BodyLimitOptions, ServerRoute, StreamOptions } from '@mastra/server/server-adapter';
 import type { Context, Env, Hono, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -137,8 +137,8 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
             if (done) break;
 
             if (value) {
-              // Sanitize chunk to remove sensitive data (system prompts, tool definitions, API keys) before sending to the client
-              const outputValue = this.streamOptions.sanitize ? sanitizeStreamChunk(value) : value;
+              // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
+              const outputValue = this.streamOptions.redact ? redactStreamChunk(value) : value;
               if (streamFormat === 'sse') {
                 await stream.write(`data: ${JSON.stringify(outputValue)}\n\n`);
               } else {

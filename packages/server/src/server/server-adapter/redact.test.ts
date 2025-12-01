@@ -1,14 +1,14 @@
 /**
- * Unit tests for sanitizeStreamChunk function
+ * Unit tests for redactStreamChunk function
  *
  * @see https://github.com/mastra-ai/mastra/issues/10363
  */
 
 import type { ChunkType } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
-import { sanitizeStreamChunk } from './sanitize';
+import { redactStreamChunk } from './redact';
 
-describe('sanitizeStreamChunk', () => {
+describe('redactStreamChunk', () => {
   describe('v1 format (legacy)', () => {
     it('should remove request from step-start chunk', () => {
       const chunk = {
@@ -24,15 +24,15 @@ describe('sanitizeStreamChunk', () => {
         warnings: [],
       };
 
-      const sanitized = sanitizeStreamChunk(chunk as ChunkType);
+      const redacted = redactStreamChunk(chunk as ChunkType);
 
-      expect(sanitized.type).toBe('step-start');
-      expect((sanitized as any).messageId).toBe('msg-123');
-      expect((sanitized as any).request).toEqual({});
-      expect((sanitized as any).warnings).toEqual([]);
+      expect(redacted.type).toBe('step-start');
+      expect((redacted as any).messageId).toBe('msg-123');
+      expect((redacted as any).request).toEqual({});
+      expect((redacted as any).warnings).toEqual([]);
 
       // Verify sensitive data is removed
-      const chunkStr = JSON.stringify(sanitized);
+      const chunkStr = JSON.stringify(redacted);
       expect(chunkStr).not.toContain('SECRET INSTRUCTIONS');
       expect(chunkStr).not.toContain('secretTool');
     });
@@ -51,15 +51,15 @@ describe('sanitizeStreamChunk', () => {
         response: { id: 'resp-123' },
       };
 
-      const sanitized = sanitizeStreamChunk(chunk as ChunkType);
+      const redacted = redactStreamChunk(chunk as ChunkType);
 
-      expect(sanitized.type).toBe('step-finish');
-      expect((sanitized as any).finishReason).toBe('stop');
-      expect((sanitized as any).request).toBeUndefined();
-      expect((sanitized as any).response).toEqual({ id: 'resp-123' });
+      expect(redacted.type).toBe('step-finish');
+      expect((redacted as any).finishReason).toBe('stop');
+      expect((redacted as any).request).toBeUndefined();
+      expect((redacted as any).response).toEqual({ id: 'resp-123' });
 
       // Verify sensitive data is removed
-      const chunkStr = JSON.stringify(sanitized);
+      const chunkStr = JSON.stringify(redacted);
       expect(chunkStr).not.toContain('CONFIDENTIAL');
     });
   });
@@ -83,16 +83,16 @@ describe('sanitizeStreamChunk', () => {
         },
       };
 
-      const sanitized = sanitizeStreamChunk(chunk as ChunkType);
+      const redacted = redactStreamChunk(chunk as ChunkType);
 
-      expect(sanitized.type).toBe('step-start');
-      expect((sanitized as any).runId).toBe('run-123');
-      expect((sanitized as any).payload.request).toEqual({});
-      expect((sanitized as any).payload.warnings).toEqual([]);
-      expect((sanitized as any).payload.messageId).toBe('msg-123');
+      expect(redacted.type).toBe('step-start');
+      expect((redacted as any).runId).toBe('run-123');
+      expect((redacted as any).payload.request).toEqual({});
+      expect((redacted as any).payload.warnings).toEqual([]);
+      expect((redacted as any).payload.messageId).toBe('msg-123');
 
       // Verify sensitive data is removed
-      const chunkStr = JSON.stringify(sanitized);
+      const chunkStr = JSON.stringify(redacted);
       expect(chunkStr).not.toContain('SECRET INSTRUCTIONS');
       expect(chunkStr).not.toContain('secretTool');
     });
@@ -131,16 +131,16 @@ describe('sanitizeStreamChunk', () => {
         },
       };
 
-      const sanitized = sanitizeStreamChunk(chunk as ChunkType);
+      const redacted = redactStreamChunk(chunk as ChunkType);
 
-      expect(sanitized.type).toBe('step-finish');
-      expect((sanitized as any).payload.metadata.request).toBeUndefined();
-      expect((sanitized as any).payload.metadata.id).toBe('id-123');
-      expect((sanitized as any).payload.output.steps[0].request).toBeUndefined();
-      expect((sanitized as any).payload.output.steps[0].response).toEqual({ id: 'resp-123' });
+      expect(redacted.type).toBe('step-finish');
+      expect((redacted as any).payload.metadata.request).toBeUndefined();
+      expect((redacted as any).payload.metadata.id).toBe('id-123');
+      expect((redacted as any).payload.output.steps[0].request).toBeUndefined();
+      expect((redacted as any).payload.output.steps[0].response).toEqual({ id: 'resp-123' });
 
       // Verify sensitive data is removed
-      const chunkStr = JSON.stringify(sanitized);
+      const chunkStr = JSON.stringify(redacted);
       expect(chunkStr).not.toContain('API_KEY');
       expect(chunkStr).not.toContain('sk-secret');
     });
@@ -175,22 +175,22 @@ describe('sanitizeStreamChunk', () => {
         },
       };
 
-      const sanitized = sanitizeStreamChunk(chunk as ChunkType);
+      const redacted = redactStreamChunk(chunk as ChunkType);
 
-      expect(sanitized.type).toBe('finish');
-      expect((sanitized as any).payload.metadata.request).toBeUndefined();
-      expect((sanitized as any).payload.output.steps[0].request).toBeUndefined();
+      expect(redacted.type).toBe('finish');
+      expect((redacted as any).payload.metadata.request).toBeUndefined();
+      expect((redacted as any).payload.output.steps[0].request).toBeUndefined();
 
       // Verify sensitive data is removed
-      const chunkStr = JSON.stringify(sanitized);
+      const chunkStr = JSON.stringify(redacted);
       expect(chunkStr).not.toContain('INTERNAL_SECRET');
     });
   });
 
   describe('edge cases', () => {
     it('should handle null/undefined chunks', () => {
-      expect(sanitizeStreamChunk(null as any)).toBeNull();
-      expect(sanitizeStreamChunk(undefined as any)).toBeUndefined();
+      expect(redactStreamChunk(null as any)).toBeNull();
+      expect(redactStreamChunk(undefined as any)).toBeUndefined();
     });
 
     it('should pass through other chunk types unchanged', () => {
@@ -199,8 +199,8 @@ describe('sanitizeStreamChunk', () => {
         textDelta: 'Hello',
       };
 
-      const sanitized = sanitizeStreamChunk(textDeltaChunk as ChunkType);
-      expect(sanitized).toEqual(textDeltaChunk);
+      const redacted = redactStreamChunk(textDeltaChunk as ChunkType);
+      expect(redacted).toEqual(textDeltaChunk);
     });
 
     it('should handle chunks without request field', () => {
@@ -210,8 +210,8 @@ describe('sanitizeStreamChunk', () => {
         warnings: [],
       };
 
-      const sanitized = sanitizeStreamChunk(chunk as ChunkType);
-      expect(sanitized).toEqual(chunk);
+      const redacted = redactStreamChunk(chunk as ChunkType);
+      expect(redacted).toEqual(chunk);
     });
 
     it('should handle v2 chunks without payload', () => {
@@ -220,8 +220,8 @@ describe('sanitizeStreamChunk', () => {
         runId: 'run-123',
       };
 
-      const sanitized = sanitizeStreamChunk(chunk as ChunkType);
-      expect(sanitized).toEqual(chunk);
+      const redacted = redactStreamChunk(chunk as ChunkType);
+      expect(redacted).toEqual(chunk);
     });
 
     it('should handle output.steps that is not an array', () => {
@@ -238,9 +238,9 @@ describe('sanitizeStreamChunk', () => {
         },
       };
 
-      const sanitized = sanitizeStreamChunk(chunk as ChunkType);
-      expect((sanitized as any).payload.metadata.request).toBeUndefined();
-      expect((sanitized as any).payload.output.steps).toBe('not-an-array');
+      const redacted = redactStreamChunk(chunk as ChunkType);
+      expect((redacted as any).payload.metadata.request).toBeUndefined();
+      expect((redacted as any).payload.output.steps).toBe('not-an-array');
     });
   });
 });

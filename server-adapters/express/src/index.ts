@@ -3,7 +3,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { Tool } from '@mastra/core/tools';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { ServerRoute, BodyLimitOptions, StreamOptions } from '@mastra/server/server-adapter';
-import { MastraServerAdapter, sanitizeStreamChunk } from '@mastra/server/server-adapter';
+import { MastraServerAdapter, redactStreamChunk } from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
 
 // Extend Express types to include Mastra context
@@ -126,8 +126,8 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
         if (done) break;
 
         if (value) {
-          // Sanitize chunk to remove sensitive data (system prompts, tool definitions, API keys) before sending to the client
-          const outputValue = this.streamOptions.sanitize ? sanitizeStreamChunk(value) : value;
+          // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
+          const outputValue = this.streamOptions.redact ? redactStreamChunk(value) : value;
           if (streamFormat === 'sse') {
             res.write(`data: ${JSON.stringify(outputValue)}\n\n`);
           } else {

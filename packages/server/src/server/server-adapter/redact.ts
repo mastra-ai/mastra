@@ -1,7 +1,7 @@
 import type { ChunkType, OutputSchema } from '@mastra/core/stream';
 
 /**
- * Removes sensitive data from stream chunks before they are sent to clients.
+ * Redacts sensitive data from stream chunks before they are sent to clients.
  *
  * This function strips out request bodies that may contain sensitive information
  * such as system prompts, tool definitions, API keys, and other configuration data.
@@ -20,10 +20,10 @@ import type { ChunkType, OutputSchema } from '@mastra/core/stream';
  * - `finish.payload.metadata.request` - Contains the request metadata
  * - `finish.payload.output.steps[].request` - Contains request data for each step
  *
- * @param chunk - The stream chunk to sanitize
- * @returns A new chunk with sensitive data removed, or the original chunk if no sanitization needed
+ * @param chunk - The stream chunk to redact
+ * @returns A new chunk with sensitive data removed, or the original chunk if no redaction needed
  */
-export function sanitizeStreamChunk<OUTPUT extends OutputSchema = undefined>(
+export function redactStreamChunk<OUTPUT extends OutputSchema = undefined>(
   chunk: ChunkType<OUTPUT>,
 ): ChunkType<OUTPUT> {
   if (!chunk || typeof chunk !== 'object') {
@@ -66,17 +66,17 @@ export function sanitizeStreamChunk<OUTPUT extends OutputSchema = undefined>(
       if ('payload' in typedChunk && typedChunk.payload && typeof typedChunk.payload === 'object') {
         // v2 format: Remove request from metadata and output.steps[].request
         const { payload, ...rest } = typedChunk;
-        const sanitizedPayload = { ...(payload as Record<string, unknown>) };
+        const redactedPayload = { ...(payload as Record<string, unknown>) };
 
         // Remove metadata.request
-        if (sanitizedPayload.metadata && typeof sanitizedPayload.metadata === 'object') {
-          const { request, ...metadataRest } = sanitizedPayload.metadata as Record<string, unknown>;
-          sanitizedPayload.metadata = metadataRest;
+        if (redactedPayload.metadata && typeof redactedPayload.metadata === 'object') {
+          const { request, ...metadataRest } = redactedPayload.metadata as Record<string, unknown>;
+          redactedPayload.metadata = metadataRest;
         }
 
         // Remove request from output.steps[]
-        if (sanitizedPayload.output && typeof sanitizedPayload.output === 'object') {
-          const output = { ...(sanitizedPayload.output as Record<string, unknown>) };
+        if (redactedPayload.output && typeof redactedPayload.output === 'object') {
+          const output = { ...(redactedPayload.output as Record<string, unknown>) };
           if (Array.isArray(output.steps)) {
             output.steps = output.steps.map((step: Record<string, unknown>) => {
               if (step && typeof step === 'object') {
@@ -86,13 +86,13 @@ export function sanitizeStreamChunk<OUTPUT extends OutputSchema = undefined>(
               return step;
             });
           }
-          sanitizedPayload.output = output;
+          redactedPayload.output = output;
         }
 
         return {
           ...rest,
           type: 'step-finish',
-          payload: sanitizedPayload,
+          payload: redactedPayload,
         } as ChunkType<OUTPUT>;
       } else if ('request' in typedChunk) {
         // v1 format: Remove request at root level
@@ -110,17 +110,17 @@ export function sanitizeStreamChunk<OUTPUT extends OutputSchema = undefined>(
       if ('payload' in typedChunk && typedChunk.payload && typeof typedChunk.payload === 'object') {
         // v2 format: Remove request from metadata and output.steps[].request
         const { payload, ...rest } = typedChunk;
-        const sanitizedPayload = { ...(payload as Record<string, unknown>) };
+        const redactedPayload = { ...(payload as Record<string, unknown>) };
 
         // Remove metadata.request
-        if (sanitizedPayload.metadata && typeof sanitizedPayload.metadata === 'object') {
-          const { request, ...metadataRest } = sanitizedPayload.metadata as Record<string, unknown>;
-          sanitizedPayload.metadata = metadataRest;
+        if (redactedPayload.metadata && typeof redactedPayload.metadata === 'object') {
+          const { request, ...metadataRest } = redactedPayload.metadata as Record<string, unknown>;
+          redactedPayload.metadata = metadataRest;
         }
 
         // Remove request from output.steps[]
-        if (sanitizedPayload.output && typeof sanitizedPayload.output === 'object') {
-          const output = { ...(sanitizedPayload.output as Record<string, unknown>) };
+        if (redactedPayload.output && typeof redactedPayload.output === 'object') {
+          const output = { ...(redactedPayload.output as Record<string, unknown>) };
           if (Array.isArray(output.steps)) {
             output.steps = output.steps.map((step: Record<string, unknown>) => {
               if (step && typeof step === 'object') {
@@ -130,13 +130,13 @@ export function sanitizeStreamChunk<OUTPUT extends OutputSchema = undefined>(
               return step;
             });
           }
-          sanitizedPayload.output = output;
+          redactedPayload.output = output;
         }
 
         return {
           ...rest,
           type: 'finish',
-          payload: sanitizedPayload,
+          payload: redactedPayload,
         } as ChunkType<OUTPUT>;
       } else if ('request' in typedChunk) {
         // v1 format: Remove request at root level
