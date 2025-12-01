@@ -110,6 +110,7 @@ export class Memory extends MastraMemory {
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfig;
       vectorSearchString?: string;
+      threadId: string;
     },
   ): Promise<{ messages: MastraDBMessage[] }> {
     const { threadId, resourceId, perPage: perPageArg, page, orderBy, threadConfig, vectorSearchString, filter } = args;
