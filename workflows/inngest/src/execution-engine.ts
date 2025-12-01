@@ -35,14 +35,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   // =============================================================================
 
   /**
-   * Exclude input from result in Inngest workflows
-   */
-  // TODO: get rid of this
-  protected get includeInputInResult(): boolean {
-    return false;
-  }
-
-  /**
    * Format errors with stack traces for better debugging in Inngest
    */
   protected formatResultError(error: Error | string | undefined, lastOutput: StepResult<any, any, any, any>): string {
