@@ -20,7 +20,13 @@ export interface IMastraLogger {
       page?: number;
       perPage?: number;
     },
-  ): Promise<{ logs: BaseLogMessage[]; total: number; page: number; perPage: number; hasMore: boolean }>;
+  ): Promise<{
+    logs: BaseLogMessage[];
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  }>;
   listLogsByRunId(_args: {
     transportId: string;
     runId: string;
@@ -30,7 +36,13 @@ export interface IMastraLogger {
     filters?: Record<string, any>;
     page?: number;
     perPage?: number;
-  }): Promise<{ logs: BaseLogMessage[]; total: number; page: number; perPage: number; hasMore: boolean }>;
+  }): Promise<{
+    logs: BaseLogMessage[];
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  }>;
 }
 
 export abstract class MastraLogger implements IMastraLogger {
@@ -72,19 +84,20 @@ export abstract class MastraLogger implements IMastraLogger {
       perPage?: number;
     },
   ) {
+    const defaultResult = {
+      logs: [],
+      total: 0,
+      page: params?.page ?? 1,
+      perPage: params?.perPage ?? 100,
+      hasMore: false,
+    };
+
     if (!transportId || !this.transports.has(transportId)) {
-      return { logs: [], total: 0, page: params?.page ?? 1, perPage: params?.perPage ?? 100, hasMore: false };
+      return defaultResult;
     }
 
-    return (
-      this.transports.get(transportId)!.listLogs(params) ?? {
-        logs: [],
-        total: 0,
-        page: params?.page ?? 1,
-        perPage: params?.perPage ?? 100,
-        hasMore: false,
-      }
-    );
+    const transport = this.transports.get(transportId);
+    return transport?.listLogs(params) ?? defaultResult;
   }
 
   async listLogsByRunId({
@@ -106,20 +119,30 @@ export abstract class MastraLogger implements IMastraLogger {
     page?: number;
     perPage?: number;
   }) {
+    const defaultResult = {
+      logs: [],
+      total: 0,
+      page: page ?? 1,
+      perPage: perPage ?? 100,
+      hasMore: false,
+    };
+
     if (!transportId || !this.transports.has(transportId) || !runId) {
-      return { logs: [], total: 0, page: page ?? 1, perPage: perPage ?? 100, hasMore: false };
+      return defaultResult;
     }
 
+    const transport = this.transports.get(transportId);
+
     return (
-      this.transports
-        .get(transportId)!
-        .listLogsByRunId({ runId, fromDate, toDate, logLevel, filters, page, perPage }) ?? {
-        logs: [],
-        total: 0,
-        page: page ?? 1,
-        perPage: perPage ?? 100,
-        hasMore: false,
-      }
+      transport?.listLogsByRunId({
+        runId,
+        fromDate,
+        toDate,
+        logLevel,
+        filters,
+        page,
+        perPage,
+      }) ?? defaultResult
     );
   }
 }
