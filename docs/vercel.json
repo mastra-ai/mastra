@@ -1561,6 +1561,11 @@
       "permanent": true
     },
     {
+      "source": "/:path(ja)?/guides/migrations/upgrade-to-v1",
+      "destination": "/:path/guides/migrations/upgrade-to-latest-0x",
+      "permanent": true
+    },
+    {
       "source": "/:path(ja)?/models/providers/iflowcn",
       "destination": "/:path/models/providers/",
       "permanent": true
