@@ -15,13 +15,22 @@ export class BaseResource {
    */
   public async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
     let lastError: Error | null = null;
-    const { baseUrl, retries = 3, backoffMs = 100, maxBackoffMs = 1000, headers = {}, credentials } = this.options;
+    const {
+      baseUrl,
+      retries = 3,
+      backoffMs = 100,
+      maxBackoffMs = 1000,
+      headers = {},
+      credentials,
+      fetch: customFetch,
+    } = this.options;
+    const fetchFn = customFetch || fetch;
 
     let delay = backoffMs;
 
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        const response = await fetch(`${baseUrl.replace(/\/$/, '')}${path}`, {
+        const response = await fetchFn(`${baseUrl.replace(/\/$/, '')}${path}`, {
           ...options,
           headers: {
             ...(options.body &&

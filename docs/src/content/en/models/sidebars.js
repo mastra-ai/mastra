@@ -203,8 +203,8 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "providers/io-intelligence",
-          label: "IO Intelligence",
+          id: "providers/io-net",
+          label: "IO.NET",
         },
         {
           type: "doc",
