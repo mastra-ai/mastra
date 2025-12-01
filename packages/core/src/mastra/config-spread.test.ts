@@ -2,7 +2,7 @@ import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
 import { MastraError } from '../error';
-import { Mastra, type Config } from './index';
+import { Mastra } from './index';
 
 /**
  * Tests for handling spread config objects in Mastra constructor.
