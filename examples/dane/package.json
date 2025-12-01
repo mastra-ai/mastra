@@ -40,7 +40,7 @@
     "boxen": "^8.0.1",
     "chalk": "^5.4.1",
     "cli-table3": "^0.6.5",
-    "commander": "^12.1.0",
+    "commander": "^14.0.2",
     "dotenv": "^16.4.7",
     "drizzle-kit": "^0.30.5",
     "execa": "^9.5.2",
