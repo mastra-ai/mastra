@@ -54,6 +54,8 @@ export interface ClientOptions {
   abortSignal?: AbortSignal;
   /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
   credentials?: 'omit' | 'same-origin' | 'include';
+  /** Custom fetch function to use for HTTP requests. Useful for environments like Tauri that require custom fetch implementations. */
+  fetch?: typeof fetch;
 }
 
 export interface RequestOptions {
