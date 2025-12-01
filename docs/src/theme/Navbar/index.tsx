@@ -1,8 +1,6 @@
 import Link from "@docusaurus/Link";
 import { GithubStarCount } from "@site/src/components/github-star-count";
 import { MobileDocsDropdown } from "@site/src/components/mobile-docs-dropdown";
-import { ThemeSwitcher } from "@site/src/components/theme-switcher";
-import VersionControl from "@site/src/components/version-control";
 import NavbarLayout from "@theme/Navbar/Layout";
 import NavbarMobileSidebarToggle from "@theme/Navbar/MobileSidebar/Toggle";
 import { type ReactNode } from "react";

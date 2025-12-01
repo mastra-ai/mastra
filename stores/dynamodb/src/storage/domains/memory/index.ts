@@ -271,15 +271,18 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    if (!threadId.trim()) {
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
           id: 'STORAGE_DYNAMODB_LIST_MESSAGES_INVALID_THREAD_ID',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
         },
-        new Error('threadId must be a non-empty string'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
 
@@ -383,7 +386,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       if (include && include.length > 0) {
         // Use the existing _getIncludedMessages helper, but adapt it for listMessages format
         const selectBy = { include };
-        includeMessages = await this._getIncludedMessages(threadId, selectBy);
+        includeMessages = await this._getIncludedMessages(selectBy);
 
         // Deduplicate: only add messages that aren't already in the paginated results
         for (const includeMsg of includeMessages) {
@@ -435,7 +438,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId,
+            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
           },
         },
@@ -608,9 +611,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   }
 
   // Helper method to get included messages with context
-  private async _getIncludedMessages(threadId: string, selectBy: any): Promise<MastraDBMessage[]> {
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
+  private async _getIncludedMessages(selectBy: any): Promise<MastraDBMessage[]> {
     if (!selectBy?.include?.length) {
       return [];
     }
@@ -619,18 +620,26 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     for (const includeItem of selectBy.include) {
       try {
-        const { id, threadId: targetThreadId, withPreviousMessages = 0, withNextMessages = 0 } = includeItem;
-        const searchThreadId = targetThreadId || threadId;
+        const { id, withPreviousMessages = 0, withNextMessages = 0 } = includeItem;
+
+        // Step 1: Get the target message by ID to find its threadId
+        const targetResult = await this.service.entities.message.get({ entity: 'message', id }).go();
+        if (!targetResult.data) {
+          this.logger.warn('Target message not found', { id });
+          continue;
+        }
+
+        const targetMessageData = targetResult.data as any;
+        const searchThreadId = targetMessageData.threadId;
 
         this.logger.debug('Getting included messages for', {
           id,
-          targetThreadId,
           searchThreadId,
           withPreviousMessages,
           withNextMessages,
         });
 
-        // Get all messages for the target thread
+        // Step 2: Get all messages for the target thread
         const query = this.service.entities.message.query.byThread({ entity: 'message', threadId: searchThreadId });
         const results = await query.go();
         const allMessages = results.data
@@ -653,10 +662,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           return timeA - timeB;
         });
 
-        // Find the target message
+        // Find the target message index
         const targetIndex = allMessages.findIndex((msg: MastraDBMessage) => msg.id === id);
         if (targetIndex === -1) {
-          this.logger.warn('Target message not found', { id, threadId: searchThreadId });
+          this.logger.warn('Target message not found in thread', { id, threadId: searchThreadId });
           continue;
         }
 

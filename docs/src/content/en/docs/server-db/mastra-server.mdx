@@ -36,7 +36,7 @@ export const mastra = new Mastra({
   // ...
   server: {
     port: 3000, // Defaults to 4111
-    timeout: 10000, // Defaults to 30000 (30s)
+    timeout: 10000, // Defaults to 3 * 60 * 1000 (3 minutes)
   },
 });
 ```
@@ -87,3 +87,32 @@ export const mastra = new Mastra({
   },
 });
 ```
+
+## Stream data redaction
+
+When streaming agent responses over HTTP, Mastra automatically redacts sensitive information from stream chunks before sending them to clients. This prevents accidental exposure of:
+
+- System prompts and agent instructions
+- Tool definitions and their parameters
+- API keys and other credentials in request bodies
+- Internal configuration data
+
+This redaction happens at the HTTP boundary, so internal callbacks like `onStepFinish` still have access to the full request data for debugging and observability purposes.
+
+### Configuring redaction
+
+By default, redaction is enabled. If you're using the server adapters directly (e.g., `@mastra/hono` or `@mastra/express`), you can configure this behavior:
+
+```typescript title="Custom server setup" copy
+import { HonoServerAdapter } from "@mastra/hono";
+import { mastra } from "./mastra";
+
+const adapter = new HonoServerAdapter({
+  mastra,
+  streamOptions: {
+    redact: true,
+  },
+});
+```
+
+Set `redact: false` only for internal services or debugging scenarios where you need access to the full request data in stream responses.

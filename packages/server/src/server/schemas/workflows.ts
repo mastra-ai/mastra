@@ -101,6 +101,7 @@ export const listWorkflowRunsQuerySchema = createOffsetPaginationSchema().extend
  */
 const workflowExecutionBodySchema = z.object({
   inputData: z.unknown().optional(),
+  initialState: z.unknown().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
   tracingOptions: tracingOptionsSchema.optional(),
 });

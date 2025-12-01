@@ -92,6 +92,13 @@ const processor = new PIIDetector({
       isOptional: true,
       default: "true",
     },
+    {
+      name: "providerOptions",
+      type: "ProviderOptions",
+      description: "Provider-specific options passed to the internal detection agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`)",
+      isOptional: true,
+      default: "undefined",
+    },
   ]}
 />
 

@@ -1853,27 +1853,29 @@ This ordering ensures that if your output guardrail calls `abort()`, memory proc
 
 ## Creating custom processors
 
-Custom processors implement the `InputProcessor` or `OutputProcessor` interface:
+Custom processors implement the `Processor` interface:
 
 ### Custom input processor
 
 ```typescript title="src/mastra/processors/custom-input.ts" showLineNumbers copy
 import type {
-  InputProcessor,
-  MastraMessageV2,
-  RuntimeContext,
+  Processor,
+  MastraDBMessage,
+  RequestContext,
 } from "@mastra/core";
 
-export class CustomInputProcessor implements InputProcessor {
-  name = "custom-input";
+export class CustomInputProcessor implements Processor {
+  id = "custom-input";
 
   async processInput({
     messages,
+    systemMessages,
     context,
   }: {
-    messages: MastraMessageV2[];
-    context: RuntimeContext;
-  }): Promise<MastraMessageV2[]> {
+    messages: MastraDBMessage[];
+    systemMessages: CoreMessage[];
+    context: RequestContext;
+  }): Promise<MastraDBMessage[]> {
     // Transform messages before they reach the LLM
     return messages.map((msg) => ({
       ...msg,
@@ -1886,25 +1888,71 @@ export class CustomInputProcessor implements InputProcessor {
 }
 ```
 
+The `processInput` method receives:
+- `messages`: User and assistant messages (not system messages)
+- `systemMessages`: All system messages (agent instructions, memory context, user-provided system prompts)
+- `messageList`: The full MessageList instance for advanced use cases
+- `abort`: Function to stop processing and return early
+- `requestContext`: Execution metadata like `threadId` and `resourceId`
+
+The method can return:
+- `MastraDBMessage[]` — Transformed messages array (backward compatible)
+- `{ messages: MastraDBMessage[]; systemMessages: CoreMessage[] }` — Both messages and modified system messages
+
+The framework handles both return formats, so modifying system messages is optional and existing processors continue to work.
+
+### Modifying system messages
+
+To modify system messages (e.g., trim verbose prompts for smaller models), return an object with both `messages` and `systemMessages`:
+
+```typescript title="src/mastra/processors/system-trimmer.ts" showLineNumbers copy
+import type { Processor, CoreMessage, MastraDBMessage } from "@mastra/core";
+
+export class SystemTrimmer implements Processor {
+  id = "system-trimmer";
+
+  async processInput({
+    messages,
+    systemMessages,
+  }): Promise<{ messages: MastraDBMessage[]; systemMessages: CoreMessage[] }> {
+    // Trim system messages for smaller models
+    const trimmedSystemMessages = systemMessages.map((msg) => ({
+      ...msg,
+      content:
+        typeof msg.content === "string"
+          ? msg.content.substring(0, 500)
+          : msg.content,
+    }));
+
+    return { messages, systemMessages: trimmedSystemMessages };
+  }
+}
+```
+
+This is useful for:
+- Trimming verbose system prompts for models with smaller context windows
+- Filtering or modifying semantic recall content to prevent "prompt too long" errors
+- Dynamically adjusting system instructions based on the conversation
+
 ### Custom output processor
 
 ```typescript title="src/mastra/processors/custom-output.ts" showLineNumbers copy
 import type {
-  OutputProcessor,
-  MastraMessageV2,
-  RuntimeContext,
+  Processor,
+  MastraDBMessage,
+  RequestContext,
 } from "@mastra/core";
 
-export class CustomOutputProcessor implements OutputProcessor {
-  name = "custom-output";
+export class CustomOutputProcessor implements Processor {
+  id = "custom-output";
 
   async processOutputResult({
     messages,
     context,
   }: {
-    messages: MastraMessageV2[];
-    context: RuntimeContext;
-  }): Promise<MastraMessageV2[]> {
+    messages: MastraDBMessage[];
+    context: RequestContext;
+  }): Promise<MastraDBMessage[]> {
     // Transform messages after the LLM generates them
     return messages.filter((msg) => msg.role !== "system");
   }
@@ -1914,15 +1962,13 @@ export class CustomOutputProcessor implements OutputProcessor {
     context,
   }: {
     stream: ReadableStream;
-    context: RuntimeContext;
+    context: RequestContext;
   }): Promise<ReadableStream> {
     // Transform streaming responses
     return stream;
   }
 }
 ```
-
-Both `processInput` and `processOutputResult` receive a `context` object containing execution metadata such as `threadId`, `resourceId`, and other runtime information.
 
 ## Built-in Utility Processors
 
@@ -8882,10 +8928,18 @@ When a schema is provided, the agent receives the working memory as a JSON objec
 }
 ```
 
+### Merge Semantics for Schema-Based Memory
+
+Schema-based working memory uses **merge semantics**, meaning the agent only needs to include fields it wants to add or update. Existing fields are preserved automatically.
+
+- **Object fields are deep merged:** Only provided fields are updated; others remain unchanged
+- **Set a field to `null` to delete it:** This explicitly removes the field from memory
+- **Arrays are replaced entirely:** When an array field is provided, it replaces the existing array (arrays are not merged element-by-element)
+
 ## Choosing Between Template and Schema
 
-- Use a **template** (Markdown) if you want the agent to maintain memory as a free-form text block, such as a user profile or scratchpad.
-- Use a **schema** if you need structured, type-safe data that can be validated and programmatically accessed as JSON.
+- Use a **template** (Markdown) if you want the agent to maintain memory as a free-form text block, such as a user profile or scratchpad. Templates use **replace semantics** — the agent must provide the complete memory content on each update.
+- Use a **schema** if you need structured, type-safe data that can be validated and programmatically accessed as JSON. Schemas use **merge semantics** — the agent only provides fields to update, and existing fields are preserved.
 - Only one mode can be active at a time: setting both `template` and `schema` is not supported.
 
 ## Example: Multi-step Retention
@@ -10703,7 +10757,6 @@ Use `configSelector` to choose the appropriate tracing configuration based on re
 ```ts title="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: new Observability({
-    default: { enabled: true }, // Provides 'default' instance
     configs: {
       langfuse: {
         serviceName: "langfuse-service",
@@ -10736,7 +10789,7 @@ export const mastra = new Mastra({
         return "langfuse";
       }
 
-      return "default";
+      throw new Error('no config found')
     },
   }),
 });
@@ -12990,6 +13043,64 @@ Key metadata considerations:
 - Only include fields you plan to filter or sort by - extra fields add overhead
 - Add timestamps (e.g., 'createdAt', 'lastUpdated') to track content freshness
 
+## Deleting Vectors
+
+When building RAG applications, you often need to clean up stale vectors when documents are deleted or updated. Mastra provides the `deleteVectors` method that supports deleting vectors by metadata filters, making it easy to remove all embeddings associated with a specific document.
+
+### Delete by Metadata Filter
+
+The most common use case is deleting all vectors for a specific document when a user deletes it:
+
+```ts title="delete-vectors.ts" showLineNumbers copy
+// Delete all vectors for a specific document
+await store.deleteVectors({
+  indexName: "myCollection",
+  filter: { docId: "document-123" },
+});
+```
+
+This is particularly useful when:
+- A user deletes a document and you need to remove all its chunks
+- You're re-indexing a document and want to remove old vectors first
+- You need to clean up vectors for a specific user or tenant
+
+### Delete Multiple Documents
+
+You can also use complex filters to delete vectors matching multiple conditions:
+
+```ts title="delete-vectors-advanced.ts" showLineNumbers copy
+// Delete all vectors for multiple documents
+await store.deleteVectors({
+  indexName: "myCollection",
+  filter: {
+    docId: { $in: ["doc-1", "doc-2", "doc-3"] },
+  },
+});
+
+// Delete vectors for a specific user's documents
+await store.deleteVectors({
+  indexName: "myCollection",
+  filter: {
+    $and: [
+      { userId: "user-123" },
+      { status: "archived" },
+    ],
+  },
+});
+```
+
+### Delete by Vector IDs
+
+If you have specific vector IDs to delete, you can pass them directly:
+
+```ts title="delete-by-ids.ts" showLineNumbers copy
+// Delete specific vectors by their IDs
+await store.deleteVectors({
+  indexName: "myCollection",
+  ids: ["vec-1", "vec-2", "vec-3"],
+});
+```
+
 ## Best Practices
 
 - Create indexes before bulk insertions
@@ -13386,7 +13497,7 @@ export const mastra = new Mastra({
   // ...
   server: {
     port: 3000, // Defaults to 4111
-    timeout: 10000, // Defaults to 30000 (30s)
+    timeout: 10000, // Defaults to 3 * 60 * 1000 (3 minutes)
   },
 });
 ```
@@ -14308,11 +14419,22 @@ console.log(result.messages); // MastraDBMessage[]
 console.log(result.total); // Total count
 console.log(result.hasMore); // Whether more pages exist
 
+// Get messages from multiple threads at once
+const multiThreadResult = await mastra
+  .getStorage()
+  .listMessages({
+    threadId: ["thread-1", "thread-2", "thread-3"],
+    page: 0,
+    perPage: 100
+  });
+
 // Get messages by their IDs
 const messages = await mastra
   .getStorage()
   .listMessagesById({ messageIds: messageIdArr });
 ```
+
+The `threadId` parameter accepts either a single thread ID string or an array of thread IDs to query messages from multiple threads in a single request.
 
 All message queries return `MastraDBMessage[]` format. If you need to convert messages to AI SDK formats for UI rendering, use the conversion utilities from `@mastra/ai-sdk/ui`:
 
@@ -14926,7 +15048,7 @@ For detailed documentation on all lifecycle hooks, see the [createTool() referen
 
 ## Tool using an agent
 
-Pipe an agent's `textStream` to the tool's `writer`. This streams partial output, and Mastra automatically aggregates the agent's usage into the tool run.
+Pipe an agent's `fullStream` to the tool's `writer`. This streams partial output, and Mastra automatically aggregates the agent's usage into the tool run.
 
 ```typescript showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
@@ -14940,7 +15062,7 @@ export const testTool = createTool({
     const testAgent = context?.mastra?.getAgent("testAgent");
     const stream = await testAgent?.stream(`What is the weather in ${city}?`);
 
-    await stream!.textStream.pipeTo(context?.writer!);
+    await stream!.fullStream.pipeTo(context?.writer!);
 
     return {
       value: await stream!.text,
@@ -19978,7 +20100,7 @@ console.log(response.text);
 <GithubLink
   outdated={true}
   marginTop="mt-16"
-  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/hierarchical-multi-agent"
+  href="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/hierarchical-multi-agent"
 />
 
 
@@ -20189,7 +20311,7 @@ console.log("Chunk Metadata:", metaTwo);
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/metadata-extraction"
   }
 />
@@ -20289,7 +20411,7 @@ console.log("Results:", result);
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/hybrid-vector-search"
   }
 />
@@ -20519,7 +20641,7 @@ console.log("Response:", cleanedResponse.text);
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/cleanup-rag"
   }
 />
@@ -20709,7 +20831,7 @@ console.log("Response:", answerThree.text);
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/cot-rag"
   }
 />
@@ -21060,7 +21182,7 @@ console.log(workflowResult.results);
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/cot-workflow-rag"
   }
 />
@@ -21779,7 +21901,7 @@ console.log("Response:", answerThree.text);
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/filter-rag"
   }
 />
@@ -21969,7 +22091,7 @@ console.log("Response:", answerFour.text);
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/graph-rag"
   }
 />
@@ -22207,7 +22329,7 @@ To view the full example code, see the [Github repository](https://github.com/ma
 <br />
 <br />
 
-<GithubLink link="https://github.com/mastra-ai/voice-examples/tree/main/speech-to-speech/call-analysis" />
+<GithubLink href="https://github.com/mastra-ai/voice-examples/tree/main/speech-to-speech/call-analysis" />
 
 
 ---
@@ -22298,7 +22420,7 @@ You can view the complete implementation of the Smart Voice Memo App on our GitH
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/voice-examples/tree/main/speech-to-text/voice-memo-app"
   }
 />
@@ -22460,7 +22582,7 @@ You can view the complete implementation of the Interactive Story Generator on o
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech/interactive-story"
   }
 />
@@ -22936,7 +23058,7 @@ You can view the complete implementation of the AI Debate with Turn Taking on ou
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech/turn-taking"
   }
 />
@@ -23775,6 +23897,7 @@ export async function POST(req: Request) {
 
   // Transform stream into AI SDK format and create UI messages stream
   const uiMessageStream = createUIMessageStream({
+    originalMessages: messages,
     execute: async ({ writer }) => {
       for await (const part of toAISdkStream(stream, { from: "agent" })!) {
         writer.write(part);
@@ -23867,6 +23990,7 @@ export async function POST(req: Request) {
   });
 
   const uiMessageStream = createUIMessageStream({
+    initialMessages: messages,
     execute: async ({ writer }) => {
       for await (const part of toAISdkStream(stream, {
         from: "agent",
@@ -29056,6 +29180,7 @@ The bot maintains conversation context through memory and delivers responses tha
 ---
 title: "Overview"
 description: "Guides on building with Mastra"
+showCopyButton: false
 ---
 
 import { CardGrid, CardGridItem } from "@site/src/components/CardGrid";
@@ -33780,7 +33905,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 57+ AI providers and 1155+ models through Mastra's model router."
+description: "Access 58+ AI providers and 1156+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -33793,7 +33918,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1155 models from 57 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1156 models from 58 providers through a single API.
 
 ## Features
 
@@ -33921,7 +34046,7 @@ Browse the directory of available models using the navigation on the left, or ex
             <span>Google</span>
           </div>
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 50 more</div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 51 more</div>
       </div>
     </CardGridItem>
 </CardGrid>
@@ -40778,10 +40903,10 @@ Direct access to individual AI model providers. Each provider offers unique mode
       href="/models/v1/providers/inference"
       logo="https://models.dev/logos/inference.svg"
     />    <CardGridItem
-      title="IO Intelligence"
+      title="IO.NET"
       description="17 models"
-      href="/models/v1/providers/io-intelligence"
-      logo="https://models.dev/logos/io-intelligence.svg"
+      href="/models/v1/providers/io-net"
+      logo="https://models.dev/logos/io-net.svg"
     />    <CardGridItem
       title="Llama"
       description="7 models"
@@ -40798,10 +40923,15 @@ Direct access to individual AI model providers. Each provider offers unique mode
       href="/models/v1/providers/lucidquery"
       logo="https://models.dev/logos/lucidquery.svg"
     />    <CardGridItem
-      title="Minimax"
+      title="MiniMax"
       description="1 models"
       href="/models/v1/providers/minimax"
       logo="https://models.dev/logos/minimax.svg"
+    />    <CardGridItem
+      title="MiniMax (China)"
+      description="1 models"
+      href="/models/v1/providers/minimax-cn"
+      logo="https://models.dev/logos/minimax-cn.svg"
     />    <CardGridItem
       title="ModelScope"
       description="7 models"
@@ -41423,6 +41553,300 @@ const agent = new Agent({
 
 
 ---
+title: "IO.NET | Models | Mastra"
+description: "Use IO.NET models with Mastra. 17 models available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+
+
+# <img src="https://models.dev/logos/io-net.svg" alt="IO.NET logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />IO.NET
+[EN] Source: https://mastra.ai/en/models/providers/io-net
+
+Access 17 IO.NET models through Mastra's model router. Authentication is handled automatically using the `IOINTELLIGENCE_API_KEY` environment variable.
+
+Learn more in the [IO.NET documentation](https://io.net/docs/guides/intelligence/io-intelligence).
+
+```bash
+IOINTELLIGENCE_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "io-net/Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [IO.NET documentation](https://io.net/docs/guides/intelligence/io-intelligence) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "io-net/deepseek-ai/DeepSeek-R1-0528",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 2,
+    "outputCost": 8.75
+  },
+  {
+    "model": "io-net/Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 106000,
+    "maxOutput": 4096,
+    "inputCost": 0.22,
+    "outputCost": 0.95
+  },
+  {
+    "model": "io-net/meta-llama/Llama-3.2-90B-Vision-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 16000,
+    "maxOutput": 4096,
+    "inputCost": 0.35,
+    "outputCost": 0.4
+  },
+  {
+    "model": "io-net/meta-llama/Llama-3.3-70B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.13,
+    "outputCost": 0.38
+  },
+  {
+    "model": "io-net/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 430000,
+    "maxOutput": 4096,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "io-net/mistralai/Devstral-Small-2505",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "io-net/mistralai/Magistral-Small-2506",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.5,
+    "outputCost": 1.5
+  },
+  {
+    "model": "io-net/mistralai/Mistral-Large-Instruct-2411",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 2,
+    "outputCost": 6
+  },
+  {
+    "model": "io-net/mistralai/Mistral-Nemo-Instruct-2407",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.02,
+    "outputCost": 0.04
+  },
+  {
+    "model": "io-net/moonshotai/Kimi-K2-Instruct-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 4096,
+    "inputCost": 0.39,
+    "outputCost": 1.9
+  },
+  {
+    "model": "io-net/moonshotai/Kimi-K2-Thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 32768,
+    "maxOutput": 4096,
+    "inputCost": 0.55,
+    "outputCost": 2.25
+  },
+  {
+    "model": "io-net/openai/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 4096,
+    "inputCost": 0.04,
+    "outputCost": 0.4
+  },
+  {
+    "model": "io-net/openai/gpt-oss-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 64000,
+    "maxOutput": 4096,
+    "inputCost": 0.03,
+    "outputCost": 0.14
+  },
+  {
+    "model": "io-net/Qwen/Qwen2.5-VL-32B-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 4096,
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "io-net/Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 4096,
+    "inputCost": 0.11,
+    "outputCost": 0.6
+  },
+  {
+    "model": "io-net/Qwen/Qwen3-Next-80B-A3B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 4096,
+    "inputCost": 0.1,
+    "outputCost": 0.8
+  },
+  {
+    "model": "io-net/zai-org/GLM-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 4096,
+    "inputCost": 0.4,
+    "outputCost": 1.75
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.intelligence.io.solutions/api/v1",
+    id: "io-net/Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar",
+    apiKey: process.env.IOINTELLIGENCE_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "io-net/zai-org/GLM-4.6"
+      : "io-net/Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar";
+  }
+});
+```
+
+
+
+
+---
 title: "Llama | Models | Mastra"
 description: "Use Llama models with Mastra. 7 models available."
 ---
@@ -41837,8 +42261,8 @@ const agent = new Agent({
 
 
 ---
-title: "Minimax | Models | Mastra"
-description: "Use Minimax models with Mastra. 1 model available."
+title: "MiniMax (China) | Models | Mastra"
+description: "Use MiniMax (China) models with Mastra. 1 model available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -41846,12 +42270,124 @@ description: "Use Minimax models with Mastra. 1 model available."
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-# <img src="https://models.dev/logos/minimax.svg" alt="Minimax logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Minimax
+# <img src="https://models.dev/logos/minimax-cn.svg" alt="MiniMax (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />MiniMax (China)
+[EN] Source: https://mastra.ai/en/models/providers/minimax-cn
+
+Access 1 MiniMax (China) model through Mastra's model router. Authentication is handled automatically using the `MINIMAX_API_KEY` environment variable.
+
+Learn more in the [MiniMax (China) documentation](https://platform.minimaxi.com/docs/guides/quickstart).
+
+```bash
+MINIMAX_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "minimax-cn/MiniMax-M2"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [MiniMax (China) documentation](https://platform.minimaxi.com/docs/guides/quickstart) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "minimax-cn/MiniMax-M2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 196608,
+    "maxOutput": 128000,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.minimaxi.com/anthropic/v1",
+    id: "minimax-cn/MiniMax-M2",
+    apiKey: process.env.MINIMAX_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "minimax-cn/MiniMax-M2"
+      : "minimax-cn/MiniMax-M2";
+  }
+});
+```
+
+
+
+## Direct Provider Installation
+
+This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/@ai-sdk/anthropic) for more details.
+
+```bash npm2yarn copy
+npm install @ai-sdk/anthropic
+```
+
+
+
+---
+title: "MiniMax | Models | Mastra"
+description: "Use MiniMax models with Mastra. 1 model available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# <img src="https://models.dev/logos/minimax.svg" alt="MiniMax logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />MiniMax
 [EN] Source: https://mastra.ai/en/models/providers/minimax
 
-Access 1 Minimax model through Mastra's model router. Authentication is handled automatically using the `MINIMAX_API_KEY` environment variable.
+Access 1 MiniMax model through Mastra's model router. Authentication is handled automatically using the `MINIMAX_API_KEY` environment variable.
 
-Learn more in the [Minimax documentation](https://platform.minimax.io/docs/guides/quickstart).
+Learn more in the [MiniMax documentation](https://platform.minimax.io/docs/guides/quickstart).
 
 ```bash
 MINIMAX_API_KEY=your-api-key
@@ -41879,7 +42415,7 @@ for await (const chunk of stream) {
 
 :::info
 
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Minimax documentation](https://platform.minimax.io/docs/guides/quickstart) for details.
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [MiniMax documentation](https://platform.minimax.io/docs/guides/quickstart) for details.
 
 :::
 
@@ -51023,6 +51559,17 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "providerOptions",
+              type: "ProviderOptions",
+              isOptional: true,
+              description:
+                "Provider-specific options passed to the internal structuring agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`).",
+            },
+          ],
+        },
       ],
     },
     {
@@ -55198,7 +55745,7 @@ const workflows = await mastraClient.listWorkflows();
 
 ## Working with a Specific Workflow
 
-Get an instance of a specific workflow as defined by the const name:
+Get an instance of a specific workflow by its ID:
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 export const testWorkflow = createWorkflow({
@@ -55207,12 +55754,12 @@ export const testWorkflow = createWorkflow({
 ```
 
 ```typescript
-const workflow = mastraClient.getWorkflow("testWorkflow");
+const workflow = mastraClient.getWorkflow("city-workflow");
 ```
 
 ## Workflow Methods
 
-### Get Workflow Details
+### details()
 
 Retrieve detailed information about a workflow:
 
@@ -55220,9 +55767,20 @@ Retrieve detailed information about a workflow:
 const details = await workflow.details();
 ```
 
-### Start workflow run asynchronously
+### createRun()
 
-Start a workflow run with inputData and await full run results:
+Create a new workflow run instance:
+
+```typescript
+const run = await workflow.createRun();
+
+// Or with an existing runId
+const run = await workflow.createRun({ runId: "existing-run-id" });
+```
+
+### startAsync()
+
+Start a workflow run and await the full result:
 
 ```typescript
 const run = await workflow.createRun();
@@ -55234,12 +55792,47 @@ const result = await run.startAsync({
 });
 ```
 
-### Resume Workflow run asynchronously
+You can also pass `initialState` to set the starting values for the workflow's state:
 
-Resume a suspended workflow step and await full run result:
+```typescript
+const result = await run.startAsync({
+  inputData: {
+    city: "New York",
+  },
+  initialState: {
+    count: 0,
+    items: [],
+  },
+});
+```
+
+The `initialState` object should match the structure defined in the workflow's `stateSchema`. See [Workflow State](/docs/v1/workflows/workflow-state) for more details.
+
+### start()
+
+Start a workflow run without waiting for completion:
 
 ```typescript
 const run = await workflow.createRun();
+
+await run.start({
+  inputData: {
+    city: "New York",
+  },
+});
+
+// Poll for results later
+const result = await workflow.runExecutionResult(run.runId);
+```
+
+This is useful for long-running workflows where you want to start execution and check results later.
+
+### resumeAsync()
+
+Resume a suspended workflow step and await the full result:
+
+```typescript
+const run = await workflow.createRun({ runId: prevRunId });
 
 const result = await run.resumeAsync({
   step: "step-id",
@@ -55247,85 +55840,68 @@ const result = await run.resumeAsync({
 });
 ```
 
-### Resume Workflow
+### resume()
 
-Resume workflow run:
+Resume a suspended workflow step without waiting for completion:
 
 ```typescript
-try {
-  const workflow = mastraClient.getWorkflow("testWorkflow");
+const run = await workflow.createRun({ runId: prevRunId });
 
-  const run = await workflow.createRun({ runId: prevRunId });
-
-  run.resume({
-    step: "step-id",
-    resumeData: { key: "value" },
-  });
-} catch (e) {
-  console.error(e);
-}
+await run.resume({
+  step: "step-id",
+  resumeData: { key: "value" },
+});
 ```
 
-### Stream Workflow
+### stream()
 
 Stream workflow execution for real-time updates:
 
 ```typescript
-try {
-  const workflow = mastraClient.getWorkflow("testWorkflow");
+const run = await workflow.createRun();
 
-  const run = await workflow.createRun();
+const stream = await run.stream({
+  inputData: {
+    city: "New York",
+  },
+});
 
-  const stream = await run.stream({
-    inputData: {
-      city: "New York",
-    },
-  });
-
-  for await (const chunk of stream) {
-    console.log(JSON.stringify(chunk, null, 2));
-  }
-} catch (e) {
-  console.error("Workflow error:", e);
+for await (const chunk of stream) {
+  console.log(JSON.stringify(chunk, null, 2));
 }
 ```
 
-### Get Workflow Run result
+### runExecutionResult()
 
-Get the result of a workflow run:
+Get the execution result for a workflow run:
 
 ```typescript
-try {
-  const workflow = mastraClient.getWorkflow("testWorkflow");
-
-  const run = await workflow.createRun();
-
-  // start the workflow run
-  const startResult = await run.start({
-    inputData: {
-      city: "New York",
-    },
-  });
-
-  const result = await workflow.runExecutionResult(run.runId);
-
-  console.log(result);
-} catch (e) {
-  console.error(e);
-}
+const result = await workflow.runExecutionResult(runId);
 ```
 
-This is useful when dealing with long running workflows. You can use this to poll the result of the workflow run.
-
-### Workflow run result
+<h3>Run result format</h3>
 
 A workflow run result yields the following:
 
-| Field            | Type                                                                                                                                                                                                                                               | Description                                      |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `payload`        | `{currentStep?: {id: string, status: string, output?: Record<string, any>, payload?: Record<string, any>}, workflowState: {status: string, steps: Record<string, {status: string, output?: Record<string, any>, payload?: Record<string, any>}>}}` | The current step and workflow state of the run   |
-| `eventTimestamp` | `Date`                                                                                                                                                                                                                                             | The timestamp of the event                       |
-| `runId`          | `string`                                                                                                                                                                                                                                           | Unique identifier for this workflow run instance |
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "Unique identifier for this workflow run instance",
+    },
+    {
+      name: "eventTimestamp",
+      type: "Date",
+      description: "The timestamp of the event",
+    },
+    {
+      name: "payload",
+      type: "object",
+      description: "Contains currentStep (id, status, output, payload) and workflowState (status, steps record)",
+    },
+  ]}
+/>
 
 
 ---
@@ -62215,6 +62791,371 @@ const workflowResult = await runEvals({
 
 
 ---
+title: "Reference: Scorer Utils | Evals"
+description: Utility functions for extracting data from scorer run inputs and outputs, including text content, reasoning, system messages, and tool calls.
+---
+
+# Scorer Utils
+[EN] Source: https://mastra.ai/en/reference/evals/scorer-utils
+
+Mastra provides utility functions to help extract and process data from scorer run inputs and outputs. These utilities are particularly useful in the `preprocess` step of custom scorers.
+
+## Import
+
+```typescript
+import {
+  getAssistantMessageFromRunOutput,
+  getReasoningFromRunOutput,
+  getUserMessageFromRunInput,
+  getSystemMessagesFromRunInput,
+  getCombinedSystemPrompt,
+  extractToolCalls,
+  extractInputMessages,
+  extractAgentResponseMessages,
+} from "@mastra/evals/scorers/utils";
+```
+
+## Message Extraction
+
+### getAssistantMessageFromRunOutput
+
+Extracts the text content from the first assistant message in the run output.
+
+```typescript
+const scorer = createScorer({
+  id: "my-scorer",
+  description: "My scorer",
+  type: "agent",
+})
+  .preprocess(({ run }) => {
+    const response = getAssistantMessageFromRunOutput(run.output);
+    return { response };
+  })
+  .generateScore(({ results }) => {
+    return results.preprocessStepResult?.response ? 1 : 0;
+  });
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "output",
+      type: "ScorerRunOutputForAgent",
+      isOptional: true,
+      description: "The scorer run output (array of MastraDBMessage)",
+    },
+  ]}
+/>
+
+**Returns:** `string | undefined` - The assistant message text, or undefined if no assistant message is found.
+
+### getUserMessageFromRunInput
+
+Extracts the text content from the first user message in the run input.
+
+```typescript
+.preprocess(({ run }) => {
+  const userMessage = getUserMessageFromRunInput(run.input);
+  return { userMessage };
+})
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "ScorerRunInputForAgent",
+      isOptional: true,
+      description: "The scorer run input containing input messages",
+    },
+  ]}
+/>
+
+**Returns:** `string | undefined` - The user message text, or undefined if no user message is found.
+
+### extractInputMessages
+
+Extracts text content from all input messages as an array.
+
+```typescript
+.preprocess(({ run }) => {
+  const allUserMessages = extractInputMessages(run.input);
+  return { conversationHistory: allUserMessages.join("\n") };
+})
+```
+
+**Returns:** `string[]` - Array of text strings from each input message.
+
+### extractAgentResponseMessages
+
+Extracts text content from all assistant response messages as an array.
+
+```typescript
+.preprocess(({ run }) => {
+  const allResponses = extractAgentResponseMessages(run.output);
+  return { allResponses };
+})
+```
+
+**Returns:** `string[]` - Array of text strings from each assistant message.
+
+## Reasoning Extraction
+
+### getReasoningFromRunOutput
+
+Extracts reasoning text from the run output. This is particularly useful when evaluating responses from reasoning models like `deepseek-reasoner` that produce chain-of-thought reasoning.
+
+Reasoning can be stored in two places:
+1. `content.reasoning` - a string field on the message content
+2. `content.parts` - as parts with `type: 'reasoning'` containing `details`
+
+```typescript
+import { 
+  getReasoningFromRunOutput, 
+  getAssistantMessageFromRunOutput 
+} from "@mastra/evals/scorers/utils";
+
+const reasoningQualityScorer = createScorer({
+  id: "reasoning-quality",
+  name: "Reasoning Quality",
+  description: "Evaluates the quality of model reasoning",
+  type: "agent",
+})
+  .preprocess(({ run }) => {
+    const reasoning = getReasoningFromRunOutput(run.output);
+    const response = getAssistantMessageFromRunOutput(run.output);
+    return { reasoning, response };
+  })
+  .analyze(({ results }) => {
+    const { reasoning } = results.preprocessStepResult || {};
+    return {
+      hasReasoning: !!reasoning,
+      reasoningLength: reasoning?.length || 0,
+      hasStepByStep: reasoning?.includes("step") || false,
+    };
+  })
+  .generateScore(({ results }) => {
+    const { hasReasoning, reasoningLength } = results.analyzeStepResult || {};
+    if (!hasReasoning) return 0;
+    // Score based on reasoning length (normalized to 0-1)
+    return Math.min(reasoningLength / 500, 1);
+  })
+  .generateReason(({ results, score }) => {
+    const { hasReasoning, reasoningLength } = results.analyzeStepResult || {};
+    if (!hasReasoning) {
+      return "No reasoning was provided by the model.";
+    }
+    return `Model provided ${reasoningLength} characters of reasoning. Score: ${score}`;
+  });
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "output",
+      type: "ScorerRunOutputForAgent",
+      isOptional: true,
+      description: "The scorer run output (array of MastraDBMessage)",
+    },
+  ]}
+/>
+
+**Returns:** `string | undefined` - The reasoning text, or undefined if no reasoning is present.
+
+## System Message Extraction
+
+### getSystemMessagesFromRunInput
+
+Extracts all system messages from the run input, including both standard system messages and tagged system messages (specialized prompts like memory instructions).
+
+```typescript
+.preprocess(({ run }) => {
+  const systemMessages = getSystemMessagesFromRunInput(run.input);
+  return { 
+    systemPromptCount: systemMessages.length,
+    systemPrompts: systemMessages 
+  };
+})
+```
+
+**Returns:** `string[]` - Array of system message strings.
+
+### getCombinedSystemPrompt
+
+Combines all system messages into a single prompt string, joined with double newlines.
+
+```typescript
+.preprocess(({ run }) => {
+  const fullSystemPrompt = getCombinedSystemPrompt(run.input);
+  return { fullSystemPrompt };
+})
+```
+
+**Returns:** `string` - Combined system prompt string.
+
+## Tool Call Extraction
+
+### extractToolCalls
+
+Extracts information about all tool calls from the run output, including tool names, call IDs, and their positions in the message array.
+
+```typescript
+const toolUsageScorer = createScorer({
+  id: "tool-usage",
+  description: "Evaluates tool usage patterns",
+  type: "agent",
+})
+  .preprocess(({ run }) => {
+    const { tools, toolCallInfos } = extractToolCalls(run.output);
+    return {
+      toolsUsed: tools,
+      toolCount: tools.length,
+      toolDetails: toolCallInfos,
+    };
+  })
+  .generateScore(({ results }) => {
+    const { toolCount } = results.preprocessStepResult || {};
+    // Score based on appropriate tool usage
+    return toolCount > 0 ? 1 : 0;
+  });
+```
+
+**Returns:**
+
+```typescript
+{
+  tools: string[];           // Array of tool names
+  toolCallInfos: ToolCallInfo[];  // Detailed tool call information
+}
+```
+
+Where `ToolCallInfo` is:
+
+```typescript
+type ToolCallInfo = {
+  toolName: string;      // Name of the tool
+  toolCallId: string;    // Unique call identifier
+  messageIndex: number;  // Index in the output array
+  invocationIndex: number; // Index within message's tool invocations
+};
+```
+
+## Test Utilities
+
+These utilities help create test data for scorer development.
+
+### createTestMessage
+
+Creates a `MastraDBMessage` object for testing purposes.
+
+```typescript
+import { createTestMessage } from "@mastra/evals/scorers/utils";
+
+const userMessage = createTestMessage({
+  content: "What is the weather?",
+  role: "user",
+});
+
+const assistantMessage = createTestMessage({
+  content: "The weather is sunny.",
+  role: "assistant",
+  toolInvocations: [
+    {
+      toolCallId: "call-1",
+      toolName: "weatherTool",
+      args: { location: "London" },
+      result: { temp: 20 },
+      state: "result",
+    },
+  ],
+});
+```
+
+### createAgentTestRun
+
+Creates a complete test run object for testing scorers.
+
+```typescript
+import { createAgentTestRun, createTestMessage } from "@mastra/evals/scorers/utils";
+
+const testRun = createAgentTestRun({
+  inputMessages: [
+    createTestMessage({ content: "Hello", role: "user" }),
+  ],
+  output: [
+    createTestMessage({ content: "Hi there!", role: "assistant" }),
+  ],
+});
+
+// Run your scorer with the test data
+const result = await myScorer.run({
+  input: testRun.input,
+  output: testRun.output,
+});
+```
+
+## Complete Example
+
+Here's a complete example showing how to use multiple utilities together:
+
+```typescript
+import { createScorer } from "@mastra/core/evals";
+import {
+  getAssistantMessageFromRunOutput,
+  getReasoningFromRunOutput,
+  getUserMessageFromRunInput,
+  getCombinedSystemPrompt,
+  extractToolCalls,
+} from "@mastra/evals/scorers/utils";
+
+const comprehensiveScorer = createScorer({
+  id: "comprehensive-analysis",
+  name: "Comprehensive Analysis",
+  description: "Analyzes all aspects of an agent response",
+  type: "agent",
+})
+  .preprocess(({ run }) => {
+    // Extract all relevant data
+    const userMessage = getUserMessageFromRunInput(run.input);
+    const response = getAssistantMessageFromRunOutput(run.output);
+    const reasoning = getReasoningFromRunOutput(run.output);
+    const systemPrompt = getCombinedSystemPrompt(run.input);
+    const { tools, toolCallInfos } = extractToolCalls(run.output);
+
+    return {
+      userMessage,
+      response,
+      reasoning,
+      systemPrompt,
+      toolsUsed: tools,
+      toolCount: tools.length,
+    };
+  })
+  .generateScore(({ results }) => {
+    const { response, reasoning, toolCount } = results.preprocessStepResult || {};
+    
+    let score = 0;
+    if (response && response.length > 0) score += 0.4;
+    if (reasoning) score += 0.3;
+    if (toolCount > 0) score += 0.3;
+    
+    return score;
+  })
+  .generateReason(({ results, score }) => {
+    const { response, reasoning, toolCount } = results.preprocessStepResult || {};
+    
+    const parts = [];
+    if (response) parts.push("provided a response");
+    if (reasoning) parts.push("included reasoning");
+    if (toolCount > 0) parts.push(`used ${toolCount} tool(s)`);
+    
+    return `Score: ${score}. The agent ${parts.join(", ")}.`;
+  });
+```
+
+
+
+---
 title: "Reference: Textual Difference Scorer | Evals"
 description: Documentation for the Textual Difference Scorer in Mastra, which measures textual differences between strings using sequence matching.
 ---
@@ -63235,6 +64176,7 @@ To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overvi
 ---
 title: "Reference: Overview"
 description: "Reference documentation on Mastra's APIs and tools"
+showCopyButton: false
 ---
 
 import { ReferenceCards } from "@site/src/components/ReferenceCards";
@@ -68038,6 +68980,13 @@ const processor = new LanguageDetector({
       isOptional: true,
       default: "'quality'",
     },
+    {
+      name: "providerOptions",
+      type: "ProviderOptions",
+      description: "Provider-specific options passed to the internal detection agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`)",
+      isOptional: true,
+      default: "undefined",
+    },
   ]}
 />
 
@@ -68184,6 +69133,13 @@ const processor = new ModerationProcessor({
       description: "Number of previous chunks to include for context when moderating stream chunks. If set to 1, includes the previous part, etc.",
       isOptional: true,
       default: "0 (no context window)",
+    },
+    {
+      name: "providerOptions",
+      type: "ProviderOptions",
+      description: "Provider-specific options passed to the internal moderation agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`)",
+      isOptional: true,
+      default: "undefined",
     },
   ]}
 />
@@ -68371,6 +69327,13 @@ const processor = new PIIDetector({
       isOptional: true,
       default: "true",
     },
+    {
+      name: "providerOptions",
+      type: "ProviderOptions",
+      description: "Provider-specific options passed to the internal detection agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`)",
+      isOptional: true,
+      default: "undefined",
+    },
   ]}
 />
 
@@ -68464,6 +69427,511 @@ export const agent = new Agent({
 
 
 ---
+title: "Reference: Processor Interface | Processors"
+description: "API reference for the Processor interface in Mastra, which defines the contract for transforming, validating, and controlling messages in agent pipelines."
+---
+
+# Processor Interface
+[EN] Source: https://mastra.ai/en/reference/processors/processor-interface
+
+The `Processor` interface defines the contract for all processors in Mastra. Processors can implement one or more methods to handle different stages of the agent execution pipeline.
+
+## When processor methods run
+
+The four processor methods run at different points in the agent execution lifecycle:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Agent Execution Flow                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  User Input                                                     │
+│      │                                                          │
+│      ▼                                                          │
+│  ┌─────────────────┐                                            │
+│  │  processInput   │  ← Runs ONCE at start                      │
+│  └────────┬────────┘                                            │
+│           │                                                     │
+│           ▼                                                     │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │                   Agentic Loop                          │    │
+│  │  ┌─────────────────────┐                                │    │
+│  │  │  processInputStep   │  ← Runs at EACH step           │    │
+│  │  └──────────┬──────────┘                                │    │
+│  │             │                                           │    │
+│  │             ▼                                           │    │
+│  │       LLM Execution                                     │    │
+│  │             │                                           │    │
+│  │             ▼                                           │    │
+│  │  ┌──────────────────────┐                               │    │
+│  │  │ processOutputStream  │  ← Runs on EACH stream chunk  │    │
+│  │  └──────────┬───────────┘                               │    │
+│  │             │                                           │    │
+│  │             ▼                                           │    │
+│  │     Tool Execution (if needed)                          │    │
+│  │             │                                           │    │
+│  │             └──────── Loop back if tools called ────────│    │
+│  └─────────────────────────────────────────────────────────┘    │
+│           │                                                     │
+│           ▼                                                     │
+│  ┌─────────────────────┐                                        │
+│  │ processOutputResult │  ← Runs ONCE after completion          │
+│  └─────────────────────┘                                        │
+│           │                                                     │
+│           ▼                                                     │
+│     Final Response                                              │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+| Method | When it runs | Use case |
+|--------|--------------|----------|
+| `processInput` | Once at the start, before the agentic loop | Validate/transform initial user input, add context |
+| `processInputStep` | At each step of the agentic loop, before each LLM call | Transform messages between steps, handle tool results |
+| `processOutputStream` | On each streaming chunk during LLM response | Filter/modify streaming content, detect patterns in real-time |
+| `processOutputResult` | Once after generation completes | Post-process final response, log results |
+
+## Interface definition
+
+```typescript copy
+interface Processor<TId extends string = string> {
+  readonly id: TId;
+  readonly name?: string;
+
+  processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInputResult;
+  processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined>;
+  processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
+  processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
+}
+```
+
+## Properties
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for the processor. Used for tracing and debugging.",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Optional display name for the processor. Falls back to id if not provided.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Methods
+
+### processInput
+
+Processes input messages before they are sent to the LLM. Runs once at the start of agent execution.
+
+```typescript copy
+processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInputResult;
+```
+
+#### ProcessInputArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description: "User and assistant messages to process (excludes system messages).",
+      isOptional: false,
+    },
+    {
+      name: "systemMessages",
+      type: "CoreMessage[]",
+      description: "All system messages (agent instructions, memory context, user-provided). Can be modified and returned.",
+      isOptional: false,
+    },
+    {
+      name: "messageList",
+      type: "MessageList",
+      description: "Full MessageList instance for advanced message management.",
+      isOptional: false,
+    },
+    {
+      name: "abort",
+      type: "(reason?: string) => never",
+      description: "Function to abort processing. Throws a TripWire error that stops execution.",
+      isOptional: false,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      description: "Tracing context for observability.",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request-scoped context with execution metadata like threadId and resourceId.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### ProcessInputResult
+
+The method can return one of three types:
+
+<PropertiesTable
+  content={[
+    {
+      name: "MastraDBMessage[]",
+      type: "array",
+      description: "Transformed messages array. System messages remain unchanged.",
+    },
+    {
+      name: "MessageList",
+      type: "MessageList",
+      description: "The same messageList instance passed in. Indicates you've mutated it directly.",
+    },
+    {
+      name: "{ messages, systemMessages }",
+      type: "object",
+      description: "Object with both transformed messages and modified system messages.",
+    },
+  ]}
+/>
+
+---
+
+### processInputStep
+
+Processes input messages at each step of the agentic loop, before they are sent to the LLM. Unlike `processInput` which runs once at the start, this runs at every step including tool call continuations.
+
+```typescript copy
+processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
+```
+
+#### Execution order in the agentic loop
+
+1. `processInput` (once at start)
+2. `processInputStep` (at each step, before LLM call)
+3. `prepareStep` callback (if provided)
+4. LLM execution
+5. Tool execution (if needed)
+6. Repeat from step 2 if tools were called
+
+#### ProcessInputStepArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description: "All messages including tool calls and results from previous steps.",
+      isOptional: false,
+    },
+    {
+      name: "messageList",
+      type: "MessageList",
+      description: "MessageList instance for managing messages.",
+      isOptional: false,
+    },
+    {
+      name: "stepNumber",
+      type: "number",
+      description: "Current step number (0-indexed). Step 0 is the initial LLM call.",
+      isOptional: false,
+    },
+    {
+      name: "systemMessages",
+      type: "CoreMessage[]",
+      description: "All system messages for read/modify access.",
+      isOptional: false,
+    },
+    {
+      name: "abort",
+      type: "(reason?: string) => never",
+      description: "Function to abort processing.",
+      isOptional: false,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      description: "Tracing context for observability.",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request-scoped context with execution metadata.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### Use cases
+
+- Transforming message part types between providers (e.g., `reasoning` → `thinking` for Anthropic)
+- Modifying messages based on step number or accumulated context
+- Implementing per-step message filtering or enrichment
+- Adding step-specific context or instructions
+
+---
+
+### processOutputStream
+
+Processes streaming output chunks with built-in state management. Allows processors to accumulate chunks and make decisions based on larger context.
+
+```typescript copy
+processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined>;
+```
+
+#### ProcessOutputStreamArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "part",
+      type: "ChunkType",
+      description: "The current stream chunk being processed.",
+      isOptional: false,
+    },
+    {
+      name: "streamParts",
+      type: "ChunkType[]",
+      description: "All chunks seen so far in the stream.",
+      isOptional: false,
+    },
+    {
+      name: "state",
+      type: "Record<string, unknown>",
+      description: "Mutable state object that persists across chunks within a single stream.",
+      isOptional: false,
+    },
+    {
+      name: "abort",
+      type: "(reason?: string) => never",
+      description: "Function to abort the stream.",
+      isOptional: false,
+    },
+    {
+      name: "messageList",
+      type: "MessageList",
+      description: "MessageList instance for accessing conversation history.",
+      isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      description: "Tracing context for observability.",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request-scoped context with execution metadata.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### Return value
+
+- Return the `ChunkType` to emit it (possibly modified)
+- Return `null` or `undefined` to skip emitting the chunk
+
+---
+
+### processOutputResult
+
+Processes the complete output result after streaming or generation is finished.
+
+```typescript copy
+processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
+```
+
+#### ProcessOutputResultArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description: "The generated response messages.",
+      isOptional: false,
+    },
+    {
+      name: "messageList",
+      type: "MessageList",
+      description: "MessageList instance for managing messages.",
+      isOptional: false,
+    },
+    {
+      name: "abort",
+      type: "(reason?: string) => never",
+      description: "Function to abort processing.",
+      isOptional: false,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      description: "Tracing context for observability.",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request-scoped context with execution metadata.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Processor types
+
+Mastra provides type aliases to ensure processors implement the required methods:
+
+```typescript copy
+// Must implement processInput OR processInputStep (or both)
+type InputProcessor = Processor & (
+  | { processInput: required }
+  | { processInputStep: required }
+);
+
+// Must implement processOutputStream OR processOutputResult (or both)
+type OutputProcessor = Processor & (
+  | { processOutputStream: required }
+  | { processOutputResult: required }
+);
+```
+
+## Usage examples
+
+### Basic input processor
+
+```typescript title="src/mastra/processors/lowercase.ts" showLineNumbers copy
+import type { Processor, MastraDBMessage } from "@mastra/core";
+
+export class LowercaseProcessor implements Processor {
+  id = "lowercase";
+
+  async processInput({ messages }): Promise<MastraDBMessage[]> {
+    return messages.map((msg) => ({
+      ...msg,
+      content: {
+        ...msg.content,
+        parts: msg.content.parts?.map((part) =>
+          part.type === "text"
+            ? { ...part, text: part.text.toLowerCase() }
+            : part
+        ),
+      },
+    }));
+  }
+}
+```
+
+### Per-step processor with processInputStep
+
+```typescript title="src/mastra/processors/reasoning-transformer.ts" showLineNumbers copy
+import type { Processor, MastraDBMessage } from "@mastra/core";
+
+export class ReasoningTransformer implements Processor {
+  id = "reasoning-transformer";
+
+  async processInputStep({ messages, messageList, stepNumber }) {
+    // Transform reasoning parts to thinking parts at each step
+    // This is useful when switching between model providers
+    for (const msg of messages) {
+      if (msg.role === "assistant" && msg.content.parts) {
+        for (const part of msg.content.parts) {
+          if (part.type === "reasoning") {
+            (part as any).type = "thinking";
+          }
+        }
+      }
+    }
+    return messageList;
+  }
+}
+```
+
+### Hybrid processor (input and output)
+
+```typescript title="src/mastra/processors/content-filter.ts" showLineNumbers copy
+import type { Processor, MastraDBMessage, ChunkType } from "@mastra/core";
+
+export class ContentFilter implements Processor {
+  id = "content-filter";
+  private blockedWords: string[];
+
+  constructor(blockedWords: string[]) {
+    this.blockedWords = blockedWords;
+  }
+
+  async processInput({ messages, abort }): Promise<MastraDBMessage[]> {
+    for (const msg of messages) {
+      const text = msg.content.parts
+        ?.filter((p) => p.type === "text")
+        .map((p) => p.text)
+        .join(" ");
+
+      if (this.blockedWords.some((word) => text?.includes(word))) {
+        abort("Blocked content detected in input");
+      }
+    }
+    return messages;
+  }
+
+  async processOutputStream({ part, abort }): Promise<ChunkType | null> {
+    if (part.type === "text-delta") {
+      if (this.blockedWords.some((word) => part.textDelta.includes(word))) {
+        abort("Blocked content detected in output");
+      }
+    }
+    return part;
+  }
+}
+```
+
+### Stream accumulator with state
+
+```typescript title="src/mastra/processors/word-counter.ts" showLineNumbers copy
+import type { Processor, ChunkType } from "@mastra/core";
+
+export class WordCounter implements Processor {
+  id = "word-counter";
+
+  async processOutputStream({ part, state }): Promise<ChunkType> {
+    // Initialize state on first chunk
+    if (!state.wordCount) {
+      state.wordCount = 0;
+    }
+
+    // Count words in text chunks
+    if (part.type === "text-delta") {
+      const words = part.textDelta.split(/\s+/).filter(Boolean);
+      state.wordCount += words.length;
+    }
+
+    // Log word count on finish
+    if (part.type === "finish") {
+      console.log(`Total words: ${state.wordCount}`);
+    }
+
+    return part;
+  }
+}
+```
+
+## Related
+
+- [Processors overview](/docs/v1/agents/processors) - Conceptual guide to processors
+- [Guardrails](/docs/v1/agents/guardrails) - Security and validation processors
+- [Memory Processors](/docs/v1/memory/memory-processors) - Memory-specific processors
+
+
+---
 title: "Reference: Prompt Injection Detector | Processors"
 description: "Documentation for the PromptInjectionDetector in Mastra, which detects prompt injection attempts in user input."
 ---
@@ -68543,6 +70011,13 @@ const processor = new PromptInjectionDetector({
       description: "Whether to include confidence scores in logs. Useful for tuning thresholds and debugging",
       isOptional: true,
       default: "false",
+    },
+    {
+      name: "providerOptions",
+      type: "ProviderOptions",
+      description: "Provider-specific options passed to the internal detection agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`)",
+      isOptional: true,
+      default: "undefined",
     },
   ]}
 />
@@ -75081,6 +76556,17 @@ const aiSdkStream = await agent.stream("message for agent", {
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "providerOptions",
+              type: "ProviderOptions",
+              isOptional: true,
+              description:
+                "Provider-specific options passed to the internal structuring agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`).",
+            },
+          ],
+        },
       ],
     },
     {
@@ -78207,23 +79693,6 @@ mcpClient.resources.onListChanged("myWeatherServer", () => {
 });
 ```
 
-### `prompts` Property
-
-The `MCPClient` instance has a `prompts` property that provides access to prompt-related operations.
-
-```typescript
-const mcpClient = new MCPClient({
-  /* ...servers configuration... */
-});
-
-// Access prompt methods via mcpClient.prompts
-const allPromptsByServer = await mcpClient.prompts.list();
-const { prompt, messages } = await mcpClient.prompts.get({
-  serverName: "myWeatherServer",
-  name: "current",
-});
-```
-
 ### `elicitation` Property
 
 The `MCPClient` instance has an `elicitation` property that provides access to elicitation-related operations. Elicitation allows MCP servers to request structured information from users.
@@ -78367,6 +79836,23 @@ await mcpClient.elicitation.onRequest("interactiveServer", async (request) => {
 });
 ```
 
+### `prompts` Property
+
+The `MCPClient` instance has a `prompts` property that provides access to prompt-related operations.
+
+```typescript
+const mcpClient = new MCPClient({
+  /* ...servers configuration... */
+});
+
+// Access prompt methods via mcpClient.prompts
+const allPromptsByServer = await mcpClient.prompts.list();
+const { prompt, messages } = await mcpClient.prompts.get({
+  serverName: "myWeatherServer",
+  name: "current",
+});
+```
+
 #### `prompts.list()`
 
 Retrieves all available prompts from all connected MCP servers, grouped by server name.
@@ -78429,6 +79915,63 @@ mcpClient.prompts.onListChanged("myWeatherServer", () => {
   console.log("Prompt list changed on myWeatherServer.");
   // You should re-fetch the list of prompts
   // await mcpClient.prompts.list();
+});
+```
+
+### `progress` Property
+
+The `MCPClient` instance has a `progress` property for subscribing to progress notifications emitted by MCP servers while tools execute.
+
+```typescript
+const mcpClient = new MCPClient({
+  servers: {
+    myServer: {
+      url: new URL('http://localhost:4111/api/mcp/myServer/mcp'),
+      // Enabled by default; set to false to disable
+      enableProgressTracking: true,
+    },
+  },
+});
+
+// Subscribe to progress updates for a specific server
+await mcpClient.progress.onUpdate('myServer', (params) => {
+  console.log('📊 Progress:', params.progress, '/', params.total);
+  if (params.message) console.log('Message:', params.message);
+  if (params.progressToken) console.log('Token:', params.progressToken);
+});
+```
+
+#### `progress.onUpdate(serverName: string, handler)`
+
+Registers a handler function to receive progress updates from the specified server.
+
+```typescript
+async onUpdate(
+  serverName: string,
+  handler: (params: {
+    progressToken: string;
+    progress: number;
+    total?: number;
+    message?: string;
+  }) => void,
+): Promise<void>
+```
+
+Notes:
+
+- When `enableProgressTracking` is true (default), tool calls include a `progressToken` so you can correlate updates to a specific run.
+- If you pass a `runId` when executing a tool, it will be used as the `progressToken`.
+
+To disable progress tracking for a server:
+
+```typescript
+const mcpClient = new MCPClient({
+  servers: {
+    myServer: {
+      url: new URL('http://localhost:4111/api/mcp/myServer/mcp'),
+      enableProgressTracking: false,
+    },
+  },
 });
 ```
 
@@ -87873,13 +89416,13 @@ voice.on("toolCall", ({ name, args, id }) => {
 
 ---
 title: "Reference: Google | Voice"
-description: "Documentation for the Google Voice implementation, providing text-to-speech and speech-to-text capabilities."
+description: "Documentation for the Google Voice implementation, providing text-to-speech and speech-to-text capabilities with support for both API key and Vertex AI authentication."
 ---
 
 # Google
 [EN] Source: https://mastra.ai/en/reference/voice/google
 
-The Google Voice implementation in Mastra provides both text-to-speech (TTS) and speech-to-text (STT) capabilities using Google Cloud services. It supports multiple voices, languages, and advanced audio configuration options.
+The Google Voice implementation in Mastra provides both text-to-speech (TTS) and speech-to-text (STT) capabilities using Google Cloud services. It supports multiple voices, languages, advanced audio configuration options, and both standard API key authentication and Vertex AI mode for enterprise deployments.
 
 ## Usage Example
 
@@ -87888,17 +89431,6 @@ import { GoogleVoice } from "@mastra/voice-google";
 
 // Initialize with default configuration (uses GOOGLE_API_KEY environment variable)
 const voice = new GoogleVoice();
-
-// Initialize with custom configuration
-const voice = new GoogleVoice({
-  speechModel: {
-    apiKey: "your-speech-api-key",
-  },
-  listeningModel: {
-    apiKey: "your-listening-api-key",
-  },
-  speaker: "en-US-Casual-K",
-});
 
 // Text-to-Speech
 const audioStream = await voice.speak("Hello, world!", {
@@ -87945,6 +89477,29 @@ const voices = await voice.getSpeakers({ languageCode: "en-US" });
       isOptional: true,
       defaultValue: "'en-US-Casual-K'",
     },
+    {
+      name: "vertexAI",
+      type: "boolean",
+      description:
+        "Enable Vertex AI mode for enterprise deployments. Uses project-based authentication instead of API keys. Requires 'project' to be set.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "project",
+      type: "string",
+      description:
+        "Google Cloud project ID (required when vertexAI is true). Falls back to GOOGLE_CLOUD_PROJECT environment variable.",
+      isOptional: true,
+    },
+    {
+      name: "location",
+      type: "string",
+      description:
+        "Google Cloud region for Vertex AI. Falls back to GOOGLE_CLOUD_LOCATION environment variable.",
+      isOptional: true,
+      defaultValue: "'us-central1'",
+    },
   ]}
 />
 
@@ -87956,7 +89511,21 @@ const voices = await voice.getSpeakers({ languageCode: "en-US" });
       name: "apiKey",
       type: "string",
       description:
-        "Google Cloud API key. Falls back to GOOGLE_API_KEY environment variable",
+        "Google Cloud API key. Falls back to GOOGLE_API_KEY environment variable. Not used when vertexAI is true.",
+      isOptional: true,
+    },
+    {
+      name: "keyFilename",
+      type: "string",
+      description:
+        "Path to service account JSON key file. Falls back to GOOGLE_APPLICATION_CREDENTIALS environment variable.",
+      isOptional: true,
+    },
+    {
+      name: "credentials",
+      type: "object",
+      description:
+        "In-memory service account credentials object with client_email and private_key properties.",
       isOptional: true,
     },
   ]}
@@ -88067,14 +89636,127 @@ Returns an array of available voice options, where each node contains:
   ]}
 />
 
+### isUsingVertexAI()
+
+Checks if Vertex AI mode is enabled.
+
+Returns: `boolean` - `true` if using Vertex AI, `false` otherwise
+
+### getProject()
+
+Gets the configured Google Cloud project ID.
+
+Returns: `string | undefined` - The project ID or `undefined` if not set
+
+### getLocation()
+
+Gets the configured Google Cloud location/region.
+
+Returns: `string` - The location (default: `'us-central1'`)
+
+## Authentication
+
+The Google Voice provider supports two authentication methods:
+
+### Standard Mode (API Key)
+
+Uses a Google Cloud API key for authentication. Suitable for development and simple use cases.
+
+```typescript
+// Using environment variable (GOOGLE_API_KEY)
+const voice = new GoogleVoice();
+
+// Using explicit API key
+const voice = new GoogleVoice({
+  speechModel: { apiKey: "your-api-key" },
+  listeningModel: { apiKey: "your-api-key" },
+  speaker: "en-US-Casual-K",
+});
+```
+
+### Vertex AI Mode (Service Account)
+
+Uses Google Cloud project-based authentication with service accounts. Recommended for production and enterprise deployments.
+
+**Benefits:**
+- Better security (no API keys in code)
+- IAM-based access control
+- Project-level billing and quotas
+- Audit logging
+- Enterprise features
+
+**Configuration Options:**
+
+```typescript
+// Using Application Default Credentials (ADC)
+// Set GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_CLOUD_PROJECT env vars
+const voice = new GoogleVoice({
+  vertexAI: true,
+  project: "your-gcp-project",
+  location: "us-central1", // Optional, defaults to 'us-central1'
+});
+
+// Using service account key file
+const voice = new GoogleVoice({
+  vertexAI: true,
+  project: "your-gcp-project",
+  speechModel: {
+    keyFilename: "/path/to/service-account.json",
+  },
+  listeningModel: {
+    keyFilename: "/path/to/service-account.json",
+  },
+});
+
+// Using in-memory credentials
+const voice = new GoogleVoice({
+  vertexAI: true,
+  project: "your-gcp-project",
+  speechModel: {
+    credentials: {
+      client_email: "service-account@project.iam.gserviceaccount.com",
+      private_key: "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
+    },
+  },
+});
+```
+
+**Required Permissions:**
+
+**IAM Roles:**
+
+For Text-to-Speech:
+- `roles/texttospeech.admin` - Text-to-Speech Admin (full access)
+- `roles/texttospeech.editor` - Text-to-Speech Editor (create and manage)
+- `roles/texttospeech.viewer` - Text-to-Speech Viewer (read-only)
+
+For Speech-to-Text:
+- `roles/speech.client` - Speech-to-Text Client
+
+**OAuth Scopes:**
+
+For synchronous Text-to-Speech synthesis:
+- `https://www.googleapis.com/auth/cloud-platform` - Full access to Google Cloud Platform services
+
+For long-audio Text-to-Speech operations:
+- `locations.longAudioSynthesize` - Create long-audio synthesis operations
+- `operations.get` - Get operation status
+- `operations.list` - List operations
+
 ## Important Notes
 
-1. A Google Cloud API key is required. Set it via the `GOOGLE_API_KEY` environment variable or pass it in the constructor.
-2. The default voice is set to 'en-US-Casual-K'.
-3. Both text-to-speech and speech-to-text services use LINEAR16 as the default audio encoding.
-4. The `speak()` method supports advanced audio configuration through the Google Cloud Text-to-Speech API.
-5. The `listen()` method supports various recognition configurations through the Google Cloud Speech-to-Text API.
-6. Available voices can be filtered by language code using the `getSpeakers()` method.
+1. **Authentication**: Either a Google Cloud API key (standard mode) or service account credentials (Vertex AI mode) is required.
+2. **Environment Variables**:
+   - `GOOGLE_API_KEY` - API key for standard mode
+   - `GOOGLE_CLOUD_PROJECT` - Project ID for Vertex AI mode
+   - `GOOGLE_CLOUD_LOCATION` - Location for Vertex AI mode (defaults to 'us-central1')
+   - `GOOGLE_APPLICATION_CREDENTIALS` - Path to service account key file
+3. The default voice is set to `'en-US-Casual-K'`.
+4. Both text-to-speech and speech-to-text services use LINEAR16 as the default audio encoding.
+5. The `speak()` method supports advanced audio configuration through the Google Cloud Text-to-Speech API.
+6. The `listen()` method supports various recognition configurations through the Google Cloud Speech-to-Text API.
+7. Available voices can be filtered by language code using the `getSpeakers()` method.
+8. Vertex AI mode provides enterprise features including IAM control, audit logs, and project-level billing.
 
 
 ---

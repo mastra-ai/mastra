@@ -155,9 +155,13 @@ export async function handleMessageSend({
   });
 
   try {
+    // Pass contextId as threadId for memory persistence across A2A conversations
+    // Allow user to pass resourceId via metadata, fall back to agentId
+    const resourceId = (metadata?.resourceId as string) ?? (message.metadata?.resourceId as string) ?? agentId;
     const { text } = await agent.generate([convertToCoreMessage(message)], {
       runId: taskId,
       requestContext,
+      ...(contextId ? { threadId: contextId, resourceId } : {}),
     });
 
     currentData = applyUpdateToTask(currentData, {
