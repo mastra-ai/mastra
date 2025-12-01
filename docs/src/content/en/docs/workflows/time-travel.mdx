@@ -6,6 +6,7 @@ description: "Re-execute workflow steps from a specific point using time travel 
 # Time Travel
 
 Time travel allows you to re-execute a workflow starting from any specific step, using either stored snapshot data or custom context you provide. This is useful for debugging failed workflows, testing individual steps with different inputs, or recovering from errors without re-running the entire workflow.
+You can also use time travel to execute a workflow that has not been run yet, starting from any specific step.
 
 ## How time travel works
 
@@ -36,7 +37,7 @@ const result = await run.timeTravel({
 
 ## Specifying the target step
 
-You can specify the target step using either a step reference or a string ID:
+You can specify the target step using either a step reference or a step ID:
 
 ### Using step reference
 
@@ -47,7 +48,7 @@ const result = await run.timeTravel({
 });
 ```
 
-### Using string ID
+### Using step ID
 
 ```typescript showLineNumbers copy
 const result = await run.timeTravel({
@@ -58,12 +59,18 @@ const result = await run.timeTravel({
 
 ### Nested workflow steps
 
-For steps inside nested workflows, use dot notation or an array of step references:
+For steps inside nested workflows, use dot notation, an array of step IDS or an array of step references:
 
 ```typescript showLineNumbers copy
 // Using dot notation
 const result = await run.timeTravel({
   step: "nestedWorkflow.step3",
+  inputData: { value: 10 },
+});
+
+// Using array of step IDs
+const result = await run.timeTravel({
+  step: ["nestedWorkflow", "step3"],
   inputData: { value: 10 },
 });
 
@@ -275,9 +282,9 @@ const result = await run.timeTravel({
 });
 ```
 
-### Testing step logic
+### Testing step logic on new workflow run
 
-Test individual steps with specific inputs without running the entire workflow:
+Test individual steps with specific inputs on a new workflow run, useful for testing a step logic without starting workflow execution from the beginning.
 
 ```typescript showLineNumbers copy
 const result = await run.timeTravel({
