@@ -534,6 +534,119 @@ Key metadata considerations:
 - Only include fields you plan to filter or sort by - extra fields add overhead
 - Add timestamps (e.g., 'createdAt', 'lastUpdated') to track content freshness
 
+## Deleting Vectors
+
+When building RAG applications, you often need to clean up stale vectors when documents are deleted or updated. Mastra provides the `deleteVectors` method that supports deleting vectors by metadata filters, making it easy to remove all embeddings associated with a specific document.
+
+### Delete by Metadata Filter
+
+The most common use case is deleting all vectors for a specific document when a user deletes it:
+
+```ts title="delete-vectors.ts" showLineNumbers copy
+// Delete all vectors for a specific document
+await store.deleteVectors({
+  indexName: "myCollection",
+  filter: { docId: "document-123" },
+});
+```
+
+This is particularly useful when:
+- A user deletes a document and you need to remove all its chunks
+- You're re-indexing a document and want to remove old vectors first
+- You need to clean up vectors for a specific user or tenant
+
+### Delete Multiple Documents
+
+You can also use complex filters to delete vectors matching multiple conditions:
+
+```ts title="delete-vectors-advanced.ts" showLineNumbers copy
+// Delete all vectors for multiple documents
+await store.deleteVectors({
+  indexName: "myCollection",
+  filter: {
+    docId: { $in: ["doc-1", "doc-2", "doc-3"] },
+  },
+});
+
+// Delete vectors for a specific user's documents
+await store.deleteVectors({
+  indexName: "myCollection",
+  filter: {
+    $and: [
+      { userId: "user-123" },
+      { status: "archived" },
+    ],
+  },
+});
+```
+
+### Delete by Vector IDs
+
+If you have specific vector IDs to delete, you can pass them directly:
+
+```ts title="delete-by-ids.ts" showLineNumbers copy
+// Delete specific vectors by their IDs
+await store.deleteVectors({
+  indexName: "myCollection",
+  ids: ["vec-1", "vec-2", "vec-3"],
+});
+```
+
+### Complete Example: Document Management Workflow
+
+Here's a complete example showing how to handle document deletion in a RAG app:
+
+```ts title="document-management.ts" showLineNumbers copy
+import { PgVector } from "@mastra/pg";
+import { embedMany } from "ai";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { MDocument } from "@mastra/rag";
+
+const store = new PgVector({
+  id: 'rag-vectors',
+  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+});
+
+// Index a document with docId in metadata
+async function indexDocument(docId: string, content: string) {
+  const doc = MDocument.fromText(content);
+  const chunks = await doc.chunk({
+    strategy: "recursive",
+    size: 512,
+    overlap: 50,
+  });
+
+  const { embeddings } = await embedMany({
+    model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+    values: chunks.map((chunk) => chunk.text),
+  });
+
+  await store.upsert({
+    indexName: "documents",
+    vectors: embeddings,
+    metadata: chunks.map((chunk) => ({
+      text: chunk.text,
+      docId: docId, // Store docId for easy cleanup
+    })),
+  });
+}
+
+// Delete all vectors for a document
+async function deleteDocument(docId: string) {
+  await store.deleteVectors({
+    indexName: "documents",
+    filter: { docId: docId },
+  });
+}
+
+// Usage
+await indexDocument("doc-123", "Your document content here...");
+// Later, when the document is deleted:
+await deleteDocument("doc-123");
+```
+
+> **Note**: The `deleteVectors` method with filters is supported by all major vector stores (MongoDB, PgVector, Pinecone, Qdrant, Chroma, etc.). The filter syntax matches the same syntax used for querying vectors, so you can use operators like `$in`, `$and`, `$or`, and comparison operators.
+
 ## Best Practices
 
 - Create indexes before bulk insertions
