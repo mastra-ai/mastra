@@ -289,6 +289,11 @@
       "source": "/docs/v1/agents/human-in-the-loop-with-tools",
       "destination": "/docs/v1/agents/agent-approval",
       "permanent": true
+    },
+    {
+      "source": "/examples/v1/agents/request-context",
+      "destination": "/docs/v1/server-db/request-context",
+      "permanent": true
     }
   ]
 }
