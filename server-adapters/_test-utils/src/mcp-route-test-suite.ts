@@ -18,9 +18,9 @@ import { AdapterTestContext, AdapterTestSuiteConfig, createDefaultTestContext } 
  * describe('Hono MCP Routes', () => {
  *   createMCPRouteTestSuite({
  *     suiteName: 'Hono Adapter',
- *     setupAdapter: async (mastra) => {
+ *     setupAdapter: async (context) => {
  *       const app = new Hono();
- *       const adapter = new MastraServer({ app, mastra, ... });
+ *       const adapter = new MastraServer({ app, mastra: context.mastra, ... });
  *       await adapter.init(); // Registers context, auth, and all routes
  *       return { app, adapter };
  *     },

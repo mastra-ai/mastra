@@ -9,7 +9,7 @@ describe('Hono Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Hono Adapter Integration Tests',
 
-    setupAdapter: (context: AdapterTestContext) => {
+    setupAdapter: async (context: AdapterTestContext) => {
       const app = new Hono();
 
       // Create Hono adapter
@@ -23,7 +23,7 @@ describe('Hono Server Adapter', () => {
         isDev: context.isDev,
       });
 
-      adapter.init();
+      await adapter.init();
 
       return { adapter, app };
     },

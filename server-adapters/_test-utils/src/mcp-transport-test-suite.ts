@@ -159,6 +159,7 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
     });
 
     afterAll(async () => {
+      await mcpClient?.disconnect();
       httpServer?.close();
       await mcpServer1?.close();
       await mcpServer2?.close();
@@ -350,6 +351,10 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
           });
         });
 
+        afterAll(async () => {
+          await sseClient?.disconnect();
+        });
+
         it('should list tools via MCPClient over SSE', async () => {
           const tools = await sseClient.listTools();
 
@@ -436,6 +441,7 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
         });
 
         afterAll(async () => {
+          await sseFailingClient?.disconnect();
           sseFailingHttpServer?.close();
           await sseFailingServer?.close();
         });

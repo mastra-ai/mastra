@@ -11,13 +11,13 @@ describe('Hono MCP Registry Routes Integration', () => {
   createMCPRouteTestSuite({
     suiteName: 'Hono Adapter',
 
-    setupAdapter: (context: AdapterTestContext) => {
-      // Create Hono app
-      const app = new Hono();
+    setupAdapter: async (context: AdapterTestContext) => {
+      // Create Hono app with explicit type parameters to avoid 'as any'
+      const app = new Hono<any, any, any>();
 
       // Create adapter
       const adapter = new MastraServer({
-        app: app as any,
+        app,
         mastra: context.mastra,
         taskStore: context.taskStore,
         customRouteAuthConfig: context.customRouteAuthConfig,
@@ -26,7 +26,7 @@ describe('Hono MCP Registry Routes Integration', () => {
       });
 
       // Register context middleware
-      adapter.init();
+      await adapter.init();
 
       return { app, adapter };
     },

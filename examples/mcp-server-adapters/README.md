@@ -78,7 +78,8 @@ import { MCPClient } from '@mastra/mcp';
 const client = new MCPClient({
   servers: {
     main: {
-      url: new URL('http://localhost:3001/api/mcp/{serverId}/mcp'),
+      // Use 'main-mcp' as the serverId (matches the key in Mastra's mcpServers config)
+      url: new URL('http://localhost:3001/api/mcp/main-mcp/mcp'),
     },
   },
 });

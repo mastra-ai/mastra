@@ -47,7 +47,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       }
 
       // Setup adapter and app
-      const setup = setupAdapter(context);
+      const setup = await setupAdapter(context);
       app = setup.app;
     });
 
@@ -158,7 +158,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
         // MCP server 404 tests
         if (route.path.includes(':serverId')) {
-          it('should return 404 when MCP server not found', async () => {
+          it('should return 404 when MCP server not found (via :serverId)', async () => {
             const request = buildRouteRequest(route, {
               pathParams: { serverId: 'non-existent-server' },
             });
@@ -178,7 +178,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
         // MCP v0 server detail 404 test (uses :id instead of :serverId)
         if (route.path.includes('/api/mcp/v0/servers/:id')) {
-          it('should return 404 when MCP server not found', async () => {
+          it('should return 404 when MCP server not found (via :id)', async () => {
             const request = buildRouteRequest(route, {
               pathParams: { id: 'non-existent-server' },
             });

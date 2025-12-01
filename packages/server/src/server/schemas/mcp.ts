@@ -61,8 +61,8 @@ export const serverDetailSchema = z.object({
 export const mcpToolInfoSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
-  inputSchema: z.any(),
-  outputSchema: z.any().optional(),
+  inputSchema: z.unknown(),
+  outputSchema: z.unknown().optional(),
   toolType: z.string().optional(),
 });
 

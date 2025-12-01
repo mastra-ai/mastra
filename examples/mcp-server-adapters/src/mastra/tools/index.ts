@@ -33,6 +33,9 @@ export const calculatorTool = createTool({
     b: z.number(),
   }),
   execute: async ({ operation, a, b }) => {
+    if (operation === 'divide' && b === 0) {
+      throw new Error('Cannot divide by zero');
+    }
     let result = 0;
     switch (operation) {
       case 'add':

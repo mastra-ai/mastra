@@ -78,10 +78,7 @@ export interface AdapterTestSuiteConfig {
    * Setup adapter and app for testing
    * Called once before all tests
    */
-  setupAdapter: (context: AdapterTestContext) => {
-    adapter: any;
-    app: any;
-  };
+  setupAdapter: (context: AdapterTestContext) => { adapter: any; app: any } | Promise<{ adapter: any; app: any }>;
 
   /**
    * Execute HTTP request through the adapter's framework (Express/Hono)

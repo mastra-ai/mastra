@@ -16,23 +16,26 @@ describe('Hono MCP Transport Routes Integration', () => {
     suiteName: 'Hono Adapter',
 
     createServer: async (mastra: Mastra) => {
-      // Create Hono app
-      const app = new Hono();
+      // Create Hono app with explicit type parameters to avoid 'as any'
+      const app = new Hono<any, any, any>();
 
       // Create adapter
       const adapter = new MastraServer({
-        app: app as any,
+        app,
         mastra,
       });
 
       // Initialize routes
-      adapter.init();
+      await adapter.init();
 
       // Start server on random port (port 0 lets OS assign available port)
       const server = serve({ fetch: app.fetch, port: 0 });
 
       const address = server.address();
-      const port = typeof address === 'object' && address ? address.port : 9999;
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+      const port = address.port;
 
       return {
         server,

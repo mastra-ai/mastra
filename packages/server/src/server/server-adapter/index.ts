@@ -140,7 +140,7 @@ export abstract class MastraServerBase<TApp, TRequest, TResponse> {
           title: 'Mastra API',
           version: '1.0.0',
           description: 'Mastra Server API',
-          path: `${this.prefix}${this.openapiPath}`,
+          path: this.openapiPath,
         },
         { prefix: this.prefix },
       );

@@ -22,9 +22,8 @@ const adapter = new MastraServer({
 adapter.init();
 
 // Start the server
+console.log(`Hono MCP Server running on port ${PORT}`);
 serve({
   fetch: app.fetch,
   port: PORT,
 });
-
-console.log(`Hono MCP Server running on port ${PORT}`);

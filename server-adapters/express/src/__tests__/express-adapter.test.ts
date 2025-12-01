@@ -11,7 +11,7 @@ describe('Express Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Express Adapter Integration Tests',
 
-    setupAdapter: (context: AdapterTestContext) => {
+    setupAdapter: async (context: AdapterTestContext) => {
       // Create Express app
       const app = express();
       app.use(express.json());
@@ -26,7 +26,7 @@ describe('Express Server Adapter', () => {
         isDev: context.isDev,
       });
 
-      adapter.init();
+      await adapter.init();
 
       return { app, adapter };
     },
