@@ -1,6 +1,6 @@
 # PR
 
-The user will ask issue this command. You will need to do the following:
+The user will issue this command. You will need to do the following:
 
 1. Create a changeset in .changeset, ensuring the naming convention for the changeset file is inline with other changesets in the .changeset folder.
 
