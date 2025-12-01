@@ -17,7 +17,11 @@ export const authenticationMiddleware = async (req: Request, res: Response, next
     return next();
   }
 
-  if (isDevPlaygroundRequest(name => req.headers[name.toLowerCase()] as string | undefined)) {
+  const path = req.path;
+  const method = req.method;
+  const getHeader = (name: string) => req.headers[name.toLowerCase()] as string | undefined;
+
+  if (isDevPlaygroundRequest(path, method, getHeader, authConfig)) {
     // Skip authentication for dev playground requests
     return next();
   }
@@ -84,8 +88,9 @@ export const authorizationMiddleware = async (req: Request, res: Response, next:
 
   const path = req.path;
   const method = req.method;
+  const getHeader = (name: string) => req.headers[name.toLowerCase()] as string | undefined;
 
-  if (isDevPlaygroundRequest(name => req.headers[name.toLowerCase()] as string | undefined)) {
+  if (isDevPlaygroundRequest(path, method, getHeader, authConfig)) {
     // Skip authorization for dev playground requests
     return next();
   }

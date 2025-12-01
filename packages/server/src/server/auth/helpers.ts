@@ -6,8 +6,17 @@ import { defaultAuthConfig } from './defaults';
  * Check if request is from dev playground
  * @param getHeader - Function to get header value from request
  */
-export const isDevPlaygroundRequest = (getHeader: (name: string) => string | undefined): boolean => {
-  return getHeader('x-mastra-dev-playground') === 'true' && process.env.MASTRA_DEV === 'true';
+export const isDevPlaygroundRequest = (
+  path: string,
+  method: string,
+  getHeader: (name: string) => string | undefined,
+  authConfig: MastraAuthConfig,
+): boolean => {
+  const protectedAccess = [...(defaultAuthConfig.protected || []), ...(authConfig.protected || [])];
+  return (
+    process.env.MASTRA_DEV === 'true' &&
+    (!isAnyMatch(path, method, protectedAccess) || getHeader('x-mastra-dev-playground') === 'true')
+  );
 };
 
 export const isCustomRoutePublic = (
