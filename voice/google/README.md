@@ -219,15 +219,31 @@ Returns the configured Google Cloud location/region.
 
 ## Required Permissions for Vertex AI
 
-When using Vertex AI, ensure your service account or user has these IAM roles:
+When using Vertex AI, ensure your service account or user has the appropriate IAM roles and OAuth scopes:
 
-- `roles/cloudtts.user` - For Text-to-Speech
-- `roles/speech.client` - For Speech-to-Text
+### IAM Roles
 
-Or specific permissions:
+**For Text-to-Speech:**
 
-- `texttospeech.synthesize`
-- `speech.recognize`
+- `roles/texttospeech.admin` - Text-to-Speech Admin (full access)
+- `roles/texttospeech.editor` - Text-to-Speech Editor (create and manage)
+- `roles/texttospeech.viewer` - Text-to-Speech Viewer (read-only)
+
+**For Speech-to-Text:**
+
+- `roles/speech.client` - Speech-to-Text Client
+
+### OAuth Scopes
+
+**For synchronous Text-to-Speech synthesis:**
+
+- `https://www.googleapis.com/auth/cloud-platform` - Full access to Google Cloud Platform services
+
+**For long-audio Text-to-Speech operations:**
+
+- `locations.longAudioSynthesize` - Create long-audio synthesis operations
+- `operations.get` - Get operation status
+- `operations.list` - List operations
 
 ## Voice Options
 

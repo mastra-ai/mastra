@@ -305,13 +305,26 @@ const voice = new GoogleVoice({
 ```
 
 **Required Permissions:**
-When using Vertex AI, ensure your service account has:
-- `roles/cloudtts.user` for Text-to-Speech
-- `roles/speech.client` for Speech-to-Text
 
-Or specific permissions:
-- `texttospeech.synthesize`
-- `speech.recognize`
+**IAM Roles:**
+
+For Text-to-Speech:
+- `roles/texttospeech.admin` - Text-to-Speech Admin (full access)
+- `roles/texttospeech.editor` - Text-to-Speech Editor (create and manage)
+- `roles/texttospeech.viewer` - Text-to-Speech Viewer (read-only)
+
+For Speech-to-Text:
+- `roles/speech.client` - Speech-to-Text Client
+
+**OAuth Scopes:**
+
+For synchronous Text-to-Speech synthesis:
+- `https://www.googleapis.com/auth/cloud-platform` - Full access to Google Cloud Platform services
+
+For long-audio Text-to-Speech operations:
+- `locations.longAudioSynthesize` - Create long-audio synthesis operations
+- `operations.get` - Get operation status
+- `operations.list` - List operations
 
 ## Important Notes
 
