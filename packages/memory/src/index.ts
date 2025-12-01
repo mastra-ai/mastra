@@ -25,7 +25,14 @@ import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
 import { ZodObject } from 'zod';
 import type { ZodTypeAny } from 'zod';
-import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
+import {
+  updateWorkingMemoryTool,
+  __experimental_updateWorkingMemoryToolVNext,
+  deepMergeWorkingMemory,
+} from './tools/working-memory';
+
+// Re-export for testing purposes
+export { deepMergeWorkingMemory };
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
@@ -103,6 +110,7 @@ export class Memory extends MastraMemory {
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfig;
       vectorSearchString?: string;
+      threadId: string;
     },
   ): Promise<{ messages: MastraDBMessage[] }> {
     const { threadId, resourceId, perPage: perPageArg, page, orderBy, threadConfig, vectorSearchString, filter } = args;
