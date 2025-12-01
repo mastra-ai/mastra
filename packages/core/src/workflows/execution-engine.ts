@@ -2,6 +2,7 @@ import type { WritableStream } from 'node:stream/web';
 import { MastraBase } from '../base';
 import type { RequestContext } from '../di';
 import { RegisteredLogger } from '../logger';
+import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { Span, SpanType, TracingPolicy } from '../observability';
 import type { ChunkType } from '../stream/types';
@@ -30,7 +31,7 @@ export interface ExecutionEngineOptions {
  * Providers will implement this class to provide their own execution logic
  */
 export abstract class ExecutionEngine extends MastraBase {
-  protected mastra?: Mastra;
+  public mastra?: Mastra;
   public options: ExecutionEngineOptions;
   constructor({ mastra, options }: { mastra?: Mastra; options: ExecutionEngineOptions }) {
     super({ name: 'ExecutionEngine', component: RegisteredLogger.WORKFLOW });
@@ -40,6 +41,10 @@ export abstract class ExecutionEngine extends MastraBase {
 
   __registerMastra(mastra: Mastra) {
     this.mastra = mastra;
+  }
+
+  public getLogger(): IMastraLogger {
+    return this.logger;
   }
 
   /**
