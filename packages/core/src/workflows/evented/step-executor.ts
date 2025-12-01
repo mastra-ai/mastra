@@ -72,6 +72,16 @@ export class StepExecutor extends MastraBase {
       stepInfo.resumedAt = Date.now();
     }
 
+    // Extract suspend data if this step was previously suspended
+    let suspendDataToUse =
+      params.stepResults[step.id]?.status === 'suspended' ? params.stepResults[step.id]?.suspendPayload : undefined;
+
+    // Filter out internal workflow metadata (similar to line 70 for resumePayload)
+    if (suspendDataToUse && '__workflow_meta' in suspendDataToUse) {
+      const { __workflow_meta, ...userSuspendData } = suspendDataToUse;
+      suspendDataToUse = userSuspendData;
+    }
+
     try {
       if (validationError) {
         throw validationError;
@@ -92,6 +102,7 @@ export class StepExecutor extends MastraBase {
             },
             retryCount,
             resumeData: params.resumeData,
+            suspendData: suspendDataToUse,
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(this, stepResults),
             suspend: async (suspendPayload: any): Promise<any> => {
