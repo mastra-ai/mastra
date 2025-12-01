@@ -227,7 +227,7 @@ describe('Integration Testing CouchbaseQueryStore', async () => {
         dimension: test_dimension,
         metric: 'euclidean',
         fields_to_index: ['num1', 'num2', 'num3', 'label'],
-        gsi_vector_index_type: 'composite',
+        vector_index_type: 'composite',
       });
       await new Promise(resolve => setTimeout(resolve, 1000));
 
@@ -267,7 +267,7 @@ describe('Integration Testing CouchbaseQueryStore', async () => {
         dimension: test_dimension,
         metric: 'euclidean',
         fields_to_index: ['num1', 'num2', 'num3', 'label'],
-        gsi_vector_index_type: 'bhive',
+        vector_index_type: 'hyperscale',
       });
       await new Promise(resolve => setTimeout(resolve, 5000));
     }, 50000);
@@ -948,7 +948,7 @@ describe('Integration Testing CouchbaseQueryStore', async () => {
           dimension: filterDimension,
           metric: 'cosine',
           fields_to_index: ['price', 'rating', 'inStock', 'category', 'name', 'description', 'createdAt'],
-          gsi_vector_index_type: 'bhive',
+          vector_index_type: 'hyperscale',
         });
 
         // Wait for documents to be indexed

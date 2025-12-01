@@ -210,11 +210,11 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
     dimension,
     metric = 'dotproduct' as MastraMetric,
     fields_to_index = [],
-    gsi_vector_index_type = 'bhive',
+    vector_index_type = 'hyperscale',
     index_metadata = {},
   }: CreateIndexParams & {
     fields_to_index?: string[];
-    gsi_vector_index_type?: 'bhive' | 'composite';
+    vector_index_type?: 'hyperscale' | 'composite';
     index_metadata?: Record<string, any>;
   }): Promise<void> {
     try {
@@ -242,7 +242,7 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
       let sqlpp_query: string = '';
 
       // Create the SQL++ query
-      if (gsi_vector_index_type === 'bhive') {
+      if (vector_index_type === 'hyperscale') {
         for (const key of Object.keys(index_metadata)) {
           if (Object.keys(default_index_metadata).includes(key)) {
             default_index_metadata[key] = index_metadata[key];
@@ -250,7 +250,7 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
         }
         let fields_string: string = fields_clause.length > 0 ? `INCLUDE (${fields_clause})` : '';
         sqlpp_query = `CREATE VECTOR INDEX \`${indexName}\` ON ${this.bucketName}.${this.scopeName}.${this.collectionName} (embedding VECTOR) ${fields_string} USING GSI WITH ${JSON.stringify(default_index_metadata)};`;
-      } else if (gsi_vector_index_type === 'composite') {
+      } else if (vector_index_type === 'composite') {
         for (const key of Object.keys(index_metadata)) {
           if (Object.keys(default_index_metadata).includes(key)) {
             default_index_metadata[key] = index_metadata[key];
@@ -259,7 +259,7 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
         let fields_string: string = fields_clause.length > 0 ? `${fields_clause},` : '';
         sqlpp_query = `CREATE INDEX \`${indexName}\` ON ${this.bucketName}.${this.scopeName}.${this.collectionName} (${fields_string}embedding VECTOR) USING GSI WITH ${JSON.stringify(default_index_metadata)};`;
       } else {
-        throw new Error('GSI vector index type must be either "bhive" or "composite"');
+        throw new Error('Vector index type must be either "hyperscale" or "composite"');
       }
 
       // Execute the SQL++ query
