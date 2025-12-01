@@ -798,3 +798,124 @@ export function convertQueryValues(values: Record<string, unknown>): Record<stri
 function convertQueryValue(value: unknown): string {
   return String(value);
 }
+
+/**
+ * Creates a ReadableStream that emits chunks with sensitive data.
+ * This simulates what an agent.stream() call would return with request metadata.
+ *
+ * @param format - The stream format version ('v1' for legacy, 'v2' for current)
+ * @returns A ReadableStream with chunks containing sensitive request data
+ */
+export function createStreamWithSensitiveData(format: 'v1' | 'v2' = 'v2'): ReadableStream {
+  const sensitiveRequest = {
+    body: JSON.stringify({
+      model: 'gpt-4',
+      messages: [{ role: 'system', content: 'SECRET_SYSTEM_PROMPT' }],
+      tools: [{ name: 'secret_tool', description: 'Internal tool' }],
+    }),
+  };
+
+  const chunks =
+    format === 'v2'
+      ? [
+          {
+            type: 'step-start',
+            runId: 'run-123',
+            from: 'AGENT',
+            payload: {
+              messageId: 'msg-123',
+              request: sensitiveRequest,
+              warnings: [],
+            },
+          },
+          { type: 'text-delta', textDelta: 'Hello' },
+          {
+            type: 'step-finish',
+            runId: 'run-123',
+            from: 'AGENT',
+            payload: {
+              messageId: 'msg-123',
+              metadata: { request: sensitiveRequest },
+              output: {
+                text: 'Hello',
+                steps: [{ request: sensitiveRequest, response: { id: 'resp-1' } }],
+              },
+            },
+          },
+          {
+            type: 'finish',
+            runId: 'run-123',
+            from: 'AGENT',
+            payload: {
+              messageId: 'msg-123',
+              metadata: { request: sensitiveRequest },
+              output: {
+                text: 'Hello',
+                steps: [{ request: sensitiveRequest }],
+              },
+            },
+          },
+        ]
+      : [
+          {
+            type: 'step-start',
+            messageId: 'msg-123',
+            request: sensitiveRequest,
+            warnings: [],
+          },
+          { type: 'text-delta', textDelta: 'Hello' },
+          {
+            type: 'step-finish',
+            finishReason: 'stop',
+            request: sensitiveRequest,
+          },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            request: sensitiveRequest,
+          },
+        ];
+
+  return new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) {
+        controller.enqueue(chunk);
+      }
+      controller.close();
+    },
+  });
+}
+
+/**
+ * Helper to consume a stream and parse SSE chunks.
+ * Reads all chunks from a stream and parses them from SSE format.
+ *
+ * @param stream - The ReadableStream to consume (typically response.body)
+ * @returns Array of parsed JSON objects from the SSE data lines
+ */
+export async function consumeSSEStream(stream: ReadableStream<Uint8Array> | null): Promise<any[]> {
+  if (!stream) return [];
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  const chunks: any[] = [];
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    const text = decoder.decode(value);
+    // Parse SSE format: "data: {...}\n\n"
+    const lines = text.split('\n');
+    for (const line of lines) {
+      if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+        try {
+          chunks.push(JSON.parse(line.slice(6)));
+        } catch {
+          // Skip non-JSON lines
+        }
+      }
+    }
+  }
+
+  return chunks;
+}

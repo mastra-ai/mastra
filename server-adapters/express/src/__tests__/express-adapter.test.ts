@@ -1,10 +1,17 @@
 import type { Server } from 'node:http';
 import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
-import { createRouteAdapterTestSuite } from '@internal/server-adapter-test-utils';
+import {
+  createRouteAdapterTestSuite,
+  createDefaultTestContext,
+  createStreamWithSensitiveData,
+  consumeSSEStream,
+} from '@internal/server-adapter-test-utils';
 import express from 'express';
 import type { Application } from 'express';
-import { describe } from 'vitest';
 import { MastraServer } from '../index';
+
+import type { ServerRoute } from '@mastra/server/server-adapter';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 // Wrapper describe block so the factory can call describe() inside
 describe('Express Server Adapter', () => {
@@ -129,5 +136,248 @@ describe('Express Server Adapter', () => {
         });
       }
     },
+  });
+
+  describe('Stream Data Redaction', () => {
+    let context: AdapterTestContext;
+    let server: Server | null = null;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>(resolve => {
+          server!.close(() => resolve());
+        });
+        server = null;
+      }
+    });
+
+    it('should redact sensitive data from stream chunks by default', async () => {
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new ExpressServerAdapter({
+        mastra: context.mastra,
+        // Default: streamOptions.redact = true
+      });
+
+      // Create a test route that returns a stream with sensitive data
+      const testRoute: ServerRoute = {
+        method: 'POST',
+        path: '/test/stream',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => createStreamWithSensitiveData('v2'),
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      // Start server
+      server = await new Promise<Server>(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+      const port = address.port;
+
+      const response = await fetch(`http://localhost:${port}/test/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+
+      const chunks = await consumeSSEStream(response.body);
+
+      // Verify chunks exist
+      expect(chunks.length).toBeGreaterThan(0);
+
+      // Check that sensitive data is NOT present in any chunk
+      const allChunksStr = JSON.stringify(chunks);
+      expect(allChunksStr).not.toContain('SECRET_SYSTEM_PROMPT');
+      expect(allChunksStr).not.toContain('secret_tool');
+
+      // Verify step-start chunk has empty request
+      const stepStart = chunks.find(c => c.type === 'step-start');
+      expect(stepStart).toBeDefined();
+      expect(stepStart.payload.request).toEqual({});
+
+      // Verify step-finish chunk has no request in metadata
+      const stepFinish = chunks.find(c => c.type === 'step-finish');
+      expect(stepFinish).toBeDefined();
+      expect(stepFinish.payload.metadata.request).toBeUndefined();
+      expect(stepFinish.payload.output.steps[0].request).toBeUndefined();
+
+      // Verify finish chunk has no request in metadata
+      const finish = chunks.find(c => c.type === 'finish');
+      expect(finish).toBeDefined();
+      expect(finish.payload.metadata.request).toBeUndefined();
+    });
+
+    it('should NOT redact sensitive data when streamOptions.redact is false', async () => {
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new ExpressServerAdapter({
+        mastra: context.mastra,
+        streamOptions: { redact: false },
+      });
+
+      // Create a test route that returns a stream with sensitive data
+      const testRoute: ServerRoute = {
+        method: 'POST',
+        path: '/test/stream',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => createStreamWithSensitiveData('v2'),
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      // Start server
+      server = await new Promise<Server>(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+      const port = address.port;
+
+      const response = await fetch(`http://localhost:${port}/test/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+
+      const chunks = await consumeSSEStream(response.body);
+
+      // Verify chunks exist
+      expect(chunks.length).toBeGreaterThan(0);
+
+      // Check that sensitive data IS present (not redacted)
+      const allChunksStr = JSON.stringify(chunks);
+      expect(allChunksStr).toContain('SECRET_SYSTEM_PROMPT');
+      expect(allChunksStr).toContain('secret_tool');
+
+      // Verify step-start chunk has full request
+      const stepStart = chunks.find(c => c.type === 'step-start');
+      expect(stepStart).toBeDefined();
+      expect(stepStart.payload.request.body).toContain('SECRET_SYSTEM_PROMPT');
+    });
+
+    it('should redact v1 format stream chunks', async () => {
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new ExpressServerAdapter({
+        mastra: context.mastra,
+        // Default: streamOptions.redact = true
+      });
+
+      // Create a test route that returns a v1 format stream
+      const testRoute: ServerRoute = {
+        method: 'POST',
+        path: '/test/stream-v1',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => createStreamWithSensitiveData('v1'),
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      // Start server
+      server = await new Promise<Server>(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+      const port = address.port;
+
+      const response = await fetch(`http://localhost:${port}/test/stream-v1`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+
+      const chunks = await consumeSSEStream(response.body);
+
+      // Check that sensitive data is NOT present
+      const allChunksStr = JSON.stringify(chunks);
+      expect(allChunksStr).not.toContain('SECRET_SYSTEM_PROMPT');
+      expect(allChunksStr).not.toContain('secret_tool');
+
+      // Verify step-start chunk has empty request (v1 format)
+      const stepStart = chunks.find(c => c.type === 'step-start');
+      expect(stepStart).toBeDefined();
+      expect(stepStart.request).toEqual({});
+
+      // Verify step-finish chunk has no request (v1 format)
+      const stepFinish = chunks.find(c => c.type === 'step-finish');
+      expect(stepFinish).toBeDefined();
+      expect(stepFinish.request).toBeUndefined();
+    });
+
+    it('should pass through non-sensitive chunk types unchanged', async () => {
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new ExpressServerAdapter({
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute = {
+        method: 'POST',
+        path: '/test/stream',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => createStreamWithSensitiveData('v2'),
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      // Start server
+      server = await new Promise<Server>(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+      const port = address.port;
+
+      const response = await fetch(`http://localhost:${port}/test/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      const chunks = await consumeSSEStream(response.body);
+
+      // Verify text-delta chunk is unchanged
+      const textDelta = chunks.find(c => c.type === 'text-delta');
+      expect(textDelta).toBeDefined();
+      expect(textDelta.textDelta).toBe('Hello');
+    });
   });
 });

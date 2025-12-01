@@ -7,6 +7,7 @@ import { SERVER_ROUTES } from './routes';
 import type { ServerRoute } from './routes';
 
 export * from './routes';
+export { redactStreamChunk } from './redact';
 
 export { WorkflowRegistry } from '../utils';
 
@@ -22,6 +23,19 @@ export interface BodyLimitOptions {
   onError: (error: unknown) => unknown;
 }
 
+export interface StreamOptions {
+  /**
+   * When true (default), redacts sensitive data from stream chunks
+   * (system prompts, tool definitions, API keys) before sending to clients.
+   *
+   * Set to false to include full request data in stream chunks (useful for
+   * debugging or internal services that need access to this data).
+   *
+   * @default true
+   */
+  redact?: boolean;
+}
+
 export abstract class MastraServerBase<TApp, TRequest, TResponse> {
   protected mastra: Mastra;
   protected bodyLimitOptions?: BodyLimitOptions;
@@ -33,6 +47,7 @@ export abstract class MastraServerBase<TApp, TRequest, TResponse> {
   protected playground?: boolean;
   protected isDev?: boolean;
   protected customRouteAuthConfig?: Map<string, boolean>;
+  protected streamOptions: StreamOptions;
 
   constructor({
     app,
@@ -45,6 +60,7 @@ export abstract class MastraServerBase<TApp, TRequest, TResponse> {
     playground = false,
     isDev = false,
     customRouteAuthConfig,
+    streamOptions,
   }: {
     app: TApp;
     mastra: Mastra;
@@ -56,6 +72,7 @@ export abstract class MastraServerBase<TApp, TRequest, TResponse> {
     playground?: boolean;
     isDev?: boolean;
     customRouteAuthConfig?: Map<string, boolean>;
+    streamOptions?: StreamOptions;
   }) {
     this.mastra = mastra;
     this.bodyLimitOptions = bodyLimitOptions;
@@ -67,6 +84,7 @@ export abstract class MastraServerBase<TApp, TRequest, TResponse> {
     this.playground = playground;
     this.isDev = isDev;
     this.customRouteAuthConfig = customRouteAuthConfig;
+    this.streamOptions = { redact: true, ...streamOptions };
   }
 
   protected mergeRequestContext({

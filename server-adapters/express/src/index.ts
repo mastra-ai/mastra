@@ -3,8 +3,8 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
-import type { ServerRoute } from '@mastra/server/server-adapter';
-import { MastraServerBase } from '@mastra/server/server-adapter';
+import type { ServerRoute, BodyLimitOptions, StreamOptions } from '@mastra/server/server-adapter';
+import { MastraServerBase, redactStreamChunk } from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
 
 import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
@@ -100,10 +100,13 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         if (done) break;
 
         if (value) {
+          // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
+          const shouldRedact = this.streamOptions?.redact ?? true;
+          const outputValue = shouldRedact ? redactStreamChunk(value) : value;
           if (streamFormat === 'sse') {
-            res.write(`data: ${JSON.stringify(value)}\n\n`);
+            res.write(`data: ${JSON.stringify(outputValue)}\n\n`);
           } else {
-            res.write(JSON.stringify(value) + '\x1E');
+            res.write(JSON.stringify(outputValue) + '\x1E');
           }
         }
       }
