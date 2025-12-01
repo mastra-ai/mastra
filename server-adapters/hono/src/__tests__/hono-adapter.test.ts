@@ -121,13 +121,14 @@ describe('Hono Server Adapter', () => {
     it('should redact sensitive data from stream chunks by default', async () => {
       const app = new Hono();
 
-      const adapter = new HonoServerAdapter({
+      const adapter = new MastraServer({
+        app,
         mastra: context.mastra,
         // Default: streamOptions.redact = true
       });
 
       // Create a test route that returns a stream with sensitive data
-      const testRoute: ServerRoute = {
+      const testRoute: ServerRoute<any, any, any> = {
         method: 'POST',
         path: '/test/stream',
         responseType: 'stream',
@@ -178,13 +179,14 @@ describe('Hono Server Adapter', () => {
     it('should NOT redact sensitive data when streamOptions.redact is false', async () => {
       const app = new Hono();
 
-      const adapter = new HonoServerAdapter({
+      const adapter = new MastraServer({
+        app,
         mastra: context.mastra,
         streamOptions: { redact: false },
       });
 
       // Create a test route that returns a stream with sensitive data
-      const testRoute: ServerRoute = {
+      const testRoute: ServerRoute<any, any, any> = {
         method: 'POST',
         path: '/test/stream',
         responseType: 'stream',
@@ -224,13 +226,14 @@ describe('Hono Server Adapter', () => {
     it('should redact v1 format stream chunks', async () => {
       const app = new Hono();
 
-      const adapter = new HonoServerAdapter({
+      const adapter = new MastraServer({
+        app,
         mastra: context.mastra,
         // Default: streamOptions.redact = true
       });
 
       // Create a test route that returns a v1 format stream
-      const testRoute: ServerRoute = {
+      const testRoute: ServerRoute<any, any, any> = {
         method: 'POST',
         path: '/test/stream-v1',
         responseType: 'stream',
@@ -272,11 +275,12 @@ describe('Hono Server Adapter', () => {
     it('should pass through non-sensitive chunk types unchanged', async () => {
       const app = new Hono();
 
-      const adapter = new HonoServerAdapter({
+      const adapter = new MastraServer({
+        app,
         mastra: context.mastra,
       });
 
-      const testRoute: ServerRoute = {
+      const testRoute: ServerRoute<any, any, any> = {
         method: 'POST',
         path: '/test/stream',
         responseType: 'stream',

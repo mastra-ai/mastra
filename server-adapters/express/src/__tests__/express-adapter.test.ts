@@ -158,13 +158,14 @@ describe('Express Server Adapter', () => {
       const app = express();
       app.use(express.json());
 
-      const adapter = new ExpressServerAdapter({
+      const adapter = new MastraServer({
+        app,
         mastra: context.mastra,
         // Default: streamOptions.redact = true
       });
 
       // Create a test route that returns a stream with sensitive data
-      const testRoute: ServerRoute = {
+      const testRoute: ServerRoute<any, any, any> = {
         method: 'POST',
         path: '/test/stream',
         responseType: 'stream',
@@ -225,13 +226,14 @@ describe('Express Server Adapter', () => {
       const app = express();
       app.use(express.json());
 
-      const adapter = new ExpressServerAdapter({
+      const adapter = new MastraServer({
+        app,
         mastra: context.mastra,
         streamOptions: { redact: false },
       });
 
       // Create a test route that returns a stream with sensitive data
-      const testRoute: ServerRoute = {
+      const testRoute: ServerRoute<any, any, any> = {
         method: 'POST',
         path: '/test/stream',
         responseType: 'stream',
@@ -281,13 +283,14 @@ describe('Express Server Adapter', () => {
       const app = express();
       app.use(express.json());
 
-      const adapter = new ExpressServerAdapter({
+      const adapter = new MastraServer({
+        app,
         mastra: context.mastra,
         // Default: streamOptions.redact = true
       });
 
       // Create a test route that returns a v1 format stream
-      const testRoute: ServerRoute = {
+      const testRoute: ServerRoute<any, any, any> = {
         method: 'POST',
         path: '/test/stream-v1',
         responseType: 'stream',
@@ -339,11 +342,12 @@ describe('Express Server Adapter', () => {
       const app = express();
       app.use(express.json());
 
-      const adapter = new ExpressServerAdapter({
+      const adapter = new MastraServer({
+        app,
         mastra: context.mastra,
       });
 
-      const testRoute: ServerRoute = {
+      const testRoute: ServerRoute<any, any, any> = {
         method: 'POST',
         path: '/test/stream',
         responseType: 'stream',
