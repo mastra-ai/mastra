@@ -1,4 +1,10 @@
-import type { StepResult, WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
+import type {
+  StepResult,
+  StorageListWorkflowRunsInput,
+  WorkflowRun,
+  WorkflowRuns,
+  WorkflowRunState,
+} from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
@@ -198,14 +204,8 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns> {
+    status,
+  }: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     try {
       // Get all workflow keys
       let pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' }) + ':*';
@@ -251,6 +251,18 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         .filter(w => {
           if (fromDate && w.createdAt < fromDate) return false;
           if (toDate && w.createdAt > toDate) return false;
+          if (status) {
+            let snapshot = w.snapshot;
+            if (typeof snapshot === 'string') {
+              try {
+                snapshot = JSON.parse(snapshot) as WorkflowRunState;
+              } catch (e) {
+                console.warn(`Failed to parse snapshot for workflow ${w.workflowName}: ${e}`);
+                return false;
+              }
+            }
+            return snapshot.status === status;
+          }
           return true;
         })
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());

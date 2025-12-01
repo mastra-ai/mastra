@@ -1,5 +1,19 @@
 # @mastra/deployer
 
+## 0.24.7-alpha.0
+
+### Patch Changes
+
+- Fixed module not found errors during production builds by skipping transitive dependency validation. Production builds now only bundle direct dependencies, which also results in faster deployment times. ([#10589](https://github.com/mastra-ai/mastra/pull/10589))
+
+  Fixes #10116
+  Fixes #10055
+  Fixes #9951
+
+- Updated dependencies [[`54cc99c`](https://github.com/mastra-ai/mastra/commit/54cc99cb99483b9e08ec41fa1502f43b71b4c351)]:
+  - @mastra/core@0.24.7-alpha.0
+  - @mastra/server@0.24.7-alpha.0
+
 ## 0.24.6
 
 ### Patch Changes

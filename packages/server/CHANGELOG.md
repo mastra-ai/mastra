@@ -1,5 +1,12 @@
 # @mastra/server
 
+## 0.24.7-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`54cc99c`](https://github.com/mastra-ai/mastra/commit/54cc99cb99483b9e08ec41fa1502f43b71b4c351)]:
+  - @mastra/core@0.24.7-alpha.0
+
 ## 0.24.6
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.24.7-alpha.0
+
+### Patch Changes
+
+- Fix corrupted provider-registry.json file ([#10605](https://github.com/mastra-ai/mastra/pull/10605))
+
 ## 0.24.6
 
 ### Patch Changes

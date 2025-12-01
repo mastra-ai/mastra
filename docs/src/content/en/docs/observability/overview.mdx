@@ -25,7 +25,17 @@ Specialized tracing for AI operations that captures:
 - **Workflow steps**: Branching logic, parallel execution, and step outputs
 - **Automatic instrumentation**: Zero-configuration tracing with decorators
 
-### OTEL Tracing
+### OTEL Tracing (Deprecated)
+
+:::warning
+OTEL Tracing via the `telemetry` configuration is deprecated and will be removed in a future release. Use [AI Tracing](/docs/observability/ai-tracing/overview) with the [OpenTelemetry exporter](/docs/observability/ai-tracing/exporters/otel) instead for OTLP-compatible tracing.
+
+If you are not using the old `telemetry` system, you should explicitly disable it to suppress deprecation warnings:
+
+```typescript
+telemetry: { enabled: false }
+```
+:::
 
 Traditional distributed tracing with OpenTelemetry:
 
@@ -53,7 +63,7 @@ export const mastra = new Mastra({
     url: "file:./mastra.db", // Storage is required for tracing
   }),
   telemetry: {
-    enabled: true, // Enables OTEL Tracing
+    enabled: false, // Disable deprecated OTEL Tracing to suppress warnings
   },
 });
 ```

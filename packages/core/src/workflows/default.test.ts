@@ -64,7 +64,6 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
       runId,
       entry,
       prevOutput: null,
-      prevStep: null as any,
       serializedStepGraph: [],
       stepResults: {} as Record<string, StepResult<any, any, any, any>>,
       executionContext: {
@@ -77,6 +76,9 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
           delay: 1000,
         },
         executionSpan: {} as Span,
+        activeStepsPath: {},
+        resumeLabels: {},
+        state: {},
       },
       emitter,
       abortController,

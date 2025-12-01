@@ -1,6 +1,6 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
 import type { StoreOperationsLibSQL } from '../operations';
@@ -163,11 +163,12 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
             activePaths: [],
             timestamp: Date.now(),
             suspendedPaths: {},
+            activeStepsPath: {},
             resumeLabels: {},
             serializedStepGraph: [],
+            status: 'pending',
             value: {},
             waitingPaths: {},
-            status: 'pending',
             runId: runId,
             runtimeContext: {},
           } as WorkflowRunState;
@@ -352,14 +353,8 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
+    status,
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
       const args: InValue[] = [];
@@ -367,6 +362,11 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       if (workflowName) {
         conditions.push('workflow_name = ?');
         args.push(workflowName);
+      }
+
+      if (status) {
+        conditions.push("json_extract(snapshot, '$.status') = ?");
+        args.push(status);
       }
 
       if (fromDate) {

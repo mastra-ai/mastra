@@ -1,6 +1,6 @@
 import { MastraBase } from '../../../base';
 import type { StepResult, WorkflowRunState } from '../../../workflows';
-import type { WorkflowRun, WorkflowRuns } from '../../types';
+import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '../../types';
 
 export abstract class WorkflowsStorage extends MastraBase {
   constructor() {
@@ -55,14 +55,7 @@ export abstract class WorkflowsStorage extends MastraBase {
     runId: string;
   }): Promise<WorkflowRunState | null>;
 
-  abstract getWorkflowRuns(args?: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns>;
+  abstract getWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns>;
 
   abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
 }
