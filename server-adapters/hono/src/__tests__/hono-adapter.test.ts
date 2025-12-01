@@ -1,124 +1,15 @@
 import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
-import { createRouteAdapterTestSuite, createDefaultTestContext } from '@internal/server-adapter-test-utils';
+import {
+  createRouteAdapterTestSuite,
+  createDefaultTestContext,
+  createStreamWithSensitiveData,
+  consumeSSEStream,
+} from '@internal/server-adapter-test-utils';
 import { SERVER_ROUTES } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { HonoServerAdapter } from '../index';
-
-/**
- * Creates a ReadableStream that emits chunks with sensitive data
- * This simulates what an agent.stream() call would return with request metadata
- */
-function createStreamWithSensitiveData(format: 'v1' | 'v2' = 'v2') {
-  const sensitiveRequest = {
-    body: JSON.stringify({
-      model: 'gpt-4',
-      messages: [{ role: 'system', content: 'SECRET_SYSTEM_PROMPT' }],
-      tools: [{ name: 'secret_tool', description: 'Internal tool' }],
-    }),
-  };
-
-  const chunks =
-    format === 'v2'
-      ? [
-          {
-            type: 'step-start',
-            runId: 'run-123',
-            from: 'AGENT',
-            payload: {
-              messageId: 'msg-123',
-              request: sensitiveRequest,
-              warnings: [],
-            },
-          },
-          { type: 'text-delta', textDelta: 'Hello' },
-          {
-            type: 'step-finish',
-            runId: 'run-123',
-            from: 'AGENT',
-            payload: {
-              messageId: 'msg-123',
-              metadata: { request: sensitiveRequest },
-              output: {
-                text: 'Hello',
-                steps: [{ request: sensitiveRequest, response: { id: 'resp-1' } }],
-              },
-            },
-          },
-          {
-            type: 'finish',
-            runId: 'run-123',
-            from: 'AGENT',
-            payload: {
-              messageId: 'msg-123',
-              metadata: { request: sensitiveRequest },
-              output: {
-                text: 'Hello',
-                steps: [{ request: sensitiveRequest }],
-              },
-            },
-          },
-        ]
-      : [
-          {
-            type: 'step-start',
-            messageId: 'msg-123',
-            request: sensitiveRequest,
-            warnings: [],
-          },
-          { type: 'text-delta', textDelta: 'Hello' },
-          {
-            type: 'step-finish',
-            finishReason: 'stop',
-            request: sensitiveRequest,
-          },
-          {
-            type: 'finish',
-            finishReason: 'stop',
-            request: sensitiveRequest,
-          },
-        ];
-
-  return new ReadableStream({
-    start(controller) {
-      for (const chunk of chunks) {
-        controller.enqueue(chunk);
-      }
-      controller.close();
-    },
-  });
-}
-
-/**
- * Helper to consume a stream and parse SSE chunks
- */
-async function consumeSSEStream(stream: ReadableStream<Uint8Array> | null): Promise<any[]> {
-  if (!stream) return [];
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  const chunks: any[] = [];
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    const text = decoder.decode(value);
-    // Parse SSE format: "data: {...}\n\n"
-    const lines = text.split('\n');
-    for (const line of lines) {
-      if (line.startsWith('data: ') && line !== 'data: [DONE]') {
-        try {
-          chunks.push(JSON.parse(line.slice(6)));
-        } catch {
-          // Skip non-JSON lines
-        }
-      }
-    }
-  }
-
-  return chunks;
-}
 
 // Wrapper describe block so the factory can call describe() inside
 describe('Hono Server Adapter', () => {

@@ -1,9 +1,3 @@
-/**
- * Unit tests for redactStreamChunk function
- *
- * @see https://github.com/mastra-ai/mastra/issues/10363
- */
-
 import type { ChunkType } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
 import { redactStreamChunk } from './redact';
