@@ -1427,12 +1427,12 @@
     },
     {
       "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/overview",
-      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "destination": "/:path/guides/migrations/upgrade-to-latest-0x",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/agent",
-      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "destination": "/:path/guides/migrations/upgrade-to-latest-0x",
       "permanent": true
     },
     {
@@ -1497,67 +1497,72 @@
     },
     {
       "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/cli",
-      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "destination": "/:path/guides/migrations/upgrade-to-latest-0x",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/client",
-      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "destination": "/:path/guides/migrations/upgrade-to-latest-0x",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/evals",
-      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "destination": "/:path/guides/migrations/upgrade-to-latest-0x",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/mastra",
-      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "destination": "/:path/guides/migrations/upgrade-to-latest-0x",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/mcp",
-      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "destination": "/:path/guides/migrations/upgrade-to-latest-0x",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/memory",
-      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "destination": "/:path/guides/migrations/upgrade-to-latest-0x",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/processors",
-      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "destination": "/:path/guides/migrations/upgrade-to-latest-0x",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/storage",
-      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "destination": "/:path/guides/migrations/upgrade-to-latest-0x",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/tools",
-      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "destination": "/:path/guides/migrations/upgrade-to-latest-0x",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/tracing",
-      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "destination": "/:path/guides/migrations/upgrade-to-latest-0x",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/vectors",
-      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "destination": "/:path/guides/migrations/upgrade-to-latest-0x",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/voice",
-      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "destination": "/:path/guides/migrations/upgrade-to-latest-0x",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/workflows",
-      "destination": "/:path/guides/migrations/upgrade-to-v1",
+      "destination": "/:path/guides/migrations/upgrade-to-latest-0x",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/guides/migrations/upgrade-to-v1",
+      "destination": "/:path/guides/migrations/upgrade-to-latest-0x",
       "permanent": true
     },
     {
