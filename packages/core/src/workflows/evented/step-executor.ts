@@ -76,7 +76,7 @@ export class StepExecutor extends MastraBase {
     let suspendDataToUse =
       params.stepResults[step.id]?.status === 'suspended' ? params.stepResults[step.id]?.suspendPayload : undefined;
 
-    // Filter out internal workflow metadata (similar to line 70 for resumePayload)
+    // Filter out internal workflow metadata before exposing to step code
     if (suspendDataToUse && '__workflow_meta' in suspendDataToUse) {
       const { __workflow_meta, ...userSuspendData } = suspendDataToUse;
       suspendDataToUse = userSuspendData;
