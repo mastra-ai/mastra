@@ -571,15 +571,20 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   }
 
   private async getIncludedMessagesWithContext(
-    threadId: string,
     include: { id: string; threadId?: string; withPreviousMessages?: number; withNextMessages?: number }[],
     messageIds: Set<string>,
   ): Promise<void> {
     await Promise.all(
       include.map(async item => {
-        // Use the item's threadId if provided, otherwise use the main threadId
-        const targetThreadId = item.threadId || threadId;
+        // Look up the message to get its threadId (message IDs are globally unique)
+        let targetThreadId = item.threadId;
+        if (!targetThreadId) {
+          const foundMessage = await this.findMessageInAnyThread(item.id);
+          if (!foundMessage) return;
+          targetThreadId = foundMessage.threadId;
+        }
         if (!targetThreadId) return;
+
         const threadMessagesKey = this.getThreadMessagesKey(targetThreadId);
 
         messageIds.add(item.id);
@@ -723,7 +728,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           id: 'STORAGE_CLOUDFLARE_LIST_MESSAGES_INVALID_THREAD_ID',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
         },
         new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
@@ -829,7 +834,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       let includedMessages: (MastraMessageV1 & { _index?: number })[] = [];
       if (include && include.length > 0) {
         const includedMessageIds = new Set<string>();
-        await this.getIncludedMessagesWithContext(threadId, include, includedMessageIds);
+        await this.getIncludedMessagesWithContext(include, includedMessageIds);
 
         // Remove IDs that are already in paginated messages to avoid duplicate fetches
         const paginatedIds = new Set(paginatedMessages.map(m => m.id));
@@ -891,7 +896,12 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       }));
 
       // Use MessageList for proper deduplication and format conversion to V2
-      const list = new MessageList({ threadId, resourceId }).add(prepared as MastraMessageV1[], 'memory');
+      // Use first threadId for context when multiple threads are provided
+      const primaryThreadId = Array.isArray(threadId) ? threadId[0] : threadId;
+      const list = new MessageList({ threadId: primaryThreadId, resourceId }).add(
+        prepared as MastraMessageV1[],
+        'memory',
+      );
       let finalMessages = list.get.all.db();
 
       // Sort final messages with type-aware comparator and stable tiebreaker
@@ -937,11 +947,11 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           id: 'CLOUDFLARE_STORAGE_LIST_MESSAGES_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: `Failed to list messages for thread ${threadId}: ${
+          text: `Failed to list messages for thread ${Array.isArray(threadId) ? threadId.join(',') : threadId}: ${
             error instanceof Error ? error.message : String(error)
           }`,
           details: {
-            threadId,
+            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
           },
         },

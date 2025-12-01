@@ -351,16 +351,8 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
-  private async _getIncludedMessages({
-    threadId,
-    include,
-  }: {
-    threadId: string;
-    include: StorageListMessagesInput['include'];
-  }) {
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-    if (!include) return null;
+  private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
+    if (!include || include.length === 0) return null;
 
     const unionQueries: string[] = [];
     const params: any[] = [];
@@ -369,17 +361,19 @@ export class MemoryPG extends MemoryStorage {
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
-      // if threadId is provided, use it, otherwise use threadId from args
-      const searchId = inc.threadId || threadId;
+      // Query by message ID directly - get the threadId from the message itself via subquery
       unionQueries.push(
         `
             SELECT * FROM (
-              WITH ordered_messages AS (
+              WITH target_thread AS (
+                SELECT thread_id FROM ${tableName} WHERE id = $${paramIdx}
+              ),
+              ordered_messages AS (
                 SELECT 
                   *,
                   ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
                 FROM ${tableName}
-                WHERE thread_id = $${paramIdx}
+                WHERE thread_id = (SELECT thread_id FROM target_thread)
               )
               SELECT
                 m.id,
@@ -391,23 +385,23 @@ export class MemoryPG extends MemoryStorage {
                 m.thread_id AS "threadId",
                 m."resourceId"
               FROM ordered_messages m
-              WHERE m.id = $${paramIdx + 1}
+              WHERE m.id = $${paramIdx}
               OR EXISTS (
                 SELECT 1 FROM ordered_messages target
-                WHERE target.id = $${paramIdx + 1}
+                WHERE target.id = $${paramIdx}
                 AND (
                   -- Get previous messages (messages that come BEFORE the target)
-                  (m.row_num < target.row_num AND m.row_num >= target.row_num - $${paramIdx + 2})
+                  (m.row_num < target.row_num AND m.row_num >= target.row_num - $${paramIdx + 1})
                   OR
                   -- Get next messages (messages that come AFTER the target)
-                  (m.row_num > target.row_num AND m.row_num <= target.row_num + $${paramIdx + 3})
+                  (m.row_num > target.row_num AND m.row_num <= target.row_num + $${paramIdx + 2})
                 )
               )
             ) AS query_${paramIdx}
             `, // Keep ASC for final sorting after fetching context
       );
-      params.push(searchId, id, withPreviousMessages, withNextMessages);
-      paramIdx += 4;
+      params.push(id, withPreviousMessages, withNextMessages);
+      paramIdx += 3;
     }
     const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
     const includedRows = await this.client.manyOrNone(finalQuery, params);
@@ -487,7 +481,7 @@ export class MemoryPG extends MemoryStorage {
           id: 'STORAGE_PG_LIST_MESSAGES_INVALID_THREAD_ID',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
         },
         new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
@@ -501,7 +495,7 @@ export class MemoryPG extends MemoryStorage {
         category: ErrorCategory.USER,
         text: 'Page number must be non-negative',
         details: {
-          threadId,
+          threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
           page,
         },
       });
@@ -566,7 +560,7 @@ export class MemoryPG extends MemoryStorage {
       // Step 2: Add included messages with context (if any), excluding duplicates
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ threadId, include });
+        const includeMessages = await this._getIncludedMessages({ include });
         if (includeMessages) {
           // Deduplicate: only add messages that aren't already in the paginated results
           for (const includeMsg of includeMessages) {
@@ -632,7 +626,7 @@ export class MemoryPG extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId,
+            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
           },
         },
