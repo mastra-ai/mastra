@@ -1060,6 +1060,22 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
       });
 
+      await this.mastra.pubsub.publish(`workflow.events.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'watch',
+          payload: {
+            currentStep: { ...prevResult, id: (step as any)?.step?.id },
+            workflowState: {
+              status: 'suspended',
+              steps: stepResults,
+              suspendPayload: prevResult.suspendPayload,
+            },
+          },
+        },
+      });
+
       await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
         runId,
