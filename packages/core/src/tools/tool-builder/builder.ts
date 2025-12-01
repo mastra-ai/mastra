@@ -365,7 +365,7 @@ export class CoreToolBuilder extends MastraBase {
 
           if (resumeData) {
             const resumeSchema = this.getResumeSchema();
-            const resumeValidation = validateToolInput(resumeSchema, resumeData, options.name);
+            const resumeValidation = await validateToolInput(resumeSchema, resumeData, options.name);
             if (resumeValidation.error) {
               logger?.warn(resumeValidation.error.message);
               toolSpan?.end({ output: resumeValidation.error });
@@ -378,7 +378,7 @@ export class CoreToolBuilder extends MastraBase {
 
         if (suspendData) {
           const suspendSchema = this.getSuspendSchema();
-          const suspendValidation = validateToolSuspendData(suspendSchema, suspendData, options.name);
+          const suspendValidation = await validateToolSuspendData(suspendSchema, suspendData, options.name);
           if (suspendValidation.error) {
             logger?.warn(suspendValidation.error.message);
             toolSpan?.end({ output: suspendValidation.error });
@@ -390,7 +390,7 @@ export class CoreToolBuilder extends MastraBase {
 
         // Validate output if outputSchema exists
         const outputSchema = this.getOutputSchema();
-        const outputValidation = validateToolOutput(outputSchema, result, options.name, skiptOutputValidation);
+        const outputValidation = await validateToolOutput(outputSchema, result, options.name, skiptOutputValidation);
         if (outputValidation.error) {
           logger?.warn(outputValidation.error.message);
           toolSpan?.end({ output: outputValidation.error });
@@ -413,7 +413,7 @@ export class CoreToolBuilder extends MastraBase {
         // Validate input parameters if schema exists
         // Use the processed schema for validation if available, otherwise fall back to original
         const parameters = processedSchema || this.getParameters();
-        const { data, error } = validateToolInput(parameters, args, options.name);
+        const { data, error } = await validateToolInput(parameters, args, options.name);
         if (error) {
           logger.warn(error.message);
           return error;
