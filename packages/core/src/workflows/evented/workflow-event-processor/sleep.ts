@@ -1,4 +1,4 @@
-import EventEmitter from 'events';
+import EventEmitter from 'node:events';
 import type { StepFlowEntry, WorkflowRunState } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
@@ -55,6 +55,7 @@ export async function processWorkflowSleep(
     stepResults,
     activeSteps,
     resumeSteps,
+    timeTravel,
     prevResult,
     resumeData,
     parentWorkflow,
@@ -134,6 +135,7 @@ export async function processWorkflowSleep(
           runId,
           executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
           resumeSteps,
+          timeTravel,
           stepResults,
           prevResult,
           resumeData,
@@ -155,6 +157,7 @@ export async function processWorkflowSleepUntil(
     stepResults,
     activeSteps,
     resumeSteps,
+    timeTravel,
     prevResult,
     resumeData,
     parentWorkflow,
@@ -234,6 +237,7 @@ export async function processWorkflowSleepUntil(
           runId,
           executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
           resumeSteps,
+          timeTravel,
           stepResults,
           prevResult,
           resumeData,

@@ -1,4 +1,4 @@
-import EventEmitter from 'events';
+import EventEmitter from 'node:events';
 import type { StepFlowEntry } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
@@ -13,6 +13,7 @@ export async function processWorkflowParallel(
     stepResults,
     activeSteps,
     resumeSteps,
+    timeTravel,
     prevResult,
     resumeData,
     parentWorkflow,
@@ -46,6 +47,7 @@ export async function processWorkflowParallel(
           stepResults,
           prevResult,
           resumeData,
+          timeTravel,
           parentWorkflow,
           activeSteps,
           requestContext,
@@ -63,6 +65,7 @@ export async function processWorkflowConditional(
     stepResults,
     activeSteps,
     resumeSteps,
+    timeTravel,
     prevResult,
     resumeData,
     parentWorkflow,
@@ -111,6 +114,7 @@ export async function processWorkflowConditional(
             executionPath: executionPath.concat([idx]),
             resumeSteps,
             stepResults,
+            timeTravel,
             prevResult,
             resumeData,
             parentWorkflow,

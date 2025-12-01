@@ -16,7 +16,6 @@ It supports both [stdio (subprocess) and SSE (HTTP) MCP transports](https://mode
 To create a new `MCPServer`, you need to provide some basic information about your server, the tools it will offer, and optionally, any agents you want to expose as tools.
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { createTool } from "@mastra/core/tools";
 import { MCPServer } from "@mastra/mcp";
@@ -28,7 +27,7 @@ const myAgent = new Agent({
   name: "MyExampleAgent",
   description: "A generalist to help with basic questions."
   instructions: "You are a helpful assistant.",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-5.1",
 });
 
 const weatherTool = createTool({
@@ -469,11 +468,11 @@ const server = new MCPServer({
 
 serve(async (req) => {
   const url = new URL(req.url);
-  
+
   if (url.pathname === "/mcp") {
     // Convert Deno Request to Node.js-compatible format
     const { req: nodeReq, res: nodeRes } = toReqRes(req);
-    
+
     await server.startHTTP({
       url,
       httpPath: "/mcp",
@@ -483,10 +482,10 @@ serve(async (req) => {
         serverless: true, // ← Enable stateless mode for serverless
       },
     });
-    
+
     return toFetchResponse(nodeRes);
   }
-  
+
   return new Response("Not found", { status: 404 });
 });
 ```
@@ -967,7 +966,7 @@ await serverWithPrompts.prompts.notifyListChanged();
 
 ## Examples
 
-For practical examples of setting up and deploying an MCPServer, see the [Deploying an MCPServer Example](/examples/v1/agents/deploying-mcp-server).
+For practical examples of setting up and deploying an MCPServer, see the [Publishing an MCP Server guide](/docs/v1/mcp/publishing-mcp-server).
 
 The example at the beginning of this page also demonstrates how to instantiate `MCPServer` with both tools and agents.
 

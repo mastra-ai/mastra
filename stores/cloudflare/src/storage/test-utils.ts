@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 
 export const createSampleTrace = (name: string, scope?: string, attributes?: Record<string, string>) => ({

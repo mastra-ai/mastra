@@ -1,6 +1,6 @@
-import { writeFileSync } from 'fs';
-import { join } from 'path';
-import process from 'process';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import process from 'node:process';
 import { Deployer } from '@mastra/deployer';
 import { move } from 'fs-extra/esm';
 import type { VcConfig, VcConfigOverrides, VercelDeployerOptions } from './types';

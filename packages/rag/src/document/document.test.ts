@@ -755,6 +755,40 @@ describe('MDocument', () => {
       expect(docs?.[1]?.metadata?.['Header 2']).toBe('First Section');
     });
 
+    it('should respect maxSize option for sections strategy', async () => {
+      // Create HTML with large content that should be split
+      const longContent = 'This is some section content that needs to be chunked properly. '.repeat(30);
+      const html = `
+        <html>
+          <body>
+            <h1>Main Title</h1>
+            <p>${longContent}</p>
+            <h2>Second Section</h2>
+            <p>${longContent}</p>
+          </body>
+        </html>
+      `;
+
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
+      await doc.chunk({
+        strategy: 'html',
+        sections: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+        ],
+        maxSize: 300,
+        overlap: 30,
+      });
+
+      const docs = doc.getDocs();
+      // Content should be split into multiple chunks (more than 2 sections)
+      expect(docs.length).toBeGreaterThan(2);
+      // Each chunk should be roughly within maxSize
+      docs.forEach(d => {
+        expect(d.text.length).toBeLessThanOrEqual(400); // Some tolerance for overlap
+      });
+    });
+
     it('should properly merge metadata', async () => {
       const doc = new MDocument({
         docs: [
@@ -960,6 +994,266 @@ describe('MDocument', () => {
       expect(xpath2).toBeDefined();
       expect(xpath2).toMatch(/^\/html\[1\]\/body\[1\]\/div\[1\]\/section\[1\]\/div\[2\]\/h1\[1\]$/);
     });
+
+    it('should respect maxSize option for headers strategy', async () => {
+      // Create HTML with large content that should be split
+      const longContent = 'This is some content. '.repeat(50); // ~1100 chars
+      const html = `
+        <html>
+          <body>
+            <h1>Title</h1>
+            <p>${longContent}</p>
+          </body>
+        </html>
+      `;
+
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
+      await doc.chunk({
+        strategy: 'html',
+        headers: [['h1', 'Header 1']],
+        maxSize: 200,
+        overlap: 20,
+      });
+
+      const docs = doc.getDocs();
+      // Content should be split into multiple chunks
+      expect(docs.length).toBeGreaterThan(1);
+      // Each chunk should be roughly within maxSize
+      docs.forEach(d => {
+        expect(d.text.length).toBeLessThanOrEqual(250); // Some tolerance for overlap
+      });
+    });
+
+    it('should not split chunks when maxSize is not specified', async () => {
+      const longContent = 'This is some content. '.repeat(50);
+      const html = `
+        <html>
+          <body>
+            <h1>Title</h1>
+            <p>${longContent}</p>
+          </body>
+        </html>
+      `;
+
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
+      await doc.chunk({
+        strategy: 'html',
+        headers: [['h1', 'Header 1']],
+        // No maxSize specified
+      });
+
+      const docs = doc.getDocs();
+      // Should have exactly 1 chunk (not split by size)
+      expect(docs.length).toBe(1);
+      expect(docs[0]?.text.length).toBeGreaterThan(1000);
+    });
+
+    it('should handle complex academic paper structure with maxSize (arXiv-style HTML)', async () => {
+      // Simulate the structure of an academic paper like "Attention Is All You Need"
+      // from https://arxiv.org/html/1706.03762 - this addresses GitHub Issue #7942
+      const abstractContent = `The dominant sequence transduction models are based on complex recurrent or 
+        convolutional neural networks that include an encoder and a decoder. The best performing models 
+        also connect the encoder and decoder through an attention mechanism. We propose a new simple 
+        network architecture, the Transformer, based solely on attention mechanisms, dispensing with 
+        recurrence and convolutions entirely. Experiments on two machine translation tasks show these 
+        models to be superior in quality while being more parallelizable and requiring significantly 
+        less time to train.`;
+
+      const introContent = `Recurrent neural networks, long short-term memory and gated recurrent neural 
+        networks in particular, have been firmly established as state of the art approaches in sequence 
+        modeling and transduction problems such as language modeling and machine translation. Numerous 
+        efforts have since continued to push the boundaries of recurrent language models and encoder-decoder 
+        architectures. Recurrent models typically factor computation along the symbol positions of the 
+        input and output sequences. Aligning the positions to steps in computation time, they generate 
+        a sequence of hidden states as a function of the previous hidden state and the input for position.
+        This inherently sequential nature precludes parallelization within training examples, which becomes 
+        critical at longer sequence lengths, as memory constraints limit batching across examples.`;
+
+      const modelContent = `In this work we propose the Transformer, a model architecture eschewing recurrence 
+        and instead relying entirely on an attention mechanism to draw global dependencies between input 
+        and output. The Transformer allows for significantly more parallelization and can reach a new 
+        state of the art in translation quality after being trained for as little as twelve hours on 
+        eight P100 GPUs. Self-attention, sometimes called intra-attention is an attention mechanism 
+        relating different positions of a single sequence in order to compute a representation of the 
+        sequence. Self-attention has been used successfully in a variety of tasks including reading 
+        comprehension, abstractive summarization, textual entailment and learning task-independent 
+        sentence representations.`;
+
+      const attentionContent = `An attention function can be described as mapping a query and a set of 
+        key-value pairs to an output, where the query, keys, values, and output are all vectors. The 
+        output is computed as a weighted sum of the values, where the weight assigned to each value is 
+        computed by a compatibility function of the query with the corresponding key. We call our 
+        particular attention Scaled Dot-Product Attention. The input consists of queries and keys of 
+        dimension dk, and values of dimension dv. We compute the dot products of the query with all 
+        keys, divide each by sqrt(dk), and apply a softmax function to obtain the weights on the values.`;
+
+      const html = `
+        <html>
+          <head><title>Attention Is All You Need</title></head>
+          <body>
+            <h1>Attention Is All You Need</h1>
+            <h2>Abstract</h2>
+            <p>${abstractContent}</p>
+            
+            <h2>1 Introduction</h2>
+            <p>${introContent}</p>
+            
+            <h2>2 Model Architecture</h2>
+            <p>${modelContent}</p>
+            
+            <h3>2.1 Attention</h3>
+            <p>${attentionContent}</p>
+            
+            <h3>2.2 Multi-Head Attention</h3>
+            <p>Instead of performing a single attention function with d-dimensional keys, values and 
+            queries, we found it beneficial to linearly project the queries, keys and values h times 
+            with different, learned linear projections to dk, dk and dv dimensions, respectively.</p>
+            
+            <h2>3 Conclusion</h2>
+            <p>In this work, we presented the Transformer, the first sequence transduction model based 
+            entirely on attention, replacing the recurrent layers most commonly used in encoder-decoder 
+            architectures with multi-headed self-attention.</p>
+          </body>
+        </html>
+      `;
+
+      // Test 1: Without maxSize - should produce fewer, larger chunks
+      const docWithoutMaxSize = MDocument.fromHTML(html, { source: 'arxiv' });
+      await docWithoutMaxSize.chunk({
+        strategy: 'html',
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+          ['h3', 'Header 3'],
+        ],
+      });
+      const docsWithoutMaxSize = docWithoutMaxSize.getDocs();
+
+      // Calculate max chunk size without maxSize option
+      const maxSizeWithout = Math.max(...docsWithoutMaxSize.map(d => d.text.length));
+
+      // Test 2: With maxSize=512 - should produce more, smaller chunks
+      const docWithMaxSize = MDocument.fromHTML(html, { source: 'arxiv' });
+      await docWithMaxSize.chunk({
+        strategy: 'html',
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+          ['h3', 'Header 3'],
+        ],
+        maxSize: 512,
+        overlap: 50,
+      });
+      const docsWithMaxSize = docWithMaxSize.getDocs();
+
+      // Calculate max chunk size with maxSize option
+      const maxSizeWith = Math.max(...docsWithMaxSize.map(d => d.text.length));
+
+      // Verify that maxSize creates more chunks (when content is large enough to split)
+      expect(docsWithMaxSize.length).toBeGreaterThanOrEqual(docsWithoutMaxSize.length);
+
+      // Verify chunk sizes are controlled (should be smaller with maxSize)
+      expect(maxSizeWith).toBeLessThanOrEqual(maxSizeWithout);
+
+      // Verify all chunks with maxSize are within the limit (with some tolerance)
+      docsWithMaxSize.forEach(d => {
+        expect(d.text.length).toBeLessThanOrEqual(600); // Allow some tolerance for overlap
+      });
+
+      // Test 3: Even smaller chunks for embedding use case
+      const docSmallChunks = MDocument.fromHTML(html, { source: 'arxiv' });
+      await docSmallChunks.chunk({
+        strategy: 'html',
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+          ['h3', 'Header 3'],
+        ],
+        maxSize: 256,
+        overlap: 25,
+      });
+      const docsSmallChunks = docSmallChunks.getDocs();
+
+      // Should have even more chunks with smaller maxSize
+      expect(docsSmallChunks.length).toBeGreaterThanOrEqual(docsWithMaxSize.length);
+
+      // Verify all chunks are within size limit
+      docsSmallChunks.forEach(d => {
+        expect(d.text.length).toBeLessThanOrEqual(320); // Allow some tolerance
+      });
+    });
+
+    // Integration test that hits the actual arXiv URL
+    // Skip in CI - run with: pnpm test -- --grep "arXiv integration"
+    it.skipIf(process.env.CI === 'true')(
+      'should chunk real arXiv paper HTML with maxSize (integration test)',
+      async () => {
+        // Fetch the actual "Attention Is All You Need" paper
+        // https://arxiv.org/html/1706.03762
+        const paperUrl = 'https://arxiv.org/html/1706.03762';
+        const response = await fetch(paperUrl);
+        expect(response.ok).toBe(true);
+
+        const paperText = await response.text();
+        expect(paperText.length).toBeGreaterThan(10000); // Should be a substantial HTML document
+
+        // Test 1: Without maxSize - large chunks
+        const docWithoutMaxSize = MDocument.fromHTML(paperText, { source: paperUrl });
+        await docWithoutMaxSize.chunk({
+          strategy: 'html',
+          headers: [
+            ['h1', 'Header 1'],
+            ['h2', 'Header 2'],
+            ['h3', 'Header 3'],
+          ],
+        });
+        const docsWithoutMaxSize = docWithoutMaxSize.getDocs();
+
+        // Should have chunks (the paper has multiple sections)
+        expect(docsWithoutMaxSize.length).toBeGreaterThan(0);
+
+        // Calculate stats for without maxSize
+        const sizesWithout = docsWithoutMaxSize.map(d => d.text.length);
+        const maxWithout = Math.max(...sizesWithout);
+        const avgWithout = sizesWithout.reduce((a, b) => a + b, 0) / sizesWithout.length;
+
+        // Test 2: With maxSize=512 - controlled chunks
+        const docWithMaxSize = MDocument.fromHTML(paperText, { source: paperUrl });
+        await docWithMaxSize.chunk({
+          strategy: 'html',
+          headers: [
+            ['h1', 'Header 1'],
+            ['h2', 'Header 2'],
+            ['h3', 'Header 3'],
+          ],
+          maxSize: 512,
+          overlap: 50,
+        });
+        const docsWithMaxSize = docWithMaxSize.getDocs();
+
+        // Calculate stats for with maxSize
+        const sizesWith = docsWithMaxSize.map(d => d.text.length);
+        const maxWith = Math.max(...sizesWith);
+
+        // Key assertion: maxSize should control chunk sizes
+        expect(maxWith).toBeLessThan(maxWithout);
+        expect(docsWithMaxSize.length).toBeGreaterThanOrEqual(docsWithoutMaxSize.length);
+
+        // Verify chunks are within size limit (with tolerance)
+        docsWithMaxSize.forEach(d => {
+          expect(d.text.length).toBeLessThanOrEqual(600);
+        });
+
+        // Log results for visibility when running locally
+        console.log('\n📊 arXiv Paper Chunking Results:');
+        console.log(`   Paper size: ${paperText.length.toLocaleString()} chars`);
+        console.log(
+          `   Without maxSize: ${docsWithoutMaxSize.length} chunks, max: ${maxWithout}, avg: ${Math.round(avgWithout)}`,
+        );
+        console.log(`   With maxSize=512: ${docsWithMaxSize.length} chunks, max: ${maxWith}`);
+      },
+      30000, // 30 second timeout for network request
+    );
   });
 
   describe('chunkJson', () => {

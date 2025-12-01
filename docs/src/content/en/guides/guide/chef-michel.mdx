@@ -19,7 +19,7 @@ You'll learn how to create the agent and register it with Mastra. Next, you'll i
 
 - Node.js `v22.13.0` or later installed
 - An API key from a supported [Model Provider](/models/v1)
-- An existing Mastra project (Follow the [installation guide](/docs/v1/getting-started/installation) to set up a new project)
+- An existing Mastra project (Follow the [installation guide](/guides/v1/getting-started/quickstart) to set up a new project)
 
 ## Creating the Agent
 
@@ -32,7 +32,6 @@ To create an agent in Mastra use the `Agent` class to define it and then registe
 Create a new file `src/mastra/agents/chefAgent.ts` and define your agent:
 
 ```ts copy title="src/mastra/agents/chefAgent.ts"
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const chefAgent = new Agent({
@@ -41,7 +40,7 @@ export const chefAgent = new Agent({
   instructions:
     "You are Michel, a practical and experienced home chef" +
     "You help people cook with whatever ingredients they have available.",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-5.1",
 });
 ```
 

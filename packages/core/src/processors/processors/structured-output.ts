@@ -1,7 +1,8 @@
-import type { TransformStreamDefaultController } from 'stream/web';
+import type { TransformStreamDefaultController } from 'node:stream/web';
 import { Agent } from '../../agent';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { TracingContext } from '../../observability';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
@@ -25,7 +26,7 @@ export const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
  * - Configurable error handling strategies
  * - Automatic instruction generation based on schema
  */
-export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements Processor {
+export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements Processor<'structured-output'> {
   readonly id = STRUCTURED_OUTPUT_PROCESSOR_NAME;
   readonly name = 'Structured Output';
 
@@ -35,6 +36,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
   private fallbackValue?: InferSchemaOutput<OUTPUT>;
   private isStructuringAgentStreamStarted = false;
   private jsonPromptInjection?: boolean;
+  private providerOptions?: ProviderOptions;
 
   constructor(options: StructuredOutputOptions<OUTPUT>) {
     if (!options.schema) {
@@ -58,6 +60,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
     this.errorStrategy = options.errorStrategy ?? 'strict';
     this.fallbackValue = options.fallbackValue;
     this.jsonPromptInjection = options.jsonPromptInjection;
+    this.providerOptions = options.providerOptions;
     // Create internal structuring agent
     this.structuringAgent = new Agent({
       id: 'structured-output-structurer',
@@ -111,6 +114,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
           schema: this.schema as OUTPUT extends OutputSchema ? OUTPUT : never,
           jsonPromptInjection: this.jsonPromptInjection,
         },
+        providerOptions: this.providerOptions,
         tracingContext,
       });
 

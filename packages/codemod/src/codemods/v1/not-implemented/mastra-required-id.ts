@@ -29,6 +29,7 @@ export default createTransformer((fileInfo, api, options, context) => {
     'D1Store',
     'MongoDBStore',
     'DynamoDBStore',
+    'LibSQLVector',
     'PgVector',
     'ChromaVector',
     'PineconeVector',

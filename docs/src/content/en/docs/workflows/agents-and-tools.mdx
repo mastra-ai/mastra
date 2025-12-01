@@ -39,8 +39,6 @@ const step1 = createStep({
 });
 ```
 
-> See [Calling Agents](/examples/v1/agents/calling-agents) for more examples.
-
 ### Agents as steps
 
 Compose an agent as a step using `createStep()` when you don't need to modify the agent call. Use `.map()` to transform the previous step's output into a `prompt` the agent can use.
@@ -143,4 +141,4 @@ export const testWorkflow = createWorkflow({
 ## Related
 
 - [Using Agents](/docs/v1/agents/overview)
-- [Using Tools](/docs/v1/tools-mcp/overview)
+- [MCP Overview](/docs/v1/mcp/overview)

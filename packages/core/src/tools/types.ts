@@ -1,4 +1,4 @@
-import type { WritableStream } from 'stream/web';
+import type { WritableStream } from 'node:stream/web';
 import type {
   Tool,
   ToolV5,
@@ -132,6 +132,10 @@ export type CoreTool = {
   outputSchema?: FlexibleSchema<any> | Schema;
   execute?: (params: any, options: MastraToolInvocationOptions) => Promise<any>;
   /**
+   * Provider-specific options passed to the model when this tool is used.
+   */
+  providerOptions?: Record<string, Record<string, unknown>>;
+  /**
    * Optional MCP-specific properties.
    * Only populated when the tool is being used in an MCP context.
    */
@@ -159,6 +163,10 @@ export type InternalCoreTool = {
   parameters: Schema;
   outputSchema?: Schema;
   execute?: (params: any, options: MastraToolInvocationOptions) => Promise<any>;
+  /**
+   * Provider-specific options passed to the model when this tool is used.
+   */
+  providerOptions?: Record<string, Record<string, unknown>>;
   /**
    * Optional MCP-specific properties.
    * Only populated when the tool is being used in an MCP context.
@@ -212,8 +220,9 @@ export interface ToolAction<
     TSuspendSchema,
     TResumeSchema
   >,
+  TId extends string = string,
 > {
-  id: string;
+  id: TId;
   description: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
@@ -230,6 +239,19 @@ export interface ToolAction<
   ) => Promise<(TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : any) | ValidationError>;
   mastra?: Mastra;
   requireApproval?: boolean;
+  /**
+   * Provider-specific options passed to the model when this tool is used.
+   * Keys are provider names (e.g., 'anthropic', 'openai'), values are provider-specific configs.
+   * @example
+   * ```typescript
+   * providerOptions: {
+   *   anthropic: {
+   *     cacheControl: { type: 'ephemeral' }
+   *   }
+   * }
+   * ```
+   */
+  providerOptions?: Record<string, Record<string, unknown>>;
   onInputStart?: (options: ToolCallOptions) => void | PromiseLike<void>;
   onInputDelta?: (
     options: {
@@ -240,5 +262,11 @@ export interface ToolAction<
     options: {
       input: InferZodLikeSchema<TSchemaIn>;
     } & ToolCallOptions,
+  ) => void | PromiseLike<void>;
+  onOutput?: (
+    options: {
+      output: TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : any;
+      toolName: string;
+    } & Omit<ToolCallOptions, 'messages'>,
   ) => void | PromiseLike<void>;
 }

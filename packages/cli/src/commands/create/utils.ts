@@ -1,6 +1,7 @@
-import fsSync from 'fs';
-import fs from 'fs/promises';
 import child_process from 'node:child_process';
+import fsSync from 'node:fs';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import util from 'node:util';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
@@ -42,6 +43,39 @@ const execWithTimeout = async (command: string, timeoutMs?: number) => {
     throw error;
   }
 };
+
+async function getInitCommand(pm: PackageManager): Promise<string> {
+  switch (pm) {
+    case 'npm':
+      return 'npm init -y';
+    case 'pnpm':
+      return 'pnpm init';
+    case 'yarn':
+      return 'yarn init -y';
+    case 'bun':
+      return 'bun init -y';
+    default:
+      return 'npm init -y';
+  }
+}
+
+async function initializePackageJson(pm: PackageManager): Promise<void> {
+  // Run the init command
+  const initCommand = await getInitCommand(pm);
+  await exec(initCommand);
+
+  // Read and update package.json directly (more reliable than pkg set)
+  const packageJsonPath = path.join(process.cwd(), 'package.json');
+  const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf-8'));
+
+  packageJson.type = 'module';
+  packageJson.engines = {
+    ...packageJson.engines,
+    node: '>=22.13.0',
+  };
+
+  await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
+}
 
 async function installMastraDependency(
   pm: PackageManager,
@@ -114,7 +148,7 @@ export const createMastraProject = async ({
     process.exit(0);
   }
 
-  let result;
+  let result: Awaited<ReturnType<typeof interactivePrompt>> | undefined = undefined;
 
   if (needsInteractive) {
     result = await interactivePrompt({
@@ -123,11 +157,14 @@ export const createMastraProject = async ({
     });
   }
   const s = p.spinner();
+  const originalCwd = process.cwd();
+  let projectPath: string | null = null;
 
   try {
     s.start('Creating project');
     try {
       await fs.mkdir(projectName);
+      projectPath = path.resolve(originalCwd, projectName);
     } catch (error) {
       if (error instanceof Error && 'code' in error && error.code === 'EEXIST') {
         s.stop(`A directory named "${projectName}" already exists. Please choose a different name.`);
@@ -144,9 +181,7 @@ export const createMastraProject = async ({
 
     s.message('Initializing project structure');
     try {
-      await exec(`npm init -y`);
-      await exec(`npm pkg set type="module"`);
-      await exec(`npm pkg set engines.node=">=20.9.0"`);
+      await initializePackageJson(pm);
       const depsService = new DepsService();
       await depsService.addScriptsToPackageJson({
         dev: 'mastra dev',
@@ -235,6 +270,20 @@ export const createMastraProject = async ({
 
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
     p.cancel(`Project creation failed: ${errorMessage}`);
+
+    // Clean up: remove the created directory on failure
+    if (projectPath && fsSync.existsSync(projectPath)) {
+      try {
+        // Change back to original directory before cleanup
+        process.chdir(originalCwd);
+        await fs.rm(projectPath, { recursive: true, force: true });
+      } catch (cleanupError) {
+        // Log but don't throw - we want to exit with the original error
+        console.error(
+          `Warning: Failed to clean up project directory: ${cleanupError instanceof Error ? cleanupError.message : 'Unknown error'}`,
+        );
+      }
+    }
 
     process.exit(1);
   }

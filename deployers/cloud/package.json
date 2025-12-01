@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloud",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0-beta.5",
   "description": "",
   "type": "module",
   "files": [
@@ -37,7 +37,7 @@
     "@mastra/loggers": "workspace:*",
     "execa": "^9.6.0",
     "fs-extra": "^11.3.2",
-    "pino": "^9.7.0",
+    "pino": "^10.1.0",
     "redis": "^5.8.3"
   },
   "devDependencies": {

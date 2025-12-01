@@ -1,4 +1,4 @@
-import { ReadableStream } from 'stream/web';
+import { ReadableStream } from 'node:stream/web';
 import type { Run } from '../workflows';
 import type { ChunkType } from './types';
 

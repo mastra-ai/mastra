@@ -35,6 +35,7 @@ export type StreamTextOnStepFinishCallback<Tools extends ToolSet> = (
 ) => Promise<void> | void;
 
 export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT extends OutputSchema = undefined> = {
+  methodType: ModelMethodType;
   messages?: UIMessage[] | ModelMessage[];
   outputProcessors?: OutputProcessor[];
   requestContext: RequestContext;
@@ -44,3 +45,5 @@ export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT extends OutputSche
   returnScorerData?: boolean;
   messageList: MessageList;
 } & Omit<LoopOptions<TOOLS, OUTPUT>, 'models' | 'messageList'>;
+
+export type ModelMethodType = 'generate' | 'stream';

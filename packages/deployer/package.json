@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0-beta.5",
   "description": "",
   "type": "module",
   "files": [
@@ -108,7 +108,7 @@
     "esbuild": "^0.25.10",
     "find-workspaces": "^0.3.1",
     "fs-extra": "^11.3.2",
-    "hono": "^4.9.7",
+    "hono": "^4.10.5",
     "local-pkg": "^1.1.2",
     "resolve-from": "^5.0.0",
     "resolve.exports": "^2.0.3",
@@ -119,6 +119,7 @@
   },
   "devDependencies": {
     "@hono/node-server": "^1.19.6",
+    "@mastra/hono": "workspace:*",
     "@hono/swagger-ui": "^0.5.2",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
@@ -134,7 +135,7 @@
     "fetch-to-node": "^2.1.0",
     "hono-openapi": "^1.1.1",
     "tsup": "^8.5.0",
-    "type-fest": "^4.41.0",
+    "type-fest": "^5.2.0",
     "typescript": "^5.8.3",
     "vitest": "catalog:",
     "zod": "^3.25.76"

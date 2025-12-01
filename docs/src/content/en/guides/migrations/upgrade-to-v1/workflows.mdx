@@ -124,6 +124,40 @@ npx @mastra/codemod@beta v1/workflow-list-runs .
 
 :::
 
+### Inputs are validated by default
+
+Previously, inputs weren't validated by default. The [`validateInputs`](/reference/v1/workflows/workflow#workflowoptions) flag determines whether to validate the workflow inputs or not. This boolean has been flipped to `true`. If you want the old behavior or have workflows whose schemas don't need to be validated, set `validateInputs: false`.
+
+```diff
+createWorkflow({
++  options: {
++    validateInputs: false
++  }
+})
+```
+
+### Step `suspendPayload` validation
+
+Step `suspendPayload` is now validated for steps that have a `suspendSchema` defined. This also uses the `validateInputs` flag to determine whether to validate the `suspendPayload` or not.
+
+```diff
+  createStep({
+    id: "suspend-resume-step",
+    // ... other step properties
+    suspendSchema: z.object({
+      reason: z.string(),
+      otherReason: z.string()
+    }),
+    execute: async ({ suspend, resumeData}) => {
+      if (!resumeData) {
+-       return suspend({ reason: "Suspension reason" }); // Missing otherReason
++       return suspend({ reason: "Suspension reason", otherReason: "Other reason" });
+      }
+      //... continue execution logic
+    },
+  });
+```
+
 ## Removed
 
 ### Legacy workflows export

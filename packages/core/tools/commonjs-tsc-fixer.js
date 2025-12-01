@@ -1,5 +1,5 @@
-import { readFile, writeFile, rm, mkdir } from 'fs/promises';
-import { dirname, join, relative } from 'path';
+import { readFile, writeFile, rm, mkdir } from 'node:fs/promises';
+import { dirname, join, relative } from 'node:path';
 import { globby } from 'globby';
 
 async function cleanupDtsFiles() {

@@ -1,10 +1,10 @@
-import { DialogTitle } from '@/components/ui/dialog';
-import { DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/ds/components/Button';
-import { Dialog } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { CodeDialogContent } from './workflow-code-dialog-content';
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { WorkflowTimeTravelForm } from './workflow-time-travel-form';
+import { WorkflowRunContext } from '../context/workflow-run-context';
 
 export interface WorkflowStepActionBarProps {
   input?: any;
@@ -17,6 +17,7 @@ export interface WorkflowStepActionBarProps {
   mapConfig?: string;
   onShowNestedGraph?: () => void;
   status?: 'running' | 'success' | 'failed' | 'suspended' | 'waiting';
+  stepKey?: string;
 }
 
 export const WorkflowStepActionBar = ({
@@ -30,19 +31,25 @@ export const WorkflowStepActionBar = ({
   stepId,
   onShowNestedGraph,
   status,
+  stepKey,
 }: WorkflowStepActionBarProps) => {
   const [isInputOpen, setIsInputOpen] = useState(false);
   const [isOutputOpen, setIsOutputOpen] = useState(false);
   const [isResumeDataOpen, setIsResumeDataOpen] = useState(false);
   const [isErrorOpen, setIsErrorOpen] = useState(false);
   const [isMapConfigOpen, setIsMapConfigOpen] = useState(false);
+  const [isTimeTravelOpen, setIsTimeTravelOpen] = useState(false);
+
+  const { withoutTimeTravel } = useContext(WorkflowRunContext);
 
   const dialogContentClass = 'bg-surface2 rounded-lg border-sm border-border1 max-w-4xl w-full px-0';
   const dialogTitleClass = 'border-b-sm border-border1 pb-4 px-6';
 
+  const showTimeTravel = !withoutTimeTravel && stepKey && !mapConfig;
+
   return (
     <>
-      {(input || output || error || mapConfig || resumeData || onShowNestedGraph) && (
+      {(input || output || error || mapConfig || resumeData || onShowNestedGraph || showTimeTravel) && (
         <div
           className={cn(
             'flex flex-wrap items-center bg-surface4 border-t-sm border-border1 px-2 py-1 gap-2 rounded-b-lg',
@@ -54,6 +61,20 @@ export const WorkflowStepActionBar = ({
           )}
         >
           {onShowNestedGraph && <Button onClick={onShowNestedGraph}>View nested graph</Button>}
+          {showTimeTravel && (
+            <>
+              <Button onClick={() => setIsTimeTravelOpen(true)}>Time travel</Button>
+              <Dialog open={isTimeTravelOpen} onOpenChange={setIsTimeTravelOpen}>
+                <DialogContent className={dialogContentClass}>
+                  <DialogTitle className={dialogTitleClass}>Time travel to {stepKey}</DialogTitle>
+
+                  <div className="px-4 overflow-scroll max-h-[600px]">
+                    <WorkflowTimeTravelForm stepKey={stepKey} closeModal={() => setIsTimeTravelOpen(false)} />
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </>
+          )}
           {mapConfig && (
             <>
               <Button onClick={() => setIsMapConfigOpen(true)}>Map config</Button>

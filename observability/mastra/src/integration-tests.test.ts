@@ -469,7 +469,7 @@ function getToolCallFromPrompt(prompt: string): { toolName: string; toolCallId: 
       return {
         toolName: 'workflow-simpleWorkflow',
         toolCallId: 'call-workflow-1',
-        args: { input: 'test input' },
+        args: { inputData: { input: 'test input' } },
       };
     }
   }
@@ -570,18 +570,21 @@ const mockModelV2 = new MockLanguageModelV2({
     const toolCall = getToolCallFromPrompt(prompt);
 
     if (toolCall) {
+      // Put tool calls in the content array, not in a separate toolCalls array
+      // The AISDKV5LanguageModel wrapper will convert these to stream events
       return {
-        content: [],
-        finishReason: 'tool-calls' as const,
-        usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
-        warnings: [],
-        toolCalls: [
+        content: [
           {
+            type: 'tool-call',
             toolCallId: toolCall.toolCallId,
             toolName: toolCall.toolName,
             args: toolCall.args,
+            input: JSON.stringify(toolCall.args),
           },
         ],
+        finishReason: 'tool-calls' as const,
+        usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
+        warnings: [],
       };
     }
 
@@ -597,7 +600,7 @@ const mockModelV2 = new MockLanguageModelV2({
       }
       return {
         content: [{ type: 'text', text: JSON.stringify(structuredData) }],
-        finishReason: 'stop',
+        finishReason: 'stop' as const,
         usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 },
         warnings: [],
       };
@@ -605,8 +608,8 @@ const mockModelV2 = new MockLanguageModelV2({
 
     // Default text response
     return {
-      content: [{ type: 'text', text: 'Mock V2 response' }],
-      finishReason: 'stop',
+      content: [{ type: 'text', text: 'Mock V2 generate response' }],
+      finishReason: 'stop' as const,
       usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 },
       warnings: [],
     };
@@ -668,7 +671,7 @@ const mockModelV2 = new MockLanguageModelV2({
     return {
       stream: convertArrayToReadableStream([
         { type: 'text-delta', id: '1', delta: 'Mock ' },
-        { type: 'text-delta', id: '2', delta: 'V2 streaming ' },
+        { type: 'text-delta', id: '2', delta: 'V2 stream ' },
         { type: 'text-delta', id: '3', delta: 'response' },
         { type: 'finish', finishReason: 'stop', usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 } },
       ]),
@@ -1195,8 +1198,8 @@ describe('Tracing Integration Tests', () => {
             expect(agentRunSpan?.output.text).toBe('Mock streaming response');
             break;
           default: // VNext generate & stream
-            expect(llmGenerationSpan?.output.text).toBe('Mock V2 streaming response');
-            expect(agentRunSpan?.output.text).toBe('Mock V2 streaming response');
+            expect(llmGenerationSpan?.output.text).toBe(`Mock V2 ${name} response`);
+            expect(agentRunSpan?.output.text).toBe(`Mock V2 ${name} response`);
             break;
         }
         expect(llmGenerationSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
@@ -1297,8 +1300,8 @@ describe('Tracing Integration Tests', () => {
             expect(agentRunSpan?.output.text).toBe('Mock streaming response');
             break;
           default: // VNext generate & stream
-            expect(llmGenerationSpan?.output.text).toBe('Mock V2 streaming response');
-            expect(agentRunSpan?.output.text).toBe('Mock V2 streaming response');
+            expect(llmGenerationSpan?.output.text).toBe(`Mock V2 ${name} response`);
+            expect(agentRunSpan?.output.text).toBe(`Mock V2 ${name} response`);
             break;
         }
         expect(llmGenerationSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
@@ -1375,8 +1378,8 @@ describe('Tracing Integration Tests', () => {
             expect(agentRunSpan?.output.text).toBe('Mock streaming response');
             break;
           default: // VNext generate & stream
-            expect(llmGenerationSpan?.output.text).toBe('Mock V2 streaming response');
-            expect(agentRunSpan?.output.text).toBe('Mock V2 streaming response');
+            expect(llmGenerationSpan?.output.text).toBe(`Mock V2 ${name} response`);
+            expect(agentRunSpan?.output.text).toBe(`Mock V2 ${name} response`);
             break;
         }
         expect(llmGenerationSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
@@ -1392,7 +1395,7 @@ describe('Tracing Integration Tests', () => {
 
   describe.each(agentMethods.filter(m => m.name === 'stream' || m.name === 'generate'))(
     'should trace agent using structuredOutput format using $name',
-    ({ method, model }) => {
+    ({ name, method, model }) => {
       it(`should trace spans correctly`, async () => {
         const testAgent = new Agent({
           id: 'test-agent',
@@ -1473,13 +1476,13 @@ describe('Tracing Integration Tests', () => {
         // Verify LLM generation spans
         expect(testAgentLlmSpan!.name).toBe("llm: 'mock-model-id'");
         expect(testAgentLlmSpan!.input.messages).toHaveLength(2);
-        expect(testAgentLlmSpan!.output.text).toBe('Mock V2 streaming response');
+        expect(testAgentLlmSpan!.output.text).toBe(`Mock V2 ${name} response`);
 
         expect(processorAgentLlmSpan?.name).toBe("llm: 'mock-model-id'");
         expect(processorAgentLlmSpan?.output.text).toBeDefined();
 
         // Verify Test Agent output
-        expect(testAgentSpan?.output.text).toBe('Mock V2 streaming response');
+        expect(testAgentSpan?.output.text).toBe(`Mock V2 ${name} response`);
 
         // Verify structured output
         expect(result.object).toBeDefined();

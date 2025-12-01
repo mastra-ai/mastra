@@ -3,29 +3,35 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { SystemMessage } from '@mastra/core/llm';
 import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
-import { RequestContext } from '@mastra/core/request-context';
+import type { RequestContext } from '@mastra/core/request-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
+import { z } from 'zod';
 
-import type {
-  StreamTextOnFinishCallback,
-  StreamTextOnStepFinishCallback,
-} from '../../../../core/dist/llm/model/base.types';
 import { HTTPException } from '../http-exception';
+import {
+  agentIdPathParams,
+  listAgentsResponseSchema,
+  serializedAgentSchema,
+  agentExecutionBodySchema,
+  generateResponseSchema,
+  streamResponseSchema,
+  providersResponseSchema,
+  approveToolCallBodySchema,
+  declineToolCallBodySchema,
+  toolCallResponseSchema,
+  updateAgentModelBodySchema,
+  reorderAgentModelListBodySchema,
+  updateAgentModelInModelListBodySchema,
+  modelManagementResponseSchema,
+  modelConfigIdPathParams,
+} from '../schemas/agents';
+import type { ServerRoute } from '../server-adapter/routes';
+import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
 import { handleError } from './error';
 import { sanitizeBody, validateBody } from './utils';
-
-type GetBody<
-  T extends keyof Agent & { [K in keyof Agent]: Agent[K] extends (...args: any) => any ? K : never }[keyof Agent],
-> = {
-  messages: Parameters<Agent[T]>[0];
-} & Parameters<Agent[T]>[1];
-
-type GetHITLBody<
-  T extends keyof Agent & { [K in keyof Agent]: Agent[K] extends (...args: any) => any ? K : never }[keyof Agent],
-> = Parameters<Agent[T]>[0];
 
 export interface SerializedProcessor {
   id: string;
@@ -38,6 +44,13 @@ export interface SerializedTool {
   inputSchema?: string;
   outputSchema?: string;
   requireApproval?: boolean;
+}
+
+interface SerializedToolInput {
+  id?: string;
+  description?: string;
+  inputSchema?: { jsonSchema?: unknown } | unknown;
+  outputSchema?: { jsonSchema?: unknown } | unknown;
 }
 
 export interface SerializedWorkflow {
@@ -76,57 +89,52 @@ export interface SerializedAgentWithId extends SerializedAgent {
   id: string;
 }
 
-export async function getSerializedAgentTools(tools: Record<string, unknown>): Promise<Record<string, SerializedTool>> {
+export async function getSerializedAgentTools(
+  tools: Record<string, SerializedToolInput>,
+): Promise<Record<string, SerializedTool>> {
   return Object.entries(tools || {}).reduce<Record<string, SerializedTool>>((acc, [key, tool]) => {
-    const _tool = tool as {
-      id?: string;
-      description?: string;
-      inputSchema?: { jsonSchema?: unknown } | unknown;
-      outputSchema?: { jsonSchema?: unknown } | unknown;
-    };
-
-    const toolId = _tool.id ?? `tool-${key}`;
+    const toolId = tool.id ?? `tool-${key}`;
 
     let inputSchemaForReturn: string | undefined = undefined;
     let outputSchemaForReturn: string | undefined = undefined;
 
     try {
-      if (_tool.inputSchema) {
-        if (_tool.inputSchema && typeof _tool.inputSchema === 'object' && 'jsonSchema' in _tool.inputSchema) {
-          inputSchemaForReturn = stringify(_tool.inputSchema.jsonSchema);
-        } else if (typeof _tool.inputSchema === 'function') {
-          const inputSchema = _tool.inputSchema();
+      if (tool.inputSchema) {
+        if (tool.inputSchema && typeof tool.inputSchema === 'object' && 'jsonSchema' in tool.inputSchema) {
+          inputSchemaForReturn = stringify(tool.inputSchema.jsonSchema);
+        } else if (typeof tool.inputSchema === 'function') {
+          const inputSchema = tool.inputSchema();
           if (inputSchema && inputSchema.jsonSchema) {
             inputSchemaForReturn = stringify(inputSchema.jsonSchema);
           }
-        } else if (_tool.inputSchema) {
-          inputSchemaForReturn = stringify(zodToJsonSchema(_tool.inputSchema as Parameters<typeof zodToJsonSchema>[0]));
+        } else if (tool.inputSchema) {
+          inputSchemaForReturn = stringify(zodToJsonSchema(tool.inputSchema as Parameters<typeof zodToJsonSchema>[0]));
         }
       }
 
-      if (_tool.outputSchema) {
-        if (_tool.outputSchema && typeof _tool.outputSchema === 'object' && 'jsonSchema' in _tool.outputSchema) {
-          outputSchemaForReturn = stringify(_tool.outputSchema.jsonSchema);
-        } else if (typeof _tool.outputSchema === 'function') {
-          const outputSchema = _tool.outputSchema();
+      if (tool.outputSchema) {
+        if (tool.outputSchema && typeof tool.outputSchema === 'object' && 'jsonSchema' in tool.outputSchema) {
+          outputSchemaForReturn = stringify(tool.outputSchema.jsonSchema);
+        } else if (typeof tool.outputSchema === 'function') {
+          const outputSchema = tool.outputSchema();
           if (outputSchema && outputSchema.jsonSchema) {
             outputSchemaForReturn = stringify(outputSchema.jsonSchema);
           }
-        } else if (_tool.outputSchema) {
+        } else if (tool.outputSchema) {
           outputSchemaForReturn = stringify(
-            zodToJsonSchema(_tool.outputSchema as Parameters<typeof zodToJsonSchema>[0]),
+            zodToJsonSchema(tool.outputSchema as Parameters<typeof zodToJsonSchema>[0]),
           );
         }
       }
     } catch (error) {
       console.error(`Error getting serialized tool`, {
-        toolId: _tool.id,
+        toolId: tool.id,
         error,
       });
     }
 
     acc[key] = {
-      ..._tool,
+      ...tool,
       id: toolId,
       inputSchema: inputSchemaForReturn,
       outputSchema: outputSchemaForReturn,
@@ -299,34 +307,6 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
   return agent;
 }
 
-// Agent handlers
-export async function listAgentsHandler({
-  mastra,
-  requestContext,
-}: Context & { requestContext: RequestContext }): Promise<Record<string, SerializedAgent>> {
-  try {
-    const agents = mastra.listAgents();
-
-    const serializedAgentsMap = await Promise.all(
-      Object.entries(agents).map(async ([id, agent]) => {
-        return formatAgentList({ id, mastra, agent, requestContext });
-      }),
-    );
-
-    const serializedAgents = serializedAgentsMap.reduce<Record<string, (typeof serializedAgentsMap)[number]>>(
-      (acc, { id, ...rest }) => {
-        acc[id] = { id, ...rest };
-        return acc;
-      },
-      {},
-    );
-
-    return serializedAgents;
-  } catch (error) {
-    return handleError(error, 'Error getting agents');
-  }
-}
-
 async function formatAgent({
   mastra,
   agent,
@@ -441,524 +421,588 @@ async function formatAgent({
   };
 }
 
-export async function getAgentByIdHandler({
-  mastra,
-  requestContext,
-  agentId,
-  isPlayground = false,
-}: Context & { isPlayground?: boolean; requestContext: RequestContext; agentId: string }): Promise<
-  SerializedAgent | ReturnType<typeof handleError>
-> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
+// ============================================================================
+// Route Definitions (new pattern - handlers defined inline with createRoute)
+// ============================================================================
 
-    return formatAgent({ mastra, agent, requestContext, isPlayground });
-  } catch (error) {
-    return handleError(error, 'Error getting agent');
-  }
-}
+export const LIST_AGENTS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/agents',
+  responseType: 'json',
+  responseSchema: listAgentsResponseSchema,
+  summary: 'List all agents',
+  description: 'Returns a list of all available agents in the system',
+  tags: ['Agents'],
+  handler: async ({ mastra, requestContext }) => {
+    try {
+      const agents = mastra.listAgents();
 
-export async function generateLegacyHandler({
-  mastra,
-  requestContext,
-  agentId,
-  body,
-  abortSignal,
-}: Context & {
-  requestContext: RequestContext;
-  agentId: string;
-  body: GetBody<'generateLegacy'> & {
-    // @deprecated use resourceId
-    resourceid?: string;
-    requestContext?: Record<string, unknown>;
-  };
-  abortSignal?: AbortSignal;
-}) {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
+      const serializedAgentsMap = await Promise.all(
+        Object.entries(agents).map(async ([id, agent]) => {
+          return formatAgentList({ id, mastra, agent, requestContext });
+        }),
+      );
 
-    // UI Frameworks may send "client tools" in the body,
-    // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(body, ['tools']);
+      const serializedAgents = serializedAgentsMap.reduce<Record<string, (typeof serializedAgentsMap)[number]>>(
+        (acc, { id, ...rest }) => {
+          acc[id] = { id, ...rest };
+          return acc;
+        },
+        {},
+      );
 
-    const { messages, resourceId, resourceid, requestContext: agentRequestContext, ...rest } = body;
-    // Use resourceId if provided, fall back to resourceid (deprecated)
-    const finalResourceId = resourceId ?? resourceid;
-
-    const finalRequestContext = new RequestContext<Record<string, unknown>>([
-      ...Array.from(requestContext.entries()),
-      ...Array.from(Object.entries(agentRequestContext ?? {})),
-    ]);
-
-    validateBody({ messages });
-
-    const result = await agent.generateLegacy(messages, {
-      ...rest,
-      abortSignal,
-      // @ts-expect-error TODO fix types
-      resourceId: finalResourceId,
-      requestContext: finalRequestContext,
-    });
-
-    return result;
-  } catch (error) {
-    return handleError(error, 'Error generating from agent');
-  }
-}
-
-export async function generateHandler({
-  mastra,
-  requestContext,
-  agentId,
-  body,
-  abortSignal,
-}: Context & {
-  requestContext: RequestContext;
-  agentId: string;
-  body: GetBody<'generate'> & {
-    requestContext?: Record<string, unknown>;
-  };
-  abortSignal?: AbortSignal;
-}): Promise<ReturnType<Agent['generate']>> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    // UI Frameworks may send "client tools" in the body,
-    // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(body, ['tools']);
-
-    const { messages, requestContext: agentRequestContext, ...rest } = body;
-
-    const finalRequestContext = new RequestContext<Record<string, unknown>>([
-      ...Array.from(requestContext.entries()),
-      ...Array.from(Object.entries(agentRequestContext ?? {})),
-    ]);
-
-    validateBody({ messages });
-
-    const result = await agent.generate(messages, {
-      ...rest,
-      requestContext: finalRequestContext,
-      abortSignal,
-    });
-
-    return result;
-  } catch (error) {
-    return handleError(error, 'Error generating from agent');
-  }
-}
-
-export async function streamGenerateLegacyHandler({
-  mastra,
-  requestContext,
-  agentId,
-  body,
-  abortSignal,
-}: Context & {
-  requestContext: RequestContext;
-  agentId: string;
-  body: GetBody<'streamLegacy'> & {
-    // @deprecated use resourceId
-    resourceid?: string;
-    requestContext?: string;
-  };
-  abortSignal?: AbortSignal;
-}): Promise<Response | undefined> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    const { messages, resourceId, resourceid, requestContext: agentRequestContext, ...rest } = body;
-    // Use resourceId if provided, fall back to resourceid (deprecated)
-    const finalResourceId = resourceId ?? resourceid;
-
-    const finalRequestContext = new RequestContext<Record<string, unknown>>([
-      ...Array.from(requestContext.entries()),
-      ...Array.from(Object.entries(agentRequestContext ?? {})),
-    ]);
-
-    validateBody({ messages });
-
-    const streamResult = await agent.streamLegacy(messages, {
-      ...rest,
-      abortSignal,
-      // @ts-expect-error TODO fix types
-      resourceId: finalResourceId,
-      requestContext: finalRequestContext,
-    });
-
-    const streamResponse = rest.output
-      ? streamResult.toTextStreamResponse({
-          headers: {
-            'Transfer-Encoding': 'chunked',
-          },
-        })
-      : streamResult.toDataStreamResponse({
-          sendUsage: true,
-          sendReasoning: true,
-          getErrorMessage: (error: any) => {
-            return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
-          },
-          headers: {
-            'Transfer-Encoding': 'chunked',
-          },
-        });
-
-    return streamResponse;
-  } catch (error) {
-    return handleError(error, 'error streaming agent response');
-  }
-}
-
-export async function streamGenerateHandler({
-  mastra,
-  requestContext,
-  agentId,
-  body,
-  abortSignal,
-}: Context & {
-  requestContext: RequestContext;
-  agentId: string;
-  body: GetBody<'stream'> & {
-    requestContext?: string;
-  };
-  abortSignal?: AbortSignal;
-}): ReturnType<Agent['stream']> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    // UI Frameworks may send "client tools" in the body,
-    // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(body, ['tools']);
-
-    const { messages, requestContext: agentRequestContext, ...rest } = body;
-    const finalRequestContext = new RequestContext<Record<string, unknown>>([
-      ...Array.from(requestContext.entries()),
-      ...Array.from(Object.entries(agentRequestContext ?? {})),
-    ]);
-
-    validateBody({ messages });
-
-    const streamResult = agent.stream(messages, {
-      ...rest,
-      requestContext: finalRequestContext,
-      abortSignal,
-    });
-
-    return streamResult;
-  } catch (error) {
-    return handleError(error, 'error streaming agent response');
-  }
-}
-
-export async function approveToolCallHandler({
-  mastra,
-  requestContext,
-  agentId,
-  body,
-  abortSignal,
-}: Context & {
-  requestContext: RequestContext;
-  agentId: string;
-  body: GetHITLBody<'approveToolCall'> & {
-    requestContext?: string;
-  };
-  abortSignal?: AbortSignal;
-}): ReturnType<Agent['approveToolCall']> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    if (!body.runId) {
-      throw new HTTPException(400, { message: 'Run id is required' });
+      return serializedAgents;
+    } catch (error) {
+      return handleError(error, 'Error getting agents');
     }
-
-    if (!body.toolCallId) {
-      throw new HTTPException(400, { message: 'Tool call id is required' });
-    }
-
-    // UI Frameworks may send "client tools" in the body,
-    // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(body, ['tools']);
-
-    const { runId, requestContext: agentRequestContext, ...rest } = body;
-
-    const finalRequestContext = new RequestContext<Record<string, unknown>>([
-      ...Array.from(requestContext.entries()),
-      ...Array.from(Object.entries(agentRequestContext ?? {})),
-    ]);
-
-    const streamResult = agent.approveToolCall({
-      ...rest,
-      runId,
-      requestContext: finalRequestContext,
-      abortSignal,
-    });
-
-    return streamResult;
-  } catch (error) {
-    return handleError(error, 'error streaming agent response');
-  }
-}
-
-export async function declineToolCallHandler({
-  mastra,
-  requestContext,
-  agentId,
-  body,
-  abortSignal,
-}: Context & {
-  requestContext: RequestContext;
-  agentId: string;
-  body: GetHITLBody<'declineToolCall'> & {
-    requestContext?: string;
-  };
-  abortSignal?: AbortSignal;
-}): ReturnType<Agent['declineToolCall']> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    if (!body.runId) {
-      throw new HTTPException(400, { message: 'Run id is required' });
-    }
-
-    if (!body.toolCallId) {
-      throw new HTTPException(400, { message: 'Tool call id is required' });
-    }
-
-    // UI Frameworks may send "client tools" in the body,
-    // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(body, ['tools']);
-
-    const { runId, requestContext: agentRequestContext, ...rest } = body;
-
-    const finalRequestContext = new RequestContext<Record<string, unknown>>([
-      ...Array.from(requestContext.entries()),
-      ...Array.from(Object.entries(agentRequestContext ?? {})),
-    ]);
-
-    const streamResult = agent.declineToolCall({
-      ...rest,
-      runId,
-      requestContext: finalRequestContext,
-      abortSignal,
-    });
-
-    return streamResult;
-  } catch (error) {
-    return handleError(error, 'error streaming agent response');
-  }
-}
-
-export async function streamNetworkHandler({
-  mastra,
-  requestContext,
-  agentId,
-  body,
-  // abortSignal,
-}: Context & {
-  requestContext: RequestContext;
-  agentId: string;
-  body: GetBody<'network'> & {
-    thread?: string;
-    resourceId?: string;
-  };
-  // abortSignal?: AbortSignal;
-}): ReturnType<Agent['network']> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    // UI Frameworks may send "client tools" in the body,
-    // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(body, ['tools']);
-
-    const { messages, requestContext: agentRequestContext, ...rest } = body;
-    const finalRequestContext = new RequestContext<Record<string, unknown>>([
-      ...Array.from(requestContext.entries()),
-      ...Array.from(Object.entries(agentRequestContext ?? {})),
-    ]);
-
-    validateBody({ messages });
-
-    const streamResult = agent.network(messages, {
-      ...rest,
-      memory: {
-        thread: rest.thread ?? '',
-        resource: rest.resourceId ?? '',
-        options: rest.memory?.options ?? {},
-      },
-      requestContext: finalRequestContext,
-    });
-
-    return streamResult;
-  } catch (error) {
-    return handleError(error, 'error streaming agent loop response');
-  }
-}
-
-export async function streamUIMessageHandler(
-  _params: Context & {
-    requestContext: RequestContext;
-    agentId: string;
-    body: GetBody<'stream'> & {
-      requestContext?: string;
-      onStepFinish?: StreamTextOnStepFinishCallback<any>;
-      onFinish?: StreamTextOnFinishCallback<any>;
-      output?: undefined;
-    };
-    abortSignal?: AbortSignal;
   },
-): Promise<Response | undefined> {
-  try {
-    throw new MastraError({
-      category: ErrorCategory.USER,
-      domain: ErrorDomain.MASTRA_SERVER,
-      id: 'DEPRECATED_ENDPOINT',
-      text: 'This endpoint is deprecated. Please use the @mastra/ai-sdk package to for uiMessage transformations',
-    });
-  } catch (error) {
-    return handleError(error, 'error streaming agent response');
-  }
-}
+});
 
-export async function updateAgentModelHandler({
-  mastra,
-  agentId,
-  body,
-}: Context & {
-  agentId: string;
-  body: {
-    modelId: string;
-    provider: string;
-  };
-}): Promise<{ message: string }> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    const { modelId, provider } = body;
-
-    // Use the universal Mastra router format: provider/model
-    const newModel = `${provider}/${modelId}`;
-
-    agent.__updateModel({ model: newModel });
-
-    return { message: 'Agent model updated' };
-  } catch (error) {
-    return handleError(error, 'error updating agent model');
-  }
-}
-
-export async function resetAgentModelHandler({
-  mastra,
-  agentId,
-}: Context & {
-  agentId: string;
-}): Promise<{ message: string }> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    agent.__resetToOriginalModel();
-
-    return { message: 'Agent model reset to original' };
-  } catch (error) {
-    return handleError(error, 'error resetting agent model');
-  }
-}
-
-export async function reorderAgentModelListHandler({
-  mastra,
-  agentId,
-  body,
-}: Context & {
-  agentId: string;
-  body: {
-    reorderedModelIds: Array<string>;
-  };
-}): Promise<{ message: string }> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    const modelList = await agent.getModelList();
-    if (!modelList || modelList.length === 0) {
-      throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
+export const GET_AGENT_BY_ID_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/agents/:agentId',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  responseSchema: serializedAgentSchema,
+  summary: 'Get agent by ID',
+  description: 'Returns details for a specific agent including configuration, tools, and memory settings',
+  tags: ['Agents'],
+  handler: async ({ agentId, mastra, requestContext }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+      const isPlayground = false; // TODO: Get from context if needed
+      const result = await formatAgent({
+        mastra,
+        agent,
+        requestContext,
+        isPlayground,
+      });
+      return result;
+    } catch (error) {
+      return handleError(error, 'Error getting agent');
     }
+  },
+});
 
-    agent.reorderModels(body.reorderedModelIds);
+export const GENERATE_AGENT_ROUTE: ServerRoute<
+  z.infer<typeof agentIdPathParams> & z.infer<typeof agentExecutionBodySchema>,
+  unknown
+> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/generate',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: generateResponseSchema,
+  summary: 'Generate agent response',
+  description: 'Executes an agent with the provided messages and returns the complete response',
+  tags: ['Agents'],
+  handler: async ({ agentId, mastra, abortSignal, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
 
-    return { message: 'Model list reordered' };
-  } catch (error) {
-    return handleError(error, 'error reordering model list');
-  }
-}
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
 
-export async function updateAgentModelInModelListHandler({
-  mastra,
-  agentId,
-  modelConfigId,
-  body,
-}: Context & {
-  agentId: string;
-  modelConfigId: string;
-  body: {
-    model?: {
-      modelId: string;
-      provider: string;
-    };
-    maxRetries?: number;
-    enabled?: boolean;
-  };
-}): Promise<{ message: string }> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
+      const { messages, ...rest } = params;
 
-    const { model: bodyModel, maxRetries, enabled } = body;
+      validateBody({ messages });
 
-    if (!modelConfigId) {
-      throw new HTTPException(400, { message: 'Model id is required' });
+      const result = await agent.generate(messages, {
+        ...rest,
+        abortSignal,
+      });
+
+      return result;
+    } catch (error) {
+      return handleError(error, 'Error generating from agent');
     }
+  },
+});
 
-    const modelList = await agent.getModelList();
-    if (!modelList || modelList.length === 0) {
-      throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
+// Legacy routes (deprecated)
+export const GENERATE_LEGACY_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/generate-legacy',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: generateResponseSchema,
+  summary: '[DEPRECATED] Generate with legacy format',
+  description: 'Legacy endpoint for generating agent responses. Use /api/agents/:agentId/generate instead.',
+  tags: ['Agents', 'Legacy'],
+  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const { messages, resourceId, resourceid, threadId, ...rest } = params;
+      // Use resourceId if provided, fall back to resourceid (deprecated)
+      const finalResourceId = resourceId ?? resourceid;
+
+      validateBody({ messages });
+
+      if ((threadId && !finalResourceId) || (!threadId && finalResourceId)) {
+        throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
+      }
+
+      const result = await agent.generateLegacy(messages, {
+        ...rest,
+        abortSignal,
+        resourceId: finalResourceId ?? '',
+        threadId: threadId ?? '',
+      });
+
+      return result;
+    } catch (error) {
+      return handleError(error, 'Error generating from agent');
     }
+  },
+});
 
-    const modelToUpdate = modelList.find(m => m.id === modelConfigId);
-    if (!modelToUpdate) {
-      throw new HTTPException(400, { message: 'Model to update is not found in agent model list' });
+export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/stream-legacy',
+  responseType: 'datastream-response' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: '[DEPRECATED] Stream with legacy format',
+  description: 'Legacy endpoint for streaming agent responses. Use /api/agents/:agentId/stream instead.',
+  tags: ['Agents', 'Legacy'],
+  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const { messages, resourceId, resourceid, threadId, ...rest } = params;
+      // Use resourceId if provided, fall back to resourceid (deprecated)
+      const finalResourceId = resourceId ?? resourceid;
+
+      validateBody({ messages });
+
+      if ((threadId && !finalResourceId) || (!threadId && finalResourceId)) {
+        throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
+      }
+
+      const streamResult = await agent.streamLegacy(messages, {
+        ...rest,
+        abortSignal,
+        resourceId: finalResourceId ?? '',
+        threadId: threadId ?? '',
+      });
+
+      const streamResponse = rest.output
+        ? streamResult.toTextStreamResponse({
+            headers: {
+              'Transfer-Encoding': 'chunked',
+            },
+          })
+        : streamResult.toDataStreamResponse({
+            sendUsage: true,
+            sendReasoning: true,
+            getErrorMessage: (error: any) => {
+              return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
+            },
+            headers: {
+              'Transfer-Encoding': 'chunked',
+            },
+          });
+
+      return streamResponse;
+    } catch (error) {
+      return handleError(error, 'error streaming agent response');
     }
+  },
+});
 
-    let model: string | undefined;
-    if (bodyModel) {
-      const { modelId, provider } = bodyModel;
+export const GET_PROVIDERS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/agents/providers',
+  responseType: 'json',
+  responseSchema: providersResponseSchema,
+  summary: 'List AI providers',
+  description: 'Returns a list of all configured AI model providers',
+  tags: ['Agents'],
+  handler: async () => {
+    try {
+      const providers = Object.entries(PROVIDER_REGISTRY).map(([id, provider]) => {
+        // Check if the provider is connected by checking for its API key env var(s)
+        const envVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
+        const connected = envVars.every(envVar => !!process.env[envVar]);
+
+        return {
+          id,
+          name: provider.name,
+          label: (provider as any).label || provider.name,
+          description: (provider as any).description || '',
+          envVar: provider.apiKeyEnvVar,
+          connected,
+          docUrl: provider.docUrl,
+          models: [...provider.models], // Convert readonly array to regular array
+        };
+      });
+      return { providers };
+    } catch (error) {
+      return handleError(error, 'Error fetching providers');
+    }
+  },
+});
+
+export const GENERATE_AGENT_VNEXT_ROUTE: ServerRoute<
+  z.infer<typeof agentIdPathParams> & z.infer<typeof agentExecutionBodySchema>,
+  unknown
+> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/generate/vnext',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: generateResponseSchema,
+  summary: 'Generate a response from an agent',
+  description: 'Generate a response from an agent',
+  tags: ['Agents'],
+  handler: GENERATE_AGENT_ROUTE.handler,
+});
+
+export const STREAM_GENERATE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/stream',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Stream agent response',
+  description: 'Executes an agent with the provided messages and streams the response in real-time',
+  tags: ['Agents'],
+  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const { messages, ...rest } = params;
+      validateBody({ messages });
+
+      const streamResult = await agent.stream(messages, {
+        ...rest,
+        abortSignal,
+      });
+
+      return streamResult.fullStream;
+    } catch (error) {
+      return handleError(error, 'error streaming agent response');
+    }
+  },
+});
+
+export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/stream/vnext',
+  responseType: 'stream',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Stream a response from an agent',
+  description: '[DEPRECATED] This endpoint is deprecated. Please use /stream instead.',
+  tags: ['Agents'],
+  handler: STREAM_GENERATE_ROUTE.handler,
+});
+
+export const APPROVE_TOOL_CALL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/approve-tool-call',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: approveToolCallBodySchema,
+  responseSchema: toolCallResponseSchema,
+  summary: 'Approve tool call',
+  description: 'Approves a pending tool call and continues agent execution',
+  tags: ['Agents', 'Tools'],
+  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      if (!params.toolCallId) {
+        throw new HTTPException(400, { message: 'Tool call id is required' });
+      }
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const streamResult = await agent.approveToolCall({
+        ...params,
+        abortSignal,
+      });
+
+      return streamResult.fullStream;
+    } catch (error) {
+      return handleError(error, 'error approving tool call');
+    }
+  },
+});
+
+export const DECLINE_TOOL_CALL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/decline-tool-call',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: declineToolCallBodySchema,
+  responseSchema: toolCallResponseSchema,
+  summary: 'Decline tool call',
+  description: 'Declines a pending tool call and continues agent execution without executing the tool',
+  tags: ['Agents', 'Tools'],
+  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      if (!params.toolCallId) {
+        throw new HTTPException(400, { message: 'Tool call id is required' });
+      }
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const streamResult = await agent.declineToolCall({
+        ...params,
+        abortSignal,
+      });
+
+      return streamResult.fullStream;
+    } catch (error) {
+      return handleError(error, 'error declining tool call');
+    }
+  },
+});
+
+export const STREAM_NETWORK_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/network',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema.extend({ thread: z.string().optional() }),
+  responseSchema: streamResponseSchema,
+  summary: 'Stream agent network',
+  description: 'Executes an agent network with multiple agents and streams the response',
+  tags: ['Agents'],
+  handler: async ({ mastra, messages, agentId, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      validateBody({ messages });
+
+      const streamResult = await agent.network(messages, {
+        ...params,
+        memory: {
+          thread: params.thread ?? params.threadId ?? '',
+          resource: params.resourceId ?? '',
+          options: params.memory?.options ?? {},
+        },
+      });
+
+      return streamResult;
+    } catch (error) {
+      return handleError(error, 'error streaming agent loop response');
+    }
+  },
+});
+
+export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/model',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: updateAgentModelBodySchema,
+  responseSchema: modelManagementResponseSchema,
+  summary: 'Update agent model',
+  description: 'Updates the AI model used by the agent',
+  tags: ['Agents', 'Models'],
+  handler: async ({ mastra, agentId, modelId, provider }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
       // Use the universal Mastra router format: provider/model
-      model = `${provider}/${modelId}`;
+      const newModel = `${provider}/${modelId}`;
+
+      agent.__updateModel({ model: newModel });
+
+      return { message: 'Agent model updated' };
+    } catch (error) {
+      return handleError(error, 'error updating agent model');
     }
+  },
+});
 
-    agent.updateModelInModelList({ id: modelConfigId, model, maxRetries, enabled });
+export const RESET_AGENT_MODEL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/model/reset',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  responseSchema: modelManagementResponseSchema,
+  summary: 'Reset agent model',
+  description: 'Resets the agent model to its original configuration',
+  tags: ['Agents', 'Models'],
+  handler: async ({ mastra, agentId }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
 
-    return { message: 'Model list updated' };
-  } catch (error) {
-    return handleError(error, 'error updating model list');
-  }
-}
+      agent.__resetToOriginalModel();
 
-export async function getProvidersHandler() {
-  try {
-    const providers = Object.entries(PROVIDER_REGISTRY).map(([id, provider]) => {
-      // Check if the provider is connected by checking for its API key env var(s)
-      const envVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
-      const connected = envVars.every(envVar => !!process.env[envVar]);
+      return { message: 'Agent model reset to original' };
+    } catch (error) {
+      return handleError(error, 'error resetting agent model');
+    }
+  },
+});
 
-      return {
-        id,
-        name: provider.name,
-        envVar: provider.apiKeyEnvVar,
-        connected,
-        docUrl: provider.docUrl,
-        models: [...provider.models], // Convert readonly array to regular array
+export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/models/reorder',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: reorderAgentModelListBodySchema,
+  responseSchema: modelManagementResponseSchema,
+  summary: 'Reorder agent model list',
+  description: 'Reorders the model list for agents with multiple model configurations',
+  tags: ['Agents', 'Models'],
+  handler: async ({ mastra, agentId, reorderedModelIds }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      const modelList = await agent.getModelList();
+      if (!modelList || modelList.length === 0) {
+        throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
+      }
+
+      agent.reorderModels(reorderedModelIds);
+
+      return { message: 'Model list reordered' };
+    } catch (error) {
+      return handleError(error, 'error reordering model list');
+    }
+  },
+});
+
+export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/models/:modelConfigId',
+  responseType: 'json',
+  pathParamSchema: modelConfigIdPathParams,
+  bodySchema: updateAgentModelInModelListBodySchema,
+  responseSchema: modelManagementResponseSchema,
+  summary: 'Update model in model list',
+  description: 'Updates a specific model configuration in the agent model list',
+  tags: ['Agents', 'Models'],
+  handler: async ({ mastra, agentId, modelConfigId, model: bodyModel, maxRetries, enabled }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      const modelList = await agent.getModelList();
+      if (!modelList || modelList.length === 0) {
+        throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
+      }
+
+      const modelConfig = modelList.find(config => config.id === modelConfigId);
+      if (!modelConfig) {
+        throw new HTTPException(404, { message: `Model config with id ${modelConfigId} not found` });
+      }
+
+      const newModel =
+        bodyModel?.modelId && bodyModel?.provider ? `${bodyModel.provider}/${bodyModel.modelId}` : modelConfig.model;
+
+      const updated = {
+        ...modelConfig,
+        model: newModel,
+        ...(maxRetries !== undefined ? { maxRetries } : {}),
+        ...(enabled !== undefined ? { enabled } : {}),
       };
-    });
 
-    return { providers };
-  } catch (error) {
-    return handleError(error, 'error fetching providers');
-  }
-}
+      agent.updateModelInModelList(updated);
+
+      return { message: 'Model updated in model list' };
+    } catch (error) {
+      return handleError(error, 'error updating model in model list');
+    }
+  },
+});
+
+export const STREAM_VNEXT_DEPRECATED_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/streamVNext',
+  responseType: 'stream',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Stream a response from an agent',
+  description: '[DEPRECATED] This endpoint is deprecated. Please use /stream instead.',
+  tags: ['Agents'],
+  handler: async () => {
+    throw new HTTPException(410, { message: 'This endpoint is deprecated. Please use /stream instead.' });
+  },
+});
+
+export const STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/stream/vnext/ui',
+  responseType: 'stream',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Stream UI messages from an agent',
+  description:
+    '[DEPRECATED] This endpoint is deprecated. Please use the @mastra/ai-sdk package for uiMessage transformations',
+  tags: ['Agents'],
+  handler: async () => {
+    try {
+      throw new MastraError({
+        category: ErrorCategory.USER,
+        domain: ErrorDomain.MASTRA_SERVER,
+        id: 'DEPRECATED_ENDPOINT',
+        text: 'This endpoint is deprecated. Please use the @mastra/ai-sdk package to for uiMessage transformations',
+      });
+    } catch (error) {
+      return handleError(error, 'error streaming agent response');
+    }
+  },
+});
+
+export const STREAM_UI_MESSAGE_DEPRECATED_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/stream/ui',
+  responseType: 'stream',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Stream UI messages from an agent',
+  description:
+    '[DEPRECATED] This endpoint is deprecated. Please use the @mastra/ai-sdk package for uiMessage transformations',
+  tags: ['Agents'],
+  handler: STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE.handler,
+});

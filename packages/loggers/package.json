@@ -1,6 +1,6 @@
 {
   "name": "@mastra/loggers",
-  "version": "1.0.0-beta.0",
+  "version": "1.0.0-beta.1",
   "description": "",
   "type": "module",
   "files": [
@@ -71,7 +71,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "pino": "^9.7.0",
+    "pino": "^10.1.0",
     "pino-pretty": "^13.0.0"
   },
   "devDependencies": {

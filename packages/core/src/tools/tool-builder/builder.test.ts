@@ -868,7 +868,7 @@ describe('Tool Input Validation', () => {
 
     expect(result).toHaveProperty('error', true);
     expect(result).toHaveProperty('message');
-    expect(result.message).toContain('Tool validation failed');
+    expect(result.message).toContain('Tool input validation failed');
     expect(result.message).toContain('Name must be at least 3 characters');
     expect(result.message).toContain('- name:');
   });
@@ -882,7 +882,7 @@ describe('Tool Input Validation', () => {
 
     expect(result).toHaveProperty('error', true);
     expect(result).toHaveProperty('message');
-    expect(result.message).toContain('Tool validation failed');
+    expect(result.message).toContain('Tool input validation failed');
     expect(result.message).toContain('Age must be positive');
     expect(result.message).toContain('- age:');
   });
@@ -897,7 +897,7 @@ describe('Tool Input Validation', () => {
 
     expect(result).toHaveProperty('error', true);
     expect(result).toHaveProperty('message');
-    expect(result.message).toContain('Tool validation failed');
+    expect(result.message).toContain('Tool input validation failed');
     expect(result.message).toContain('Invalid email format');
     expect(result.message).toContain('- email:');
   });
@@ -912,7 +912,7 @@ describe('Tool Input Validation', () => {
 
     expect(result).toHaveProperty('error', true);
     expect(result).toHaveProperty('message');
-    expect(result.message).toContain('Tool validation failed');
+    expect(result.message).toContain('Tool input validation failed');
     expect(result.message).toContain('Required');
     expect(result.message).toContain('- name:');
   });
@@ -927,7 +927,7 @@ describe('Tool Input Validation', () => {
 
     expect(result).toHaveProperty('error', true);
     expect(result).toHaveProperty('message');
-    expect(result.message).toContain('Tool validation failed');
+    expect(result.message).toContain('Tool input validation failed');
     expect(result.message).toContain('At least one tag required');
     expect(result.message).toContain('- tags:');
   });
@@ -947,5 +947,188 @@ describe('Tool Input Validation', () => {
     expect(result.message).toContain('"age": 200');
     expect(result.message).toContain('"email": "bad-email"');
     expect(result.message).toContain('"tags": []');
+  });
+});
+
+describe('CoreToolBuilder providerOptions', () => {
+  it('should pass through providerOptions when building a tool', () => {
+    const toolWithProviderOptions = createTool({
+      id: 'cache-control-tool',
+      description: 'A tool with cache control',
+      inputSchema: z.object({ city: z.string() }),
+      providerOptions: {
+        anthropic: {
+          cacheControl: { type: 'ephemeral' },
+        },
+      },
+      execute: async ({ city }) => ({ result: city }),
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: toolWithProviderOptions,
+      options: {
+        name: 'cache-control-tool',
+        logger: console as any,
+        description: 'A tool with cache control',
+        requestContext: new RequestContext(),
+        tracingContext: {},
+      },
+    });
+
+    const builtTool = builder.build();
+
+    expect(builtTool.providerOptions).toEqual({
+      anthropic: {
+        cacheControl: { type: 'ephemeral' },
+      },
+    });
+  });
+
+  it('should handle tools without providerOptions', () => {
+    const toolWithoutProviderOptions = createTool({
+      id: 'no-provider-options',
+      description: 'A tool without provider options',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async ({ value }) => ({ result: value }),
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: toolWithoutProviderOptions,
+      options: {
+        name: 'no-provider-options',
+        logger: console as any,
+        description: 'A tool without provider options',
+        requestContext: new RequestContext(),
+        tracingContext: {},
+      },
+    });
+
+    const builtTool = builder.build();
+
+    expect(builtTool.providerOptions).toBeUndefined();
+  });
+
+  it('should pass through multiple provider options', () => {
+    const toolWithMultipleProviders = createTool({
+      id: 'multi-provider-tool',
+      description: 'A tool with multiple provider options',
+      inputSchema: z.object({ query: z.string() }),
+      providerOptions: {
+        anthropic: {
+          cacheControl: { type: 'ephemeral' },
+        },
+        openai: {
+          customOption: 'value',
+        },
+        google: {
+          anotherOption: true,
+        },
+      },
+      execute: async ({ query }) => ({ result: query }),
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: toolWithMultipleProviders,
+      options: {
+        name: 'multi-provider-tool',
+        logger: console as any,
+        description: 'A tool with multiple provider options',
+        requestContext: new RequestContext(),
+        tracingContext: {},
+      },
+    });
+
+    const builtTool = builder.build();
+
+    expect(builtTool.providerOptions).toEqual({
+      anthropic: {
+        cacheControl: { type: 'ephemeral' },
+      },
+      openai: {
+        customOption: 'value',
+      },
+      google: {
+        anotherOption: true,
+      },
+    });
+  });
+
+  it('should handle Vercel tools with providerOptions', () => {
+    // Simulate a Vercel tool that has providerOptions
+    const vercelToolWithProviderOptions = {
+      description: 'A Vercel tool with provider options',
+      parameters: z.object({ input: z.string() }),
+      providerOptions: {
+        anthropic: {
+          cacheControl: { type: 'ephemeral' },
+        },
+      },
+      execute: async (args: any) => ({ result: args.input }),
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: vercelToolWithProviderOptions as any,
+      options: {
+        name: 'vercel-tool-with-options',
+        logger: console as any,
+        description: 'A Vercel tool with provider options',
+        requestContext: new RequestContext(),
+        tracingContext: {},
+      },
+    });
+
+    const builtTool = builder.build();
+
+    expect(builtTool.providerOptions).toEqual({
+      anthropic: {
+        cacheControl: { type: 'ephemeral' },
+      },
+    });
+  });
+});
+
+describe('CoreToolBuilder Output Schema', () => {
+  it('should allow ZodTuple in outputSchema', () => {
+    const mockModel = {
+      modelId: 'openai/gpt-4.1-mini',
+      provider: 'openrouter',
+      specificationVersion: 'v1',
+      supportsStructuredOutputs: false,
+    } as any;
+
+    const toolWithTupleOutput = createTool({
+      id: 'weather-tool',
+      description: 'Get weather information',
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      outputSchema: z.object({
+        temperature: z.number(),
+        conditions: z.string(),
+        test: z.tuple([z.string(), z.string()]),
+      }),
+      execute: async () => ({
+        temperature: 72,
+        conditions: 'sunny',
+        test: ['value1', 'value2'] as [string, string],
+      }),
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: toolWithTupleOutput,
+      options: {
+        name: 'weather-tool',
+        logger: console as any,
+        description: 'Get weather information',
+        requestContext: new RequestContext(),
+        tracingContext: {},
+        model: mockModel,
+      },
+    });
+
+    expect(() => builder.build()).not.toThrow();
+
+    const builtTool = builder.build();
+    expect(builtTool.outputSchema).toBeDefined();
   });
 });

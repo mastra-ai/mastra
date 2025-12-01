@@ -4,7 +4,6 @@ import type {
   SharedV2ProviderMetadata,
   LanguageModelV2CallWarning,
   LanguageModelV2ResponseMetadata,
-  LanguageModelV2,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider-v5';
 import type { FinishReason, LanguageModelRequestMetadata, LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
@@ -12,8 +11,10 @@ import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
+import type { MastraLanguageModelV2 } from '../llm/model/shared.types';
 import type { TracingContext } from '../observability';
 import type { OutputProcessor } from '../processors';
+import type { RequestContext } from '../request-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './base/schema';
 
@@ -308,6 +309,7 @@ interface TripwirePayload {
 // Network-specific payload interfaces
 interface RoutingAgentStartPayload {
   agentId: string;
+  networkId: string;
   runId: string;
   inputData: {
     task: string;
@@ -324,8 +326,8 @@ interface RoutingAgentStartPayload {
 
 interface RoutingAgentEndPayload {
   task: string;
-  resourceId: string;
-  resourceType: string;
+  primitiveId: string;
+  primitiveType: string;
   prompt: string;
   result: string;
   isComplete?: boolean;
@@ -365,10 +367,12 @@ interface AgentExecutionEndPayload {
   isComplete: boolean;
   iteration: number;
   usage: LanguageModelV2Usage;
+  runId: string;
 }
 
 interface WorkflowExecutionStartPayload {
   name: string;
+  workflowId: string;
   args: {
     task: string;
     primitiveId: string;
@@ -384,6 +388,7 @@ interface WorkflowExecutionStartPayload {
 
 interface WorkflowExecutionEndPayload {
   name: string;
+  workflowId: string;
   task: string;
   primitiveId: string;
   primitiveType: string;
@@ -391,6 +396,7 @@ interface WorkflowExecutionEndPayload {
   isComplete: boolean;
   iteration: number;
   usage: LanguageModelV2Usage;
+  runId: string;
 }
 
 interface ToolExecutionStartPayload {
@@ -625,11 +631,11 @@ export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: To
 export type ReasoningChunk = BaseChunkType & { type: 'reasoning'; payload: ReasoningDeltaPayload };
 
 export type ExecuteStreamModelManager<T> = (
-  callback: (model: LanguageModelV2, isLastModel: boolean) => Promise<T>,
+  callback: (model: MastraLanguageModelV2, isLastModel: boolean) => Promise<T>,
 ) => Promise<T>;
 
 export type ModelManagerModelConfig = {
-  model: LanguageModelV2;
+  model: MastraLanguageModelV2;
   maxRetries: number;
   id: string;
 };
@@ -675,6 +681,7 @@ export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = 
   returnScorerData?: boolean;
   tracingContext?: TracingContext;
   processorStates?: Map<string, any>;
+  requestContext?: RequestContext;
 };
 
 export type LLMStepResult<OUTPUT extends OutputSchema = undefined> = {
