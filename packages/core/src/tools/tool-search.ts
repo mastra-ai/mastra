@@ -54,30 +54,26 @@ export interface ToolSearchConfig {
 }
 
 /**
- * A callable tool search that returns tools for use with Agent toolsets.
- * Call it with an optional threadId to get the search tool plus any loaded tools.
+ * Tool search instance for on-demand tool loading.
  */
 export interface ToolSearch {
-  /** Get tools for a thread. Returns search tool + any loaded tools. */
-  (threadId?: string): Record<string, ToolAction<any, any, any>>;
+  /** Get current tools (search tool + any loaded tools) */
+  (): Record<string, ToolAction<any, any, any>>;
 
   /** Search for tools matching a query */
   search(query: string): Promise<ToolSearchResult[]>;
 
-  /** Manually load a tool for a thread */
-  loadTool(toolId: string, threadId?: string): boolean;
+  /** Manually load a tool */
+  load(toolId: string): boolean;
 
-  /** Unload a tool from a thread */
-  unloadTool(toolId: string, threadId?: string): boolean;
+  /** Reset - mark all tools as deferred again */
+  reset(): void;
 
-  /** Unload all tools for a thread */
-  unloadAll(threadId?: string): void;
-
-  /** Get IDs of loaded tools for a thread */
-  getLoadedToolIds(threadId?: string): string[];
+  /** Get IDs of currently loaded tools */
+  loaded(): string[];
 
   /** Get all available tool IDs */
-  getToolIds(): string[];
+  available(): string[];
 }
 
 // ============================================================================
@@ -197,8 +193,6 @@ function getSearchText(tool: ToolAction<any, any, any>, id: string): string {
   return parts.filter(Boolean).join('. ');
 }
 
-const GLOBAL_THREAD_KEY = '__global__';
-
 const toolSearchInputSchema = z.object({
   query: z.string().describe('Natural language description of the capability or tool you need'),
 });
@@ -206,8 +200,10 @@ const toolSearchInputSchema = z.object({
 /**
  * Creates a tool search for on-demand tool loading.
  *
- * Returns a callable that provides tools for use with Agent toolsets.
- * The search tool finds matching tools and loads them for subsequent turns.
+ * Returns a callable that provides the search tool plus any loaded tools.
+ * When the search tool is called, matching tools are loaded and become
+ * available for the remainder of the request. Call reset() after the
+ * request to mark tools as deferred again.
  *
  * @example
  * ```typescript
@@ -228,17 +224,14 @@ const toolSearchInputSchema = z.object({
  *   model: 'openai/gpt-4o',
  * });
  *
- * // Pass toolSearch() to get current tools (search tool + any loaded tools)
- * let response = await agent.generate('Create a GitHub PR', {
- *   toolsets: { available: toolSearch(threadId) },
+ * // Pass toolSearch() to get current tools
+ * await agent.generate('Create a GitHub PR for the bug fix', {
+ *   toolsets: { available: toolSearch() },
  * });
- * // Agent calls tool_search, which loads github.createPR
+ * // Agent calls tool_search → loads github.createPR → calls it
  *
- * // Next turn: loaded tools are now available
- * response = await agent.generate('OK, now create it', {
- *   toolsets: { available: toolSearch(threadId) },
- * });
- * // Agent can now call github.createPR directly
+ * // Reset after request to mark tools as deferred again
+ * toolSearch.reset();
  * ```
  */
 export async function createToolSearch(config: ToolSearchConfig): Promise<ToolSearch> {
@@ -257,7 +250,7 @@ export async function createToolSearch(config: ToolSearchConfig): Promise<ToolSe
 
   // Index all tools
   const indexedTools = new Map<string, IndexedTool>();
-  const loadedToolsByThread = new Map<string, Set<string>>();
+  const loadedTools = new Set<string>();
 
   const embedText = async (text: string): Promise<number[]> => {
     if (!embedder) throw new Error('Embedder not configured');
@@ -329,92 +322,47 @@ export async function createToolSearch(config: ToolSearchConfig): Promise<ToolSe
     return results;
   };
 
-  // Load tool for a thread
-  const loadTool = (id: string, threadId?: string): boolean => {
-    if (!indexedTools.has(id)) return false;
-    const key = threadId ?? GLOBAL_THREAD_KEY;
-    let loaded = loadedToolsByThread.get(key);
-    if (!loaded) {
-      loaded = new Set();
-      loadedToolsByThread.set(key, loaded);
-    }
-    loaded.add(id);
-    return true;
-  };
+  // Create the search tool
+  const searchTool: Tool<typeof toolSearchInputSchema, any, any, any, any, string> = createTool({
+    id: toolId,
+    description: toolDescription,
+    inputSchema: toolSearchInputSchema,
+    execute: async (input: z.infer<typeof toolSearchInputSchema>, _context?: ToolExecutionContext) => {
+      const results = await search(input.query);
 
-  // Unload tool from a thread
-  const unloadTool = (id: string, threadId?: string): boolean => {
-    const key = threadId ?? GLOBAL_THREAD_KEY;
-    const loaded = loadedToolsByThread.get(key);
-    return loaded?.delete(id) ?? false;
-  };
-
-  // Unload all tools for a thread
-  const unloadAll = (threadId?: string): void => {
-    const key = threadId ?? GLOBAL_THREAD_KEY;
-    loadedToolsByThread.delete(key);
-  };
-
-  // Get loaded tool IDs for a thread
-  const getLoadedToolIds = (threadId?: string): string[] => {
-    const key = threadId ?? GLOBAL_THREAD_KEY;
-    const loaded = loadedToolsByThread.get(key);
-    return loaded ? Array.from(loaded) : [];
-  };
-
-  // Get all available tool IDs
-  const getToolIds = (): string[] => Array.from(indexedTools.keys());
-
-  // Create search tool for a specific thread
-  const createSearchTool = (threadId?: string): Tool<typeof toolSearchInputSchema, any, any, any, any, string> => {
-    return createTool({
-      id: toolId,
-      description: toolDescription,
-      inputSchema: toolSearchInputSchema,
-      execute: async (input: z.infer<typeof toolSearchInputSchema>, _context?: ToolExecutionContext) => {
-        const results = await search(input.query);
-
-        if (results.length === 0) {
-          return {
-            success: false,
-            loadedTools: [],
-            message: 'No matching tools found for your query.',
-            availableTools: getToolIds(),
-            query: input.query,
-          };
-        }
-
-        // Load matching tools for this thread
-        for (const result of results) {
-          loadTool(result.id, threadId);
-        }
-
+      if (results.length === 0) {
         return {
-          success: true,
-          loadedTools: results.map(r => ({ id: r.id, description: r.description, score: r.score })),
-          message: `Loaded ${results.length} tool(s). You can now call them directly.`,
+          success: false,
+          loadedTools: [],
+          message: 'No matching tools found for your query.',
+          availableTools: Array.from(indexedTools.keys()),
           query: input.query,
         };
-      },
-    });
-  };
+      }
 
-  // Get tools for a thread (search tool + loaded tools)
-  const getTools = (threadId?: string): Record<string, ToolAction<any, any, any>> => {
+      // Load matching tools
+      for (const result of results) {
+        loadedTools.add(result.id);
+      }
+
+      return {
+        success: true,
+        loadedTools: results.map(r => ({ id: r.id, description: r.description, score: r.score })),
+        message: `Loaded ${results.length} tool(s). You can now call them directly.`,
+        query: input.query,
+      };
+    },
+  });
+
+  // Get current tools (search + loaded)
+  const getTools = (): Record<string, ToolAction<any, any, any>> => {
     const tools: Record<string, ToolAction<any, any, any>> = {};
+    tools[toolId] = searchTool;
 
-    // Add search tool
-    tools[toolId] = createSearchTool(threadId);
-
-    // Add loaded tools for this thread
-    const key = threadId ?? GLOBAL_THREAD_KEY;
-    const loadedIds = loadedToolsByThread.get(key);
-    if (loadedIds) {
-      for (const id of loadedIds) {
-        const indexed = indexedTools.get(id);
-        if (indexed) {
-          tools[id] = indexed.tool;
-        }
+    for (const id of loadedTools) {
+      const indexed = indexedTools.get(id);
+      if (indexed) {
+        tools[id] = indexed.tool;
       }
     }
 
@@ -422,13 +370,23 @@ export async function createToolSearch(config: ToolSearchConfig): Promise<ToolSe
   };
 
   // Create the callable ToolSearch
-  const toolSearch = ((threadId?: string) => getTools(threadId)) as ToolSearch;
+  const toolSearch = (() => getTools()) as ToolSearch;
+
   toolSearch.search = search;
-  toolSearch.loadTool = loadTool;
-  toolSearch.unloadTool = unloadTool;
-  toolSearch.unloadAll = unloadAll;
-  toolSearch.getLoadedToolIds = getLoadedToolIds;
-  toolSearch.getToolIds = getToolIds;
+
+  toolSearch.load = (id: string): boolean => {
+    if (!indexedTools.has(id)) return false;
+    loadedTools.add(id);
+    return true;
+  };
+
+  toolSearch.reset = () => {
+    loadedTools.clear();
+  };
+
+  toolSearch.loaded = () => Array.from(loadedTools);
+
+  toolSearch.available = () => Array.from(indexedTools.keys());
 
   return toolSearch;
 }
