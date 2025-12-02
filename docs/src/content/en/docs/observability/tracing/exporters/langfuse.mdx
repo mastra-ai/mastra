@@ -111,40 +111,15 @@ new LangfuseExporter({
 
 You can link LLM generations to prompts stored in [Langfuse Prompt Management](https://langfuse.com/docs/prompt-management). This enables version tracking and metrics for your prompts.
 
-### Basic Usage
+### Using the Helper (Recommended)
 
-Add a `langfuse.prompt` object to your trace metadata with `name` and `version`:
+Use `withLangfusePrompt` with `buildTracingOptions` for the cleanest API:
 
 ```typescript title="src/agents/support-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
-
-export const supportAgent = new Agent({
-  name: "support-agent",
-  instructions: "You are a helpful support assistant.",
-  model: openai("gpt-4o"),
-  defaultGenerateOptions: {
-    tracingOptions: {
-      metadata: {
-        langfuse: {
-          prompt: {
-            name: "support-prompt",
-            version: 1,
-          },
-        },
-      },
-    },
-  },
-});
-```
-
-### Using the Langfuse Client
-
-For dynamic prompt management, fetch prompts directly from Langfuse:
-
-```typescript title="src/agents/dynamic-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
+import { buildTracingOptions } from "@mastra/observability";
+import { withLangfusePrompt } from "@mastra/langfuse";
 import { Langfuse } from "langfuse";
 
 const langfuse = new Langfuse({
@@ -155,29 +130,51 @@ const langfuse = new Langfuse({
 // Fetch the prompt from Langfuse Prompt Management
 const prompt = await langfuse.getPrompt("customer-support");
 
-export const dynamicAgent = new Agent({
-  name: "dynamic-agent",
+export const supportAgent = new Agent({
+  name: "support-agent",
   instructions: prompt.prompt, // Use the prompt text from Langfuse
   model: openai("gpt-4o"),
   defaultGenerateOptions: {
-    tracingOptions: {
-      metadata: {
-        langfuse: {
-          prompt: {
-            name: prompt.name,
-            version: prompt.version,
-            id: prompt.id, // Optional: include prompt ID for direct linking
-          },
-        },
-      },
-    },
+    tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)),
   },
 });
 ```
 
+The `withLangfusePrompt` helper automatically extracts `name`, `version`, and `id` from the Langfuse prompt object.
+
+### Composing Multiple Options
+
+You can compose multiple tracing options together:
+
+```typescript
+import { buildTracingOptions, withUserId, withSessionId } from "@mastra/observability";
+import { withLangfusePrompt } from "@mastra/langfuse";
+
+const tracingOptions = buildTracingOptions(
+  withLangfusePrompt(prompt),
+  withUserId("user-123"),
+  withSessionId("session-456"),
+);
+```
+
+### Manual Fields
+
+You can also pass manual fields if you're not using the Langfuse SDK:
+
+```typescript
+const tracingOptions = buildTracingOptions(
+  withLangfusePrompt({ name: "my-prompt", version: 1 }),
+);
+
+// Or with just an ID
+const tracingOptions = buildTracingOptions(
+  withLangfusePrompt({ id: "prompt-uuid-12345" }),
+);
+```
+
 ### Prompt Object Fields
 
-The `langfuse.prompt` object supports these fields:
+The prompt object supports these fields:
 
 | Field | Type | Description |
 |-------|------|-------------|

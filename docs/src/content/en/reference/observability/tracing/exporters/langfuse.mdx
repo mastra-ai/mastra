@@ -120,34 +120,11 @@ const exporter = new LangfuseExporter({
 
 ## Prompt Linking
 
-Link LLM generations to [Langfuse Prompt Management](https://langfuse.com/docs/prompt-management) by setting `metadata.langfuse.prompt`:
+Link LLM generations to [Langfuse Prompt Management](https://langfuse.com/docs/prompt-management) using the `withLangfusePrompt` helper:
 
 ```typescript
-const agent = new Agent({
-  name: "my-agent",
-  instructions: "...",
-  model: openai("gpt-4o"),
-  defaultGenerateOptions: {
-    tracingOptions: {
-      metadata: {
-        langfuse: {
-          prompt: {
-            // Option 1: Use id alone (UUID uniquely identifies prompt version)
-            id: "prompt-uuid",
-            // Option 2: Use name + version
-            name: "my-prompt",
-            version: 1,
-          },
-        },
-      },
-    },
-  },
-});
-```
-
-### Using the Langfuse Client
-
-```typescript
+import { buildTracingOptions } from "@mastra/observability";
+import { withLangfusePrompt } from "@mastra/langfuse";
 import { Langfuse } from "langfuse";
 
 const langfuse = new Langfuse({
@@ -155,7 +132,6 @@ const langfuse = new Langfuse({
   secretKey: process.env.LANGFUSE_SECRET_KEY!,
 });
 
-// Fetch prompt from Langfuse Prompt Management
 const prompt = await langfuse.getPrompt("customer-support");
 
 const agent = new Agent({
@@ -163,19 +139,39 @@ const agent = new Agent({
   instructions: prompt.prompt,
   model: openai("gpt-4o"),
   defaultGenerateOptions: {
-    tracingOptions: {
-      metadata: {
-        langfuse: {
-          prompt: {
-            name: prompt.name,
-            version: prompt.version,
-            id: prompt.id,
-          },
-        },
-      },
-    },
+    tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)),
   },
 });
+```
+
+### Helper Functions
+
+#### `withLangfusePrompt(prompt)`
+
+Adds Langfuse prompt metadata to tracing options.
+
+```typescript
+// With Langfuse SDK prompt object
+withLangfusePrompt(prompt)
+
+// With manual fields
+withLangfusePrompt({ name: "my-prompt", version: 1 })
+withLangfusePrompt({ id: "prompt-uuid" })
+```
+
+### Composing Options
+
+Use `buildTracingOptions` from `@mastra/observability` to compose multiple updaters:
+
+```typescript
+import { buildTracingOptions, withUserId, withSessionId } from "@mastra/observability";
+import { withLangfusePrompt } from "@mastra/langfuse";
+
+const tracingOptions = buildTracingOptions(
+  withLangfusePrompt(prompt),
+  withUserId("user-123"),
+  withSessionId("session-456"),
+);
 ```
 
 When `metadata.langfuse.prompt` is set on a `MODEL_GENERATION` span (with either `id` alone, or `name` + `version`), the exporter automatically links the generation to the prompt in Langfuse.
