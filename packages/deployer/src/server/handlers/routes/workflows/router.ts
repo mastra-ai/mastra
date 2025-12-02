@@ -21,6 +21,13 @@ import {
   observeStreamVNextWorkflowHandler,
   streamLegacyWorkflowHandler,
   observeStreamLegacyWorkflowHandler,
+  timeTravelAsyncWorkflowHandler,
+  timeTravelWorkflowHandler,
+  timeTravelStreamWorkflowHandler,
+  restartAllActiveWorkflowRunsAsyncHandler,
+  restartAllActiveWorkflowRunsHandler,
+  restartAsyncWorkflowHandler,
+  restartWorkflowHandler,
 } from './handlers';
 import {
   createLegacyWorkflowRunHandler,
@@ -613,6 +620,322 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     resumeAsyncWorkflowHandler,
+  );
+
+  router.post(
+    '/:workflowId/time-travel',
+    describeRoute({
+      description: 'Time travel a workflow run',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                step: {
+                  oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+                },
+                inputData: { type: 'object' },
+                resumeData: { type: 'object' },
+                initialState: { type: 'object' },
+                context: { type: 'object', description: 'Context for the workflow execution' },
+                nestedStepsContext: { type: 'object', description: 'Nested steps context for the workflow execution' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the workflow execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
+              },
+              required: ['step'],
+            },
+          },
+        },
+      },
+    }),
+    timeTravelWorkflowHandler,
+  );
+
+  router.post(
+    '/:workflowId/time-travel-stream',
+    describeRoute({
+      description: 'Time travel a workflow run using streamVNext',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                step: {
+                  oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+                },
+                inputData: { type: 'object' },
+                resumeData: { type: 'object' },
+                initialState: { type: 'object' },
+                context: { type: 'object', description: 'Context for the workflow execution' },
+                nestedStepsContext: { type: 'object', description: 'Nested steps context for the workflow execution' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the workflow execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
+              },
+              required: ['step'],
+            },
+          },
+        },
+      },
+    }),
+    timeTravelStreamWorkflowHandler,
+  );
+
+  router.post(
+    '/:workflowId/time-travel-async',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Time travel a workflow run asynchronously',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                step: {
+                  oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+                },
+                inputData: { type: 'object' },
+                resumeData: { type: 'object' },
+                initialState: { type: 'object' },
+                context: { type: 'object', description: 'Context for the workflow execution' },
+                nestedStepsContext: { type: 'object', description: 'Nested steps context for the workflow execution' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the workflow execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
+              },
+              required: ['step'],
+            },
+          },
+        },
+      },
+    }),
+    timeTravelAsyncWorkflowHandler,
+  );
+
+  router.post(
+    '/:workflowId/restart',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Restart a workflow run',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the workflow execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    restartWorkflowHandler,
+  );
+
+  router.post(
+    '/:workflowId/restart-async',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Restart a workflow run asynchronously',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the workflow execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    restartAsyncWorkflowHandler,
+  );
+
+  router.post(
+    '/:workflowId/restart-all-active-workflow-runs',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Restart all active workflow runs',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+    }),
+    restartAllActiveWorkflowRunsHandler,
+  );
+
+  router.post(
+    '/:workflowId/restart-all-active-workflow-runs-async',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Restart all active workflow runs asynchronously',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+    }),
+    restartAllActiveWorkflowRunsAsyncHandler,
   );
 
   router.post(

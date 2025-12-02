@@ -42,6 +42,11 @@ export const DiscriminatedUnionField: React.FC<AutoFormFieldProps> = ({ field, p
     {} as Record<string, ParsedField[]>,
   );
 
+  const andFieldSchemas = field.schema?.filter(schema => {
+    const literalSchema = schema.schema?.find((schema: ParsedField) => schema.fieldConfig?.customData?.isLiteral);
+    return !literalSchema;
+  });
+
   const literalFieldValue = value?.[literalSchemaField.key];
 
   return (
@@ -54,6 +59,10 @@ export const DiscriminatedUnionField: React.FC<AutoFormFieldProps> = ({ field, p
       {literalFieldValue &&
         otherFieldSchemas?.[literalFieldValue] &&
         otherFieldSchemas[literalFieldValue].map((schema: ParsedField) => (
+          <CustomAutoFormField key={`${fullPath}.${schema.key}`} field={schema} path={[...path, schema.key]} />
+        ))}
+      {andFieldSchemas &&
+        andFieldSchemas.map((schema: ParsedField) => (
           <CustomAutoFormField key={`${fullPath}.${schema.key}`} field={schema} path={[...path, schema.key]} />
         ))}
     </div>

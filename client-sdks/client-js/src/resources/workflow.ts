@@ -10,6 +10,7 @@ import type {
   GetWorkflowRunByIdResponse,
   GetWorkflowRunExecutionResultResponse,
   StreamVNextChunkType,
+  TimeTravelParams,
 } from '../types';
 
 import { parseClientRuntimeContext, base64RuntimeContext, runtimeContextQueryString } from '../utils';
@@ -854,5 +855,169 @@ export class Workflow extends BaseResource {
         }
       },
     });
+  }
+
+  /**
+   * Restarts an active workflow run synchronously without waiting for the workflow to complete
+   * @param params - Object containing the runId and runtimeContext
+   * @returns Promise containing success message
+   */
+  restart(params: {
+    runId: string;
+    runtimeContext?: RuntimeContext | Record<string, any>;
+    tracingOptions?: TracingOptions;
+  }): Promise<{ message: string }> {
+    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    return this.request(`/api/workflows/${this.workflowId}/restart?runId=${params.runId}`, {
+      method: 'POST',
+      body: {
+        runtimeContext,
+        tracingOptions: params.tracingOptions,
+      },
+    });
+  }
+
+  /**
+   * Restarts an active workflow run asynchronously
+   * @param params - Object containing the runId and runtimeContext
+   * @returns Promise containing the workflow restart results
+   */
+  restartAsync(params: {
+    runId: string;
+    runtimeContext?: RuntimeContext | Record<string, any>;
+    tracingOptions?: TracingOptions;
+  }): Promise<WorkflowRunResult> {
+    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    return this.request(`/api/workflows/${this.workflowId}/restart-async?runId=${params.runId}`, {
+      method: 'POST',
+      body: {
+        runtimeContext,
+        tracingOptions: params.tracingOptions,
+      },
+    });
+  }
+
+  /**
+   * Restart all active workflow runs synchronously without waiting for the workflow to complete
+   * @returns Promise containing success message
+   */
+  restartAllActiveWorkflowRuns(): Promise<{ message: string }> {
+    return this.request(`/api/workflows/${this.workflowId}/restart-all-active-workflow-runs`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Restart all active workflow runs asynchronously
+   * @returns Promise containing success message
+   */
+  restartAllActiveWorkflowRunsAsync(): Promise<{ message: string }> {
+    return this.request(`/api/workflows/${this.workflowId}/restart-all-active-workflow-runs-async`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Time travels a workflow run synchronously without waiting for the workflow to complete
+   * @param params - Object containing the runId, step, inputData, resumeData, initialState, context, nestedStepsContext, runtimeContext and tracingOptions
+   * @returns Promise containing success message
+   */
+  timeTravel({
+    runId,
+    runtimeContext: paramsRuntimeContext,
+    ...params
+  }: TimeTravelParams): Promise<{ message: string }> {
+    const runtimeContext = parseClientRuntimeContext(paramsRuntimeContext);
+    return this.request(`/api/workflows/${this.workflowId}/time-travel?runId=${runId}`, {
+      method: 'POST',
+      body: {
+        ...params,
+        runtimeContext,
+      },
+    });
+  }
+
+  /**
+   * Time travels a workflow run asynchronously
+   * @param params - Object containing the runId, step, inputData, resumeData, initialState, context, nestedStepsContext, runtimeContext and tracingOptions
+   * @returns Promise containing the workflow time travel results
+   */
+  timeTravelAsync({
+    runId,
+    runtimeContext: paramsRuntimeContext,
+    ...params
+  }: TimeTravelParams): Promise<WorkflowRunResult> {
+    const runtimeContext = parseClientRuntimeContext(paramsRuntimeContext);
+    return this.request(`/api/workflows/${this.workflowId}/time-travel-async?runId=${runId}`, {
+      method: 'POST',
+      body: {
+        ...params,
+        runtimeContext,
+      },
+    });
+  }
+
+  /**
+   * Time travels a workflow run and returns a stream
+   * @param params - Object containing the runId, step, inputData, resumeData, initialState, context, nestedStepsContext, runtimeContext and tracingOptions
+   * @returns Promise containing the workflow execution results
+   */
+  async timeTravelStream({ runId, runtimeContext: paramsRuntimeContext, ...params }: TimeTravelParams) {
+    const runtimeContext = parseClientRuntimeContext(paramsRuntimeContext);
+    const response: Response = await this.request(
+      `/api/workflows/${this.workflowId}/time-travel-stream?runId=${runId}`,
+      {
+        method: 'POST',
+        body: {
+          ...params,
+          runtimeContext,
+        },
+        stream: true,
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to time travel workflow: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    //using undefined instead of empty string to avoid parsing errors
+    let failedChunk: string | undefined = undefined;
+
+    // Create a transform stream that processes the response body
+    const transformStream = new TransformStream<ArrayBuffer, StreamVNextChunkType>({
+      start() {},
+      async transform(chunk, controller) {
+        try {
+          // Decode binary data to text
+          const decoded = new TextDecoder().decode(chunk);
+
+          // Split by record separator
+          const chunks = decoded.split(RECORD_SEPARATOR);
+
+          // Process each chunk
+          for (const chunk of chunks) {
+            if (chunk) {
+              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
+              try {
+                const parsedChunk = JSON.parse(newChunk);
+                controller.enqueue(parsedChunk);
+                failedChunk = undefined;
+              } catch {
+                failedChunk = newChunk;
+              }
+            }
+          }
+        } catch {
+          // Silently ignore processing errors
+        }
+      },
+    });
+
+    // Pipe the response body through the transform stream
+    return response.body.pipeThrough(transformStream);
   }
 }

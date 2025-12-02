@@ -1,5 +1,4 @@
 import { AppSidebar } from './ui/app-sidebar';
-import { Toaster } from './ui/sonner';
 import { ThemeProvider } from './ui/theme-provider';
 import { MainSidebarProvider, Toaster, TooltipProvider } from '@mastra/playground-ui';
 

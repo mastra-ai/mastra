@@ -1,4 +1,4 @@
-import jsonSchemaToZod from 'json-schema-to-zod';
+import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { Braces, Loader2, StopCircle } from 'lucide-react';
 import { useState, useEffect, useContext } from 'react';
 import { parse } from 'superjson';
@@ -147,10 +147,10 @@ export function WorkflowTrigger({
 
   const suspendedSteps = Object.entries(streamResultToUse?.steps || {})
     .filter(([_, { status }]) => status === 'suspended')
-    .map(([stepId, { payload }]) => ({
+    .map(([stepId, { suspendPayload }]) => ({
       stepId,
       runId: innerRunId,
-      suspendPayload: payload,
+      suspendPayload,
       isLoading: false,
     }));
 

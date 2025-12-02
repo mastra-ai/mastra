@@ -1,12 +1,12 @@
 import type { WritableStream } from 'node:stream/web';
-import type { Mastra, RestartExecutionParams, SerializedStepFlowEntry } from '..';
+import type { Mastra } from '..';
 import type { AISpan, AISpanType, TracingPolicy } from '../ai-tracing';
 import { MastraBase } from '../base';
 import type { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
 import type { ChunkType } from '../stream/types';
-import type { Emitter, StepResult, WorkflowRunStatus } from './types';
-import type { StepFlowEntry } from '.';
+import type { Emitter, SerializedStepFlowEntry, StepResult, WorkflowRunStatus } from './types';
+import type { RestartExecutionParams, StepFlowEntry, TimeTravelExecutionParams } from '.';
 
 /**
  * Represents an execution graph for a workflow
@@ -57,6 +57,7 @@ export abstract class ExecutionEngine extends MastraBase {
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
     initialState?: TState;
+    timeTravel?: TimeTravelExecutionParams;
     restart?: RestartExecutionParams;
     resume?: {
       steps: string[];

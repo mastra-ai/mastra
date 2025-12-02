@@ -10,6 +10,7 @@ import type {
   AgentInstructions,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { TracingOptions } from '@mastra/core/ai-tracing';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
@@ -33,7 +34,7 @@ import type {
 } from '@mastra/core/storage';
 import type { OutputSchema } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
-import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
+import type { TimeTravelContext, Workflow, WorkflowResult, WatchEvent, WorkflowState } from '@mastra/core/workflows';
 
 import type { UIMessage } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
@@ -184,7 +185,7 @@ export type GetWorkflowRunsResponse = WorkflowRuns;
 
 export type GetWorkflowRunByIdResponse = WorkflowRun;
 
-export type GetWorkflowRunExecutionResultResponse = WatchEvent['payload']['workflowState'];
+export type GetWorkflowRunExecutionResultResponse = WorkflowState;
 
 export interface GetWorkflowResponse {
   name: string;
@@ -585,4 +586,16 @@ export interface StreamVNextChunkType {
   payload: any;
   runId: string;
   from: 'AGENT' | 'WORKFLOW';
+}
+
+export interface TimeTravelParams {
+  runId: string;
+  step: string | string[];
+  inputData?: Record<string, any>;
+  resumeData?: Record<string, any>;
+  initialState?: Record<string, any>;
+  context?: TimeTravelContext<any, any, any, any>;
+  nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+  runtimeContext?: RuntimeContext | Record<string, any>;
+  tracingOptions?: TracingOptions;
 }

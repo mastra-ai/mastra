@@ -86,7 +86,6 @@
     "@xyflow/react": "^12.8.6",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
-    "json-schema-to-zod": "^2.6.1",
     "motion": "^12.23.22",
     "prettier": "^3.6.2",
     "prism-react-renderer": "^2.4.1",
@@ -117,11 +116,13 @@
     "tailwindcss": "^3.0.0",
     "@mastra/client-js": "workspace:^",
     "@mastra/react": "workspace:*",
-    "@tanstack/react-query": "^5.81.5"
+    "@tanstack/react-query": "^5.81.5",
+    "@mastra/schema-compat": "workspace:*"
   },
   "devDependencies": {
     "@mastra/client-js": "workspace:^",
     "@mastra/react": "workspace:*",
+    "@mastra/schema-compat": "workspace:*",
     "@mastra/core": "workspace:*",
     "@storybook/addon-docs": "^9.1.10",
     "@storybook/react-vite": "^9.1.10",

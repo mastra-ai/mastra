@@ -1,37 +1,37 @@
-import { useState, useEffect } from 'react';
-
-import {
-  Badge,
-  WorkflowIcon,
-  WorkflowTrigger,
-  EntityHeader,
-  useWorkflow,
-  WorkflowRunDetail,
-  useExecuteWorkflow,
-  useStreamWorkflow,
-  useCancelWorkflowRun,
-} from '@mastra/playground-ui';
+import { useState, useEffect, useContext } from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { CopyIcon } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { useParams } from 'react-router';
+import { useWorkflow } from '@/hooks/use-workflows';
+import { EntityHeader } from '@/components/ui/entity-header';
+import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
+import { Badge } from '@/ds/components/Badge';
+import { WorkflowRunDetail } from '../runs/workflow-run-details';
+import { WorkflowTrigger } from '../workflow/workflow-trigger';
+import { toast } from '@/lib/toast';
+import { WorkflowRunContext } from '../context/workflow-run-context';
 
-export function WorkflowInformation({ workflowId }: { workflowId: string }) {
-  const params = useParams();
-  const { data: workflow, isLoading } = useWorkflow(workflowId);
+export interface WorkflowInformationProps {
+  workflowId: string;
+  initialRunId?: string;
+}
 
-  const { createWorkflowRun } = useExecuteWorkflow();
+export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInformationProps) {
+  const { data: workflow, isLoading, error } = useWorkflow(workflowId);
+
   const {
+    createWorkflowRun,
     streamWorkflow,
     streamResult,
-    isStreaming,
+    isStreamingWorkflow,
     observeWorkflowStream,
     closeStreamsAndReset,
-    resumeWorkflowStream,
-  } = useStreamWorkflow();
-  const { mutateAsync: cancelWorkflowRun, isPending: isCancellingWorkflowRun } = useCancelWorkflowRun();
+    resumeWorkflow,
+    cancelWorkflowRun,
+    isCancellingWorkflowRun,
+  } = useContext(WorkflowRunContext);
 
   const [runId, setRunId] = useState<string>('');
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
@@ -39,10 +39,21 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
   const stepsCount = Object.keys(workflow?.steps ?? {}).length;
 
   useEffect(() => {
-    if (!runId && !params?.runId) {
+    if (!runId && !initialRunId) {
       closeStreamsAndReset();
     }
-  }, [runId, params]);
+  }, [runId, initialRunId]);
+
+  useEffect(() => {
+    if (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load workflow';
+      toast.error(`Error loading workflow: ${errorMessage}`);
+    }
+  }, [error]);
+
+  if (error) {
+    return null;
+  }
 
   return (
     <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto border-l-sm border-border1">
@@ -67,21 +78,21 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
 
       <div className="overflow-y-auto border-t-sm border-border1">
         {workflowId ? (
-          params?.runId ? (
+          initialRunId ? (
             <WorkflowRunDetail
               workflowId={workflowId}
-              runId={params?.runId}
+              runId={initialRunId}
               setRunId={setRunId}
               workflow={workflow ?? undefined}
               isLoading={isLoading}
-              createWorkflowRun={createWorkflowRun.mutateAsync}
-              streamWorkflow={streamWorkflow.mutateAsync}
-              resumeWorkflow={resumeWorkflowStream.mutateAsync}
+              createWorkflowRun={createWorkflowRun}
+              streamWorkflow={streamWorkflow}
+              resumeWorkflow={resumeWorkflow}
               streamResult={streamResult}
-              isStreamingWorkflow={isStreaming}
+              isStreamingWorkflow={isStreamingWorkflow}
               isCancellingWorkflowRun={isCancellingWorkflowRun}
               cancelWorkflowRun={cancelWorkflowRun}
-              observeWorkflowStream={observeWorkflowStream.mutate}
+              observeWorkflowStream={observeWorkflowStream}
             />
           ) : (
             <WorkflowTrigger
@@ -89,11 +100,11 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
               setRunId={setRunId}
               workflow={workflow ?? undefined}
               isLoading={isLoading}
-              createWorkflowRun={createWorkflowRun.mutateAsync}
-              streamWorkflow={streamWorkflow.mutateAsync}
-              resumeWorkflow={resumeWorkflowStream.mutateAsync}
+              createWorkflowRun={createWorkflowRun}
+              streamWorkflow={streamWorkflow}
+              resumeWorkflow={resumeWorkflow}
               streamResult={streamResult}
-              isStreamingWorkflow={isStreaming}
+              isStreamingWorkflow={isStreamingWorkflow}
               isCancellingWorkflowRun={isCancellingWorkflowRun}
               cancelWorkflowRun={cancelWorkflowRun}
             />

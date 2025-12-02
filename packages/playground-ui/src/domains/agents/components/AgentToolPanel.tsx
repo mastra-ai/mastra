@@ -1,6 +1,6 @@
 import { usePlaygroundStore } from '@/store/playground-store';
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
-import jsonSchemaToZod from 'json-schema-to-zod';
+import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { parse } from 'superjson';
 import { z } from 'zod';
 import { Txt } from '@/ds/components/Txt';

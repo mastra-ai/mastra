@@ -25,7 +25,7 @@ export function WorkflowGraphInner({ workflow, onShowTrace, onSendEvent }: Workf
   const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges(workflow);
   const [nodes, _, onNodesChange] = useNodesState(initialNodes);
   const [edges] = useEdgesState(initialEdges);
-  const { steps, runId } = useCurrentRun();
+  const { steps } = useCurrentRun();
 
   const nodeTypes = {
     'default-node': (props: NodeProps<DefaultNode>) => (

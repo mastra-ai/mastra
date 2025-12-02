@@ -9,6 +9,7 @@ import type {
   ChunkType,
   WorkflowStreamEvent,
   StreamEvent,
+  TimeTravelContext,
 } from '@mastra/core/workflows';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
@@ -883,5 +884,300 @@ export async function sendWorkflowRunEventHandler({
     return { message: 'Workflow run event sent' };
   } catch (error) {
     return handleError(error, 'Error sending workflow run event');
+  }
+}
+
+export async function restartAsyncWorkflowHandler({
+  mastra,
+  workflowId,
+  runId,
+  runtimeContext,
+  tracingOptions,
+}: WorkflowContext & {
+  runtimeContext?: RuntimeContext;
+  tracingOptions?: TracingOptions;
+}) {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to restart workflow' });
+    }
+
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
+
+    if (!workflow) {
+      throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    const run = await workflow.getWorkflowRunById(runId);
+
+    if (!run) {
+      throw new HTTPException(404, { message: 'Workflow run not found' });
+    }
+
+    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
+    const result = await _run.restart({
+      runtimeContext,
+      tracingOptions,
+    });
+
+    return result;
+  } catch (error) {
+    return handleError(error, 'Error restarting workflow');
+  }
+}
+
+export async function restartWorkflowHandler({
+  mastra,
+  workflowId,
+  runId,
+  runtimeContext,
+  tracingOptions,
+}: WorkflowContext & {
+  runtimeContext?: RuntimeContext;
+  tracingOptions?: TracingOptions;
+}) {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to restart workflow' });
+    }
+
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
+
+    if (!workflow) {
+      throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    const run = await workflow.getWorkflowRunById(runId);
+
+    if (!run) {
+      throw new HTTPException(404, { message: 'Workflow run not found' });
+    }
+
+    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
+
+    void _run.restart({
+      runtimeContext,
+      tracingOptions,
+    });
+
+    return { message: 'Workflow run restarted' };
+  } catch (error) {
+    return handleError(error, 'Error restarting workflow');
+  }
+}
+
+export async function restartAllActiveWorkflowRunsAsyncHandler({ mastra, workflowId }: WorkflowContext) {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
+
+    if (!workflow) {
+      throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    await workflow.restartAllActiveWorkflowRuns();
+
+    return { message: 'All active workflow runs restarted' };
+  } catch (error) {
+    return handleError(error, 'Error restarting all active workflow runs');
+  }
+}
+
+export async function restartAllActiveWorkflowRunsHandler({ mastra, workflowId }: WorkflowContext) {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
+
+    if (!workflow) {
+      throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    void workflow.restartAllActiveWorkflowRuns();
+
+    return { message: 'All active workflow runs restarted' };
+  } catch (error) {
+    return handleError(error, 'Error restarting all active workflow runs');
+  }
+}
+
+export async function timeTravelAsyncWorkflowHandler({
+  mastra,
+  workflowId,
+  runId,
+  body,
+  runtimeContext,
+  tracingOptions,
+}: WorkflowContext & {
+  body: {
+    inputData?: unknown;
+    resumeData?: unknown;
+    initialState?: unknown;
+    step: string | string[];
+    context?: TimeTravelContext<any, any, any, any>;
+    nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+  };
+  runtimeContext?: RuntimeContext;
+  tracingOptions?: TracingOptions;
+}) {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to time travel workflow' });
+    }
+
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
+
+    if (!workflow) {
+      throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    const run = await workflow.getWorkflowRunById(runId);
+
+    if (!run) {
+      throw new HTTPException(404, { message: 'Workflow run not found' });
+    }
+
+    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
+    const result = await _run.timeTravel({
+      ...body,
+      runtimeContext,
+      tracingOptions,
+    });
+
+    return result;
+  } catch (error) {
+    return handleError(error, 'Error time traveling workflow');
+  }
+}
+
+export async function timeTravelWorkflowHandler({
+  mastra,
+  workflowId,
+  runId,
+  body,
+  runtimeContext,
+  tracingOptions,
+}: WorkflowContext & {
+  body: {
+    inputData?: unknown;
+    resumeData?: unknown;
+    initialState?: unknown;
+    step: string | string[];
+    context?: TimeTravelContext<any, any, any, any>;
+    nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+  };
+  runtimeContext?: RuntimeContext;
+  tracingOptions?: TracingOptions;
+}) {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to time travel workflow' });
+    }
+
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
+
+    if (!workflow) {
+      throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    const run = await workflow.getWorkflowRunById(runId);
+
+    if (!run) {
+      throw new HTTPException(404, { message: 'Workflow run not found' });
+    }
+
+    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
+    void _run.timeTravel({
+      ...body,
+      runtimeContext,
+      tracingOptions,
+    });
+
+    return { message: 'Workflow run time travel started' };
+  } catch (error) {
+    return handleError(error, 'Error time traveling workflow');
+  }
+}
+
+export async function timeTravelStreamWorkflowHandler({
+  mastra,
+  workflowId,
+  runId,
+  body,
+  runtimeContext,
+  tracingOptions,
+}: WorkflowContext & {
+  body: {
+    inputData?: unknown;
+    resumeData?: unknown;
+    initialState?: unknown;
+    step: string | string[];
+    context?: TimeTravelContext<any, any, any, any>;
+    nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+  };
+  runtimeContext?: RuntimeContext;
+  tracingOptions?: TracingOptions;
+}) {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to time travel workflow' });
+    }
+
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
+
+    if (!workflow) {
+      throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    const run = await workflow.getWorkflowRunById(runId);
+
+    if (!run) {
+      throw new HTTPException(404, { message: 'Workflow run not found' });
+    }
+
+    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
+    const serverCache = mastra.getServerCache();
+
+    const result = _run.timeTravelStream({ ...body, runtimeContext, tracingOptions });
+
+    return result.fullStream.pipeThrough(
+      new TransformStream<ChunkType, ChunkType>({
+        transform(chunk, controller) {
+          if (serverCache) {
+            const cacheKey = runId;
+            serverCache.listPush(cacheKey, chunk).catch(() => {});
+          }
+
+          controller.enqueue(chunk);
+        },
+      }),
+    );
+  } catch (error) {
+    return handleError(error, 'Error resuming workflow');
   }
 }
