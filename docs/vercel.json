@@ -147,7 +147,12 @@
     },
     {
       "source": "/guides/v1/guide/manual-install",
-      "destination": "/guides/v1/getting-started/manual-install",
+      "destination": "/docs/v1/getting-started/manual-install",
+      "permanent": true
+    },
+    {
+      "source": "/guides/v1/getting-started/manual-install",
+      "destination": "/docs/v1/getting-started/manual-install",
       "permanent": true
     },
     {

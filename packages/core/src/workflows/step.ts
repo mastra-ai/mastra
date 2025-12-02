@@ -24,6 +24,7 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
   state: TState;
   setState(state: TState): void;
   resumeData?: TResumeSchema;
+  suspendData?: TSuspendSchema;
   retryCount: number;
   tracingContext: TracingContext;
   getInitData<T extends z.ZodType<any>>(): z.infer<T>;
