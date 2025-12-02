@@ -785,7 +785,6 @@ export interface TracingOptions {
   /**
    * Tags to apply to this trace.
    * Tags are string labels that can be used to categorize and filter traces
-   * in observability platforms like Braintrust and Langfuse.
    * Note: Tags are only applied to the root span of a trace.
    */
   tags?: string[];
