@@ -1,9 +1,14 @@
-import type { ReadableStream } from 'stream/web';
+import type { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
-import type { LanguageModelV2, LanguageModelV2Usage } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import type { ToolSet } from 'ai-v5';
 import { MessageList } from '../../../agent/message-list';
+import type { MastraDBMessage } from '../../../agent/message-list';
 import { getErrorFromUnknown } from '../../../error/utils.js';
+import type { MastraLanguageModelV2 } from '../../../llm/model/shared.types';
+import { ConsoleLogger } from '../../../logger';
+import { executeWithContextSync } from '../../../observability';
+import { ProcessorRunner } from '../../../processors/runner';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { MastraModelOutput } from '../../../stream/base/output';
@@ -22,7 +27,7 @@ import { llmIterationOutputSchema } from '../schema';
 import { isControllerOpen } from '../stream';
 
 type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
-  model: LanguageModelV2;
+  model: MastraLanguageModelV2;
   tools?: ToolSet;
   messageId: string;
   includeRawChunks?: boolean;
@@ -78,25 +83,22 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         const textStartPayload = chunk.payload as TextStartPayload;
         const providerMetadata = textStartPayload.providerMetadata ?? runState.state.providerOptions;
 
-        messageList.add(
-          {
-            id: messageId,
-            role: 'assistant',
-            content: [
-              providerMetadata
-                ? {
-                    type: 'text',
-                    text: runState.state.textDeltas.join(''),
-                    providerOptions: providerMetadata,
-                  }
-                : {
-                    type: 'text',
-                    text: runState.state.textDeltas.join(''),
-                  },
+        const message: MastraDBMessage = {
+          id: messageId,
+          role: 'assistant' as const,
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'text' as const,
+                text: runState.state.textDeltas.join(''),
+                ...(providerMetadata ? { providerMetadata } : {}),
+              },
             ],
           },
-          'response',
-        );
+          createdAt: new Date(),
+        };
+        messageList.add(message, 'response');
       }
 
       runState.setState({
@@ -200,20 +202,23 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         });
 
         if (Object.values(chunk.payload.providerMetadata || {}).find((v: any) => v?.redactedData)) {
-          messageList.add(
-            {
-              id: messageId,
-              role: 'assistant',
-              content: [
+          const message: MastraDBMessage = {
+            id: messageId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
                 {
-                  type: 'reasoning',
-                  text: '',
-                  providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
+                  type: 'reasoning' as const,
+                  reasoning: '',
+                  details: [{ type: 'redacted', data: '' }],
+                  providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
                 },
               ],
             },
-            'response',
-          );
+            createdAt: new Date(),
+          };
+          messageList.add(message, 'response');
           if (isControllerOpen(controller)) {
             controller.enqueue(chunk);
           }
@@ -240,23 +245,26 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       }
 
       case 'reasoning-end': {
-        // Use the accumulated reasoning deltas from runState
-        if (runState.state.reasoningDeltas.length > 0) {
-          messageList.add(
-            {
-              id: messageId,
-              role: 'assistant',
-              content: [
-                {
-                  type: 'reasoning',
-                  text: runState.state.reasoningDeltas.join(''),
-                  providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
-                },
-              ],
-            },
-            'response',
-          );
-        }
+        // Always store reasoning, even if empty - OpenAI requires item_reference for tool calls
+        // See: https://github.com/mastra-ai/mastra/issues/9005
+        const message: MastraDBMessage = {
+          id: messageId,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'reasoning' as const,
+                reasoning: '',
+                details: [{ type: 'text', text: runState.state.reasoningDeltas.join('') }],
+                providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
+              },
+            ],
+          },
+          createdAt: new Date(),
+        };
+
+        messageList.add(message, 'response');
 
         // Reset reasoning state
         runState.setState({
@@ -271,28 +279,33 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       }
 
       case 'file':
-        messageList.add(
-          {
+        {
+          const message: MastraDBMessage = {
             id: messageId,
-            role: 'assistant',
-            content: [
-              {
-                type: 'file',
-                data: chunk.payload.data,
-                mimeType: chunk.payload.mimeType,
-              },
-            ],
-          },
-          'response',
-        );
-        controller.enqueue(chunk);
+            role: 'assistant' as const,
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'file' as const,
+                  // @ts-expect-error
+                  data: chunk.payload.data, // TODO: incorrect string type
+                  mimeType: chunk.payload.mimeType,
+                },
+              ],
+            },
+            createdAt: new Date(),
+          };
+          messageList.add(message, 'response');
+          controller.enqueue(chunk);
+        }
         break;
 
       case 'source':
-        messageList.add(
-          {
+        {
+          const message: MastraDBMessage = {
             id: messageId,
-            role: 'assistant',
+            role: 'assistant' as const,
             content: {
               format: 2,
               parts: [
@@ -309,11 +322,10 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
               ],
             },
             createdAt: new Date(),
-          },
-          'response',
-        );
-
-        controller.enqueue(chunk);
+          };
+          messageList.add(message, 'response');
+          controller.enqueue(chunk);
+        }
         break;
 
       case 'finish':
@@ -448,10 +460,16 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   controller,
   structuredOutput,
   outputProcessors,
+  inputProcessors,
+  logger,
+  agentId,
   headers,
   downloadRetries,
   downloadConcurrency,
   processorStates,
+  requestContext,
+  methodType,
+  modelSpanTracker,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'llm-execution',
@@ -482,11 +500,40 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
             };
             let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
-            // Call prepareStep callback if provided
+            // Call processInputStep for processors (runs BEFORE prepareStep)
+            // This allows processors to modify messages at each step of the agentic loop
             let stepModel = model;
             let stepToolChoice = toolChoice;
             let stepTools = tools;
 
+            // Run processInputStep for all processors that implement it
+            if (inputProcessors && inputProcessors.length > 0) {
+              const processorRunner = new ProcessorRunner({
+                inputProcessors,
+                outputProcessors: [],
+                logger: logger || new ConsoleLogger({ level: 'error' }),
+                agentName: agentId || 'unknown',
+              });
+
+              try {
+                // processInputStep modifies messages in place via messageList (same as processInput)
+                await processorRunner.runProcessInputStep({
+                  messages: messageList.get.all.db(),
+                  messageList,
+                  stepNumber: inputData.output?.steps?.length || 0,
+                  tracingContext,
+                  requestContext,
+                });
+
+                // Re-fetch messages after processors have modified them
+                inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+              } catch (error) {
+                console.error('Error in processInputStep processors:', error);
+                throw error;
+              }
+            }
+
+            // Call prepareStep callback if provided (runs AFTER processInputStep)
             if (options?.prepareStep) {
               try {
                 const prepareStepResult = await options.prepareStep({
@@ -531,45 +578,50 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
               }
             }
 
-            modelResult = execute({
-              runId,
-              model: stepModel,
-              providerOptions,
-              inputMessages,
-              tools: stepTools,
-              toolChoice: stepToolChoice,
-              options,
-              modelSettings,
-              includeRawChunks,
-              structuredOutput,
-              headers,
-              onResult: ({
-                warnings: warningsFromStream,
-                request: requestFromStream,
-                rawResponse: rawResponseFromStream,
-              }) => {
-                warnings = warningsFromStream;
-                request = requestFromStream || {};
-                rawResponse = rawResponseFromStream;
-
-                if (!isControllerOpen(controller)) {
-                  // Controller is closed or errored, skip enqueueing
-                  // This can happen when downstream errors (like in onStepFinish) close the controller
-                  return;
-                }
-
-                controller.enqueue({
+            modelResult = executeWithContextSync({
+              span: modelSpanTracker?.getTracingContext()?.currentSpan,
+              fn: () =>
+                execute({
                   runId,
-                  from: ChunkFrom.AGENT,
-                  type: 'step-start',
-                  payload: {
-                    request: request || {},
-                    warnings: warnings || [],
-                    messageId: messageId,
+                  model: stepModel,
+                  providerOptions,
+                  inputMessages,
+                  tools: stepTools,
+                  toolChoice: stepToolChoice,
+                  options,
+                  modelSettings,
+                  includeRawChunks,
+                  structuredOutput,
+                  headers,
+                  methodType,
+                  onResult: ({
+                    warnings: warningsFromStream,
+                    request: requestFromStream,
+                    rawResponse: rawResponseFromStream,
+                  }) => {
+                    warnings = warningsFromStream;
+                    request = requestFromStream || {};
+                    rawResponse = rawResponseFromStream;
+
+                    if (!isControllerOpen(controller)) {
+                      // Controller is closed or errored, skip enqueueing
+                      // This can happen when downstream errors (like in onStepFinish) close the controller
+                      return;
+                    }
+
+                    controller.enqueue({
+                      runId,
+                      from: ChunkFrom.AGENT,
+                      type: 'step-start',
+                      payload: {
+                        request: request || {},
+                        warnings: warnings || [],
+                        messageId: messageId,
+                      },
+                    });
                   },
-                });
-              },
-              shouldThrowError: !isLastModel,
+                  shouldThrowError: !isLastModel,
+                }),
             });
             break;
           }
@@ -596,6 +648,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
             isLLMExecutionStep: true,
             tracingContext,
             processorStates,
+            requestContext,
           },
         });
 
@@ -707,25 +760,27 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
       });
 
       if (toolCalls.length > 0) {
-        const assistantContent = [
-          ...toolCalls.map(toolCall => {
-            return {
-              type: 'tool-call' as const,
-              toolCallId: toolCall.toolCallId,
-              toolName: toolCall.toolName,
-              args: toolCall.args,
-            };
-          }),
-        ];
-
-        messageList.add(
-          {
-            id: messageId,
-            role: 'assistant',
-            content: assistantContent,
+        const message: MastraDBMessage = {
+          id: messageId,
+          role: 'assistant' as const,
+          content: {
+            format: 2,
+            parts: toolCalls.map(toolCall => {
+              return {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: toolCall.toolCallId,
+                  toolName: toolCall.toolName,
+                  args: toolCall.args,
+                },
+                ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
+              };
+            }),
           },
-          'response',
-        );
+          createdAt: new Date(),
+        };
+        messageList.add(message, 'response');
       }
 
       const finishReason = runState?.state?.stepResult?.reason ?? outputStream._getImmediateFinishReason();

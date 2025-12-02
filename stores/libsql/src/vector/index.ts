@@ -14,6 +14,7 @@ import type {
   DeleteIndexParams,
   DeleteVectorParams,
   UpdateVectorParams,
+  DeleteVectorsParams,
 } from '@mastra/core/vector';
 import type { LibSQLVectorFilter } from './filter';
 import { LibSQLFilterTranslator } from './filter';
@@ -407,13 +408,36 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  public updateVector(args: UpdateVectorParams): Promise<void> {
+  public updateVector(args: UpdateVectorParams<LibSQLVectorFilter>): Promise<void> {
     return this.executeWriteOperationWithRetry(() => this.doUpdateVector(args));
   }
 
-  private async doUpdateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+  private async doUpdateVector(params: UpdateVectorParams<LibSQLVectorFilter>): Promise<void> {
+    const { indexName, update } = params;
     const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
-    const updates = [];
+
+    // Validate that both id and filter are not provided at the same time
+    if ('id' in params && params.id && 'filter' in params && params.filter) {
+      throw new MastraError({
+        id: 'LIBSQL_VECTOR_UPDATE_MUTUALLY_EXCLUSIVE_PARAMS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: 'id and filter are mutually exclusive - provide only one',
+      });
+    }
+
+    if (!update.vector && !update.metadata) {
+      throw new MastraError({
+        id: 'LIBSQL_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: 'No updates provided',
+      });
+    }
+
+    const updates: string[] = [];
     const args: InValue[] = [];
 
     if (update.vector) {
@@ -427,33 +451,103 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     }
 
     if (updates.length === 0) {
+      return;
+    }
+
+    let whereClause: string;
+    let whereValues: InValue[];
+
+    // Type narrowing: check if updating by id or by filter
+    if ('id' in params && params.id) {
+      // Update by ID
+      whereClause = 'vector_id = ?';
+      whereValues = [params.id];
+    } else if ('filter' in params && params.filter) {
+      // Update by filter
+      const filter = params.filter;
+
+      if (!filter || Object.keys(filter).length === 0) {
+        throw new MastraError({
+          id: 'LIBSQL_VECTOR_UPDATE_EMPTY_FILTER',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: 'Cannot update with empty filter',
+        });
+      }
+
+      const translatedFilter = this.transformFilter(filter);
+      const { sql: filterSql, values: filterValues } = buildFilterQuery(translatedFilter);
+
+      if (!filterSql || filterSql.trim() === '') {
+        throw new MastraError({
+          id: 'LIBSQL_VECTOR_UPDATE_INVALID_FILTER',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: 'Filter produced empty WHERE clause',
+        });
+      }
+
+      // Guard against match-all patterns that would update all vectors
+      // Normalize SQL by removing WHERE prefix and extra whitespace for pattern matching
+      const normalizedCondition = filterSql
+        .replace(/^\s*WHERE\s+/i, '')
+        .trim()
+        .toLowerCase();
+      const matchAllPatterns = ['true', '1 = 1', '1=1'];
+
+      if (matchAllPatterns.includes(normalizedCondition)) {
+        throw new MastraError({
+          id: 'LIBSQL_VECTOR_UPDATE_MATCH_ALL_FILTER',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName, filterSql: normalizedCondition },
+          text: 'Filter matches all vectors. Provide a specific filter to update targeted vectors.',
+        });
+      }
+
+      // buildFilterQuery already includes "WHERE" in the SQL, so we need to extract just the condition
+      whereClause = filterSql.replace(/^WHERE\s+/i, '');
+      whereValues = filterValues;
+    } else {
       throw new MastraError({
-        id: 'LIBSQL_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        id: 'LIBSQL_VECTOR_UPDATE_MISSING_PARAMS',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
-        details: { indexName, id },
-        text: 'No updates provided',
+        details: { indexName },
+        text: 'Either id or filter must be provided',
       });
     }
-    args.push(id);
+
     const query = `
-        UPDATE ${parsedIndexName}
-        SET ${updates.join(', ')}
-        WHERE vector_id = ?;
-      `;
+      UPDATE ${parsedIndexName}
+      SET ${updates.join(', ')}
+      WHERE ${whereClause};
+    `;
 
     try {
       await this.turso.execute({
         sql: query,
-        args,
+        args: [...args, ...whereValues],
       });
     } catch (error) {
+      const errorDetails: Record<string, any> = { indexName };
+
+      if ('id' in params && params.id) {
+        errorDetails.id = params.id;
+      }
+
+      if ('filter' in params && params.filter) {
+        errorDetails.filter = JSON.stringify(params.filter);
+      }
+
       throw new MastraError(
         {
           id: 'LIBSQL_VECTOR_UPDATE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: errorDetails,
         },
         error,
       );
@@ -476,7 +570,10 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
           id: 'LIBSQL_VECTOR_DELETE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName: args.indexName, id: args.id },
+          details: {
+            indexName: args.indexName,
+            ...(args.id && { id: args.id }),
+          },
         },
         error,
       );
@@ -489,6 +586,123 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
       sql: `DELETE FROM ${parsedIndexName} WHERE vector_id = ?`,
       args: [id],
     });
+  }
+
+  public deleteVectors(args: DeleteVectorsParams<LibSQLVectorFilter>): Promise<void> {
+    return this.executeWriteOperationWithRetry(() => this.doDeleteVectors(args));
+  }
+
+  private async doDeleteVectors({ indexName, filter, ids }: DeleteVectorsParams<LibSQLVectorFilter>): Promise<void> {
+    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+
+    // Validate that exactly one of filter or ids is provided
+    if (!filter && !ids) {
+      throw new MastraError({
+        id: 'LIBSQL_VECTOR_DELETE_MISSING_PARAMS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: 'Either filter or ids must be provided',
+      });
+    }
+
+    if (filter && ids) {
+      throw new MastraError({
+        id: 'LIBSQL_VECTOR_DELETE_CONFLICTING_PARAMS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: 'Cannot provide both filter and ids - they are mutually exclusive',
+      });
+    }
+
+    let query: string;
+    let values: InValue[];
+
+    if (ids) {
+      // Delete by IDs
+      if (ids.length === 0) {
+        throw new MastraError({
+          id: 'LIBSQL_VECTOR_DELETE_EMPTY_IDS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: 'Cannot delete with empty ids array',
+        });
+      }
+
+      const placeholders = ids.map(() => '?').join(', ');
+      query = `DELETE FROM ${parsedIndexName} WHERE vector_id IN (${placeholders})`;
+      values = ids;
+    } else {
+      // Delete by filter
+      // Safety check: Don't allow empty filters to prevent accidental deletion of all vectors
+      if (!filter || Object.keys(filter).length === 0) {
+        throw new MastraError({
+          id: 'LIBSQL_VECTOR_DELETE_EMPTY_FILTER',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: 'Cannot delete with empty filter. Use deleteIndex to delete all vectors.',
+        });
+      }
+
+      const translatedFilter = this.transformFilter(filter);
+      const { sql: filterSql, values: filterValues } = buildFilterQuery(translatedFilter);
+
+      if (!filterSql || filterSql.trim() === '') {
+        throw new MastraError({
+          id: 'LIBSQL_VECTOR_DELETE_INVALID_FILTER',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: 'Filter produced empty WHERE clause',
+        });
+      }
+
+      // Guard against match-all patterns that would delete all vectors
+      // Normalize SQL by removing WHERE prefix and extra whitespace for pattern matching
+      const normalizedCondition = filterSql
+        .replace(/^\s*WHERE\s+/i, '')
+        .trim()
+        .toLowerCase();
+      const matchAllPatterns = ['true', '1 = 1', '1=1'];
+
+      if (matchAllPatterns.includes(normalizedCondition)) {
+        throw new MastraError({
+          id: 'LIBSQL_VECTOR_DELETE_MATCH_ALL_FILTER',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName, filterSql: normalizedCondition },
+          text: 'Filter matches all vectors. Use deleteIndex to delete all vectors from an index.',
+        });
+      }
+
+      // buildFilterQuery already includes "WHERE" in the SQL
+      query = `DELETE FROM ${parsedIndexName} ${filterSql}`;
+      values = filterValues;
+    }
+
+    try {
+      await this.turso.execute({
+        sql: query,
+        args: values,
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_VECTOR_DELETE_VECTORS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            ...(filter && { filter: JSON.stringify(filter) }),
+            ...(ids && { idsCount: ids.length }),
+          },
+        },
+        error,
+      );
+    }
   }
 
   public truncateIndex(args: DeleteIndexParams): Promise<void> {

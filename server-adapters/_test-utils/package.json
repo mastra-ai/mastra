@@ -1,0 +1,28 @@
+{
+  "name": "@internal/server-adapter-test-utils",
+  "version": "0.0.1",
+  "description": "Test utilities for server adapters",
+  "type": "module",
+  "main": "src/index.ts",
+  "private": true,
+  "scripts": {
+    "test": "vitest run"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "peerDependencies": {
+    "vitest": "*",
+    "@mastra/core": "*",
+    "@mastra/server": "*"
+  },
+  "devDependencies": {
+    "@mastra/core": "workspace:*",
+    "@mastra/server": "workspace:*",
+    "@mastra/mcp": "workspace:*",
+    "zod": "^3.25.76"
+  }
+}

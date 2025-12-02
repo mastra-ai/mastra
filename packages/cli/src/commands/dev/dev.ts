@@ -1,6 +1,6 @@
-import type { ChildProcess } from 'child_process';
+import type { ChildProcess } from 'node:child_process';
+import { join } from 'node:path';
 import process from 'node:process';
-import { join } from 'path';
 import devcert from '@expo/devcert';
 import { FileService } from '@mastra/deployer';
 import { getServerOptions } from '@mastra/deployer/build';
@@ -23,8 +23,8 @@ interface HTTPSOptions {
 }
 
 interface StartOptions {
-  inspect?: boolean;
-  inspectBrk?: boolean;
+  inspect?: string | boolean;
+  inspectBrk?: string | boolean;
   customArgs?: string[];
   https?: HTTPSOptions;
 }
@@ -69,12 +69,17 @@ const startServer = async (
 
     const commands = [];
 
-    if (startOptions.inspect) {
-      commands.push('--inspect');
+    const inspect = startOptions.inspect === '' ? true : startOptions.inspect;
+    const inspectBrk = startOptions.inspectBrk === '' ? true : startOptions.inspectBrk;
+
+    if (inspect) {
+      const inspectFlag = typeof inspect === 'string' ? `--inspect=${inspect}` : '--inspect';
+      commands.push(inspectFlag);
     }
 
-    if (startOptions.inspectBrk) {
-      commands.push('--inspect-brk'); //stops at beginning of script
+    if (inspectBrk) {
+      const inspectBrkFlag = typeof inspectBrk === 'string' ? `--inspect-brk=${inspectBrk}` : '--inspect-brk';
+      commands.push(inspectBrkFlag);
     }
 
     if (startOptions.customArgs) {
@@ -116,7 +121,7 @@ const startServer = async (
       currentServerProcess.stdout.on('data', (data: Buffer) => {
         const output = data.toString();
         if (
-          !output.includes('Playground available') &&
+          !output.includes('Studio available') &&
           !output.includes('👨‍💻') &&
           !output.includes('Mastra API running on port')
         ) {
@@ -129,7 +134,7 @@ const startServer = async (
       currentServerProcess.stderr.on('data', (data: Buffer) => {
         const output = data.toString();
         if (
-          !output.includes('Playground available') &&
+          !output.includes('Studio available') &&
           !output.includes('👨‍💻') &&
           !output.includes('Mastra API running on port')
         ) {
@@ -313,8 +318,8 @@ export async function dev({
   root?: string;
   tools?: string[];
   env?: string;
-  inspect?: boolean;
-  inspectBrk?: boolean;
+  inspect?: string | boolean;
+  inspectBrk?: string | boolean;
   customArgs?: string[];
   https?: boolean;
   debug: boolean;

@@ -10,6 +10,7 @@ import type { OutputSchema } from '../../../stream/base/schema';
 import { createWorkflow } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
+import type { AgentMethodType } from '../../types';
 import { createMapResultsStep } from './map-results-step';
 import { createPrepareMemoryStep } from './prepare-memory-step';
 import { createPrepareToolsStep } from './prepare-tools-step';
@@ -27,12 +28,12 @@ interface CreatePrepareStreamWorkflowOptions<
   runId: string;
   requestContext: RequestContext;
   agentSpan: Span<SpanType.AGENT_RUN>;
-  methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+  methodType: AgentMethodType;
   instructions: SystemMessage;
   memoryConfig?: MemoryConfig;
   memory?: MastraMemory;
-  saveQueueManager: SaveQueueManager;
   returnScorerData?: boolean;
+  saveQueueManager?: SaveQueueManager;
   requireToolApproval?: boolean;
   resumeContext?: {
     resumeData: any;
@@ -57,8 +58,8 @@ export function createPrepareStreamWorkflow<
   instructions,
   memoryConfig,
   memory,
-  saveQueueManager,
   returnScorerData,
+  saveQueueManager,
   requireToolApproval,
   resumeContext,
   agentId,
@@ -98,6 +99,11 @@ export function createPrepareStreamWorkflow<
     resumeContext,
     agentId,
     toolCallId,
+    methodType,
+    saveQueueManager,
+    memoryConfig,
+    memory,
+    resourceId,
   });
 
   const mapResultsStep = createMapResultsStep({
@@ -108,9 +114,9 @@ export function createPrepareStreamWorkflow<
     requestContext,
     memory,
     memoryConfig,
-    saveQueueManager,
     agentSpan,
     agentId,
+    methodType,
   });
 
   return createWorkflow({
@@ -125,6 +131,7 @@ export function createPrepareStreamWorkflow<
       tracingPolicy: {
         internal: InternalSpans.WORKFLOW,
       },
+      validateInputs: false,
     },
   })
     .parallel([prepareToolsStep, prepareMemoryStep])

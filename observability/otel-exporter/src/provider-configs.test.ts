@@ -108,20 +108,20 @@ describe('Provider Configurations', () => {
       const config = resolveProviderConfig({
         custom: {
           endpoint: 'https://my-collector.example.com',
-          headers: { 'x-api-key': 'test' },
+          headers: { 'x-value': 'test' },
           protocol: 'http/protobuf',
         },
       });
 
       expect(config?.endpoint).toBe('https://my-collector.example.com');
-      expect(config?.headers['x-api-key']).toBe('test');
+      expect(config?.headers['x-value']).toBe('test');
       expect(config?.protocol).toBe('http/protobuf');
     });
 
     it('should require endpoint for custom provider', () => {
       const config = resolveProviderConfig({
         custom: {
-          headers: { 'x-api-key': 'test' },
+          headers: { 'x-value': 'test' },
         },
       });
 

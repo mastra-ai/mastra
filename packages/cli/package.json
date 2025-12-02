@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.4",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -59,7 +59,7 @@
     "fs-extra": "^11.3.2",
     "get-port": "^7.1.0",
     "picocolors": "^1.1.1",
-    "posthog-node": "4.18.0",
+    "posthog-node": "5.11.2",
     "prettier": "^3.6.2",
     "shell-quote": "^1.8.3",
     "strip-json-comments": "^5.0.3",
@@ -75,13 +75,15 @@
     "@types/fs-extra": "^11.0.4",
     "@types/node": "22.13.17",
     "@types/shell-quote": "^1.7.5",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "memfs": "^4.50.0",
     "rollup": "^4.50.2",
     "tsup": "^8.5.0",
     "type-fest": "^5.2.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0",

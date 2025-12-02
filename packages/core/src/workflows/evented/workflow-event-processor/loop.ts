@@ -1,4 +1,4 @@
-import EventEmitter from 'events';
+import EventEmitter from 'node:events';
 import type { StepFlowEntry, StepResult } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
@@ -134,6 +134,7 @@ export async function processWorkflowForEach(
     stepResults,
     activeSteps,
     resumeSteps,
+    timeTravel,
     resumeData,
     parentWorkflow,
     requestContext,
@@ -166,6 +167,7 @@ export async function processWorkflowForEach(
         executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
         resumeSteps,
         stepResults,
+        timeTravel,
         prevResult: currentResult,
         resumeData,
         activeSteps,
@@ -208,6 +210,7 @@ export async function processWorkflowForEach(
           executionPath: [executionPath[0]!, i],
           resumeSteps,
           stepResults,
+          timeTravel,
           prevResult,
           resumeData,
           activeSteps,
@@ -242,6 +245,7 @@ export async function processWorkflowForEach(
       runId,
       executionPath: [executionPath[0]!, idx],
       resumeSteps,
+      timeTravel,
       stepResults,
       prevResult,
       resumeData,

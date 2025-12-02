@@ -740,10 +740,10 @@ describe('Working Memory Tests', () => {
         type: 'object',
         properties: {
           name: { type: 'string' },
-          age: { type: 'number' },
+          age: { type: ['number', 'null'] },
           city: { type: 'string' },
           preferences: {
-            type: 'object',
+            type: ['object', 'null'],
             properties: {
               theme: { type: 'string' },
               notifications: { type: 'boolean' },

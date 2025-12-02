@@ -7,7 +7,7 @@ import { createScorer } from '@mastra/core/evals';
 import { MCPServer } from '@mastra/mcp';
 import { z } from 'zod';
 
-import { LibSQLStore } from '@mastra/libsql';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { PostgresStore } from '@mastra/pg';
 import { D1Store } from '@mastra/cloudflare-d1';
 import { MongoDBStore } from '@mastra/mongodb';
@@ -21,6 +21,10 @@ import { LanceVector } from '@mastra/lance';
 
 const libsqlStorage = new LibSQLStore({
   url: ':memory:',
+});
+
+const libsqlVector = new LibSQLVector({
+  connectionUrl: "file:../../mastra.db",
 });
 
 const postgresStorage = new PostgresStore({

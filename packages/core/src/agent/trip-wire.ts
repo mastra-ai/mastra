@@ -1,5 +1,5 @@
-import { randomUUID } from 'crypto';
-import { ReadableStream } from 'stream/web';
+import { randomUUID } from 'node:crypto';
+import { ReadableStream } from 'node:stream/web';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { TracingContext } from '../observability';
 import { ChunkFrom, MastraModelOutput } from '../stream';
@@ -63,6 +63,7 @@ export const getModelOutputForTripwire = async <
       onFinish: options.onFinish as any, // Fix these types after the types PR is merged
       onStepFinish: options.onStepFinish as any,
       returnScorerData: options.returnScorerData,
+      requestContext: options.requestContext,
     },
     messageId: randomUUID(),
   });

@@ -24,6 +24,8 @@ const testConfigs = [
     model: 'openai/gpt-4o-mini',
     envVar: 'OPENROUTER_API_KEY',
   },
+  // Note: Azure OpenAI is tested separately in azure.integration.test.ts
+  // It requires an AzureOpenAIGateway instance and can't use ModelsDevGateway
 ];
 
 // Simple tool for testing tool calling
@@ -50,7 +52,9 @@ describe('ModelRouter Integration Tests', () => {
 
     if (availableProviders.length === 0) {
       console.log('\n⚠️  No API keys configured. Set one or more of:');
-      testConfigs.forEach(({ envVar }) => console.log(`   - ${envVar}`));
+      testConfigs.forEach(({ envVar }) => {
+        console.log(`   - ${envVar}`);
+      });
       console.log('\nSkipping all integration tests.\n');
     } else {
       console.log('\n✅ Testing with providers:', availableProviders.join(', '));
@@ -182,34 +186,30 @@ describe('ModelRouter Integration Tests', () => {
       expect(hasPirateWord).toBe(true);
     });
 
-    it.skipIf(skipInCI)(
-      'should support streaming',
-      async () => {
-        if (!process.env[envVar]) {
-          throw new Error(`${envVar} not set - required for ${provider} integration tests`);
-        }
+    it.skipIf(skipInCI)('should support streaming', { timeout: 30000 }, async () => {
+      if (!process.env[envVar]) {
+        throw new Error(`${envVar} not set - required for ${provider} integration tests`);
+      }
 
-        const agent = new Agent({
-          id: 'test-agent',
-          name: 'test-agent',
-          instructions: 'You are a helpful assistant.',
-          model: modelId,
-        });
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: modelId,
+      });
 
-        const { textStream } = await agent.stream('Count from 1 to 3');
+      const { textStream } = await agent.stream('Count from 1 to 3');
 
-        const chunks: string[] = [];
-        for await (const chunk of textStream) {
-          chunks.push(chunk);
-        }
+      const chunks: string[] = [];
+      for await (const chunk of textStream) {
+        chunks.push(chunk);
+      }
 
-        expect(chunks.length).toBeGreaterThan(0);
-        const fullText = chunks.join('');
-        expect(fullText).toBeDefined();
-        expect(typeof fullText).toBe('string');
-      },
-      { timeout: 30000 },
-    );
+      expect(chunks.length).toBeGreaterThan(0);
+      const fullText = chunks.join('');
+      expect(fullText).toBeDefined();
+      expect(typeof fullText).toBe('string');
+    });
   });
 
   describe('Model ID Validation', () => {

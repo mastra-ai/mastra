@@ -4,10 +4,11 @@ import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import {
   ScoresStorage,
+  SCORERS_SCHEMA,
   TABLE_SCORERS,
   calculatePagination,
   normalizePerPage,
-  safelyParseJSON,
+  transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsClickhouse } from '../operations';
@@ -21,31 +22,15 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     this.operations = operations;
   }
 
+  /**
+   * ClickHouse-specific score row transformation.
+   * Converts timestamps to Date objects and filters out '_null_' values.
+   */
   private transformScoreRow(row: any): ScoreRowData {
-    const scorer = safelyParseJSON(row.scorer);
-    const preprocessStepResult = safelyParseJSON(row.preprocessStepResult);
-    const analyzeStepResult = safelyParseJSON(row.analyzeStepResult);
-    const metadata = safelyParseJSON(row.metadata);
-    const input = safelyParseJSON(row.input);
-    const output = safelyParseJSON(row.output);
-    const additionalContext = safelyParseJSON(row.additionalContext);
-    const requestContext = safelyParseJSON(row.requestContext);
-    const entity = safelyParseJSON(row.entity);
-
-    return {
-      ...row,
-      scorer,
-      preprocessStepResult,
-      analyzeStepResult,
-      metadata,
-      input,
-      output,
-      additionalContext,
-      requestContext,
-      entity,
-      createdAt: new Date(row.createdAt),
-      updatedAt: new Date(row.updatedAt),
-    };
+    return coreTransformScoreRow(row, {
+      convertTimestamps: true,
+      nullValuePattern: '_null_',
+    });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
@@ -100,9 +85,17 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     }
 
     try {
-      const record = {
-        ...parsedScore,
-      };
+      // Build record from schema columns, converting undefined to null for ClickHouse
+      const record: Record<string, unknown> = {};
+      for (const key of Object.keys(SCORERS_SCHEMA)) {
+        const value = parsedScore[key as keyof typeof parsedScore];
+        if (key === 'createdAt' || key === 'updatedAt') {
+          record[key] = new Date().toISOString();
+          continue;
+        }
+        record[key] = value === undefined || value === null ? '_null_' : value;
+      }
+
       await this.client.insert({
         table: TABLE_SCORERS,
         values: [record],

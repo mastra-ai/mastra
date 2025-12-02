@@ -8,27 +8,20 @@ import {
   TABLE_SCORERS,
   calculatePagination,
   normalizePerPage,
-  safelyParseJSON,
+  transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { ConnectionPool } from 'mssql';
 import type { StoreOperationsMSSQL } from '../operations';
 import { getSchemaName, getTableName } from '../utils';
 
+/**
+ * MSSQL-specific score row transformation.
+ * Converts timestamp strings to Date objects.
+ */
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  return {
-    ...row,
-    input: safelyParseJSON(row.input),
-    scorer: safelyParseJSON(row.scorer),
-    preprocessStepResult: safelyParseJSON(row.preprocessStepResult),
-    analyzeStepResult: safelyParseJSON(row.analyzeStepResult),
-    metadata: safelyParseJSON(row.metadata),
-    output: safelyParseJSON(row.output),
-    additionalContext: safelyParseJSON(row.additionalContext),
-    requestContext: safelyParseJSON(row.requestContext),
-    entity: safelyParseJSON(row.entity),
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  } as ScoreRowData;
+  return coreTransformScoreRow(row, {
+    convertTimestamps: true,
+  });
 }
 
 export class ScoresMSSQL extends ScoresStorage {

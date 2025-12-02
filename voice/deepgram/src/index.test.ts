@@ -1,6 +1,6 @@
-import { writeFileSync, mkdirSync, createReadStream } from 'fs';
-import path from 'path';
-import { PassThrough } from 'stream';
+import { writeFileSync, mkdirSync, createReadStream } from 'node:fs';
+import path from 'node:path';
+import { PassThrough } from 'node:stream';
 import { describe, expect, it, beforeAll } from 'vitest';
 
 import { DeepgramVoice } from './index.js';

@@ -1,4 +1,4 @@
-import { TransformStream } from 'stream/web';
+import { TransformStream } from 'node:stream/web';
 import { asSchema, isDeepEqualData, jsonSchema, parsePartialJson } from 'ai-v5';
 import type { JSONSchema7, Schema } from 'ai-v5';
 import type z3 from 'zod/v3';

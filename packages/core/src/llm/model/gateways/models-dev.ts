@@ -57,8 +57,8 @@ const OPENAI_COMPATIBLE_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
 };
 
 export class ModelsDevGateway extends MastraModelGateway {
+  readonly id = 'models.dev';
   readonly name = 'models.dev';
-  readonly prefix = undefined; // No prefix for registry gateway
 
   private providerConfigs: Record<string, ProviderConfig> = {};
 
@@ -177,10 +177,12 @@ export class ModelsDevGateway extends MastraModelGateway {
     modelId,
     providerId,
     apiKey,
+    headers,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
+    headers?: Record<string, string>;
   }): Promise<LanguageModelV2> {
     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
 
@@ -197,7 +199,7 @@ export class ModelsDevGateway extends MastraModelGateway {
       case 'mistral':
         return createMistral({ apiKey })(modelId);
       case 'openrouter':
-        return createOpenRouter({ apiKey })(modelId);
+        return createOpenRouter({ apiKey, headers })(modelId);
       case 'xai':
         return createXai({
           apiKey,

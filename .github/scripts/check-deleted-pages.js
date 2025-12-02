@@ -1,6 +1,5 @@
 import { execSync } from 'child_process';
 import fs from 'fs';
-import { match } from 'path-to-regexp';
 
 const matcherCache = new Map();
 const BASE_REF = process.env.BASE_REF || 'origin/main';
@@ -37,6 +36,16 @@ function filePathToUrlPath(filePath) {
     urlPath = urlPath.replace(/\/index$/, '');
   }
 
+  // Add /v1 prefix for paths that use routeBasePath with /v1
+  // (docs, models, guides, examples, reference all use /v1)
+  const v1Paths = ['docs', 'models', 'guides', 'examples', 'reference'];
+  for (const pathPrefix of v1Paths) {
+    if (urlPath.startsWith(`${pathPrefix}/`)) {
+      urlPath = urlPath.replace(new RegExp(`^${pathPrefix}/`), `${pathPrefix}/v1/`);
+      break;
+    }
+  }
+
   // Add leading slash
   urlPath = '/' + urlPath;
 
@@ -60,6 +69,34 @@ function stripLocalePattern(source) {
   return source.replace(/^\/:[^/]+\([^)]+\)\?/, '');
 }
 
+// Convert path pattern to regex (handles :param, :param*, :param+, :param?)
+function patternToRegex(pattern) {
+  // First, escape standard special regex characters in the original pattern
+  // This escapes literals like dots in '/api.v1/:id' before processing :id
+  // We need to escape: . ^ $ { } | [ ] \ ( )
+  // But NOT: : * ? + which we use for parameter operators
+  let regexStr = pattern.replace(/[.^${}()|\[\]\\]/g, '\\$&');
+
+  // Then escape *, ?, + only when they are literal (not part of :param operators)
+  // Use negative lookbehind to ensure they're not preceded by a word char
+  // This way ':param*' keeps the operator while literal '*' gets escaped
+  regexStr = regexStr.replace(/(?<!\w)([?*+])/g, '\\$1');
+
+  // Then convert path-to-regexp patterns to regex patterns
+  // These replacements work on the escaped string, converting :param patterns
+  regexStr = regexStr
+    // Replace :param* with catch-all (.*)
+    .replace(/:(\w+)\*/g, '(?<$1>.*)')
+    // Replace :param+ with one or more segments ([^/]+(?:/[^/]+)*)
+    .replace(/:(\w+)\+/g, '(?<$1>[^/]+(?:/[^/]+)*)')
+    // Replace :param? with optional segment ([^/]*)
+    .replace(/:(\w+)\?/g, '(?<$1>[^/]*)')
+    // Replace :param with single segment ([^/]+)
+    .replace(/:(\w+)/g, '(?<$1>[^/]+)');
+
+  return new RegExp(`^${regexStr}$`);
+}
+
 // Check if a URL has a redirect
 function hasRedirect(urlPath, redirects) {
   return redirects.some(({ source }) => {
@@ -71,13 +108,13 @@ function hasRedirect(urlPath, redirects) {
       return true;
     }
 
-    // Use path-to-regexp to handle patterns like :param, :param*, :param+, :param?, etc.
+    // Pattern match using regex
     try {
       if (!matcherCache.has(cleanSource)) {
-        matcherCache.set(cleanSource, match(cleanSource, { decode: decodeURIComponent }));
+        matcherCache.set(cleanSource, patternToRegex(cleanSource));
       }
-      const tester = matcherCache.get(cleanSource);
-      return Boolean(tester(urlPath));
+      const regex = matcherCache.get(cleanSource);
+      return regex.test(urlPath);
     } catch {
       return false;
     }

@@ -1,4 +1,4 @@
-import { Transform } from 'stream';
+import { Transform } from 'node:stream';
 import type { LogLevel } from './constants';
 
 export interface BaseLogMessage {
