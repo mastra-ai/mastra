@@ -533,51 +533,52 @@ export class ToolSearch {
  * All tools passed here are searchable - they're not loaded into the agent's context
  * initially. The agent gets a search tool to discover and load relevant tools on-demand.
  *
- * @example
+ * @example Pass directly to Agent
  * ```typescript
+ * import { Agent } from '@mastra/core/agent';
  * import { createToolSearch, createTool } from '@mastra/core/tools';
  *
- * // Define your tools
- * const createPRTool = createTool({
- *   id: 'github.createPR',
- *   description: 'Create a GitHub pull request',
- *   execute: async () => { ... },
- * });
- *
- * const sendMessageTool = createTool({
- *   id: 'slack.sendMessage',
- *   description: 'Send a Slack message',
- *   execute: async () => { ... },
- * });
- *
- * // Create with BM25 search (default, no embedder needed)
  * const toolSearch = await createToolSearch({
- *   tools: { createPRTool, sendMessageTool },
- *   method: 'bm25',
+ *   tools: {
+ *     'github.createPR': createPRTool,
+ *     'slack.sendMessage': sendMessageTool,
+ *     'jira.createTicket': jiraTicketTool,
+ *     // ... 100+ more tools
+ *   },
+ *   method: 'bm25', // or 'regex' or 'embedding'
  * });
  *
- * // Or with regex search
- * const toolSearch = await createToolSearch({
- *   tools: { createPRTool, sendMessageTool },
- *   method: 'regex',
- * });
- *
- * // Or with embedding search
- * const toolSearch = await createToolSearch({
- *   tools: { createPRTool, sendMessageTool },
- *   method: 'embedding',
- *   embedder: openai.embedding('text-embedding-3-small'),
- * });
- *
- * // Use with an agent - combine with always-loaded tools
  * const agent = new Agent({
- *   tools: { helpTool }, // Always loaded
+ *   name: 'Assistant',
+ *   model: 'openai/gpt-4o',
+ *   tools: toolSearch.getTools(), // Pass directly - agent gets search tool
+ * });
+ *
+ * // Agent will search and load tools as needed
+ * const response = await agent.generate('Create a GitHub PR for my changes');
+ * ```
+ *
+ * @example Combine with always-loaded tools via toolsets
+ * ```typescript
+ * const agent = new Agent({
+ *   name: 'Assistant',
+ *   model: 'openai/gpt-4o',
+ *   tools: { helpTool, statusTool }, // Always available
  * });
  *
  * const response = await agent.generate('Create a GitHub PR', {
  *   toolsets: {
  *     searchable: toolSearch.getTools(threadId), // Searchable tools
  *   },
+ * });
+ * ```
+ *
+ * @example With embedding search for better semantic matching
+ * ```typescript
+ * const toolSearch = await createToolSearch({
+ *   tools: myTools,
+ *   method: 'embedding',
+ *   embedder: openai.embedding('text-embedding-3-small'),
  * });
  * ```
  */

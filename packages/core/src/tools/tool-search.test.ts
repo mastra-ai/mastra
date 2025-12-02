@@ -585,6 +585,86 @@ describe('createToolSearch', () => {
     });
   });
 
+  describe('Usage Patterns', () => {
+    it('should work when passed directly to Agent tools', async () => {
+      // This pattern: new Agent({ tools: toolSearch.getTools() })
+      const toolSearch = await createToolSearch({
+        tools: {
+          'github.createPR': githubCreatePR,
+          'slack.sendMessage': slackSendMessage,
+        },
+        method: 'bm25',
+      });
+
+      // Simulating what Agent receives
+      const agentTools = toolSearch.getTools();
+
+      // Agent only sees the search tool initially
+      expect(Object.keys(agentTools)).toEqual(['tool_search']);
+      expect(agentTools['tool_search']).toBeDefined();
+      expect(agentTools['tool_search']!.description).toContain('Search');
+
+      // Agent can search and load tools
+      const result = await agentTools['tool_search']!.execute!({ query: 'github' });
+      expect(result.success).toBe(true);
+    });
+
+    it('should work when passed via toolsets', async () => {
+      // This pattern: agent.generate({ toolsets: { search: toolSearch.getTools(threadId) } })
+      const toolSearch = await createToolSearch({
+        tools: {
+          'github.createPR': githubCreatePR,
+          'slack.sendMessage': slackSendMessage,
+        },
+        method: 'bm25',
+      });
+
+      const threadId = 'thread-123';
+
+      // Simulating toolsets merge - agent tools + toolset tools
+      const agentTools = { helpTool: { id: 'help', description: 'Help', execute: async () => ({}) } };
+      const toolsetTools = toolSearch.getTools(threadId);
+
+      const allTools = { ...agentTools, ...toolsetTools };
+
+      // Agent sees its own tools + search tool
+      expect(Object.keys(allTools)).toContain('helpTool');
+      expect(Object.keys(allTools)).toContain('tool_search');
+      expect(Object.keys(allTools)).not.toContain('github.createPR');
+
+      // After search, tools are loaded for this thread
+      await toolsetTools['tool_search']!.execute!({ query: 'github' });
+
+      const updatedToolsetTools = toolSearch.getTools(threadId);
+      expect(Object.keys(updatedToolsetTools)).toContain('github.createPR');
+    });
+
+    it('should support per-request thread isolation via toolsets', async () => {
+      const toolSearch = await createToolSearch({
+        tools: {
+          'github.createPR': githubCreatePR,
+          'slack.sendMessage': slackSendMessage,
+        },
+        method: 'bm25',
+      });
+
+      // User 1's conversation
+      const user1Tools = toolSearch.getTools('user-1-thread');
+      await user1Tools['tool_search']!.execute!({ query: 'github' });
+
+      // User 2's conversation
+      const user2Tools = toolSearch.getTools('user-2-thread');
+      await user2Tools['tool_search']!.execute!({ query: 'slack' });
+
+      // Each user has different tools loaded
+      expect(Object.keys(toolSearch.getTools('user-1-thread'))).toContain('github.createPR');
+      expect(Object.keys(toolSearch.getTools('user-1-thread'))).not.toContain('slack.sendMessage');
+
+      expect(Object.keys(toolSearch.getTools('user-2-thread'))).toContain('slack.sendMessage');
+      expect(Object.keys(toolSearch.getTools('user-2-thread'))).not.toContain('github.createPR');
+    });
+  });
+
   describe('Real-World Scenario', () => {
     it('should work end-to-end like Anthropic Tool Search', async () => {
       // Setup: Create tool search with many tools
