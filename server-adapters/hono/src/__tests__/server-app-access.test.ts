@@ -5,7 +5,7 @@ import { MastraServer } from '../index';
 
 /**
  * These tests verify that MastraServer (Hono adapter) properly supports
- * getApp() method inherited from MastraServerAdapterBase.
+ * getApp() method inherited from MastraServerBase.
  */
 describe('MastraServer (Hono) - Server App Access', () => {
   describe('getApp()', () => {

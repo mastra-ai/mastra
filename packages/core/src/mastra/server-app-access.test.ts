@@ -67,7 +67,7 @@ describe('Server App Access', () => {
         logger: false,
       });
 
-      // Create a mock adapter that implements MastraServerAdapterBase
+      // Create a mock adapter that implements MastraServerBase
       const mockApp = { fetch: () => Promise.resolve(new Response('ok')) };
       const mockAdapter = {
         getApp: <T = unknown>() => mockApp as T,

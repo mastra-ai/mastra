@@ -7,7 +7,7 @@ import { MastraServer } from '../index';
 
 /**
  * These tests verify that MastraServer (Express adapter) properly supports
- * getApp() method inherited from MastraServerAdapterBase.
+ * getApp() method inherited from MastraServerBase.
  *
  * These tests focus on verifying the adapter's getApp functionality
  * and demonstrate how users would access the Express app.

@@ -17,7 +17,7 @@ import type { MCPServerBase } from '../mcp';
 import type { ObservabilityEntrypoint } from '../observability';
 import { NoOpObservability } from '../observability';
 import type { Processor } from '../processors';
-import type { MastraServerAdapterBase } from '../server/adapter-base';
+import type { MastraServerBase } from '../server/adapter-base';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage, WorkflowRuns } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -281,7 +281,7 @@ export class Mastra<
   #tools?: TTools;
   #processors?: TProcessors;
   #server?: ServerConfig;
-  #serverAdapter?: MastraServerAdapterBase;
+  #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
@@ -1869,7 +1869,7 @@ export class Mastra<
    * mastra.setMastraServer(adapter);
    * ```
    */
-  public setMastraServer(adapter: MastraServerAdapterBase): void {
+  public setMastraServer(adapter: MastraServerBase): void {
     this.#serverAdapter = adapter;
     // Inject the logger into the adapter
     if (this.#logger) {
@@ -1890,7 +1890,7 @@ export class Mastra<
    * }
    * ```
    */
-  public getMastraServer(): MastraServerAdapterBase | undefined {
+  public getMastraServer(): MastraServerBase | undefined {
     return this.#serverAdapter;
   }
 

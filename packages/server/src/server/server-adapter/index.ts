@@ -1,6 +1,6 @@
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import { MastraServerAdapterBase } from '@mastra/core/server';
+import { MastraServerBase } from '@mastra/core/server';
 import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '../a2a/store';
 import { generateOpenAPIDocument } from './openapi-utils';
@@ -40,7 +40,7 @@ export interface StreamOptions {
 /**
  * Abstract base class for server adapters that handle HTTP requests.
  *
- * This class extends `MastraServerAdapterBase` to inherit app storage functionality
+ * This class extends `MastraServerBase` to inherit app storage functionality
  * and provides the framework for registering routes, middleware, and handling requests.
  *
  * Concrete implementations (like `MastraServer` from @mastra/hono or @mastra/express) extend
@@ -50,7 +50,7 @@ export interface StreamOptions {
  * @template TRequest - The type of the request object
  * @template TResponse - The type of the response object
  */
-export abstract class MastraServerBase<TApp, TRequest, TResponse> extends MastraServerAdapterBase<TApp> {
+export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServerBase<TApp> {
   protected mastra: Mastra;
   protected bodyLimitOptions?: BodyLimitOptions;
   protected tools?: Record<string, Tool>;

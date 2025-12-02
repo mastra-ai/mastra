@@ -21,11 +21,11 @@ import { RegisteredLogger } from '../logger/constants';
  * const response = await app.fetch(new Request('http://localhost/health'));
  * ```
  */
-export abstract class MastraServerAdapterBase<TApp = unknown> extends MastraBase {
+export abstract class MastraServerBase<TApp = unknown> extends MastraBase {
   #app: TApp;
 
   constructor({ app, name }: { app: TApp; name?: string }) {
-    super({ component: RegisteredLogger.SERVER_ADAPTER, name: name ?? 'ServerAdapter' });
+    super({ component: RegisteredLogger.SERVER, name: name ?? 'Server' });
     this.#app = app;
     this.logger.debug(`Server app set`);
   }

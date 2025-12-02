@@ -8,7 +8,7 @@ export type { MastraAuthConfig, ContextWithMastra, ApiRoute } from './types';
 export { MastraAuthProvider } from './auth';
 export type { MastraAuthProviderOptions } from './auth';
 export { CompositeAuth } from './composite-auth';
-export { MastraServerAdapterBase } from './adapter-base';
+export { MastraServerBase } from './adapter-base';
 export { SimpleAuth } from './simple-auth';
 export type { SimpleAuthOptions } from './simple-auth';
 
