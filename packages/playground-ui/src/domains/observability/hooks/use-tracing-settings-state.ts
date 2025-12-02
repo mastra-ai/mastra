@@ -22,8 +22,6 @@ export function useTracingSettingsState({ entityId, entityType }: TracingSetting
       // ignore
       console.error(e);
     }
-
-    // Only run on mount or when initialSettings changes
   }, [LOCAL_STORAGE_KEY]);
 
   const setSettings = (settingsValue: TracingSettings) => {

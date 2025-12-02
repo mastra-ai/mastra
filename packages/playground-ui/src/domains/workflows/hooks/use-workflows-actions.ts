@@ -344,7 +344,13 @@ export const useStreamWorkflow = () => {
       Object.entries(playgroundRequestContext).forEach(([key, value]) => {
         requestContext.set(key as keyof RequestContext, value);
       });
-      const stream = await workflow.resumeStreamVNext({ runId, step, resumeData, requestContext });
+      const stream = await workflow.resumeStreamVNext({
+        runId,
+        step,
+        resumeData,
+        requestContext,
+        tracingOptions: settings?.tracingOptions,
+      });
 
       if (!stream) {
         return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
@@ -417,7 +423,11 @@ export const useStreamWorkflow = () => {
       Object.entries(playgroundRequestContext).forEach(([key, value]) => {
         requestContext.set(key as keyof RequestContext, value);
       });
-      const stream = await workflow.timeTravelStream({ ...params, requestContext });
+      const stream = await workflow.timeTravelStream({
+        ...params,
+        requestContext,
+        tracingOptions: settings?.tracingOptions,
+      });
 
       if (!stream) {
         return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
