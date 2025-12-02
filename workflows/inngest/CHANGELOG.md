@@ -1,5 +1,11 @@
 # @mastra/inngest
 
+## 0.16.2
+
+### Patch Changes
+
+- Emit workflow-step-result and workflow-step-finish when step fails in inngest workflow ([#10559](https://github.com/mastra-ai/mastra/pull/10559))
+
 ## 0.16.1
 
 ### Patch Changes
