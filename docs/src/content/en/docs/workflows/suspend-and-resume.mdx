@@ -62,7 +62,7 @@ Use `resume()` to restart a suspended workflow from the step where it paused. To
 
 ```typescript {13} showLineNumbers copy
 const workflow = mastra.getWorkflow("testWorkflow");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 await run.start({
   inputData: {
@@ -143,7 +143,7 @@ When a workflow is suspended, it restarts from the step where it paused. You can
 
 ```typescript {11} showLineNumbers copy
 const workflow = mastra.getWorkflow("testWorkflow");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({
   inputData: {
