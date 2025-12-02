@@ -4,8 +4,8 @@ permissions:
 
 on:
   schedule:
-    # Run every day at 12:00 PM UTC
-    - cron: '0 12 * * *'
+    # Run every 2 hours
+    - cron: '0 */2 * * *'
   workflow_dispatch: # Allow manual triggering
 
 jobs:
