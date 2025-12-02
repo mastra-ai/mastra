@@ -111,12 +111,20 @@ describe('ElasticSearchVector', () => {
 
     describe('listIndexes', () => {
       const indexName = 'test_query_3';
+      const deleteTestIndexName = 'test_query_3_delete';
+
       beforeAll(async () => {
         await vectorDB.createIndex({ indexName, dimension: 3 });
       });
 
       afterAll(async () => {
         await vectorDB.deleteIndex({ indexName });
+        // Clean up deletion test index if it still exists
+        try {
+          await vectorDB.deleteIndex({ indexName: deleteTestIndexName });
+        } catch {
+          // Ignore if already deleted
+        }
       });
 
       it('should list all vector tables', async () => {
@@ -125,9 +133,14 @@ describe('ElasticSearchVector', () => {
       });
 
       it('should not return created index in list if it is deleted', async () => {
-        await vectorDB.deleteIndex({ indexName });
-        const indexes = await vectorDB.listIndexes();
-        expect(indexes).not.toContain(indexName);
+        // Use a separate index for the deletion test to avoid state dependency
+        await vectorDB.createIndex({ indexName: deleteTestIndexName, dimension: 3 });
+        const indexesBefore = await vectorDB.listIndexes();
+        expect(indexesBefore).toContain(deleteTestIndexName);
+
+        await vectorDB.deleteIndex({ indexName: deleteTestIndexName });
+        const indexesAfter = await vectorDB.listIndexes();
+        expect(indexesAfter).not.toContain(deleteTestIndexName);
       });
     });
 
