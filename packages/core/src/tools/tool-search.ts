@@ -54,24 +54,17 @@ export interface ToolSearchConfig {
 }
 
 /**
- * Tool search instance for on-demand tool loading.
+ * Tool search instance - pass directly to toolsets
  */
-export interface ToolSearch {
-  /** Get current tools (search tool + any loaded tools) */
-  (): Record<string, ToolAction<any, any, any>>;
-
+export interface ToolSearchTools extends Record<string, ToolAction<any, any, any>> {
   /** Search for tools matching a query */
   search(query: string): Promise<ToolSearchResult[]>;
-
   /** Manually load a tool */
   load(toolId: string): boolean;
-
   /** Reset - mark all tools as deferred again */
   reset(): void;
-
   /** Get IDs of currently loaded tools */
   loaded(): string[];
-
   /** Get all available tool IDs */
   available(): string[];
 }
@@ -198,19 +191,17 @@ const toolSearchInputSchema = z.object({
 });
 
 /**
- * Creates a tool search for on-demand tool loading.
+ * Creates a tool search that can be passed directly to toolsets.
  *
- * Returns a callable that provides the search tool plus any loaded tools.
- * When the search tool is called, matching tools are loaded and become
- * available for the remainder of the request. Call reset() after the
- * request to mark tools as deferred again.
+ * Returns a dynamic tools object containing the search tool plus any loaded tools.
+ * When the search tool finds matches, those tools become available immediately.
  *
  * @example
  * ```typescript
  * import { Agent } from '@mastra/core/agent';
  * import { createToolSearch, createTool } from '@mastra/core/tools';
  *
- * const toolSearch = await createToolSearch({
+ * const toolSearch = createToolSearch({
  *   tools: {
  *     'github.createPR': createPRTool,
  *     'slack.send': slackTool,
@@ -224,17 +215,17 @@ const toolSearchInputSchema = z.object({
  *   model: 'openai/gpt-4o',
  * });
  *
- * // Pass toolSearch() to get current tools
- * await agent.generate('Create a GitHub PR for the bug fix', {
- *   toolsets: { available: toolSearch() },
+ * // Pass toolSearch directly
+ * await agent.generate('Create a GitHub PR', {
+ *   toolsets: { available: toolSearch },
  * });
  * // Agent calls tool_search → loads github.createPR → calls it
  *
- * // Reset after request to mark tools as deferred again
+ * // Reset after request
  * toolSearch.reset();
  * ```
  */
-export async function createToolSearch(config: ToolSearchConfig): Promise<ToolSearch> {
+export function createToolSearch(config: ToolSearchConfig): ToolSearchTools {
   const method = config.method ?? 'bm25';
   const embedder = config.embedder;
   const topK = config.topK ?? 5;
@@ -248,43 +239,48 @@ export async function createToolSearch(config: ToolSearchConfig): Promise<ToolSe
     throw new Error('Embedder is required when using embedding search method');
   }
 
-  // Index all tools
+  // State
   const indexedTools = new Map<string, IndexedTool>();
   const loadedTools = new Set<string>();
+  let embeddingsReady = false;
 
-  const embedText = async (text: string): Promise<number[]> => {
-    if (!embedder) throw new Error('Embedder not configured');
-    const isV2 = (embedder as any).specificationVersion === 'v2';
-    if (isV2) {
-      const result = await embedV2({ model: embedder as any, value: text });
-      return result.embedding;
-    } else {
-      const result = await embed({ model: embedder as any, value: text });
-      return result.embedding;
-    }
-  };
-
-  // Index tools
+  // Index tools (sync for regex/bm25, async embeddings done lazily)
   const entries = Object.entries(config.tools);
-  if (method === 'embedding') {
-    const embeddings = await Promise.all(
-      entries.map(async ([id, tool]) => {
-        const searchText = getSearchText(tool, id);
-        const embedding = await embedText(searchText);
-        return { id, searchText, embedding };
-      }),
-    );
-    for (let i = 0; i < entries.length; i++) {
-      const [id, tool] = entries[i]!;
-      const { searchText, embedding } = embeddings[i]!;
-      indexedTools.set(id, { id, description: tool.description, searchText, embedding, tool });
-    }
-  } else {
-    for (const [id, tool] of entries) {
-      const searchText = getSearchText(tool, id);
-      indexedTools.set(id, { id, description: tool.description, searchText, tool });
-    }
+  for (const [id, tool] of entries) {
+    const searchText = getSearchText(tool, id);
+    indexedTools.set(id, { id, description: tool.description, searchText, tool });
   }
+
+  // Lazy embedding initialization
+  const ensureEmbeddings = async (): Promise<void> => {
+    if (method !== 'embedding' || embeddingsReady) return;
+
+    const embedText = async (text: string): Promise<number[]> => {
+      if (!embedder) throw new Error('Embedder not configured');
+      const isV2 = (embedder as any).specificationVersion === 'v2';
+      if (isV2) {
+        const result = await embedV2({ model: embedder as any, value: text });
+        return result.embedding;
+      } else {
+        const result = await embed({ model: embedder as any, value: text });
+        return result.embedding;
+      }
+    };
+
+    const embeddings = await Promise.all(
+      Array.from(indexedTools.values()).map(async indexed => ({
+        id: indexed.id,
+        embedding: await embedText(indexed.searchText),
+      })),
+    );
+
+    for (const { id, embedding } of embeddings) {
+      const indexed = indexedTools.get(id);
+      if (indexed) indexed.embedding = embedding;
+    }
+
+    embeddingsReady = true;
+  };
 
   // Search function
   const search = async (query: string): Promise<ToolSearchResult[]> => {
@@ -299,6 +295,17 @@ export async function createToolSearch(config: ToolSearchConfig): Promise<ToolSe
         results = bm25Search(query, indexedTools, topK);
         break;
       case 'embedding': {
+        await ensureEmbeddings();
+        const embedText = async (text: string): Promise<number[]> => {
+          const isV2 = (embedder as any).specificationVersion === 'v2';
+          if (isV2) {
+            const result = await embedV2({ model: embedder as any, value: text });
+            return result.embedding;
+          } else {
+            const result = await embed({ model: embedder as any, value: text });
+            return result.embedding;
+          }
+        };
         const queryEmbedding = await embedText(query);
         results = [];
         for (const indexed of indexedTools.values()) {
@@ -354,39 +361,59 @@ export async function createToolSearch(config: ToolSearchConfig): Promise<ToolSe
     },
   });
 
-  // Get current tools (search + loaded)
-  const getTools = (): Record<string, ToolAction<any, any, any>> => {
-    const tools: Record<string, ToolAction<any, any, any>> = {};
-    tools[toolId] = searchTool;
-
-    for (const id of loadedTools) {
-      const indexed = indexedTools.get(id);
-      if (indexed) {
-        tools[id] = indexed.tool;
-      }
-    }
-
-    return tools;
-  };
-
-  // Create the callable ToolSearch
-  const toolSearch = (() => getTools()) as ToolSearch;
-
-  toolSearch.search = search;
-
-  toolSearch.load = (id: string): boolean => {
+  // Helper methods
+  const load = (id: string): boolean => {
     if (!indexedTools.has(id)) return false;
     loadedTools.add(id);
     return true;
   };
 
-  toolSearch.reset = () => {
+  const reset = (): void => {
     loadedTools.clear();
   };
 
-  toolSearch.loaded = () => Array.from(loadedTools);
+  const loaded = (): string[] => Array.from(loadedTools);
 
-  toolSearch.available = () => Array.from(indexedTools.keys());
+  const available = (): string[] => Array.from(indexedTools.keys());
 
-  return toolSearch;
+  // Create a Proxy that returns tools dynamically
+  const toolsProxy = new Proxy({} as ToolSearchTools, {
+    get(_target, prop: string) {
+      // Helper methods
+      if (prop === 'search') return search;
+      if (prop === 'load') return load;
+      if (prop === 'reset') return reset;
+      if (prop === 'loaded') return loaded;
+      if (prop === 'available') return available;
+
+      // Search tool
+      if (prop === toolId) return searchTool;
+
+      // Loaded tools
+      if (loadedTools.has(prop)) {
+        return indexedTools.get(prop)?.tool;
+      }
+
+      return undefined;
+    },
+
+    has(_target, prop: string) {
+      if (['search', 'load', 'reset', 'loaded', 'available'].includes(prop)) return true;
+      if (prop === toolId) return true;
+      return loadedTools.has(prop);
+    },
+
+    ownKeys() {
+      return [toolId, ...loadedTools];
+    },
+
+    getOwnPropertyDescriptor(_target, prop: string) {
+      if (prop === toolId || loadedTools.has(prop)) {
+        return { enumerable: true, configurable: true };
+      }
+      return undefined;
+    },
+  });
+
+  return toolsProxy;
 }

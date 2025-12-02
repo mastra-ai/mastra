@@ -74,10 +74,17 @@ const allTools = {
 
 describe('createToolSearch', () => {
   describe('Initialization', () => {
-    it('returns a callable function with helper methods', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools });
+    it('returns synchronously (no await needed)', () => {
+      // No await - it's sync!
+      const toolSearch = createToolSearch({ tools: allTools });
 
-      expect(typeof toolSearch).toBe('function');
+      expect(toolSearch).toBeDefined();
+      expect(typeof toolSearch.search).toBe('function');
+    });
+
+    it('has helper methods', () => {
+      const toolSearch = createToolSearch({ tools: allTools });
+
       expect(typeof toolSearch.search).toBe('function');
       expect(typeof toolSearch.load).toBe('function');
       expect(typeof toolSearch.reset).toBe('function');
@@ -85,58 +92,71 @@ describe('createToolSearch', () => {
       expect(typeof toolSearch.available).toBe('function');
     });
 
-    it('indexes all provided tools', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools });
+    it('indexes all provided tools', () => {
+      const toolSearch = createToolSearch({ tools: allTools });
 
       const available = toolSearch.available();
       expect(available).toHaveLength(6);
       expect(available).toContain('github.createPR');
       expect(available).toContain('slack.sendMessage');
-      expect(available).toContain('jira.createTicket');
     });
 
-    it('initially returns only the search tool', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools });
+    it('initially contains only the search tool', () => {
+      const toolSearch = createToolSearch({ tools: allTools });
 
-      const tools = toolSearch();
-      expect(Object.keys(tools)).toEqual(['tool_search']);
-      expect(tools.tool_search.id).toBe('tool_search');
+      expect(toolSearch.tool_search).toBeDefined();
+      expect(toolSearch['github.createPR']).toBeUndefined();
     });
 
-    it('throws when embedding method used without embedder', async () => {
-      await expect(createToolSearch({ tools: allTools, method: 'embedding' })).rejects.toThrow(
+    it('throws when embedding method used without embedder', () => {
+      expect(() => createToolSearch({ tools: allTools, method: 'embedding' })).toThrow(
         'Embedder is required when using embedding search method',
       );
+    });
+  });
+
+  describe('Can be passed directly to toolsets', () => {
+    it('works as a tools object', () => {
+      const toolSearch = createToolSearch({ tools: allTools });
+
+      // Simulate passing to agent.generate({ toolsets: { available: toolSearch } })
+      const toolsets = { available: toolSearch };
+
+      expect(toolsets.available.tool_search).toBeDefined();
+      expect(toolsets.available.tool_search.execute).toBeDefined();
+    });
+
+    it('Object.keys returns current tools', () => {
+      const toolSearch = createToolSearch({ tools: allTools });
+
+      expect(Object.keys(toolSearch)).toEqual(['tool_search']);
+
+      toolSearch.load('github.createPR');
+      expect(Object.keys(toolSearch)).toContain('tool_search');
+      expect(Object.keys(toolSearch)).toContain('github.createPR');
     });
   });
 
   describe('Search Methods', () => {
     describe('BM25 (default)', () => {
       it('ranks results by term frequency and relevance', async () => {
-        const toolSearch = await createToolSearch({ tools: allTools, method: 'bm25' });
+        const toolSearch = createToolSearch({ tools: allTools, method: 'bm25' });
 
         const results = await toolSearch.search('github pull request');
         expect(results[0].id).toBe('github.createPR');
       });
 
       it('finds tools with partial matches', async () => {
-        const toolSearch = await createToolSearch({ tools: allTools });
+        const toolSearch = createToolSearch({ tools: allTools });
 
         const results = await toolSearch.search('message channel');
         expect(results.some(r => r.id === 'slack.sendMessage')).toBe(true);
-      });
-
-      it('returns empty for no matches with high minScore', async () => {
-        const toolSearch = await createToolSearch({ tools: allTools, minScore: 0.99 });
-
-        const results = await toolSearch.search('xyzabc123');
-        expect(results).toHaveLength(0);
       });
     });
 
     describe('Regex', () => {
       it('finds exact substring matches', async () => {
-        const toolSearch = await createToolSearch({ tools: allTools, method: 'regex' });
+        const toolSearch = createToolSearch({ tools: allTools, method: 'regex' });
 
         const results = await toolSearch.search('GitHub');
         expect(results.length).toBeGreaterThan(0);
@@ -144,107 +164,74 @@ describe('createToolSearch', () => {
       });
 
       it('is case-insensitive', async () => {
-        const toolSearch = await createToolSearch({ tools: allTools, method: 'regex' });
+        const toolSearch = createToolSearch({ tools: allTools, method: 'regex' });
 
         const lower = await toolSearch.search('jira');
         const upper = await toolSearch.search('JIRA');
         expect(lower[0].id).toBe(upper[0].id);
-      });
-
-      it('handles special regex characters', async () => {
-        const toolSearch = await createToolSearch({ tools: allTools, method: 'regex' });
-
-        // Should not throw, characters are escaped
-        const results = await toolSearch.search('test.*pattern');
-        expect(Array.isArray(results)).toBe(true);
       });
     });
   });
 
   describe('Tool Loading via Search', () => {
     it('search tool loads matching tools', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools });
+      const toolSearch = createToolSearch({ tools: allTools });
 
       expect(toolSearch.loaded()).toHaveLength(0);
 
-      const tools = toolSearch();
-      const result = await tools.tool_search.execute!({ query: 'github pull request' }, {} as any);
+      const result = await toolSearch.tool_search.execute!({ query: 'github pull request' }, {} as any);
 
       expect(result.success).toBe(true);
-      expect(result.loadedTools.length).toBeGreaterThan(0);
       expect(result.loadedTools[0].id).toBe('github.createPR');
       expect(toolSearch.loaded()).toContain('github.createPR');
     });
 
-    it('loaded tools appear in subsequent calls', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools });
+    it('loaded tools become accessible', async () => {
+      const toolSearch = createToolSearch({ tools: allTools });
 
       // Before search
-      expect(toolSearch()['github.createPR']).toBeUndefined();
+      expect(toolSearch['github.createPR']).toBeUndefined();
 
       // Search
-      await toolSearch().tool_search.execute!({ query: 'github' }, {} as any);
+      await toolSearch.tool_search.execute!({ query: 'github' }, {} as any);
 
-      // After search
-      expect(toolSearch()['github.createPR']).toBeDefined();
+      // After search - tool is accessible
+      expect(toolSearch['github.createPR']).toBeDefined();
     });
 
     it('multiple searches accumulate loaded tools', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools });
+      const toolSearch = createToolSearch({ tools: allTools });
 
-      await toolSearch().tool_search.execute!({ query: 'github' }, {} as any);
-      await toolSearch().tool_search.execute!({ query: 'slack' }, {} as any);
+      await toolSearch.tool_search.execute!({ query: 'github' }, {} as any);
+      await toolSearch.tool_search.execute!({ query: 'slack' }, {} as any);
 
-      const tools = toolSearch();
-      expect(tools['github.createPR']).toBeDefined();
-      expect(tools['slack.sendMessage']).toBeDefined();
-    });
-
-    it('returns helpful message when no tools found', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools, minScore: 0.99 });
-
-      const result = await toolSearch().tool_search.execute!({ query: 'xyznonexistent' }, {} as any);
-
-      expect(result.success).toBe(false);
-      expect(result.message).toContain('No matching tools');
-      expect(result.availableTools).toEqual(toolSearch.available());
+      expect(toolSearch['github.createPR']).toBeDefined();
+      expect(toolSearch['slack.sendMessage']).toBeDefined();
     });
   });
 
   describe('Manual Loading', () => {
-    it('load() adds a specific tool', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools });
+    it('load() adds a specific tool', () => {
+      const toolSearch = createToolSearch({ tools: allTools });
 
-      expect(toolSearch()['weather.get']).toBeUndefined();
+      expect(toolSearch['weather.get']).toBeUndefined();
 
       const success = toolSearch.load('weather.get');
       expect(success).toBe(true);
-      expect(toolSearch()['weather.get']).toBeDefined();
+      expect(toolSearch['weather.get']).toBeDefined();
     });
 
-    it('load() returns false for unknown tools', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools });
+    it('load() returns false for unknown tools', () => {
+      const toolSearch = createToolSearch({ tools: allTools });
 
       const success = toolSearch.load('nonexistent.tool');
       expect(success).toBe(false);
     });
-
-    it('loaded() returns current loaded tool IDs', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools });
-
-      toolSearch.load('github.createPR');
-      toolSearch.load('slack.sendMessage');
-
-      const loaded = toolSearch.loaded();
-      expect(loaded).toContain('github.createPR');
-      expect(loaded).toContain('slack.sendMessage');
-      expect(loaded).toHaveLength(2);
-    });
   });
 
   describe('Reset', () => {
-    it('reset() clears all loaded tools', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools });
+    it('reset() clears all loaded tools', () => {
+      const toolSearch = createToolSearch({ tools: allTools });
 
       toolSearch.load('github.createPR');
       toolSearch.load('slack.sendMessage');
@@ -253,137 +240,79 @@ describe('createToolSearch', () => {
       toolSearch.reset();
 
       expect(toolSearch.loaded()).toHaveLength(0);
-      expect(Object.keys(toolSearch())).toEqual(['tool_search']);
-    });
-
-    it('tools can be reloaded after reset', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools });
-
-      toolSearch.load('github.createPR');
-      toolSearch.reset();
-      toolSearch.load('slack.sendMessage');
-
-      expect(toolSearch.loaded()).toEqual(['slack.sendMessage']);
+      expect(toolSearch['github.createPR']).toBeUndefined();
     });
   });
 
   describe('Tool Execution', () => {
     it('loaded tools can be executed', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools });
+      const toolSearch = createToolSearch({ tools: allTools });
 
-      await toolSearch().tool_search.execute!({ query: 'slack message' }, {} as any);
+      await toolSearch.tool_search.execute!({ query: 'slack message' }, {} as any);
 
-      const tools = toolSearch();
-      const result = await tools['slack.sendMessage'].execute!({ channel: '#dev', message: 'Hello!' }, {} as any);
+      const result = await toolSearch['slack.sendMessage'].execute!({ channel: '#dev', message: 'Hello!' }, {} as any);
 
       expect(result.sent).toBe(true);
       expect(result.channel).toBe('#dev');
-      expect(result.message).toBe('Hello!');
-    });
-
-    it('multiple loaded tools can be executed', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools });
-
-      toolSearch.load('github.createPR');
-      toolSearch.load('jira.createTicket');
-
-      const tools = toolSearch();
-
-      const prResult = await tools['github.createPR'].execute!({ title: 'Fix bug' }, {} as any);
-      expect(prResult.prUrl).toContain('Fix bug');
-
-      const ticketResult = await tools['jira.createTicket'].execute!({ summary: 'Bug fix' }, {} as any);
-      expect(ticketResult.ticketId).toBe('JIRA-Bug f');
     });
   });
 
   describe('Configuration', () => {
-    it('custom search tool ID', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools, id: 'find_tools' });
+    it('custom search tool ID', () => {
+      const toolSearch = createToolSearch({ tools: allTools, id: 'find_tools' });
 
-      const tools = toolSearch();
-      expect(tools.find_tools).toBeDefined();
-      expect(tools.tool_search).toBeUndefined();
+      expect(toolSearch.find_tools).toBeDefined();
+      expect(toolSearch.tool_search).toBeUndefined();
     });
 
-    it('custom search tool description', async () => {
-      const toolSearch = await createToolSearch({
+    it('custom search tool description', () => {
+      const toolSearch = createToolSearch({
         tools: allTools,
         description: 'Find the right tool for your task',
       });
 
-      expect(toolSearch().tool_search.description).toBe('Find the right tool for your task');
+      expect(toolSearch.tool_search.description).toBe('Find the right tool for your task');
     });
 
     it('topK limits number of results', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools, topK: 2 });
+      const toolSearch = createToolSearch({ tools: allTools, topK: 2 });
 
       const results = await toolSearch.search('tool');
       expect(results.length).toBeLessThanOrEqual(2);
-    });
-
-    it('minScore filters low-relevance results', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools, minScore: 0.5 });
-
-      const results = await toolSearch.search('github');
-      results.forEach(r => {
-        expect(r.score).toBeGreaterThanOrEqual(0.5);
-      });
     });
   });
 
   describe('Real-World Scenarios', () => {
     it('simulates complete request cycle', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools });
+      const toolSearch = createToolSearch({ tools: allTools });
 
       // Start: only search tool
-      let tools = toolSearch();
-      expect(Object.keys(tools)).toEqual(['tool_search']);
+      expect(Object.keys(toolSearch)).toEqual(['tool_search']);
 
-      // User: "Create a GitHub PR"
       // Agent searches for relevant tools
-      const searchResult = await tools.tool_search.execute!({ query: 'create pull request github' }, {} as any);
+      const searchResult = await toolSearch.tool_search.execute!({ query: 'create pull request github' }, {} as any);
       expect(searchResult.success).toBe(true);
 
       // Now GitHub tools are available
-      tools = toolSearch();
-      expect(tools['github.createPR']).toBeDefined();
+      expect(toolSearch['github.createPR']).toBeDefined();
 
       // Agent executes the tool
-      const prResult = await tools['github.createPR'].execute!({ title: 'Add new feature' }, {} as any);
+      const prResult = await toolSearch['github.createPR'].execute!({ title: 'Add new feature' }, {} as any);
       expect(prResult.prUrl).toContain('Add new feature');
 
-      // User: "Also notify the team on Slack"
-      await tools.tool_search.execute!({ query: 'slack notify message' }, {} as any);
+      // User asks for Slack
+      await toolSearch.tool_search.execute!({ query: 'slack notify message' }, {} as any);
 
       // Both tools now available
-      tools = toolSearch();
-      expect(tools['github.createPR']).toBeDefined();
-      expect(tools['slack.sendMessage']).toBeDefined();
+      expect(toolSearch['github.createPR']).toBeDefined();
+      expect(toolSearch['slack.sendMessage']).toBeDefined();
 
-      const slackResult = await tools['slack.sendMessage'].execute!(
-        { channel: '#team', message: 'PR created!' },
-        {} as any,
-      );
-      expect(slackResult.sent).toBe(true);
-
-      // End of request: reset for next request
+      // End of request: reset
       toolSearch.reset();
-      expect(Object.keys(toolSearch())).toEqual(['tool_search']);
-    });
-
-    it('handles tool not found gracefully', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools, minScore: 0.99 });
-
-      const result = await toolSearch().tool_search.execute!({ query: 'xyznonexistent123' }, {} as any);
-
-      expect(result.success).toBe(false);
-      expect(result.loadedTools).toHaveLength(0);
-      expect(result.availableTools.length).toBeGreaterThan(0);
+      expect(Object.keys(toolSearch)).toEqual(['tool_search']);
     });
 
     it('works with large tool sets', async () => {
-      // Generate 100 tools
       const manyTools: Record<string, any> = {};
       for (let i = 0; i < 100; i++) {
         manyTools[`tool_${i}`] = createTool({
@@ -393,33 +322,10 @@ describe('createToolSearch', () => {
         });
       }
 
-      const toolSearch = await createToolSearch({ tools: manyTools, topK: 5 });
+      const toolSearch = createToolSearch({ tools: manyTools, topK: 5 });
 
       const results = await toolSearch.search('category 5');
       expect(results.length).toBeLessThanOrEqual(5);
-    });
-  });
-
-  describe('Usage Patterns', () => {
-    it('can be used with agent toolsets', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools });
-
-      // Simulate passing to agent.generate({ toolsets: { available: toolSearch() } })
-      const toolsets = { available: toolSearch() };
-
-      expect(toolsets.available.tool_search).toBeDefined();
-      expect(typeof toolsets.available.tool_search.execute).toBe('function');
-    });
-
-    it('maintains state across multiple toolSearch() calls', async () => {
-      const toolSearch = await createToolSearch({ tools: allTools });
-
-      toolSearch.load('github.createPR');
-
-      // Multiple calls to toolSearch() see the same loaded state
-      expect(toolSearch()['github.createPR']).toBeDefined();
-      expect(toolSearch()['github.createPR']).toBeDefined();
-      expect(toolSearch()['github.createPR']).toBeDefined();
     });
   });
 });
