@@ -275,6 +275,11 @@ export class PosthogExporter extends BaseExporter {
       baseProperties.$ai_session_id = span.metadata.sessionId;
     }
 
+    // Include tags for root spans (tags are only set on root spans by design)
+    if (span.isRootSpan && span.tags?.length) {
+      baseProperties.$ai_tags = span.tags;
+    }
+
     if (span.type === SpanType.MODEL_GENERATION || span.type === SpanType.MODEL_STEP) {
       baseProperties.$ai_generation_id = span.id;
       return { ...baseProperties, ...this.buildGenerationProperties(span) };
