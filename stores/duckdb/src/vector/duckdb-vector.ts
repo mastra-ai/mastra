@@ -59,7 +59,10 @@ export class DuckDBVector extends MastraVector {
     reject: (error: Error) => void;
   }> = [];
   private mutex = new Mutex();
+  private writeMutex = new Mutex(); // Serializes all write operations (DuckDB single-writer limitation)
   private initialized = false;
+  private static readonly MAX_QUEUE_SIZE = 100;
+  private static readonly MAX_BATCH_SIZE = 100000;
 
   constructor(config: DuckDBVectorConfig = {}) {
     const id = config.id || 'duckdb-vector';
@@ -87,12 +90,16 @@ export class DuckDBVector extends MastraVector {
     return this.mutex.runExclusive(async () => {
       if (this.initialized) return;
 
+      const tempConnections: duckdb.Connection[] = [];
+      let configConn: duckdb.Connection | null = null;
+      let initConn: duckdb.Connection | null = null;
+
       try {
         // Create DuckDB instance - simplified constructor
         this.db = new duckdb.Database(this.config.path);
 
         // Set configuration options after creation
-        const conn = this.db.connect();
+        configConn = this.db.connect();
         // Validate memory limit format (e.g., '2GB', '512MB')
         if (!/^\d+[KMG]B?$/i.test(this.config.memoryLimit)) {
           throw new Error('Invalid memory limit format. Use format like: 2GB, 512MB, 1024KB');
@@ -107,12 +114,13 @@ export class DuckDBVector extends MastraVector {
         // DuckDB limitation: SET commands don't support parameterized queries
         // memoryLimit validated to match ^\d+[KMG]B?$ pattern only
         // threads validated as integer 1-128 only
-        await this.execute(conn, `SET memory_limit='${this.config.memoryLimit}'`);
-        await this.execute(conn, `SET threads=${threads}`);
-        conn.close();
+        await this.execute(configConn, `SET memory_limit='${this.config.memoryLimit}'`);
+        await this.execute(configConn, `SET threads=${threads}`);
+        configConn.close();
+        configConn = null;
 
         // Install and load extensions using a temporary connection
-        const initConn = this.db.connect();
+        initConn = this.db.connect();
 
         // @greptile-security-review safe - Pre-defined constant SQL strings only
         // These are hardcoded SQL commands, not user input
@@ -140,15 +148,48 @@ export class DuckDBVector extends MastraVector {
         // Create default tables
         await this.createDefaultTables(initConn);
         initConn.close();
+        initConn = null;
 
-        // Create connection pool after initialization
+        // Create connection pool AFTER all setup succeeds
         for (let i = 0; i < this.config.poolSize; i++) {
           const poolConn = this.db.connect();
-          this.connectionPool.push(poolConn);
+          tempConnections.push(poolConn);
         }
 
+        // All succeeded, transfer to instance
+        this.connectionPool = tempConnections;
         this.initialized = true;
       } catch (error) {
+        // Cleanup on failure - close all temp connections
+        for (const conn of tempConnections) {
+          try {
+            conn.close();
+          } catch {
+            // Ignore close errors during cleanup
+          }
+        }
+        if (configConn) {
+          try {
+            configConn.close();
+          } catch {
+            // Ignore
+          }
+        }
+        if (initConn) {
+          try {
+            initConn.close();
+          } catch {
+            // Ignore
+          }
+        }
+        if (this.db) {
+          try {
+            this.db.close();
+          } catch {
+            // Ignore
+          }
+          this.db = null;
+        }
         throw this.handleError(error, 'Failed to initialize DuckDB');
       }
     });
@@ -156,40 +197,51 @@ export class DuckDBVector extends MastraVector {
 
   /**
    * Get a connection from the pool with retry and queue management
+   * Thread-safe via mutex to prevent race conditions on pool access
    */
   private async getConnection(): Promise<duckdb.Connection> {
     if (!this.initialized) {
       await this.initialize();
     }
 
-    // Try to get a connection immediately
-    const conn = this.connectionPool.pop();
-    if (conn) {
-      return conn;
-    }
+    // Use mutex to safely access connection pool
+    return this.mutex.runExclusive(async () => {
+      // Try to get a connection immediately
+      const conn = this.connectionPool.pop();
+      if (conn) {
+        return conn;
+      }
 
-    // No connection available, add to wait queue
-    return new Promise<duckdb.Connection>((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        const index = this.connectionWaitQueue.findIndex(w => w.resolve === resolve);
-        if (index !== -1) {
-          this.connectionWaitQueue.splice(index, 1);
-        }
-        reject(new Error('Timeout waiting for connection from pool'));
-      }, 30000); // 30 second timeout
+      // Check queue size limit to prevent memory leak
+      if (this.connectionWaitQueue.length >= DuckDBVector.MAX_QUEUE_SIZE) {
+        throw new Error('Connection pool queue overflow - too many pending requests');
+      }
 
-      this.connectionWaitQueue.push({
-        resolve: (conn: duckdb.Connection) => {
-          clearTimeout(timeoutId);
-          resolve(conn);
-        },
-        reject,
+      // No connection available, add to wait queue
+      return new Promise<duckdb.Connection>((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          const index = this.connectionWaitQueue.findIndex(w => w.resolve === resolve);
+          if (index !== -1) {
+            this.connectionWaitQueue.splice(index, 1);
+          }
+          reject(new Error('Timeout waiting for connection from pool'));
+        }, 30000); // 30 second timeout
+
+        this.connectionWaitQueue.push({
+          resolve: (conn: duckdb.Connection) => {
+            clearTimeout(timeoutId);
+            resolve(conn);
+          },
+          reject,
+        });
       });
     });
   }
 
   /**
    * Release a connection back to the pool and notify waiting requests
+   * Note: This is synchronous but safe because array operations are atomic in JS
+   * and we're not doing async operations here
    */
   private releaseConnection(conn: duckdb.Connection): void {
     // If there are waiting requests, give the connection to the first one
@@ -199,6 +251,19 @@ export class DuckDBVector extends MastraVector {
     } else {
       // Otherwise, return it to the pool
       this.connectionPool.push(conn);
+    }
+  }
+
+  /**
+   * Safely parse JSON with fallback to default value
+   */
+  private safeJsonParse<T>(json: string | null | undefined, defaultValue: T): T {
+    if (!json) return defaultValue;
+    try {
+      return JSON.parse(json);
+    } catch (error) {
+      console.warn('Failed to parse JSON:', error);
+      return defaultValue;
     }
   }
 
@@ -244,12 +309,14 @@ export class DuckDBVector extends MastraVector {
 
   /**
    * Create a new vector index
+   * Protected by writeMutex to ensure single-writer semantics
    */
   async createIndex(params: CreateIndexParams): Promise<void> {
-    const conn = await this.getConnection();
+    return this.writeMutex.runExclusive(async () => {
+      const conn = await this.getConnection();
 
-    try {
-      const { indexName, dimension, metric = this.config.metric } = params;
+      try {
+        const { indexName, dimension, metric = this.config.metric } = params;
 
       // Validate index name to prevent SQL injection
       this.validateIdentifier(indexName, 'Index name');
@@ -381,86 +448,102 @@ export class DuckDBVector extends MastraVector {
         // FTS might not be available, ignore for now
         console.warn('FTS extension not available for hybrid search:', error);
       }
-    } finally {
-      this.releaseConnection(conn);
-    }
+      } finally {
+        this.releaseConnection(conn);
+      }
+    });
   }
 
   /**
    * Upsert vectors to an index
+   * Protected by writeMutex to ensure single-writer semantics
    */
   async upsert(params: UpsertVectorParams): Promise<string[]> {
-    const conn = await this.getConnection();
+    const { indexName, vectors, metadata = [], ids } = params;
 
-    try {
-      const { indexName, vectors, metadata = [], ids } = params;
+    // Validate batch size limit
+    if (vectors.length > DuckDBVector.MAX_BATCH_SIZE) {
+      throw new Error(
+        `Batch size ${vectors.length} exceeds maximum ${DuckDBVector.MAX_BATCH_SIZE}. ` +
+          'Please split your data into smaller batches.',
+      );
+    }
 
-      // Validate index name
-      this.validateIdentifier(indexName, 'Index name');
+    return this.writeMutex.runExclusive(async () => {
+      const conn = await this.getConnection();
 
-      const tableName = this.getTableName(indexName);
-      const escapedTableName = this.escapeIdentifier(tableName);
+      try {
+        // Validate index name
+        this.validateIdentifier(indexName, 'Index name');
 
-      // Generate IDs if not provided
-      const vectorIds = ids || vectors.map(() => crypto.randomUUID());
+        const tableName = this.getTableName(indexName);
+        const escapedTableName = this.escapeIdentifier(tableName);
 
-      // Start transaction for batch insert
-      await this.execute(conn, 'BEGIN TRANSACTION');
+        // Generate IDs if not provided
+        const vectorIds = ids || vectors.map(() => crypto.randomUUID());
 
-      for (let i = 0; i < vectors.length; i++) {
-        const vectorData = vectors[i];
-        const metadataObj = metadata[i] || {};
-        const vectorId = vectorIds[i];
+        // Start transaction for batch insert
+        await this.execute(conn, 'BEGIN TRANSACTION');
 
-        // Validate vector dimensions
-        if (!vectorData) {
-          throw new Error(`Vector at index ${i} is undefined`);
+        for (let i = 0; i < vectors.length; i++) {
+          const vectorData = vectors[i];
+          const metadataObj = metadata[i] || {};
+          const vectorId = vectorIds[i];
+
+          // Validate vector dimensions
+          if (!vectorData) {
+            throw new Error(`Vector at index ${i} is undefined`);
+          }
+          validateVector(vectorData, this.config.dimensions);
+
+          // Normalize vector if using cosine similarity
+          const normalizedVector = this.config.metric === 'cosine' ? normalizeVector(vectorData) : vectorData;
+
+          // Upsert vector
+          await this.execute(
+            conn,
+            `
+            INSERT INTO ${escapedTableName} (id, vector, content, metadata, updated_at)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT (id) DO UPDATE SET
+              vector = EXCLUDED.vector,
+              metadata = EXCLUDED.metadata,
+              updated_at = EXCLUDED.updated_at
+          `,
+            [vectorId, `[${normalizedVector.join(',')}]`, metadataObj.content || '', JSON.stringify(metadataObj)],
+          );
         }
-        validateVector(vectorData, this.config.dimensions);
 
-        // Normalize vector if using cosine similarity
-        const normalizedVector = this.config.metric === 'cosine' ? normalizeVector(vectorData) : vectorData;
-
-        // Upsert vector
+        // Update vector count
         await this.execute(
           conn,
           `
-          INSERT INTO ${escapedTableName} (id, vector, content, metadata, updated_at)
-          VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-          ON CONFLICT (id) DO UPDATE SET
-            vector = EXCLUDED.vector,
-            metadata = EXCLUDED.metadata,
-            updated_at = EXCLUDED.updated_at
+          UPDATE vector_indexes
+          SET total_vectors = (SELECT COUNT(*) FROM ${escapedTableName}),
+              updated_at = CURRENT_TIMESTAMP
+          WHERE name = ?
         `,
-          [vectorId, `[${normalizedVector.join(',')}]`, metadataObj.content || '', JSON.stringify(metadataObj)],
+          [indexName],
         );
-      }
 
-      // Update vector count
-      await this.execute(
-        conn,
-        `
-        UPDATE vector_indexes
-        SET total_vectors = (SELECT COUNT(*) FROM ${escapedTableName}),
-            updated_at = CURRENT_TIMESTAMP
-        WHERE name = ?
-      `,
-        [indexName],
-      );
-
-      await this.execute(conn, 'COMMIT');
-      return vectorIds;
-    } catch (error) {
-      try {
-        await this.execute(conn, 'ROLLBACK');
-      } catch (rollbackError) {
-        // Log rollback error but throw original error
-        console.error('Failed to rollback transaction:', rollbackError);
+        await this.execute(conn, 'COMMIT');
+        return vectorIds;
+      } catch (error) {
+        try {
+          await this.execute(conn, 'ROLLBACK');
+        } catch (rollbackError) {
+          // Combine both errors for better debugging
+          const combinedError = new Error(
+            `Operation failed: ${error instanceof Error ? error.message : String(error)}. ` +
+              `Rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
+          );
+          throw this.handleError(combinedError, 'Transaction failed with rollback error');
+        }
+        throw this.handleError(error, 'Failed to upsert vectors');
+      } finally {
+        this.releaseConnection(conn);
       }
-      throw this.handleError(error, 'Failed to upsert vectors');
-    } finally {
-      this.releaseConnection(conn);
-    }
+    });
   }
 
   /**
@@ -526,10 +609,10 @@ export class DuckDBVector extends MastraVector {
         const result: QueryResult = {
           id: row.id,
           score: row.score,
-          metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+          metadata: this.safeJsonParse(row.metadata, undefined),
         };
         if (includeVector && row.vector) {
-          result.vector = JSON.parse(row.vector);
+          result.vector = this.safeJsonParse(row.vector, []);
         }
         return result;
       });
@@ -587,182 +670,264 @@ export class DuckDBVector extends MastraVector {
 
   /**
    * Delete an index and all its vectors
+   * Protected by writeMutex to ensure single-writer semantics
    */
   async deleteIndex(params: DeleteIndexParams): Promise<void> {
-    const conn = await this.getConnection();
+    return this.writeMutex.runExclusive(async () => {
+      const conn = await this.getConnection();
 
-    try {
-      const { indexName } = params;
+      try {
+        const { indexName } = params;
 
-      // Validate index name
-      this.validateIdentifier(indexName, 'Index name');
+        // Validate index name
+        this.validateIdentifier(indexName, 'Index name');
 
-      const tableName = this.getTableName(indexName);
-      const escapedTableName = this.escapeIdentifier(tableName);
+        const tableName = this.getTableName(indexName);
+        const escapedTableName = this.escapeIdentifier(tableName);
 
-      // Drop table and index
-      await this.execute(conn, `DROP TABLE IF EXISTS ${escapedTableName}`);
+        // Drop table and index
+        await this.execute(conn, `DROP TABLE IF EXISTS ${escapedTableName}`);
 
-      // Remove from indexes table
-      await this.execute(conn, 'DELETE FROM vector_indexes WHERE name = ?', [indexName]);
-    } finally {
-      this.releaseConnection(conn);
-    }
+        // Remove from indexes table
+        await this.execute(conn, 'DELETE FROM vector_indexes WHERE name = ?', [indexName]);
+      } finally {
+        this.releaseConnection(conn);
+      }
+    });
   }
 
   /**
    * Update a vector's metadata
+   * Protected by writeMutex to ensure single-writer semantics
    */
   async updateVector(params: UpdateVectorParams): Promise<void> {
-    const conn = await this.getConnection();
+    return this.writeMutex.runExclusive(async () => {
+      const conn = await this.getConnection();
 
-    try {
-      const { indexName, id, update } = params;
-      const { metadata, vector } = update;
+      try {
+        const { indexName, id, update } = params;
+        const { metadata, vector } = update;
 
-      // Validate index name
-      this.validateIdentifier(indexName, 'Index name');
+        // Validate index name
+        this.validateIdentifier(indexName, 'Index name');
 
-      const tableName = this.getTableName(indexName);
-      const escapedTableName = this.escapeIdentifier(tableName);
+        const tableName = this.getTableName(indexName);
+        const escapedTableName = this.escapeIdentifier(tableName);
 
-      const updates: string[] = [];
-      const updateParams: any[] = [];
+        const updates: string[] = [];
+        const updateParams: any[] = [];
 
-      if (vector) {
-        validateVector(vector, this.config.dimensions);
-        const normalizedVector = this.config.metric === 'cosine' ? normalizeVector(vector) : vector;
-        updates.push('vector = ?');
-        updateParams.push(`[${normalizedVector.join(',')}]`);
+        if (vector) {
+          validateVector(vector, this.config.dimensions);
+          const normalizedVector = this.config.metric === 'cosine' ? normalizeVector(vector) : vector;
+          updates.push('vector = ?');
+          updateParams.push(`[${normalizedVector.join(',')}]`);
+        }
+
+        if (metadata) {
+          updates.push('metadata = ?');
+          updateParams.push(JSON.stringify(metadata));
+        }
+
+        if (updates.length === 0) return;
+
+        updates.push('updated_at = CURRENT_TIMESTAMP');
+        updateParams.push(id);
+
+        await this.execute(
+          conn,
+          `
+          UPDATE ${escapedTableName}
+          SET ${updates.join(', ')}
+          WHERE id = ?
+        `,
+          updateParams,
+        );
+      } finally {
+        this.releaseConnection(conn);
       }
-
-      if (metadata) {
-        updates.push('metadata = ?');
-        updateParams.push(JSON.stringify(metadata));
-      }
-
-      if (updates.length === 0) return;
-
-      updates.push('updated_at = CURRENT_TIMESTAMP');
-      updateParams.push(id);
-
-      await this.execute(
-        conn,
-        `
-        UPDATE ${escapedTableName}
-        SET ${updates.join(', ')}
-        WHERE id = ?
-      `,
-        updateParams,
-      );
-    } finally {
-      this.releaseConnection(conn);
-    }
+    });
   }
 
   /**
    * Delete vectors by ID
+   * Protected by writeMutex to ensure single-writer semantics
    */
   async deleteVector(params: DeleteVectorParams): Promise<void> {
-    const conn = await this.getConnection();
+    return this.writeMutex.runExclusive(async () => {
+      const conn = await this.getConnection();
 
-    try {
-      const { indexName, id } = params;
+      try {
+        const { indexName, id } = params;
 
-      // Validate index name
-      this.validateIdentifier(indexName, 'Index name');
+        // Validate index name
+        this.validateIdentifier(indexName, 'Index name');
 
-      const tableName = this.getTableName(indexName);
-      const escapedTableName = this.escapeIdentifier(tableName);
+        const tableName = this.getTableName(indexName);
+        const escapedTableName = this.escapeIdentifier(tableName);
 
-      // Handle both single ID and array of IDs
-      const ids = Array.isArray(id) ? id : [id];
-      const placeholders = ids.map(() => '?').join(',');
+        // Handle both single ID and array of IDs
+        const ids = Array.isArray(id) ? id : [id];
+        const placeholders = ids.map(() => '?').join(',');
 
-      await this.execute(
-        conn,
-        `
-        DELETE FROM ${escapedTableName}
-        WHERE id IN (${placeholders})
-      `,
-        ids,
-      );
+        await this.execute(
+          conn,
+          `
+          DELETE FROM ${escapedTableName}
+          WHERE id IN (${placeholders})
+        `,
+          ids,
+        );
 
-      // Update vector count
-      await this.execute(
-        conn,
-        `
-        UPDATE vector_indexes
-        SET total_vectors = (SELECT COUNT(*) FROM ${escapedTableName}),
-            updated_at = CURRENT_TIMESTAMP
-        WHERE name = ?
-      `,
-        [indexName],
-      );
-    } finally {
-      this.releaseConnection(conn);
+        // Update vector count
+        await this.execute(
+          conn,
+          `
+          UPDATE vector_indexes
+          SET total_vectors = (SELECT COUNT(*) FROM ${escapedTableName}),
+              updated_at = CURRENT_TIMESTAMP
+          WHERE name = ?
+        `,
+          [indexName],
+        );
+      } finally {
+        this.releaseConnection(conn);
+      }
+    });
+  }
+
+  /**
+   * Delete multiple vectors by IDs or filter
+   * Protected by writeMutex to ensure single-writer semantics
+   */
+  async deleteVectors(params: {
+    indexName: string;
+    ids?: string[];
+    filter?: Record<string, any>;
+  }): Promise<void> {
+    const { indexName, ids, filter } = params;
+
+    // Validate parameters
+    if (!ids && !filter) {
+      throw new Error('Either ids or filter must be provided');
     }
+    if (ids && filter) {
+      throw new Error('Cannot provide both ids and filter');
+    }
+
+    return this.writeMutex.runExclusive(async () => {
+      const conn = await this.getConnection();
+
+      try {
+        // Validate index name
+        this.validateIdentifier(indexName, 'Index name');
+
+        const tableName = this.getTableName(indexName);
+        const escapedTableName = this.escapeIdentifier(tableName);
+
+        if (ids) {
+          // Delete by IDs
+          if (ids.length === 0) {
+            return; // Nothing to delete
+          }
+          const placeholders = ids.map(() => '?').join(',');
+          await this.execute(
+            conn,
+            `DELETE FROM ${escapedTableName} WHERE id IN (${placeholders})`,
+            ids,
+          );
+        } else if (filter) {
+          // Delete by filter
+          const filterBuilder = new DuckDBFilterBuilder();
+          const { sql: filterSql, params: filterParams } = filterBuilder.build(filter);
+          if (filterSql) {
+            await this.execute(
+              conn,
+              `DELETE FROM ${escapedTableName} WHERE ${filterSql}`,
+              filterParams,
+            );
+          }
+        }
+
+        // Update vector count
+        await this.execute(
+          conn,
+          `
+          UPDATE vector_indexes
+          SET total_vectors = (SELECT COUNT(*) FROM ${escapedTableName}),
+              updated_at = CURRENT_TIMESTAMP
+          WHERE name = ?
+        `,
+          [indexName],
+        );
+      } finally {
+        this.releaseConnection(conn);
+      }
+    });
   }
 
   /**
    * Import vectors from Parquet file (Enhanced DuckDB-specific feature)
+   * Protected by writeMutex to ensure single-writer semantics
    */
   async importFromParquet(indexName: string, options: ParquetImportOptions): Promise<number> {
-    const conn = await this.getConnection();
+    return this.writeMutex.runExclusive(async () => {
+      const conn = await this.getConnection();
 
-    try {
-      // Validate index name
-      this.validateIdentifier(indexName, 'Index name');
+      try {
+        // Validate index name
+        this.validateIdentifier(indexName, 'Index name');
 
-      const tableName = this.getTableName(indexName);
-      const escapedTableName = this.escapeIdentifier(tableName);
-      const { source, mapping = {}, batchSize = 10000 } = options;
+        const tableName = this.getTableName(indexName);
+        const escapedTableName = this.escapeIdentifier(tableName);
+        const { source, mapping = {}, batchSize = 10000 } = options;
 
-      // Validate source path to prevent SQL injection and directory traversal
-      this.validateParquetSource(source);
+        // Validate source path to prevent SQL injection and directory traversal
+        this.validateParquetSource(source);
 
-      // Escape single quotes in the source path for SQL
-      const escapedSource = source.replace(/'/g, "''");
+        // Escape single quotes in the source path for SQL
+        const escapedSource = source.replace(/'/g, "''");
 
-      // Build column mapping - validate column names
-      const idCol = this.escapeIdentifier(mapping.id || 'id');
-      const vectorCol = this.escapeIdentifier(mapping.vector || 'embedding');
-      const contentCol = this.escapeIdentifier(mapping.content || 'content');
-      const metadataCol = this.escapeIdentifier(mapping.metadata || 'metadata');
+        // Build column mapping - validate column names
+        const idCol = this.escapeIdentifier(mapping.id || 'id');
+        const vectorCol = this.escapeIdentifier(mapping.vector || 'embedding');
+        const contentCol = this.escapeIdentifier(mapping.content || 'content');
+        const metadataCol = this.escapeIdentifier(mapping.metadata || 'metadata');
 
-      // NOTE: Parquet filtering is not supported in the API
-      // If you need to filter Parquet data, please pre-filter your Parquet files
-      // or import to a staging table and filter using query methods
+        // NOTE: Parquet filtering is not supported in the API
+        // If you need to filter Parquet data, please pre-filter your Parquet files
+        // or import to a staging table and filter using query methods
 
-      // Import from Parquet
-      const sql = `
-        INSERT INTO ${escapedTableName} (id, vector, content, metadata)
-        SELECT
-          ${idCol} as id,
-          ${vectorCol} as vector,
-          ${contentCol} as content,
-          ${metadataCol} as metadata
-        FROM read_parquet('${escapedSource}')
-      `;
+        // Import from Parquet
+        const sql = `
+          INSERT INTO ${escapedTableName} (id, vector, content, metadata)
+          SELECT
+            ${idCol} as id,
+            ${vectorCol} as vector,
+            ${contentCol} as content,
+            ${metadataCol} as metadata
+          FROM read_parquet('${escapedSource}')
+        `;
 
-      const result = await this.execute(conn, sql);
+        const result = await this.execute(conn, sql);
 
-      // Update vector count
-      await this.execute(
-        conn,
-        `
-        UPDATE vector_indexes
-        SET total_vectors = (SELECT COUNT(*) FROM ${escapedTableName}),
-            updated_at = CURRENT_TIMESTAMP
-        WHERE name = ?
-      `,
-        [indexName],
-      );
+        // Update vector count
+        await this.execute(
+          conn,
+          `
+          UPDATE vector_indexes
+          SET total_vectors = (SELECT COUNT(*) FROM ${escapedTableName}),
+              updated_at = CURRENT_TIMESTAMP
+          WHERE name = ?
+        `,
+          [indexName],
+        );
 
-      return result.length;
-    } finally {
-      this.releaseConnection(conn);
-    }
+        return result.length;
+      } finally {
+        this.releaseConnection(conn);
+      }
+    });
   }
 
   /**
@@ -856,7 +1021,7 @@ export class DuckDBVector extends MastraVector {
       return results.map(row => ({
         id: row.id,
         score: row.score,
-        metadata: JSON.parse(row.metadata || '{}'),
+        metadata: this.safeJsonParse(row.metadata, {}),
       }));
     } finally {
       this.releaseConnection(conn);

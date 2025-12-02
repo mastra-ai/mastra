@@ -616,4 +616,202 @@ describe('DuckDBVector', () => {
       expect(results).toHaveLength(10);
     });
   });
+
+  describe('deleteVectors', () => {
+    beforeEach(async () => {
+      await vectorStore.createIndex({
+        indexName: 'test-index',
+        dimension: 512,
+        metric: 'cosine',
+      });
+    });
+
+    it('should delete vectors by ids', async () => {
+      const vectors = generateTestVectors(10, 512);
+
+      await vectorStore.upsert({
+        indexName: 'test-index',
+        vectors: vectors.map(v => v.values),
+        ids: vectors.map(v => v.id),
+        metadata: vectors.map(v => v.metadata),
+      });
+
+      await vectorStore.deleteVectors({
+        indexName: 'test-index',
+        ids: ['vec_0', 'vec_1', 'vec_2'],
+      });
+
+      const stats = await vectorStore.describeIndex({
+        indexName: 'test-index',
+      });
+
+      expect(stats.count).toBe(7);
+    });
+
+    it('should delete vectors by filter', async () => {
+      const vectors = generateTestVectors(20, 512);
+
+      await vectorStore.upsert({
+        indexName: 'test-index',
+        vectors: vectors.map(v => v.values),
+        ids: vectors.map(v => v.id),
+        metadata: vectors.map(v => v.metadata),
+      });
+
+      // Delete vectors with category 'A'
+      await vectorStore.deleteVectors({
+        indexName: 'test-index',
+        filter: { metadata: { category: 'A' } },
+      });
+
+      const stats = await vectorStore.describeIndex({
+        indexName: 'test-index',
+      });
+
+      // Should have deleted all vectors with category 'A'
+      expect(stats.count).toBeLessThan(20);
+    });
+
+    it('should throw if neither ids nor filter provided', async () => {
+      await expect(
+        vectorStore.deleteVectors({ indexName: 'test-index' }),
+      ).rejects.toThrow('Either ids or filter must be provided');
+    });
+
+    it('should throw if both ids and filter provided', async () => {
+      await expect(
+        vectorStore.deleteVectors({
+          indexName: 'test-index',
+          ids: ['vec_0'],
+          filter: { metadata: { category: 'A' } },
+        }),
+      ).rejects.toThrow('Cannot provide both ids and filter');
+    });
+
+    it('should handle empty ids array gracefully', async () => {
+      const vectors = generateTestVectors(5, 512);
+
+      await vectorStore.upsert({
+        indexName: 'test-index',
+        vectors: vectors.map(v => v.values),
+        ids: vectors.map(v => v.id),
+        metadata: vectors.map(v => v.metadata),
+      });
+
+      // Delete with empty array - should not throw
+      await vectorStore.deleteVectors({
+        indexName: 'test-index',
+        ids: [],
+      });
+
+      const stats = await vectorStore.describeIndex({
+        indexName: 'test-index',
+      });
+
+      // All vectors should still be there
+      expect(stats.count).toBe(5);
+    });
+  });
+
+  describe('Concurrency', () => {
+    beforeEach(async () => {
+      await vectorStore.createIndex({
+        indexName: 'test-index',
+        dimension: 512,
+        metric: 'cosine',
+      });
+    });
+
+    it('should serialize concurrent upserts', async () => {
+      // Run 10 concurrent upserts
+      const promises = Array.from({ length: 10 }, (_, i) =>
+        vectorStore.upsert({
+          indexName: 'test-index',
+          vectors: [generateRandomVector(512)],
+          ids: [`concurrent-${i}`],
+          metadata: [{ batch: i }],
+        }),
+      );
+
+      await Promise.all(promises);
+
+      const stats = await vectorStore.describeIndex({
+        indexName: 'test-index',
+      });
+
+      expect(stats.count).toBe(10);
+    });
+
+    it('should handle concurrent read/write operations', async () => {
+      // First insert some vectors
+      const initialVectors = generateTestVectors(20, 512);
+      await vectorStore.upsert({
+        indexName: 'test-index',
+        vectors: initialVectors.map(v => v.values),
+        ids: initialVectors.map(v => v.id),
+        metadata: initialVectors.map(v => v.metadata),
+      });
+
+      // Run concurrent reads and writes
+      const readPromises = Array.from({ length: 5 }, () =>
+        vectorStore.query({
+          indexName: 'test-index',
+          queryVector: generateRandomVector(512),
+          topK: 5,
+        }),
+      );
+
+      const writePromises = Array.from({ length: 3 }, (_, i) =>
+        vectorStore.upsert({
+          indexName: 'test-index',
+          vectors: [generateRandomVector(512)],
+          ids: [`new-vec-${i}`],
+          metadata: [{ type: 'concurrent-write' }],
+        }),
+      );
+
+      // All operations should complete without error
+      await Promise.all([...readPromises, ...writePromises]);
+
+      const stats = await vectorStore.describeIndex({
+        indexName: 'test-index',
+      });
+
+      // Should have initial 20 + 3 new = 23 vectors
+      expect(stats.count).toBe(23);
+    });
+
+    it('should serialize delete and upsert operations', async () => {
+      // Insert vectors
+      const vectors = generateTestVectors(10, 512);
+      await vectorStore.upsert({
+        indexName: 'test-index',
+        vectors: vectors.map(v => v.values),
+        ids: vectors.map(v => v.id),
+        metadata: vectors.map(v => v.metadata),
+      });
+
+      // Concurrent delete and insert
+      const deletePromise = vectorStore.deleteVectors({
+        indexName: 'test-index',
+        ids: ['vec_0', 'vec_1'],
+      });
+
+      const insertPromise = vectorStore.upsert({
+        indexName: 'test-index',
+        vectors: [generateRandomVector(512), generateRandomVector(512)],
+        ids: ['new-1', 'new-2'],
+        metadata: [{ new: true }, { new: true }],
+      });
+
+      await Promise.all([deletePromise, insertPromise]);
+
+      const stats = await vectorStore.describeIndex({
+        indexName: 'test-index',
+      });
+
+      // Should have 10 - 2 + 2 = 10 vectors
+      expect(stats.count).toBe(10);
+    });
+  });
 });

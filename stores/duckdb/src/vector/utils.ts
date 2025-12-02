@@ -24,15 +24,28 @@ export function validateVector(vector: number[], expectedDimension: number): voi
 
 /**
  * Normalize vector to unit length (for cosine similarity)
+ * Validates that the result contains no NaN or Infinity values
  */
 export function normalizeVector(vector: number[]): number[] {
   const magnitude = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
 
-  if (magnitude === 0) {
-    throw new Error('Cannot normalize zero vector');
+  if (magnitude === 0 || !isFinite(magnitude)) {
+    throw new Error(
+      `Cannot normalize vector: magnitude is ${magnitude}. ` +
+        `Vector may contain NaN or Infinity values.`,
+    );
   }
 
-  return vector.map(val => val / magnitude);
+  return vector.map(val => {
+    const result = val / magnitude;
+    if (!isFinite(result)) {
+      throw new Error(
+        `Normalization produced non-finite value. ` +
+          `Original value: ${val}, magnitude: ${magnitude}`,
+      );
+    }
+    return result;
+  });
 }
 
 /**
