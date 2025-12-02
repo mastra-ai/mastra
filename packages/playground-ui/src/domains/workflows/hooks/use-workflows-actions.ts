@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from 'react';
 import { mapWorkflowStreamChunkToWatchResult, useMastraClient } from '@mastra/react';
 import type { ReadableStreamDefaultReader } from 'stream/web';
 import { toast } from '@/lib/toast';
+import { useWorkflowSettings } from '../context/workflow-settings-context';
 
 export const useExecuteWorkflow = () => {
   const client = useMastraClient();
@@ -88,6 +89,7 @@ type WorkflowStreamResult = CoreWorkflowStreamResult<any, any, any, any>;
 
 export const useStreamWorkflow = () => {
   const client = useMastraClient();
+  const { settings } = useWorkflowSettings();
   const [streamResult, setStreamResult] = useState<WorkflowStreamResult>({} as WorkflowStreamResult);
   const [isStreaming, setIsStreaming] = useState(false);
   const readerRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);
@@ -182,7 +184,13 @@ export const useStreamWorkflow = () => {
         requestContext.set(key as keyof RequestContext, value);
       });
       const workflow = client.getWorkflow(workflowId);
-      const stream = await workflow.streamVNext({ runId, inputData, requestContext, closeOnSuspend: true });
+      const stream = await workflow.streamVNext({
+        runId,
+        inputData,
+        requestContext,
+        closeOnSuspend: true,
+        tracingOptions: settings?.tracingOptions,
+      });
 
       if (!stream) {
         return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
