@@ -1,11 +1,8 @@
-import { spawn } from 'child_process';
-import { promisify } from 'util';
+import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsup';
 
-const exec = promisify(spawn);
-
 export default defineConfig({
-  entry: ['src/index.ts', 'src/zod-to-json.ts'],
+  entry: ['src/index.ts', 'src/zod-to-json.ts', 'src/json-to-zod.ts'],
   format: ['esm', 'cjs'],
   clean: true,
   dts: false,
@@ -15,8 +12,6 @@ export default defineConfig({
   },
   sourcemap: true,
   onSuccess: async () => {
-    await exec('pnpm', ['tsc', '-p', 'tsconfig.build.json'], {
-      stdio: 'inherit',
-    });
+    await generateTypes(process.cwd());
   },
 });

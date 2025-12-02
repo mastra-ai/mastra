@@ -18,14 +18,18 @@ export interface WorkflowInputDataProps {
   isSubmitLoading: boolean;
   submitButtonLabel: string;
   onSubmit: (data: any) => void;
+  withoutSubmit?: boolean;
+  children?: React.ReactNode;
 }
 
 export const WorkflowInputData = ({
   schema,
   defaultValues,
+  withoutSubmit,
   isSubmitLoading,
   submitButtonLabel,
   onSubmit,
+  children,
 }: WorkflowInputDataProps) => {
   const [type, setType] = useState<'json' | 'form'>('form');
 
@@ -64,8 +68,10 @@ export const WorkflowInputData = ({
             defaultValues={defaultValues}
             isSubmitLoading={isSubmitLoading}
             submitButtonLabel={submitButtonLabel}
-            onSubmit={onSubmit}
-          />
+            onSubmit={withoutSubmit ? undefined : onSubmit}
+          >
+            {children}
+          </DynamicForm>
         ) : (
           <JSONInput
             schema={schema}
@@ -73,16 +79,27 @@ export const WorkflowInputData = ({
             isSubmitLoading={isSubmitLoading}
             submitButtonLabel={submitButtonLabel}
             onSubmit={onSubmit}
-          />
+            withoutSubmit={withoutSubmit}
+          >
+            {children}
+          </JSONInput>
         )}
       </div>
     </div>
   );
 };
 
-const JSONInput = ({ schema, defaultValues, isSubmitLoading, submitButtonLabel, onSubmit }: WorkflowInputDataProps) => {
+const JSONInput = ({
+  schema,
+  defaultValues,
+  isSubmitLoading,
+  submitButtonLabel,
+  onSubmit,
+  withoutSubmit,
+  children,
+}: WorkflowInputDataProps) => {
   const [errors, setErrors] = useState<string[]>([]);
-  const [inputData, setInputData] = useState<string>(JSON.stringify(defaultValues ?? {}, null, 2));
+  const [inputData, setInputData] = useState<string>(() => JSON.stringify(defaultValues ?? {}, null, 2));
 
   const handleSubmit = () => {
     setErrors([]);
@@ -119,9 +136,13 @@ const JSONInput = ({ schema, defaultValues, isSubmitLoading, submitButtonLabel, 
 
       <SyntaxHighlighter data={inputData} onChange={setInputData} />
 
-      <Button variant="light" onClick={handleSubmit} className="w-full" size="lg">
-        {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel}
-      </Button>
+      {children}
+
+      {withoutSubmit ? null : (
+        <Button variant="light" onClick={handleSubmit} className="w-full" size="lg">
+          {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel}
+        </Button>
+      )}
     </div>
   );
 };

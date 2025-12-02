@@ -5,7 +5,7 @@ import { describe, expect, beforeEach, afterEach, it, beforeAll, afterAll, vi } 
 import { ChromaVector } from './';
 
 describe('ChromaVector Integration Tests', () => {
-  let vectorDB = new ChromaVector();
+  let vectorDB = new ChromaVector({ id: 'chroma-test-vector' });
 
   const testIndexName = 'test-index';
   const testIndexName2 = 'test-index-2';
@@ -1563,13 +1563,13 @@ describe('ChromaVector Integration Tests', () => {
 
 // Metadata filtering tests for Memory system
 describe('Chroma Metadata Filtering', () => {
-  const chromaVector = new ChromaVector();
+  const chromaVector = new ChromaVector({ id: 'chroma-metadata-filter-test' });
 
   createVectorTestSuite({
     vector: chromaVector,
     createIndex: async (indexName: string) => {
-      // Using dimension 4 as required by the metadata filtering test vectors
-      await chromaVector.createIndex({ indexName, dimension: 4 });
+      // Using dimension 1536 as required by the metadata filtering test vectors
+      await chromaVector.createIndex({ indexName, dimension: 1536 });
     },
     deleteIndex: async (indexName: string) => {
       await chromaVector.deleteIndex({ indexName });
@@ -1590,6 +1590,7 @@ describe.skipIf(!process.env.CHROMA_API_KEY)('ChromaCloudVector Fork Tests', () 
 
   beforeEach(async () => {
     cloudVector = new ChromaVector({
+      id: 'chroma-cloud-vector-fork-test',
       apiKey: process.env.CHROMA_API_KEY,
     });
 

@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { useMastraClient } from '@/contexts/mastra-client-context';
+import { useMastraClient } from '@mastra/react';
 import { useEffect, useState } from 'react';
 import { VoiceAttachmentAdapter } from '../attachments/voice-adapter';
 import {
@@ -10,19 +10,25 @@ import {
   WebSpeechSynthesisAdapter,
 } from '@assistant-ui/react';
 import { PDFAttachmentAdapter } from '../attachments/pdfs-adapter';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export const useAdapters = (agentId: string) => {
   const [isReady, setIsReady] = useState(false);
   const [speechAdapter, setSpeechAdapter] = useState<SpeechSynthesisAdapter | undefined>(undefined);
   const baseClient = useMastraClient();
+  const { requestContext } = usePlaygroundStore();
 
   useEffect(() => {
     const check = async () => {
       const agent = baseClient.getAgent(agentId);
 
       try {
-        await agent.voice.getSpeakers();
-        setSpeechAdapter(new VoiceAttachmentAdapter(agent as unknown as Agent));
+        const speakers = await agent.voice.getSpeakers(requestContext);
+        if (speakers.length > 0) {
+          setSpeechAdapter(new VoiceAttachmentAdapter(agent as unknown as Agent));
+        } else {
+          setSpeechAdapter(new WebSpeechSynthesisAdapter());
+        }
         setIsReady(true);
       } catch {
         setSpeechAdapter(new WebSpeechSynthesisAdapter());

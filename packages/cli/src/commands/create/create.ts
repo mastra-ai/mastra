@@ -1,50 +1,64 @@
+import fsSync from 'node:fs';
+import fs from 'node:fs/promises';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
+import pkgJson from '../../../package.json';
 import type { PosthogAnalytics } from '../../analytics/index';
-
 import { getAnalytics } from '../../analytics/index';
 import { cloneTemplate, installDependencies } from '../../utils/clone-template';
 import { loadTemplates, selectTemplate, findTemplateByName, getDefaultProjectName } from '../../utils/template-utils';
 import type { Template } from '../../utils/template-utils';
 import { init } from '../init/init';
-import { interactivePrompt } from '../init/utils';
-import type { LLMProvider } from '../init/utils';
-import { getPackageManager } from '../utils.js';
+import type { Editor } from '../init/mcp-docs-server-install';
+import type { Component, LLMProvider } from '../init/utils';
+import { LLM_PROVIDERS } from '../init/utils';
+import { getPackageManager, gitInit } from '../utils.js';
 
 import { createMastraProject } from './utils';
 
+const version = pkgJson.version;
+
 export const create = async (args: {
   projectName?: string;
-  components?: string[];
+  components?: Component[];
   llmProvider?: LLMProvider;
   addExample?: boolean;
   llmApiKey?: string;
   createVersionTag?: string;
   timeout?: number;
   directory?: string;
-  mcpServer?: 'windsurf' | 'cursor' | 'cursor-global';
+  mcpServer?: Editor;
   template?: string | boolean;
   analytics?: PosthogAnalytics;
 }) => {
   if (args.template !== undefined) {
-    await createFromTemplate({ ...args, injectedAnalytics: args.analytics });
+    await createFromTemplate({
+      projectName: args.projectName,
+      template: args.template,
+      timeout: args.timeout,
+      injectedAnalytics: args.analytics,
+      llmProvider: args.llmProvider,
+    });
     return;
   }
 
-  const { projectName } = await createMastraProject({
+  /**
+   * We need to explicitly check for undefined instead of using the falsy (!) check because the user might have passed args that are explicitly set to false (in this case, no example code) and we need to distinguish between those and the case where the args were not passed at all.
+   */
+  const needsInteractive =
+    args.components === undefined || args.llmProvider === undefined || args.addExample === undefined;
+
+  const { projectName, result } = await createMastraProject({
     projectName: args?.projectName,
     createVersionTag: args?.createVersionTag,
     timeout: args?.timeout,
+    llmProvider: args?.llmProvider,
+    llmApiKey: args?.llmApiKey,
+    needsInteractive,
   });
   const directory = args.directory || 'src/';
 
-  // We need to explicitly check for undefined instead of using the falsy (!)
-  // check because the user might have passed args that are explicitly set
-  // to false (in this case, no example code) and we need to distinguish
-  // between those and the case where the args were not passed at all.
-  if (args.components === undefined || args.llmProvider === undefined || args.addExample === undefined) {
-    const result = await interactivePrompt();
-
+  if (needsInteractive && result) {
     // Track model provider selection from interactive prompt
     const analytics = getAnalytics();
     if (analytics && result?.llmProvider) {
@@ -56,9 +70,10 @@ export const create = async (args: {
 
     await init({
       ...result,
-      llmApiKey: result?.llmApiKey as string,
-      components: ['agents', 'tools', 'workflows'],
+      llmApiKey: result?.llmApiKey as string | undefined,
+      components: ['agents', 'tools', 'workflows', 'scorers'],
       addExample: true,
+      versionTag: args.createVersionTag,
     });
     postCreate({ projectName });
     return;
@@ -82,6 +97,7 @@ export const create = async (args: {
     addExample,
     llmApiKey,
     configureEditorWithDocsMCP: args.mcpServer,
+    versionTag: args.createVersionTag,
   });
 
   postCreate({ projectName });
@@ -212,6 +228,7 @@ async function createFromTemplate(args: {
   template?: string | boolean;
   timeout?: number;
   injectedAnalytics?: PosthogAnalytics;
+  llmProvider?: LLMProvider;
 }) {
   let selectedTemplate: Template | undefined;
 
@@ -277,6 +294,35 @@ async function createFromTemplate(args: {
     projectName = response as string;
   }
 
+  // Get LLM provider if not specified
+  let llmProvider = args.llmProvider;
+  if (!llmProvider) {
+    const providerResponse = await p.select({
+      message: 'Select a default provider:',
+      options: LLM_PROVIDERS,
+    });
+
+    if (p.isCancel(providerResponse)) {
+      p.log.info('Project creation cancelled.');
+      return;
+    }
+
+    llmProvider = providerResponse as LLMProvider;
+  }
+
+  // Handle git initialization for templates
+  let initGit = false;
+  const gitConfirmResult = await p.confirm({
+    message: 'Initialize a new git repository?',
+    initialValue: true,
+  });
+
+  if (!p.isCancel(gitConfirmResult)) {
+    initGit = gitConfirmResult;
+  }
+
+  let projectPath: string | null = null;
+
   try {
     // Track template usage
     const analytics = args.injectedAnalytics || getAnalytics();
@@ -285,16 +331,43 @@ async function createFromTemplate(args: {
         template_slug: selectedTemplate.slug,
         template_title: selectedTemplate.title,
       });
+
+      // Track model provider selection
+      if (llmProvider) {
+        analytics.trackEvent('cli_model_provider_selected', {
+          provider: llmProvider,
+          selection_method: args.llmProvider ? 'cli_args' : 'interactive',
+        });
+      }
     }
 
+    const isBeta = version?.includes('beta') ?? false;
+    const isMastraTemplate = selectedTemplate.githubUrl.includes('github.com/mastra-ai/');
+    const branch = isBeta && isMastraTemplate ? 'beta' : undefined;
+
     // Clone the template
-    const projectPath = await cloneTemplate({
+    projectPath = await cloneTemplate({
       template: selectedTemplate,
       projectName,
+      branch,
+      llmProvider,
     });
 
     // Install dependencies
     await installDependencies(projectPath);
+
+    if (initGit) {
+      const s = p.spinner();
+      try {
+        s.start('Initializing git repository');
+
+        await gitInit({ cwd: projectPath });
+
+        s.stop('Git repository initialized');
+      } catch {
+        s.stop();
+      }
+    }
 
     p.note(`
       ${color.green('Mastra template installed!')}
@@ -306,6 +379,19 @@ async function createFromTemplate(args: {
     // Show completion message
     postCreate({ projectName });
   } catch (error) {
+    // Clean up: remove the created directory on failure
+    if (projectPath) {
+      try {
+        if (fsSync.existsSync(projectPath)) {
+          await fs.rm(projectPath, { recursive: true, force: true });
+        }
+      } catch (cleanupError) {
+        // Log but don't throw - we want to exit with the original error
+        console.error(
+          `Warning: Failed to clean up project directory: ${cleanupError instanceof Error ? cleanupError.message : 'Unknown error'}`,
+        );
+      }
+    }
     p.log.error(`Failed to create project from template: ${error instanceof Error ? error.message : 'Unknown error'}`);
     throw error;
   }

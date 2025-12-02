@@ -1,17 +1,19 @@
 import type {
-  ModelMessage,
-  UIMessage,
   ToolSet,
   DeepPartial,
   streamText,
   StreamTextOnFinishCallback as OriginalStreamTextOnFinishCallback,
   StreamTextOnStepFinishCallback as OriginalStreamTextOnStepFinishCallback,
+  ModelMessage,
+  UIMessage,
 } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema } from 'zod';
+import type { ZodSchema } from 'zod';
+import type { MessageList } from '../../agent';
 import type { LoopOptions } from '../../loop/types';
-import type { StructuredOutputOptions, OutputProcessor } from '../../processors';
-import type { RuntimeContext } from '../../runtime-context';
+import type { TracingContext } from '../../observability';
+import type { OutputProcessor } from '../../processors';
+import type { RequestContext } from '../../request-context';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { inferOutput } from './shared.types';
 
@@ -32,15 +34,16 @@ export type StreamTextOnStepFinishCallback<Tools extends ToolSet> = (
   event: Parameters<OriginalStreamTextOnStepFinishCallback<Tools>>[0] & { runId: string },
 ) => Promise<void> | void;
 
-export type ModelLoopStreamArgs<
-  TOOLS extends ToolSet,
-  OUTPUT extends OutputSchema | undefined = undefined,
-  STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-> = {
-  messages: UIMessage[] | ModelMessage[];
-  structuredOutput?: STRUCTURED_OUTPUT extends z.ZodTypeAny ? StructuredOutputOptions<STRUCTURED_OUTPUT> : never;
+export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT extends OutputSchema = undefined> = {
+  methodType: ModelMethodType;
+  messages?: UIMessage[] | ModelMessage[];
   outputProcessors?: OutputProcessor[];
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
+  tracingContext: TracingContext;
   resourceId?: string;
   threadId?: string;
-} & Omit<LoopOptions<TOOLS, OUTPUT>, 'model' | 'messageList'>;
+  returnScorerData?: boolean;
+  messageList: MessageList;
+} & Omit<LoopOptions<TOOLS, OUTPUT>, 'models' | 'messageList'>;
+
+export type ModelMethodType = 'generate' | 'stream';

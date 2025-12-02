@@ -1,10 +1,12 @@
 import http from 'node:http';
-import path from 'path';
+import path from 'node:path';
 import type { ServerType } from '@hono/node-server';
 import { serve } from '@hono/node-server';
 import { Agent } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
-import type { MCPServerConfig, Repository, PackageInfo, RemoteInfo, ConvertedTool } from '@mastra/core/mcp';
+import type { MCPServerConfig, Repository, PackageInfo, RemoteInfo } from '@mastra/core/mcp';
+import type { InternalCoreTool, Tool } from '@mastra/core/tools';
+import { createTool } from '@mastra/core/tools';
 import { createStep, Workflow } from '@mastra/core/workflows';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type {
@@ -16,7 +18,7 @@ import type {
   GetPromptResult,
   Prompt,
 } from '@modelcontextprotocol/sdk/types.js';
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai/test';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
@@ -55,26 +57,77 @@ const minimalTestTool: ToolsInput = {
   },
 };
 
-const mockAgentGenerate = vi.fn(async (query: string) => {
+// Mock function for agent's doGenerate - properly typed
+const mockAgentDoGenerate: MockLanguageModelV2['doGenerate'] = vi.fn(async params => {
+  // Extract query from the params for the mock response
+  const lastMessage = params.prompt[params.prompt.length - 1];
+  let query = '';
+
+  if (lastMessage?.role === 'user') {
+    if (typeof lastMessage.content === 'string') {
+      query = lastMessage.content;
+    } else if (Array.isArray(lastMessage.content)) {
+      const textPart = lastMessage.content.find((part: any) => part.type === 'text') as any;
+      query = textPart?.text || '';
+    }
+  }
+
   return {
-    rawCall: { rawPrompt: null, rawSettings: {} },
-    finishReason: 'stop',
-    usage: { promptTokens: 10, completionTokens: 20 },
-    text: `{"content":"Agent response to: "${JSON.stringify(query)}"}`,
+    finishReason: 'stop' as const,
+    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+    content: [{ type: 'text' as const, text: `Agent response to: "${query}"` }],
+    warnings: [],
   };
 });
 
 const mockAgentGetInstructions = vi.fn(() => 'This is a mock agent for testing.');
 
-const createMockAgent = (name: string, generateFn: any, instructionsFn?: any, description?: string) => {
+const createMockAgent = (
+  name: string,
+  generateFn: MockLanguageModelV2['doGenerate'],
+  instructionsFn?: any,
+  description?: string,
+) => {
   return new Agent({
-    name: name,
+    id: name,
+    name,
     instructions: instructionsFn,
-    description: description || '',
-    model: new MockLanguageModelV1({
-      defaultObjectGenerationMode: 'json',
-      doGenerate: async options => {
-        return generateFn((options.prompt.at(-1)?.content[0] as { text: string }).text);
+    description,
+    model: new MockLanguageModelV2({
+      doGenerate: generateFn,
+      doStream: async params => {
+        // Extract the query from the messages
+        const lastMessage = params.prompt[params.prompt.length - 1];
+        let query = '';
+
+        if (lastMessage?.role === 'user') {
+          // The content might be a string or an array of content parts
+          if (typeof lastMessage.content === 'string') {
+            query = lastMessage.content;
+          } else if (Array.isArray(lastMessage.content)) {
+            // Extract text from content parts
+            const textPart = lastMessage.content.find((part: any) => part.type === 'text') as any;
+            query = textPart?.text || '';
+          }
+        }
+
+        // Create the response text based on the query
+        const textContent = `Agent response to: "${query}"`;
+
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: textContent },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        };
       },
     }),
   });
@@ -106,7 +159,8 @@ describe('MCPServer', () => {
     vi.clearAllMocks();
 
     // @ts-ignore - Mocking Date completely
-    global.Date = vi.fn((...args: any[]) => {
+    // Must use a regular function (not arrow function) to support `new Date()` constructor calls
+    global.Date = vi.fn(function (this: any, ...args: any[]) {
       if (args.length === 0) {
         // new Date()
         return mockDate;
@@ -118,9 +172,7 @@ describe('MCPServer', () => {
     // @ts-ignore
     global.Date.now = vi.fn(() => mockDate.getTime());
     // @ts-ignore
-    global.Date.prototype.toISOString = vi.fn(() => mockDateISO);
-    // @ts-ignore // Static Date.toISOString() might be used by some libraries
-    global.Date.toISOString = vi.fn(() => mockDateISO);
+    global.Date.prototype = OriginalDate.prototype;
   });
 
   // Restore original Date after all tests in this describe block
@@ -543,7 +595,9 @@ describe('MCPServer', () => {
     it('should read resource content for an existing resource', async () => {
       const uri = 'test://resource/1';
       const result = (await notificationTestInternalClient.readResource(uri)) as ReadResourceResult;
-      expect(getResourceContentCallback).toHaveBeenCalledWith({ uri });
+      expect(getResourceContentCallback).toHaveBeenCalledWith(
+        expect.objectContaining({ uri, extra: expect.any(Object) }),
+      );
       expect(result.contents).toEqual([
         {
           uri,
@@ -868,13 +922,17 @@ describe('MCPServer', () => {
       if (reader) {
         try {
           await reader.cancel();
-        } catch {}
+        } catch {
+          // swallow error
+        }
         reader = undefined;
       }
       if (sseRes && 'body' in sseRes && sseRes.body) {
         try {
           await sseRes.body.cancel();
-        } catch {}
+        } catch {
+          // swallow error
+        }
         sseRes = undefined;
       }
     });
@@ -927,7 +985,7 @@ describe('MCPServer', () => {
         },
       });
 
-      const tools = await existingConfig.getTools();
+      const tools = await existingConfig.listTools();
       expect(Object.keys(tools).length).toBeGreaterThan(0);
       expect(Object.keys(tools)[0]).toBe('weather_weatherTool');
       await existingConfig.disconnect();
@@ -950,11 +1008,11 @@ describe('MCPServer', () => {
             parameters: z.object({
               message: z.string().describe('Message to show to user'),
             }),
-            execute: async (context, options) => {
-              const extra = options.extra as MCPRequestHandlerExtra;
+            execute: async (inputData, context) => {
+              const extra = context?.mcp?.extra as MCPRequestHandlerExtra;
 
               return {
-                message: context.message,
+                message: inputData.message,
                 sessionId: extra?.sessionId || null,
                 authInfo: extra?.authInfo || null,
                 requestId: extra?.requestId || null,
@@ -1008,12 +1066,12 @@ describe('MCPServer', () => {
     });
 
     it('should respond to HTTP request using client', async () => {
-      const tools = await client.getTools();
+      const tools = await client.listTools();
       const tool = tools['local_weatherTool'];
       expect(tool).toBeDefined();
 
       // Call the tool
-      const result = await tool.execute({ context: { location: 'Austin' } });
+      const result = await tool.execute!({ location: 'Austin' });
 
       // Check the result
       expect(result).toBeDefined();
@@ -1143,12 +1201,12 @@ describe('MCPServer', () => {
 
     it('should respond to SSE connection and tool call', async () => {
       // Get tools from the client
-      const tools = await client.getTools();
+      const tools = await client.listTools();
       const tool = tools['local_weatherTool'];
       expect(tool).toBeDefined();
 
       // Call the tool using the MCPClient (SSE transport)
-      const result = await tool.execute({ context: { location: 'Austin' } });
+      const result = await tool.execute!({ location: 'Austin' });
 
       expect(result).toBeDefined();
       expect(result.content).toBeInstanceOf(Array);
@@ -1166,6 +1224,234 @@ describe('MCPServer', () => {
       expect(toolResult).toHaveProperty('windGust');
     });
   });
+
+  describe('MCPServer Session Management', () => {
+    let sessionServer: MCPServer;
+    let sessionHttpServer: http.Server;
+    let currentTestPort: number;
+
+    beforeEach(() => {
+      currentTestPort = 9600 + Math.floor(Math.random() * 1000);
+    });
+
+    afterEach(async () => {
+      if (sessionHttpServer) {
+        sessionHttpServer.closeAllConnections?.();
+        await new Promise<void>((resolve, reject) => {
+          sessionHttpServer.close(err => {
+            if (err) return reject(err);
+            resolve();
+          });
+        });
+      }
+      if (sessionServer) {
+        await sessionServer.close();
+      }
+    });
+
+    it('should generate sessions by default when no sessionIdGenerator option is provided', async () => {
+      sessionServer = new MCPServer({
+        name: 'DefaultSessionServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          // No options provided - should use default sessionIdGenerator
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+
+      const client = new InternalMastraMCPClient({
+        name: 'default-session-client',
+        server: {
+          url: new URL(`http://localhost:${currentTestPort}/http`),
+        },
+      });
+
+      await client.connect();
+
+      // Verify that a session was created by checking if we can list tools
+      const tools = await client.tools();
+      expect(tools).toBeDefined();
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
+
+      await client.disconnect();
+    });
+
+    it('should disable sessions when sessionIdGenerator is explicitly set to undefined', async () => {
+      sessionServer = new MCPServer({
+        name: 'NoSessionServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          options: {
+            sessionIdGenerator: undefined, // Explicitly disable sessions
+          },
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+
+      const client = new InternalMastraMCPClient({
+        name: 'no-session-client',
+        server: {
+          url: new URL(`http://localhost:${currentTestPort}/http`),
+        },
+      });
+
+      await client.connect();
+
+      // Should work in stateless mode
+      const tools = await client.tools();
+      expect(tools).toBeDefined();
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
+
+      await client.disconnect();
+    });
+
+    it('should run in serverless mode when serverless option is true', async () => {
+      sessionServer = new MCPServer({
+        name: 'ServerlessServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          options: {
+            serverless: true, // Enable serverless mode
+          },
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+
+      const client = new InternalMastraMCPClient({
+        name: 'serverless-client',
+        server: {
+          url: new URL(`http://localhost:${currentTestPort}/http`),
+        },
+      });
+
+      await client.connect();
+
+      // Should work in stateless serverless mode
+      const tools = await client.tools();
+      expect(tools).toBeDefined();
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
+
+      await client.disconnect();
+    });
+
+    it('should use custom sessionIdGenerator when provided', async () => {
+      const customSessionIds: string[] = [];
+      let sessionIdCounter = 0;
+
+      const customSessionIdGenerator = () => {
+        const customId = `custom-session-${sessionIdCounter++}`;
+        customSessionIds.push(customId);
+        return customId;
+      };
+
+      sessionServer = new MCPServer({
+        name: 'CustomSessionServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          options: {
+            sessionIdGenerator: customSessionIdGenerator,
+          },
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+
+      const client = new InternalMastraMCPClient({
+        name: 'custom-session-client',
+        server: {
+          url: new URL(`http://localhost:${currentTestPort}/http`),
+        },
+      });
+
+      await client.connect();
+
+      // Verify that the custom session ID generator was called
+      expect(customSessionIds.length).toBeGreaterThan(0);
+      expect(customSessionIds[0]).toMatch(/^custom-session-\d+$/);
+
+      await client.disconnect();
+    });
+
+    it('should allow user options to override default sessionIdGenerator', async () => {
+      // This test verifies the core fix: user-provided options override defaults
+      sessionServer = new MCPServer({
+        name: 'OverrideTestServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          options: {
+            sessionIdGenerator: undefined, // User explicitly disables sessions
+          },
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+
+      const client = new InternalMastraMCPClient({
+        name: 'override-test-client',
+        server: {
+          url: new URL(`http://localhost:${currentTestPort}/http`),
+        },
+      });
+
+      await client.connect();
+
+      // Should work with serverless mode enabled
+      const tools = await client.tools();
+      expect(tools).toBeDefined();
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
+
+      await client.disconnect();
+    });
+  });
 });
 
 describe('MCPServer - Agent to Tool Conversion', () => {
@@ -1178,7 +1464,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
   it('should convert a provided agent to an MCP tool with sync dynamic description', () => {
     const testAgent = createMockAgent(
       'MyTestAgent',
-      mockAgentGenerate,
+      mockAgentDoGenerate,
       mockAgentGetInstructions,
       'Simple mock description.',
     );
@@ -1209,10 +1495,14 @@ describe('MCPServer - Agent to Tool Conversion', () => {
   it('should call agent.generate when the derived tool is executed', async () => {
     const testAgent = createMockAgent(
       'MyExecAgent',
-      mockAgentGenerate,
+      mockAgentDoGenerate,
       mockAgentGetInstructions,
       'Executable mock agent',
     );
+
+    // Spy on the agent's generate method
+    const generateSpy = vi.spyOn(testAgent, 'generate');
+
     server = new MCPServer({
       name: 'AgentExecServer',
       version: '1.0.0',
@@ -1228,9 +1518,18 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     if (agentTool && agentTool.execute) {
       const result = await agentTool.execute(queryInput, { toolCallId: 'mcp-call-123', messages: [] });
 
-      expect(mockAgentGenerate).toHaveBeenCalledTimes(1);
-      expect(mockAgentGenerate).toHaveBeenCalledWith(queryInput.message);
-      expect(result.text).toBe(`{"content":"Agent response to: ""Hello Agent""}`);
+      // Check that agent.generate was called with the correct message
+      expect(generateSpy).toHaveBeenCalledTimes(1);
+      expect(generateSpy).toHaveBeenCalledWith(
+        queryInput.message,
+        expect.objectContaining({
+          requestContext: expect.any(Object),
+          tracingContext: expect.any(Object),
+        }),
+      );
+
+      // The result should contain the response text
+      expect(result.text).toBe('Agent response to: "Hello Agent"');
     } else {
       throw new Error('Agent tool or its execute function is undefined');
     }
@@ -1241,7 +1540,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     const explicitToolExecute = vi.fn(async () => 'explicit tool response');
     const collidingAgent = createMockAgent(
       'CollidingAgent',
-      mockAgentGenerate,
+      mockAgentDoGenerate,
       undefined,
       'Colliding agent description',
     );
@@ -1262,13 +1561,13 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     const tools = server.tools();
     expect(tools[explicitToolName]).toBeDefined();
     expect(tools[explicitToolName].description).toBe('An explicit tool that collides.');
-    expect(mockAgentGenerate).not.toHaveBeenCalled();
+    expect(mockAgentDoGenerate).not.toHaveBeenCalled();
   });
 
   it('should use agentKey for tool name ask_<agentKey>', () => {
     const uniqueKeyAgent = createMockAgent(
       'AgentNameDoesNotMatterForToolKey',
-      mockAgentGenerate,
+      mockAgentDoGenerate,
       undefined,
       'Agent description',
     );
@@ -1282,7 +1581,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
   });
 
   it('should throw an error if description is undefined (not provided to mock)', () => {
-    const agentWithNoDesc = createMockAgent('NoDescAgent', mockAgentGenerate, mockAgentGetInstructions, undefined); // getDescription will return ''
+    const agentWithNoDesc = createMockAgent('NoDescAgent', mockAgentDoGenerate, mockAgentGetInstructions, undefined); // getDescription will return ''
 
     expect(
       () =>
@@ -1294,6 +1593,205 @@ describe('MCPServer - Agent to Tool Conversion', () => {
         }),
     ).toThrow('must have a non-empty description');
   });
+
+  it('should pass MCP context to tools both directly and through agents', async () => {
+    const mockExtra: MCPRequestHandlerExtra = {
+      signal: new AbortController().signal,
+      sessionId: 'auth-test-session',
+      authInfo: {
+        token: 'test-auth-token-123',
+        clientId: 'test-client-456',
+        scopes: ['read', 'write'],
+      },
+      requestId: 'auth-test-request',
+      sendNotification: vi.fn(),
+      sendRequest: vi.fn(),
+    };
+
+    let directToolOptions: any = null;
+    const directAuthCheckTool: ToolsInput = {
+      authCheck: {
+        description: 'Tool that checks for auth context',
+        parameters: z.object({ query: z.string().optional() }),
+        execute: async (args, options) => {
+          directToolOptions = options;
+          return {
+            source: 'direct-mcp',
+            authInfo: options?.mcp?.extra?.authInfo,
+          };
+        },
+      },
+    };
+
+    server = new MCPServer({
+      name: 'DirectToolServer',
+      version: '1.0.0',
+      tools: directAuthCheckTool,
+    });
+
+    const serverInstance = server.getServer();
+    // @ts-ignore
+    const requestHandlers = serverInstance._requestHandlers;
+    const callToolHandler = requestHandlers.get('tools/call');
+
+    await callToolHandler(
+      {
+        jsonrpc: '2.0' as const,
+        id: 'test-direct-tool-1',
+        method: 'tools/call' as const,
+        params: {
+          name: 'authCheck',
+          arguments: { query: 'direct call' },
+        },
+      },
+      mockExtra,
+    );
+
+    expect(directToolOptions).toBeDefined();
+    expect(directToolOptions.mcp).toBeDefined();
+    expect(directToolOptions.mcp.extra.authInfo.token).toBe('test-auth-token-123');
+    expect(directToolOptions.mcp.extra.authInfo.clientId).toBe('test-client-456');
+    expect(directToolOptions.mcp.extra.sessionId).toBe('auth-test-session');
+
+    let agentContextObj: any = null;
+    let agentExecOptions: any = null;
+
+    const agentAuthCheckToolInstance = createTool({
+      id: 'authCheck',
+      description: 'Tool that checks for auth context',
+      inputSchema: z.object({ query: z.string().optional() }),
+      execute: async (inputData, context) => {
+        agentContextObj = context;
+        agentExecOptions = context;
+        const mcpExtra = context?.requestContext?.get('mcp.extra');
+        return {
+          source: 'agent-request-context',
+          authInfo: mcpExtra?.authInfo,
+        };
+      },
+    });
+
+    const agentMock = new MockLanguageModelV2({
+      doGenerate: async params => {
+        const hasToolResults = params.prompt.some(
+          (msg: any) =>
+            msg.role === 'tool' ||
+            (Array.isArray(msg.content) && msg.content.some((c: any) => c.type === 'tool-result')),
+        );
+
+        if (!hasToolResults) {
+          return {
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'call-1',
+                toolName: 'authCheck',
+                input: JSON.stringify({ query: 'agent call' }),
+              },
+            ],
+            warnings: [],
+          };
+        } else {
+          return {
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Tool executed successfully' }],
+            warnings: [],
+          };
+        }
+      },
+      doStream: async params => {
+        const hasToolResults = params.prompt.some(
+          (msg: any) =>
+            msg.role === 'tool' ||
+            (Array.isArray(msg.content) && msg.content.some((c: any) => c.type === 'tool-result')),
+        );
+
+        if (!hasToolResults) {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolName: 'authCheck',
+                input: JSON.stringify({ query: 'agent call' }),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ] as any),
+          };
+        } else {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-delta', id: 'text-1', delta: 'Tool executed successfully' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ] as any),
+          };
+        }
+      },
+    });
+
+    const agentWithTool = new Agent({
+      id: 'AgentWithAuthCheckTool',
+      name: 'AgentWithAuthCheckTool',
+      instructions: 'You use the authCheck tool',
+      description: 'Agent that uses authCheck tool',
+      model: agentMock,
+      tools: { authCheck: agentAuthCheckToolInstance },
+    });
+
+    server = new MCPServer({
+      name: 'AgentAuthContextServer',
+      version: '1.0.0',
+      tools: {},
+      agents: { authAgent: agentWithTool },
+    });
+
+    const serverInstance2 = server.getServer();
+    // @ts-ignore
+    const requestHandlers2 = serverInstance2._requestHandlers;
+    const callToolHandler2 = requestHandlers2.get('tools/call');
+
+    await callToolHandler2(
+      {
+        jsonrpc: '2.0' as const,
+        id: 'test-agent-tool-1',
+        method: 'tools/call' as const,
+        params: {
+          name: 'ask_authAgent',
+          arguments: { message: 'Please check auth' },
+        },
+      },
+      mockExtra,
+    );
+
+    expect(agentContextObj).toBeDefined();
+    expect(agentContextObj.requestContext).toBeDefined();
+    expect(typeof agentContextObj.requestContext.get).toBe('function');
+
+    // All keys from extra are spread directly on the requestContext
+    const authInfo = agentContextObj.requestContext.get('authInfo');
+    expect(authInfo).toBeDefined();
+    expect(authInfo.token).toBe('test-auth-token-123');
+    expect(authInfo.clientId).toBe('test-client-456');
+    expect(authInfo.scopes).toEqual(['read', 'write']);
+    expect(agentContextObj.requestContext.get('sessionId')).toBe('auth-test-session');
+    expect(agentContextObj.requestContext.get('requestId')).toBe('auth-test-request');
+    expect(agentExecOptions.mcp).toBeUndefined();
+  });
 });
 
 describe('MCPServer - Workflow to Tool Conversion', () => {
@@ -1304,7 +1802,7 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
   });
 
   it('should convert a provided workflow to an MCP tool', () => {
-    const testWorkflow = createMockWorkflow('MyTestWorkflow', 'A test workflow.');
+    const testWorkflow = createMockWorkflow('MyTestWorkflow', 'A test workflow.', z.object({ input: z.string() }));
     server = new MCPServer({
       name: 'WorkflowToolServer',
       version: '1.0.0',
@@ -1346,7 +1844,7 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
     ).toThrow('must have a non-empty description');
   });
 
-  it('should call workflow.createRun().start() when the derived tool is executed', async () => {
+  it('should execute workflow when the derived tool is called', async () => {
     const testWorkflow = createMockWorkflow('MyExecWorkflow', 'Executable workflow', z.object({ data: z.string() }));
     const step = createStep({
       id: 'my-step',
@@ -1371,7 +1869,7 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
       workflows: { execWorkflowKey: testWorkflow },
     });
 
-    const workflowTool = server.tools()['run_execWorkflowKey'] as ConvertedTool;
+    const workflowTool = server.tools()['run_execWorkflowKey'] as InternalCoreTool;
     expect(workflowTool).toBeDefined();
 
     const inputData = { data: 'Hello Workflow' };
@@ -1423,6 +1921,106 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
     });
     expect(server.tools()['run_unique_workflow_key_789']).toBeDefined();
   });
+
+  it('should pass MCP context through requestContext to workflow steps', async () => {
+    const mockExtra: MCPRequestHandlerExtra = {
+      signal: new AbortController().signal,
+      sessionId: 'workflow-auth-test-session',
+      authInfo: {
+        token: 'workflow-auth-token-456',
+        clientId: 'workflow-client-789',
+        scopes: ['workflow:read', 'workflow:write'],
+      },
+      requestId: 'workflow-request-id',
+      sendNotification: vi.fn(),
+      sendRequest: vi.fn(),
+    };
+
+    let capturedRequestContext: any = null;
+
+    // Create a workflow with a step that captures the requestContext
+    const authCheckWorkflow = new Workflow({
+      id: 'authCheckWorkflow',
+      description: 'Workflow that checks for auth context in requestContext',
+      inputSchema: z.object({ message: z.string() }),
+      outputSchema: z.object({ message: z.string(), authInfo: z.any(), sessionId: z.string().optional() }),
+      steps: [],
+    });
+
+    const authCheckStep = createStep({
+      id: 'auth-check-step',
+      description: 'Step that captures auth context',
+      inputSchema: z.object({
+        message: z.string(),
+      }),
+      outputSchema: z.object({
+        message: z.string(),
+        authInfo: z.any(),
+        sessionId: z.string().optional(),
+      }),
+      execute: async ({ inputData, requestContext }) => {
+        capturedRequestContext = requestContext;
+        return {
+          message: inputData.message,
+          authInfo: requestContext?.get('authInfo') || null,
+          sessionId: requestContext?.get('sessionId') || null,
+        };
+      },
+    });
+
+    authCheckWorkflow.then(authCheckStep).commit();
+
+    server = new MCPServer({
+      name: 'WorkflowAuthContextServer',
+      version: '1.0.0',
+      tools: {},
+      workflows: { authCheckWorkflow },
+    });
+
+    const serverInstance = server.getServer();
+    // @ts-ignore - accessing private property for testing
+    const requestHandlers = serverInstance._requestHandlers;
+    const callToolHandler = requestHandlers.get('tools/call');
+
+    const result = await callToolHandler(
+      {
+        jsonrpc: '2.0' as const,
+        id: 'test-workflow-auth-1',
+        method: 'tools/call' as const,
+        params: {
+          name: 'run_authCheckWorkflow',
+          arguments: { message: 'test workflow auth' },
+        },
+      },
+      mockExtra,
+    );
+
+    // Verify the result
+    expect(result).toBeDefined();
+    expect(result.isError).toBe(false);
+    expect(result.content).toBeInstanceOf(Array);
+    expect(result.content.length).toBeGreaterThan(0);
+
+    const toolOutput = result.content[0];
+    expect(toolOutput.type).toBe('text');
+    const workflowResult = JSON.parse(toolOutput.text);
+
+    // Verify the workflow completed successfully
+    expect(workflowResult.status).toBe('success');
+
+    // Verify the requestContext was captured and all extra keys are set directly
+    expect(capturedRequestContext).toBeDefined();
+    expect(typeof capturedRequestContext.get).toBe('function');
+
+    // All keys from extra are spread directly on the context
+    const authInfo = capturedRequestContext.get('authInfo');
+    expect(authInfo).toBeDefined();
+    expect(authInfo.token).toBe('workflow-auth-token-456');
+    expect(authInfo.clientId).toBe('workflow-client-789');
+    expect(authInfo.scopes).toEqual(['workflow:read', 'workflow:write']);
+    expect(capturedRequestContext.get('sessionId')).toBe('workflow-auth-test-session');
+    expect(capturedRequestContext.get('requestId')).toBe('workflow-request-id');
+  });
 });
 
 describe('MCPServer - Elicitation', () => {
@@ -1441,12 +2039,12 @@ describe('MCPServer - Elicitation', () => {
           parameters: z.object({
             message: z.string().describe('Message to show to user'),
           }),
-          execute: async (context, options) => {
+          execute: async (inputData, context) => {
             // Use the session-aware elicitation functionality
             try {
-              const elicitation = options.elicitation;
+              const elicitation = context?.mcp?.elicitation;
               const result = await elicitation.sendRequest({
-                message: context.message,
+                message: inputData.message,
                 requestedSchema: {
                   type: 'object',
                   properties: {
@@ -1545,10 +2143,8 @@ describe('MCPServer - Elicitation', () => {
     const tool = tools['testElicitationTool'];
     expect(tool).toBeDefined();
 
-    const result = await tool.execute({
-      context: {
-        message: 'Please provide your information',
-      },
+    const result = await tool.execute!({
+      message: 'Please provide your information',
     });
 
     expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
@@ -1579,10 +2175,8 @@ describe('MCPServer - Elicitation', () => {
     const tools = await elicitationClient.tools();
     const tool = tools['testElicitationTool'];
 
-    const result = await tool.execute({
-      context: {
-        message: 'Please provide sensitive data',
-      },
+    const result = await tool.execute!({
+      message: 'Please provide sensitive data',
     });
 
     expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
@@ -1606,10 +2200,8 @@ describe('MCPServer - Elicitation', () => {
     const tools = await elicitationClient.tools();
     const tool = tools['testElicitationTool'];
 
-    const result = await tool.execute({
-      context: {
-        message: 'Please provide optional data',
-      },
+    const result = await tool.execute!({
+      message: 'Please provide optional data',
     });
 
     expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
@@ -1633,10 +2225,8 @@ describe('MCPServer - Elicitation', () => {
     const tools = await elicitationClient.tools();
     const tool = tools['testElicitationTool'];
 
-    const result = await tool.execute({
-      context: {
-        message: 'This will cause an error',
-      },
+    const result = await tool.execute!({
+      message: 'This will cause an error',
     });
 
     expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
@@ -1656,10 +2246,8 @@ describe('MCPServer - Elicitation', () => {
     const tools = await elicitationClient.tools();
     const tool = tools['testElicitationTool'];
 
-    const result = await tool.execute({
-      context: {
-        message: 'This should fail gracefully',
-      },
+    const result = await tool.execute!({
+      message: 'This should fail gracefully',
     });
 
     // When no elicitation handler is provided, the server's elicitInput should fail
@@ -1694,10 +2282,8 @@ describe('MCPServer - Elicitation', () => {
     const tool = tools['testElicitationTool'];
     expect(tool).toBeDefined();
 
-    const result = await tool.execute({
-      context: {
-        message: 'Please provide your information',
-      },
+    const result = await tool.execute!({
+      message: 'Please provide your information',
     });
 
     expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
@@ -1755,16 +2341,14 @@ describe('MCPServer - Elicitation', () => {
     elicitationClient1.elicitation.onRequest('elicitation1', client1Handler);
     elicitationClient2.elicitation.onRequest('elicitation2', client2Handler);
 
-    const tools = await elicitationClient1.getTools();
+    const tools = await elicitationClient1.listTools();
     const tool = tools['elicitation1_testElicitationTool'];
     expect(tool).toBeDefined();
-    await tool.execute({
-      context: {
-        message: 'Please provide your information',
-      },
+    await tool.execute!({
+      message: 'Please provide your information',
     });
 
-    const tools2 = await elicitationClient2.getTools();
+    const tools2 = await elicitationClient2.listTools();
     const tool2 = tools2['elicitation2_testElicitationTool'];
     expect(tool2).toBeDefined();
 
@@ -1834,25 +2418,22 @@ describe('MCPServer with Tool Output Schema', () => {
   });
 
   it('should list tool with outputSchema', async () => {
-    const tools = await clientWithOutputSchema.getTools();
+    const tools = await clientWithOutputSchema.listTools();
     const tool = tools['local_structuredTool'];
     expect(tool).toBeDefined();
     expect(tool.outputSchema).toBeDefined();
   });
 
   it('should call tool and receive structuredContent', async () => {
-    const tools = await clientWithOutputSchema.getTools();
+    const tools = await clientWithOutputSchema.listTools();
     const tool = tools['local_structuredTool'];
-    const result = await tool.execute({ context: { input: 'hello' } });
+    const result = await tool.execute!({ input: 'hello' });
 
     expect(result).toBeDefined();
-    expect(result.structuredContent).toBeDefined();
-    expect(result.structuredContent.processedInput).toBe('processed: hello');
-    expect(result.structuredContent.timestamp).toBe(mockDateISO);
-
-    expect(result.content).toBeDefined();
-    expect(result.content[0].type).toBe('text');
-    expect(JSON.parse(result.content[0].text)).toEqual(result.structuredContent);
+    // When a tool has outputSchema, the MCP client returns structuredContent directly
+    // so output validation can work correctly
+    expect(result.processedInput).toBe('processed: hello');
+    expect(result.timestamp).toBe(mockDateISO);
   });
 });
 
@@ -1860,7 +2441,7 @@ describe('MCPServer - Tool Input Validation', () => {
   let validationServer: MCPServer;
   let validationClient: InternalMastraMCPClient;
   let httpValidationServer: ServerType;
-  let tools: Record<string, any>;
+  let tools: Record<string, Tool<any, any, any, any>>;
   const VALIDATION_PORT = 9700 + Math.floor(Math.random() * 100);
 
   const toolsWithValidation: ToolsInput = {
@@ -1952,11 +2533,9 @@ describe('MCPServer - Tool Input Validation', () => {
     const stringTool = tools['stringTool'];
     expect(stringTool).toBeDefined();
 
-    const result = await stringTool.execute({
-      context: {
-        message: 'Hello world',
-        optional: 'optional value',
-      },
+    const result = await stringTool.execute!({
+      message: 'Hello world',
+      optional: 'optional value',
     });
 
     expect(result).toBeDefined();
@@ -1965,72 +2544,64 @@ describe('MCPServer - Tool Input Validation', () => {
 
   it('should return validation error for missing required parameters', async () => {
     const stringTool = tools['stringTool'];
-    const result = await stringTool.execute({
-      context: {},
-    });
+    const result = await stringTool.execute!({});
 
     expect(result).toBeDefined();
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
       expect(result.message).toContain('Please fix the following errors');
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool validation failed');
+      expect(result.content[0].text).toContain('Tool input validation failed');
       expect(result.content[0].text).toContain('Please fix the following errors');
     }
   });
 
   it('should return validation error for invalid string length', async () => {
     const stringTool = tools['stringTool'];
-    const result = await stringTool.execute({
-      context: {
-        message: 'Hi', // Too short, min is 3
-      },
+    const result = await stringTool.execute!({
+      message: 'Hi', // Too short, min is 3
     });
 
     expect(result).toBeDefined();
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
       expect(result.message).toContain('String must contain at least 3 character(s)');
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool validation failed');
+      expect(result.content[0].text).toContain('Tool input validation failed');
       expect(result.content[0].text).toContain('Message must be at least 3 characters');
     }
   });
 
   it('should return validation error for invalid number range', async () => {
     const numberTool = tools['numberTool'];
-    const result = await numberTool.execute({
-      context: {
-        age: -5, // Negative age not allowed
-      },
+    const result = await numberTool.execute!({
+      age: -5, // Negative age not allowed
     });
 
     expect(result).toBeDefined();
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool validation failed');
+      expect(result.content[0].text).toContain('Tool input validation failed');
     }
   });
 
   it('should return validation error for invalid email format', async () => {
     const complexTool = tools['complexTool'];
-    const result = await complexTool.execute({
-      context: {
-        email: 'not-an-email',
-        tags: ['tag1'],
-        metadata: {
-          priority: 'medium',
-        },
+    const result = await complexTool.execute!({
+      email: 'not-an-email',
+      tags: ['tag1'],
+      metadata: {
+        priority: 'medium',
       },
     });
 
@@ -2042,13 +2613,11 @@ describe('MCPServer - Tool Input Validation', () => {
 
   it('should return validation error for empty array when minimum required', async () => {
     const complexTool = tools['complexTool'];
-    const result = await complexTool.execute({
-      context: {
-        email: 'test@example.com',
-        tags: [], // Empty array, min 1 required
-        metadata: {
-          priority: 'low',
-        },
+    const result = await complexTool.execute!({
+      email: 'test@example.com',
+      tags: [], // Empty array, min 1 required
+      metadata: {
+        priority: 'low',
       },
     });
 
@@ -2056,24 +2625,22 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
       expect(result.message).toContain('Array must contain at least 1 element(s)');
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool validation failed');
+      expect(result.content[0].text).toContain('Tool input validation failed');
       expect(result.content[0].text).toContain('Array must contain at least 1 element(s)');
     }
   });
 
   it('should return validation error for invalid enum value', async () => {
     const complexTool = tools['complexTool'];
-    const result = await complexTool.execute({
-      context: {
-        email: 'test@example.com',
-        tags: ['tag1'],
-        metadata: {
-          priority: 'urgent', // Not in enum ['low', 'medium', 'high']
-        },
+    const result = await complexTool.execute!({
+      email: 'test@example.com',
+      tags: ['tag1'],
+      metadata: {
+        priority: 'urgent', // Not in enum ['low', 'medium', 'high']
       },
     });
 
@@ -2081,22 +2648,20 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool validation failed');
+      expect(result.content[0].text).toContain('Tool input validation failed');
     }
   });
 
   it('should handle multiple validation errors', async () => {
     const complexTool = tools['complexTool'];
-    const result = await complexTool.execute({
-      context: {
-        email: 'invalid-email',
-        tags: [],
-        metadata: {
-          priority: 'invalid',
-        },
+    const result = await complexTool.execute!({
+      email: 'invalid-email',
+      tags: [],
+      metadata: {
+        priority: 'invalid',
       },
     });
 
@@ -2105,7 +2670,7 @@ describe('MCPServer - Tool Input Validation', () => {
     if (result.error) {
       expect(result.error).toBe(true);
       const errorText = result.message;
-      expect(errorText).toContain('Tool validation failed');
+      expect(errorText).toContain('Tool input validation failed');
       // Should contain multiple validation errors
       // Note: Some validations might not trigger when there are other errors
       expect(errorText).toContain('- tags: Array must contain at least 1 element(s)');
@@ -2113,7 +2678,7 @@ describe('MCPServer - Tool Input Validation', () => {
     } else {
       expect(result.isError).toBe(true);
       const errorText = result.content[0].text;
-      expect(errorText).toContain('Tool validation failed');
+      expect(errorText).toContain('Tool input validation failed');
       // Should contain multiple validation errors
       // Note: Some validations might not trigger when there are other errors
       expect(errorText).toContain('- tags: Array must contain at least 1 element(s)');
@@ -2136,7 +2701,294 @@ describe('MCPServer - Tool Input Validation', () => {
 
     // executeTool returns client-side validation format
     expect(invalidResult.error).toBe(true);
-    expect(invalidResult.message).toContain('Tool validation failed');
+    expect(invalidResult.message).toContain('Tool input validation failed');
     expect(invalidResult.message).toContain('Message must be at least 3 characters');
+  });
+});
+
+/**
+ * Tests for readJsonBody functionality
+ *
+ * These tests verify that MCP server correctly handles request bodies
+ * from both pre-parsed middleware (like express.json()) and raw streams.
+ */
+describe('MCPServer readJsonBody compatibility', () => {
+  const READ_JSON_BODY_PORT = 9400 + Math.floor(Math.random() * 100);
+  let readJsonServer: MCPServer;
+  let readJsonHttpServer: http.Server;
+
+  const echoTool = createTool({
+    id: 'echo',
+    description: 'Echoes the input back',
+    inputSchema: z.object({
+      message: z.string(),
+    }),
+    execute: async ({ message }) => ({ echo: message }),
+  });
+
+  beforeAll(async () => {
+    readJsonServer = new MCPServer({
+      name: 'readJsonBodyTestServer',
+      version: '1.0.0',
+      tools: { echo: echoTool },
+    });
+
+    readJsonHttpServer = http.createServer(async (req, res) => {
+      const url = new URL(req.url || '', `http://localhost:${READ_JSON_BODY_PORT}`);
+      await readJsonServer.startHTTP({
+        url,
+        httpPath: '/mcp',
+        req,
+        res,
+      });
+    });
+
+    await new Promise<void>(resolve => {
+      readJsonHttpServer.listen(READ_JSON_BODY_PORT, resolve);
+    });
+  });
+
+  afterAll(async () => {
+    await readJsonServer.close();
+    readJsonHttpServer.close();
+  });
+
+  describe('HTTP transport with raw stream (no middleware)', () => {
+    it('should read body from stream when no middleware has parsed it', async () => {
+      const client = new MCPClient({
+        servers: {
+          test: {
+            url: new URL(`http://localhost:${READ_JSON_BODY_PORT}/mcp`),
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+      expect(tools['test_echo']).toBeDefined();
+
+      const result = await tools['test_echo'].execute!({ message: 'hello from stream' });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.echo).toBe('hello from stream');
+
+      await client.disconnect();
+    });
+  });
+
+  describe('HTTP transport with pre-parsed body (simulating express.json())', () => {
+    const PREPARSED_PORT = 9500 + Math.floor(Math.random() * 100);
+    let preParsedServer: MCPServer;
+    let preParsedHttpServer: http.Server;
+
+    beforeAll(async () => {
+      preParsedServer = new MCPServer({
+        name: 'preParsedBodyTestServer',
+        version: '1.0.0',
+        tools: { echo: echoTool },
+      });
+
+      // Simulate express.json() by pre-parsing the body
+      preParsedHttpServer = http.createServer(async (req, res) => {
+        const url = new URL(req.url || '', `http://localhost:${PREPARSED_PORT}`);
+
+        // Simulate express.json() middleware by reading and parsing body first
+        if (req.method === 'POST') {
+          let data = '';
+          for await (const chunk of req) {
+            data += chunk;
+          }
+          if (data) {
+            try {
+              (req as any).body = JSON.parse(data);
+            } catch {
+              // Ignore parse errors, let handler deal with it
+            }
+          }
+        }
+
+        await preParsedServer.startHTTP({
+          url,
+          httpPath: '/mcp',
+          req,
+          res,
+        });
+      });
+
+      await new Promise<void>(resolve => {
+        preParsedHttpServer.listen(PREPARSED_PORT, resolve);
+      });
+    });
+
+    afterAll(async () => {
+      await preParsedServer.close();
+      preParsedHttpServer.close();
+    });
+
+    it('should use pre-parsed body from req.body when available', async () => {
+      const client = new MCPClient({
+        servers: {
+          test: {
+            url: new URL(`http://localhost:${PREPARSED_PORT}/mcp`),
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+      expect(tools['test_echo']).toBeDefined();
+
+      const result = await tools['test_echo'].execute!({ message: 'hello from pre-parsed' });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.echo).toBe('hello from pre-parsed');
+
+      await client.disconnect();
+    });
+
+    it('should handle multiple sequential requests with pre-parsed bodies', async () => {
+      const client = new MCPClient({
+        servers: {
+          test: {
+            url: new URL(`http://localhost:${PREPARSED_PORT}/mcp`),
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+
+      // Multiple calls to ensure session handling works
+      for (let i = 0; i < 3; i++) {
+        const result = await tools['test_echo'].execute!({ message: `request ${i}` });
+        const parsed = JSON.parse((result.content[0] as any).text);
+        expect(parsed.echo).toBe(`request ${i}`);
+      }
+
+      await client.disconnect();
+    });
+  });
+
+  describe('SSE transport with pre-parsed body', () => {
+    const SSE_PORT = 9600 + Math.floor(Math.random() * 100);
+    let sseServer: MCPServer;
+    let sseHttpServer: http.Server;
+
+    beforeAll(async () => {
+      sseServer = new MCPServer({
+        name: 'ssePreParsedTestServer',
+        version: '1.0.0',
+        tools: { echo: echoTool },
+      });
+
+      // Simulate express.json() by pre-parsing the body for POST requests
+      sseHttpServer = http.createServer(async (req, res) => {
+        const url = new URL(req.url || '', `http://localhost:${SSE_PORT}`);
+
+        // Simulate express.json() middleware
+        if (req.method === 'POST') {
+          let data = '';
+          for await (const chunk of req) {
+            data += chunk;
+          }
+          if (data) {
+            try {
+              (req as any).body = JSON.parse(data);
+            } catch {
+              // Ignore parse errors
+            }
+          }
+        }
+
+        await sseServer.startSSE({
+          url,
+          ssePath: '/sse',
+          messagePath: '/messages',
+          req,
+          res,
+        });
+      });
+
+      await new Promise<void>(resolve => {
+        sseHttpServer.listen(SSE_PORT, resolve);
+      });
+    });
+
+    afterAll(async () => {
+      await sseServer.close();
+      sseHttpServer.close();
+    });
+
+    it('should work with SSE transport when body is pre-parsed', async () => {
+      const client = new MCPClient({
+        servers: {
+          test: {
+            url: new URL(`http://localhost:${SSE_PORT}/sse`),
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+      expect(tools['test_echo']).toBeDefined();
+
+      const result = await tools['test_echo'].execute!({ message: 'hello from SSE pre-parsed' });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.echo).toBe('hello from SSE pre-parsed');
+
+      await client.disconnect();
+    });
+  });
+
+  describe('SSE transport with raw stream (no middleware)', () => {
+    const SSE_RAW_PORT = 9700 + Math.floor(Math.random() * 100);
+    let sseRawServer: MCPServer;
+    let sseRawHttpServer: http.Server;
+
+    beforeAll(async () => {
+      sseRawServer = new MCPServer({
+        name: 'sseRawTestServer',
+        version: '1.0.0',
+        tools: { echo: echoTool },
+      });
+
+      // No body parsing - raw stream
+      sseRawHttpServer = http.createServer(async (req, res) => {
+        const url = new URL(req.url || '', `http://localhost:${SSE_RAW_PORT}`);
+        await sseRawServer.startSSE({
+          url,
+          ssePath: '/sse',
+          messagePath: '/messages',
+          req,
+          res,
+        });
+      });
+
+      await new Promise<void>(resolve => {
+        sseRawHttpServer.listen(SSE_RAW_PORT, resolve);
+      });
+    });
+
+    afterAll(async () => {
+      await sseRawServer.close();
+      sseRawHttpServer.close();
+    });
+
+    it('should work with SSE transport when reading from raw stream', async () => {
+      const client = new MCPClient({
+        servers: {
+          test: {
+            url: new URL(`http://localhost:${SSE_RAW_PORT}/sse`),
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+      expect(tools['test_echo']).toBeDefined();
+
+      const result = await tools['test_echo'].execute!({ message: 'hello from SSE raw stream' });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.echo).toBe('hello from SSE raw stream');
+
+      await client.disconnect();
+    });
   });
 });

@@ -1,9 +1,9 @@
-import { jsonSchemaToZod } from 'json-schema-to-zod';
+import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { MastraError } from './error';
 import { ConsoleLogger } from './logger';
-import { RuntimeContext } from './runtime-context';
+import { RequestContext } from './request-context';
 import type { InternalCoreTool } from './tools';
 import { createTool, isVercelTool } from './tools';
 import { makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
@@ -157,7 +157,8 @@ describe('makeCoreTool', () => {
   const mockOptions = {
     name: 'testTool',
     description: 'Test tool description',
-    runtimeContext: new RuntimeContext(),
+    requestContext: new RequestContext(),
+    tracingContext: {},
   };
 
   it('should convert a Vercel tool correctly', async () => {
@@ -270,22 +271,6 @@ describe('makeCoreTool', () => {
     expect(() => (coreTool as InternalCoreTool).parameters.validate({})).not.toThrow();
     expect(() => (coreTool as InternalCoreTool).parameters.validate({ extra: 'field' })).not.toThrow();
   });
-
-  it('should have default parameters if no parameters are provided for Mastra tool', () => {
-    const coreTool = makeCoreTool(
-      {
-        id: 'test',
-        description: 'test',
-        inputSchema: undefined,
-        execute: async () => ({}),
-      },
-      mockOptions,
-    );
-
-    // Test the schema behavior instead of structure
-    expect(() => (coreTool as InternalCoreTool).parameters.validate({})).not.toThrow();
-    expect(() => (coreTool as InternalCoreTool).parameters.validate({ extra: 'field' })).not.toThrow();
-  });
 });
 
 it('should log correctly for Vercel tool execution', async () => {
@@ -300,7 +285,8 @@ it('should log correctly for Vercel tool execution', async () => {
   const coreTool = makeCoreTool(vercelTool, {
     name: 'testTool',
     agentName: 'testAgent',
-    runtimeContext: new RuntimeContext(),
+    requestContext: new RequestContext(),
+    tracingContext: {},
   });
 
   await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });

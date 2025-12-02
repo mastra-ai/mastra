@@ -1,114 +1,60 @@
 ---
-title: "Reference: Completeness | Metrics | Evals | Mastra Docs"
-description: Documentation for the Completeness Metric in Mastra, which evaluates how thoroughly LLM outputs cover key elements present in the input.
+title: "Reference: Completeness Scorer | Evals"
+description: Documentation for the Completeness Scorer in Mastra, which evaluates how thoroughly LLM outputs cover key elements present in the input.
 ---
 
-import { ScorerCallout } from '@/components/scorer-callout'
+# Completeness Scorer
 
-# CompletenessMetric
+The `createCompletenessScorer()` function evaluates how thoroughly an LLM's output covers the key elements present in the input. It analyzes nouns, verbs, topics, and terms to determine coverage and provides a detailed completeness score.
 
-<ScorerCallout />
+## Parameters
 
-The `CompletenessMetric` class evaluates how thoroughly an LLM's output covers the key elements present in the input. It analyzes nouns, verbs, topics, and terms to determine coverage and provides a detailed completeness score.
+The `createCompletenessScorer()` function does not take any options.
 
-## Basic Usage
+This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
 
-```typescript
-import { CompletenessMetric } from "@mastra/evals/nlp";
-
-const metric = new CompletenessMetric();
-
-const result = await metric.measure(
-  "Explain how photosynthesis works in plants using sunlight, water, and carbon dioxide.",
-  "Plants use sunlight to convert water and carbon dioxide into glucose through photosynthesis.",
-);
-
-console.log(result.score); // Coverage score from 0-1
-console.log(result.info); // Object containing detailed metrics about element coverage
-```
-
-## measure() Parameters
+## .run() Returns
 
 <PropertiesTable
   content={[
     {
-      name: "input",
+      name: "runId",
       type: "string",
-      description: "The original text containing key elements to be covered",
-      isOptional: false,
+      description: "The id of the run (optional).",
     },
     {
-      name: "output",
-      type: "string",
-      description: "The LLM's response to evaluate for completeness",
-      isOptional: false,
+      name: "preprocessStepResult",
+      type: "object",
+      description:
+        "Object with extracted elements and coverage details: { inputElements: string[], outputElements: string[], missingElements: string[], elementCounts: { input: number, output: number } }",
     },
-  ]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
     {
       name: "score",
       type: "number",
       description:
-        "Completeness score (0-1) representing the proportion of input elements covered in the output",
-    },
-    {
-      name: "info",
-      type: "object",
-      description: "Object containing detailed metrics about element coverage",
-      properties: [
-        {
-          type: "string[]",
-          parameters: [
-            {
-              name: "inputElements",
-              type: "string[]",
-              description: "Array of key elements extracted from the input",
-            },
-          ],
-        },
-        {
-          type: "string[]",
-          parameters: [
-            {
-              name: "outputElements",
-              type: "string[]",
-              description: "Array of key elements found in the output",
-            },
-          ],
-        },
-        {
-          type: "string[]",
-          parameters: [
-            {
-              name: "missingElements",
-              type: "string[]",
-              description: "Array of input elements not found in the output",
-            },
-          ],
-        },
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "elementCounts",
-              type: "object",
-              description: "Count of elements in input and output",
-            },
-          ],
-        },
-      ],
+        "Completeness score (0-1) representing the proportion of input elements covered in the output.",
     },
   ]}
 />
 
+The `.run()` method returns a result in the following shape:
+
+```typescript
+{
+  runId: string,
+  extractStepResult: {
+    inputElements: string[],
+    outputElements: string[],
+    missingElements: string[],
+    elementCounts: { input: number, output: number }
+  },
+  score: number
+}
+```
+
 ## Element Extraction Details
 
-The metric extracts and analyzes several types of elements:
+The scorer extracts and analyzes several types of elements:
 
 - Nouns: Key objects, concepts, and entities
 - Verbs: Actions and states (converted to infinitive form)
@@ -123,19 +69,26 @@ The extraction process includes:
 - Special handling of short words (3 characters or less)
 - Deduplication of elements
 
+### extractStepResult
+
+From the `.run()` method, you can get the `extractStepResult` object with the following properties:
+
+- **inputElements**: Key elements found in the input (e.g., nouns, verbs, topics, terms).
+- **outputElements**: Key elements found in the output.
+- **missingElements**: Input elements not found in the output.
+- **elementCounts**: The number of elements in the input and output.
+
 ## Scoring Details
 
-The metric evaluates completeness through linguistic element coverage analysis.
+The scorer evaluates completeness through linguistic element coverage analysis.
 
 ### Scoring Process
 
 1. Extracts key elements:
-
    - Nouns and named entities
    - Action verbs
    - Topic-specific terms
    - Normalized word forms
-
 2. Calculates coverage of input elements:
    - Exact matches for short terms (≤3 chars)
    - Substantial overlap (>60%) for longer terms
@@ -144,41 +97,59 @@ Final score: `(covered_elements / total_input_elements) * scale`
 
 ### Score interpretation
 
-(0 to scale, default 0-1)
+A completeness score between 0 and 1:
 
-- 1.0: Complete coverage - contains all input elements
-- 0.7-0.9: High coverage - includes most key elements
-- 0.4-0.6: Partial coverage - contains some key elements
-- 0.1-0.3: Low coverage - missing most key elements
-- 0.0: No coverage - output lacks all input elements
+- **1.0**: Thoroughly addresses all aspects of the query with comprehensive detail.
+- **0.7–0.9**: Covers most important aspects with good detail, minor gaps.
+- **0.4–0.6**: Addresses some key points but missing important aspects or lacking detail.
+- **0.1–0.3**: Only partially addresses the query with significant gaps.
+- **0.0**: Fails to address the query or provides irrelevant information.
 
-## Example with Analysis
+## Example
 
-```typescript
-import { CompletenessMetric } from "@mastra/evals/nlp";
+Evaluate agent responses for completeness across different query complexities:
 
-const metric = new CompletenessMetric();
+```typescript title="src/example-completeness.ts" showLineNumbers copy
+import { runEvals } from "@mastra/core/evals";
+import { createCompletenessScorer } from "@mastra/evals/scorers/prebuilt";
+import { myAgent } from "./agent";
 
-const result = await metric.measure(
-  "The quick brown fox jumps over the lazy dog",
-  "A brown fox jumped over a dog",
-);
+const scorer = createCompletenessScorer();
 
-// Example output:
-// {
-//   score: 0.75,
-//   info: {
-//     inputElements: ["quick", "brown", "fox", "jump", "lazy", "dog"],
-//     outputElements: ["brown", "fox", "jump", "dog"],
-//     missingElements: ["quick", "lazy"],
-//     elementCounts: { input: 6, output: 4 }
-//   }
-// }
+const result = await runEvals({
+  data: [
+    {
+      input:
+        "Explain the process of photosynthesis, including the inputs, outputs, and stages involved.",
+    },
+    {
+      input:
+        "What are the benefits and drawbacks of remote work for both employees and employers?",
+    },
+    {
+      input:
+        "Compare renewable and non-renewable energy sources in terms of cost, environmental impact, and sustainability.",
+    },
+  ],
+  scorers: [scorer],
+  target: myAgent,
+  onItemComplete: ({ scorerResults }) => {
+    console.log({
+      score: scorerResults[scorer.id].score,
+    });
+  },
+});
+
+console.log(result.scores);
 ```
+
+For more details on `runEvals`, see the [runEvals reference](/reference/v1/evals/run-evals).
+
+To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overview#adding-scorers-to-agents) guide.
 
 ## Related
 
-- [Answer Relevancy Metric](./answer-relevancy)
-- [Content Similarity Metric](./content-similarity)
-- [Textual Difference Metric](./textual-difference)
-- [Keyword Coverage Metric](./keyword-coverage)
+- [Answer Relevancy Scorer](./answer-relevancy)
+- [Content Similarity Scorer](./content-similarity)
+- [Textual Difference Scorer](./textual-difference)
+- [Keyword Coverage Scorer](./keyword-coverage)

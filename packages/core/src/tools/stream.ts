@@ -1,6 +1,10 @@
-import { WritableStream } from 'stream/web';
+import { WritableStream } from 'node:stream/web';
+import type { DataChunkType } from '../stream/types';
 
 export class ToolStream<T> extends WritableStream<T> {
+  originalStream?: WritableStream;
+  private writeQueue: Promise<void> = Promise.resolve();
+
   constructor(
     {
       prefix,
@@ -26,8 +30,15 @@ export class ToolStream<T> extends WritableStream<T> {
             from: 'USER',
             payload: {
               output: chunk,
-              [`${prefix}CallId`]: callId,
-              [`${prefix}Name`]: name,
+              ...(prefix === 'workflow-step'
+                ? {
+                    runId,
+                    stepName: name,
+                  }
+                : {
+                    [`${prefix}CallId`]: callId,
+                    [`${prefix}Name`]: name,
+                  }),
             },
           });
         } finally {
@@ -35,6 +46,7 @@ export class ToolStream<T> extends WritableStream<T> {
         }
       },
     });
+    this.originalStream = originalStream;
   }
 
   async write(data: any) {
@@ -45,5 +57,23 @@ export class ToolStream<T> extends WritableStream<T> {
     } finally {
       writer.releaseLock();
     }
+  }
+
+  async custom<T extends { type: string }>(data: T extends { type: `data-${string}` } ? DataChunkType : T) {
+    // Queue the write operation to prevent concurrent access to the writer
+    this.writeQueue = this.writeQueue.then(async () => {
+      if (!this.originalStream) {
+        return;
+      }
+
+      const writer = this.originalStream.getWriter();
+      try {
+        await writer.write(data);
+      } finally {
+        writer.releaseLock();
+      }
+    });
+
+    return this.writeQueue;
   }
 }

@@ -1,6 +1,6 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import fsExtra from 'fs-extra/esm';
 
@@ -21,7 +21,7 @@ export class FileService {
     const fileString = fs.readFileSync(filePath, 'utf8');
 
     if (fs.existsSync(outputFilePath) && !replaceIfExists) {
-      console.log(`${outputFilePath} already exists`);
+      console.info(`${outputFilePath} already exists`);
       return false;
     }
 

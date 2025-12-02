@@ -1,21 +1,17 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { MastraBase } from '@mastra/core/base';
-import type { RuntimeContext } from '@mastra/core/di';
+import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
+import type { Tool } from '@mastra/core/tools';
 import { isZodType } from '@mastra/core/utils';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
-import type { SSEClientTransportOptions } from '@modelcontextprotocol/sdk/client/sse.js';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { StreamableHTTPClientTransportOptions } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type {
-  ClientCapabilities,
-  ElicitRequest,
-  ElicitResult,
   GetPromptResult,
   ListPromptsResult,
   LoggingLevel,
@@ -31,6 +27,8 @@ import {
   GetPromptResultSchema,
   PromptListChangedNotificationSchema,
   ElicitRequestSchema,
+  ProgressNotificationSchema,
+  ListRootsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { asyncExitHook, gracefulExit } from 'exit-hook';
@@ -38,65 +36,32 @@ import { z } from 'zod';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import { convertJsonSchemaToZod as convertJsonSchemaToZodV3 } from 'zod-from-json-schema-v3';
 import type { JSONSchema } from 'zod-from-json-schema-v3';
-import { ElicitationClientActions } from './elicitationActions';
-import { PromptClientActions } from './promptActions';
-import { ResourceClientActions } from './resourceActions';
+import { ElicitationClientActions } from './actions/elicitation';
+import { ProgressClientActions } from './actions/progress';
+import { PromptClientActions } from './actions/prompt';
+import { ResourceClientActions } from './actions/resource';
+import type {
+  LogHandler,
+  ElicitationHandler,
+  ProgressHandler,
+  MastraMCPServerDefinition,
+  InternalMastraMCPClientOptions,
+  Root,
+} from './types';
 
-// Re-export MCP SDK LoggingLevel for convenience
-export type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+// Re-export types for convenience
+export type {
+  LoggingLevel,
+  LogMessage,
+  LogHandler,
+  ElicitationHandler,
+  ProgressHandler,
+  MastraMCPServerDefinition,
+  InternalMastraMCPClientOptions,
+  Root,
+} from './types';
 
-export interface LogMessage {
-  level: LoggingLevel;
-  message: string;
-  timestamp: Date;
-  serverName: string;
-  details?: Record<string, any>;
-  runtimeContext?: RuntimeContext | null;
-}
-
-export type LogHandler = (logMessage: LogMessage) => void;
-
-// Elicitation handler type
-export type ElicitationHandler = (request: ElicitRequest['params']) => Promise<ElicitResult>;
-
-// Base options common to all server definitions
-type BaseServerOptions = {
-  logger?: LogHandler;
-  timeout?: number;
-  capabilities?: ClientCapabilities;
-  enableServerLogs?: boolean;
-};
-
-type StdioServerDefinition = BaseServerOptions & {
-  command: string; // 'command' is required for Stdio
-  args?: string[];
-  env?: Record<string, string>;
-
-  url?: never; // Exclude 'url' for Stdio
-  requestInit?: never; // Exclude HTTP options for Stdio
-  eventSourceInit?: never; // Exclude HTTP options for Stdio
-  authProvider?: never; // Exclude HTTP options for Stdio
-  reconnectionOptions?: never; // Exclude Streamable HTTP specific options
-  sessionId?: never; // Exclude Streamable HTTP specific options
-};
-
-// HTTP Server Definition (Streamable HTTP or SSE fallback)
-type HttpServerDefinition = BaseServerOptions & {
-  url: URL; // 'url' is required for HTTP
-
-  command?: never; // Exclude 'command' for HTTP
-  args?: never; // Exclude Stdio options for HTTP
-  env?: never; // Exclude Stdio options for HTTP
-
-  // Include relevant options from SDK HTTP transport types
-  requestInit?: StreamableHTTPClientTransportOptions['requestInit'];
-  eventSourceInit?: SSEClientTransportOptions['eventSourceInit'];
-  authProvider?: StreamableHTTPClientTransportOptions['authProvider'];
-  reconnectionOptions?: StreamableHTTPClientTransportOptions['reconnectionOptions'];
-  sessionId?: StreamableHTTPClientTransportOptions['sessionId'];
-};
-
-export type MastraMCPServerDefinition = StdioServerDefinition | HttpServerDefinition;
+const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
 
 /**
  * Convert an MCP LoggingLevel to a logger method name that exists in our logger
@@ -121,26 +86,40 @@ function convertLogLevelToLoggerMethod(level: LoggingLevel): 'debug' | 'info' | 
   }
 }
 
-export type InternalMastraMCPClientOptions = {
-  name: string;
-  server: MastraMCPServerDefinition;
-  capabilities?: ClientCapabilities;
-  version?: string;
-  timeout?: number;
-};
-
+/**
+ * Internal MCP client implementation for connecting to a single MCP server.
+ *
+ * This class handles the low-level connection, transport management, and protocol
+ * communication with an MCP server. Most users should use MCPClient instead.
+ *
+ * @internal
+ */
 export class InternalMastraMCPClient extends MastraBase {
   name: string;
   private client: Client;
   private readonly timeout: number;
   private logHandler?: LogHandler;
   private enableServerLogs?: boolean;
+  private enableProgressTracking?: boolean;
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
-  private currentOperationContext: RuntimeContext | null = null;
+  private currentOperationContext: RequestContext | null = null;
+  private exitHookUnsubscribe?: () => void;
+  private sigTermHandler?: () => void;
+  private _roots: Root[];
+
+  /** Provides access to resource operations (list, read, subscribe, etc.) */
   public readonly resources: ResourceClientActions;
+  /** Provides access to prompt operations (list, get, notifications) */
   public readonly prompts: PromptClientActions;
+  /** Provides access to elicitation operations (request handling) */
   public readonly elicitation: ElicitationClientActions;
+  /** Provides access to progress operations (notifications) */
+  public readonly progress: ProgressClientActions;
+
+  /**
+   * @internal
+   */
   constructor({
     name,
     version = '1.0.0',
@@ -154,8 +133,19 @@ export class InternalMastraMCPClient extends MastraBase {
     this.logHandler = server.logger;
     this.enableServerLogs = server.enableServerLogs ?? true;
     this.serverConfig = server;
+    this.enableProgressTracking = !!server.enableProgressTracking;
 
-    const clientCapabilities = { ...capabilities, elicitation: {} };
+    // Initialize roots from server config
+    this._roots = server.roots ?? [];
+
+    // Build client capabilities, automatically enabling roots if configured
+    const hasRoots = this._roots.length > 0 || !!capabilities.roots;
+    const clientCapabilities = {
+      ...capabilities,
+      elicitation: {},
+      // Auto-enable roots capability if roots are provided
+      ...(hasRoots ? { roots: { listChanged: true, ...(capabilities.roots ?? {}) } } : {}),
+    };
 
     this.client = new Client(
       {
@@ -170,9 +160,15 @@ export class InternalMastraMCPClient extends MastraBase {
     // Set up log message capturing
     this.setupLogging();
 
+    // Set up roots/list request handler if roots capability is enabled
+    if (hasRoots) {
+      this.setupRootsHandler();
+    }
+
     this.resources = new ResourceClientActions({ client: this, logger: this.logger });
     this.prompts = new PromptClientActions({ client: this, logger: this.logger });
     this.elicitation = new ElicitationClientActions({ client: this, logger: this.logger });
+    this.progress = new ProgressClientActions({ client: this, logger: this.logger });
   }
 
   /**
@@ -198,7 +194,7 @@ export class InternalMastraMCPClient extends MastraBase {
         timestamp: new Date(),
         serverName: this.name,
         details,
-        runtimeContext: this.currentOperationContext,
+        requestContext: this.currentOperationContext,
       });
     }
   }
@@ -222,6 +218,67 @@ export class InternalMastraMCPClient extends MastraBase {
     }
   }
 
+  /**
+   * Set up handler for roots/list requests from the server.
+   *
+   * Per MCP spec (https://modelcontextprotocol.io/specification/2025-11-25/client/roots):
+   * When a server sends a roots/list request, the client responds with the configured roots.
+   */
+  private setupRootsHandler(): void {
+    this.log('debug', 'Setting up roots/list request handler');
+    this.client.setRequestHandler(ListRootsRequestSchema, async () => {
+      this.log('debug', `Responding to roots/list request with ${this._roots.length} roots`);
+      return { roots: this._roots };
+    });
+  }
+
+  /**
+   * Get the currently configured roots.
+   *
+   * @returns Array of configured filesystem roots
+   */
+  get roots(): Root[] {
+    return [...this._roots];
+  }
+
+  /**
+   * Update the list of filesystem roots and notify the server.
+   *
+   * Per MCP spec, when roots change, the client sends a `notifications/roots/list_changed`
+   * notification to inform the server that it should re-fetch the roots list.
+   *
+   * @param roots - New list of filesystem roots
+   *
+   * @example
+   * ```typescript
+   * await client.setRoots([
+   *   { uri: 'file:///home/user/projects', name: 'Projects' },
+   *   { uri: 'file:///tmp', name: 'Temp' }
+   * ]);
+   * ```
+   */
+  async setRoots(roots: Root[]): Promise<void> {
+    this.log('debug', `Updating roots to ${roots.length} entries`);
+    this._roots = [...roots];
+    await this.sendRootsListChanged();
+  }
+
+  /**
+   * Send a roots/list_changed notification to the server.
+   *
+   * Per MCP spec, clients that support `listChanged` MUST send this notification
+   * when the list of roots changes. The server will then call roots/list to get
+   * the updated list.
+   */
+  async sendRootsListChanged(): Promise<void> {
+    if (!this.transport) {
+      this.log('debug', 'Cannot send roots/list_changed: not connected');
+      return;
+    }
+    this.log('debug', 'Sending notifications/roots/list_changed');
+    await this.client.notification({ method: 'notifications/roots/list_changed' });
+  }
+
   private async connectStdio(command: string) {
     this.log('debug', `Using Stdio transport for command: ${command}`);
     try {
@@ -239,7 +296,7 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private async connectHttp(url: URL) {
-    const { requestInit, eventSourceInit, authProvider } = this.serverConfig;
+    const { requestInit, eventSourceInit, authProvider, connectTimeout } = this.serverConfig;
 
     this.log('debug', `Attempting to connect to URL: ${url}`);
 
@@ -257,8 +314,7 @@ export class InternalMastraMCPClient extends MastraBase {
         });
         await this.client.connect(streamableTransport, {
           timeout:
-            // this is hardcoded to 3s because the long default timeout would be extremely slow for sse backwards compat (60s)
-            3000,
+            connectTimeout ?? DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC,
         });
         this.transport = streamableTransport;
         this.log('debug', 'Successfully connected using Streamable HTTP transport.');
@@ -288,6 +344,17 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private isConnected: Promise<boolean> | null = null;
 
+  /**
+   * Connects to the MCP server using the configured transport.
+   *
+   * Automatically detects transport type based on configuration (stdio vs HTTP).
+   * Safe to call multiple times - returns existing connection if already connected.
+   *
+   * @returns Promise resolving to true when connected
+   * @throws {MastraError} If connection fails
+   *
+   * @internal
+   */
   async connect() {
     // If a connection attempt is in progress, wait for it.
     if (await this.isConnected) {
@@ -324,22 +391,34 @@ export class InternalMastraMCPClient extends MastraBase {
       }
     });
 
-    asyncExitHook(
-      async () => {
-        this.log('debug', `Disconnecting MCP server during exit`);
-        await this.disconnect();
-      },
-      { wait: 5000 },
-    );
+    // Only register exit hooks if not already registered
+    if (!this.exitHookUnsubscribe) {
+      this.exitHookUnsubscribe = asyncExitHook(
+        async () => {
+          this.log('debug', `Disconnecting MCP server during exit`);
+          await this.disconnect();
+        },
+        { wait: 5000 },
+      );
+    }
 
-    process.on('SIGTERM', () => gracefulExit());
+    if (!this.sigTermHandler) {
+      this.sigTermHandler = () => gracefulExit();
+      process.on('SIGTERM', this.sigTermHandler);
+    }
+
     this.log('debug', `Successfully connected to MCP server`);
     return this.isConnected;
   }
 
   /**
-   * Get the current session ID if using the Streamable HTTP transport.
-   * Returns undefined if not connected or not using Streamable HTTP.
+   * Gets the current session ID if using Streamable HTTP transport.
+   *
+   * Returns undefined if not connected or not using Streamable HTTP transport.
+   *
+   * @returns Session ID string or undefined
+   *
+   * @internal
    */
   get sessionId(): string | undefined {
     if (this.transport instanceof StreamableHTTPClientTransport) {
@@ -364,8 +443,86 @@ export class InternalMastraMCPClient extends MastraBase {
       throw e;
     } finally {
       this.transport = undefined;
-      this.isConnected = Promise.resolve(false);
+      this.isConnected = null;
+
+      // Clean up exit hooks to prevent memory leaks
+      if (this.exitHookUnsubscribe) {
+        this.exitHookUnsubscribe();
+        this.exitHookUnsubscribe = undefined;
+      }
+      if (this.sigTermHandler) {
+        process.off('SIGTERM', this.sigTermHandler);
+        this.sigTermHandler = undefined;
+      }
     }
+  }
+
+  /**
+   * Checks if an error indicates a session invalidation that requires reconnection.
+   * 
+   * Common session-related errors include:
+   * - "No valid session ID provided" (HTTP 400)
+   * - "Server not initialized" (HTTP 400)
+   * - Connection refused errors
+   * 
+   * @param error - The error to check
+   * @returns true if the error indicates a session problem requiring reconnection
+   * 
+   * @internal
+   */
+  private isSessionError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+    
+    const errorMessage = error.message.toLowerCase();
+    
+    // Check for session-related error patterns
+    return (
+      errorMessage.includes('no valid session') ||
+      errorMessage.includes('session') ||
+      errorMessage.includes('server not initialized') ||
+      errorMessage.includes('http 400') ||
+      errorMessage.includes('http 401') ||
+      errorMessage.includes('http 403') ||
+      errorMessage.includes('econnrefused') ||
+      errorMessage.includes('fetch failed') ||
+      errorMessage.includes('connection refused')
+    );
+  }
+
+  /**
+   * Forces a reconnection to the MCP server by disconnecting and reconnecting.
+   * 
+   * This is useful when the session becomes invalid (e.g., after server restart)
+   * and the client needs to establish a fresh connection.
+   * 
+   * @returns Promise resolving when reconnection is complete
+   * @throws {Error} If reconnection fails
+   * 
+   * @internal
+   */
+  async forceReconnect(): Promise<void> {
+    this.log('debug', 'Forcing reconnection to MCP server...');
+    
+    // Disconnect current connection (ignore errors as connection may already be broken)
+    try {
+      if (this.transport) {
+        await this.transport.close();
+      }
+    } catch (e) {
+      this.log('debug', 'Error during force disconnect (ignored)', {
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+    
+    // Reset connection state
+    this.transport = undefined;
+    this.isConnected = null;
+    
+    // Reconnect
+    await this.connect();
+    this.log('debug', 'Successfully reconnected to MCP server');
   }
 
   async listResources() {
@@ -471,6 +628,13 @@ export class InternalMastraMCPClient extends MastraBase {
     });
   }
 
+  setProgressNotificationHandler(handler: ProgressHandler): void {
+    this.log('debug', 'Setting progress notification handler');
+    this.client.setNotificationHandler(ProgressNotificationSchema, notification => {
+      handler(notification.params);
+    });
+  }
+
   private async convertInputSchema(
     inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'] | JSONSchema,
   ): Promise<z.ZodType> {
@@ -482,7 +646,7 @@ export class InternalMastraMCPClient extends MastraBase {
       await $RefParser.dereference(inputSchema);
       const jsonSchemaToConvert = ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema;
       if ('toJSONSchema' in z) {
-        // @ts-expect-error - zod type issue
+        //@ts-expect-error - zod type issue
         return convertJsonSchemaToZod(jsonSchemaToConvert);
       } else {
         return convertJsonSchemaToZodV3(jsonSchemaToConvert);
@@ -525,7 +689,7 @@ export class InternalMastraMCPClient extends MastraBase {
       await $RefParser.dereference(outputSchema);
       const jsonSchemaToConvert = ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema;
       if ('toJSONSchema' in z) {
-        // @ts-expect-error - zod type issue
+        //@ts-expect-error - zod type issue
         return convertJsonSchemaToZod(jsonSchemaToConvert);
       } else {
         return convertJsonSchemaToZodV3(jsonSchemaToConvert);
@@ -556,10 +720,10 @@ export class InternalMastraMCPClient extends MastraBase {
     }
   }
 
-  async tools() {
+  async tools(): Promise<Record<string, Tool<any, any, any, any>>> {
     this.log('debug', `Requesting tools from MCP server`);
-    const { tools } = await this.client.listTools({ timeout: this.timeout });
-    const toolsRes: Record<string, any> = {};
+    const { tools } = await this.client.listTools({}, { timeout: this.timeout });
+    const toolsRes: Record<string, Tool<any, any, any, any>> = {};
     for (const tool of tools) {
       this.log('debug', `Processing tool: ${tool.name}`);
       try {
@@ -568,15 +732,18 @@ export class InternalMastraMCPClient extends MastraBase {
           description: tool.description || '',
           inputSchema: await this.convertInputSchema(tool.inputSchema),
           outputSchema: await this.convertOutputSchema(tool.outputSchema),
-          execute: async ({ context, runtimeContext }: { context: any; runtimeContext?: RuntimeContext | null }) => {
+          execute: async (input: any, context?: { requestContext?: RequestContext | null, runId?: string }) => {
             const previousContext = this.currentOperationContext;
-            this.currentOperationContext = runtimeContext || null; // Set current context
-            try {
-              this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: context });
+            this.currentOperationContext = context?.requestContext || null; // Set current context
+            
+            const executeToolCall = async () => {
+              this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input, runId: context?.runId });
               const res = await this.client.callTool(
                 {
                   name: tool.name,
-                  arguments: context,
+                  arguments: input,
+                  // Use runId as progress token if available, otherwise generate a random UUID
+                  ...(this.enableProgressTracking ? { _meta: { progressToken: context?.runId || crypto.randomUUID() } } : {}),
                 },
                 CallToolResultSchema,
                 {
@@ -585,11 +752,47 @@ export class InternalMastraMCPClient extends MastraBase {
               );
 
               this.log('debug', `Tool executed successfully: ${tool.name}`);
+
+              // When a tool has an outputSchema, return the structuredContent directly
+              // so that output validation works correctly
+              if (res.structuredContent !== undefined) {
+                return res.structuredContent;
+              }
+
               return res;
+            };
+            
+            try {
+              return await executeToolCall();
             } catch (e) {
+              // Check if this is a session-related error that requires reconnection
+              if (this.isSessionError(e)) {
+                this.log('debug', `Session error detected for tool ${tool.name}, attempting reconnection...`, {
+                  error: e instanceof Error ? e.message : String(e),
+                });
+                
+                try {
+                  // Force reconnection
+                  await this.forceReconnect();
+                  
+                  // Retry the tool call with fresh connection
+                  this.log('debug', `Retrying tool ${tool.name} after reconnection...`);
+                  return await executeToolCall();
+                } catch (reconnectError) {
+                  this.log('error', `Reconnection or retry failed for tool ${tool.name}`, {
+                    originalError: e instanceof Error ? e.message : String(e),
+                    reconnectError: reconnectError instanceof Error ? reconnectError.stack : String(reconnectError),
+                    toolArgs: input,
+                  });
+                  // Throw the original error if reconnection/retry fails
+                  throw e;
+                }
+              }
+              
+              // For non-session errors, log and rethrow
               this.log('error', `Error calling tool: ${tool.name}`, {
                 error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
-                toolArgs: context,
+                toolArgs: input,
               });
               throw e;
             } finally {
@@ -611,18 +814,5 @@ export class InternalMastraMCPClient extends MastraBase {
     }
 
     return toolsRes;
-  }
-}
-
-/**
- * @deprecated MastraMCPClient is deprecated and will be removed in a future release. Please use MCPClient instead.
- */
-
-export class MastraMCPClient extends InternalMastraMCPClient {
-  constructor(args: InternalMastraMCPClientOptions) {
-    super(args);
-    this.logger.warn(
-      '[DEPRECATION] MastraMCPClient is deprecated and will be removed in a future release. Please use MCPClient instead.',
-    );
   }
 }

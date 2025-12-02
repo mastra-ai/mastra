@@ -76,6 +76,9 @@ MASTRA_STORAGE_AUTH_TOKEN=your-auth-token
 BUSINESS_API_RUNNER_LOGS_ENDPOINT=your-logs-endpoint
 BUSINESS_JWT_TOKEN=your-jwt-token
 
+# Playground Configuration
+PLAYGROUND_JWT_TOKEN=your-playground-jwt-token
+
 # Runtime Configuration
 RUNNER_START_TIME=deployment-start-time
 CI=true|false
@@ -115,7 +118,6 @@ After deployment, your project will have:
 
 ```
 output/
-├── instrumentation.mjs    # OpenTelemetry setup
 ├── package.json          # With cloud dependencies
 ├── index.mjs            # Main server entry
 ├── mastra.mjs          # Your Mastra configuration
@@ -170,7 +172,3 @@ pnpm test
 # Lint code
 pnpm lint
 ```
-
-## License
-
-Apache-2.0

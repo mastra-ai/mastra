@@ -33,8 +33,9 @@ export interface BatchPartsOptions {
  * Processor that batches multiple stream parts together to reduce stream overhead.
  * Only implements processOutputStream - does not process final results.
  */
-export class BatchPartsProcessor implements Processor {
-  public readonly name = 'batch-parts';
+export class BatchPartsProcessor implements Processor<'batch-parts'> {
+  public readonly id = 'batch-parts';
+  public readonly name = 'Batch Parts';
 
   constructor(private options: BatchPartsOptions = {}) {
     this.options = {

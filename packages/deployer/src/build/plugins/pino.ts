@@ -1,4 +1,4 @@
-import path from 'path';
+import path from 'node:path';
 import type { OutputChunk, Plugin } from 'rollup';
 
 export function pino() {
@@ -63,7 +63,6 @@ export function pino() {
       }
     },
     renderChunk(code, chunk) {
-      debugger;
       if (chunk.type === 'chunk' && (chunk as OutputChunk).isEntry && fileReferences.size && chunk.name === 'index') {
         const importRegex = /^(?:import(?:["'\s]*[\w*${}\n\r\t, ]+from\s*)?["'\s].+[;"'\s]*)$/gm;
 

@@ -42,6 +42,7 @@ export const createConfig = async () =>
     {
       plugins: {
         import: (await import('eslint-plugin-import-x')).default,
+        unicorn: (await import('eslint-plugin-unicorn')).default,
       },
       languageOptions: {
         globals: {
@@ -54,6 +55,7 @@ export const createConfig = async () =>
         'no-unexpected-multiline': ERROR,
         'no-warning-comments': [ERROR, { terms: ['FIXME'], location: 'anywhere' }],
         'import/no-duplicates': [ERROR, { 'prefer-inline': false }],
+        'unicorn/prefer-node-protocol': ERROR,
         'import/order': [
           ERROR,
           {
@@ -62,6 +64,16 @@ export const createConfig = async () =>
             groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
           },
         ],
+      },
+    },
+
+    // non-test files only - console and debugger rules
+    {
+      files: ['**/*.ts?(x)', '**/*.js?(x)'],
+      ignores: testFiles,
+      rules: {
+        'no-console': [ERROR, { allow: ['warn', 'error', 'info', 'table', 'time', 'timeEnd', 'dir'] }],
+        'no-debugger': ERROR,
       },
     },
 
@@ -76,6 +88,7 @@ export const createConfig = async () =>
             parser: hasTypeScript ? (await import('typescript-eslint')).parser : undefined,
             parserOptions: {
               jsx: true,
+              tsconfigRootDir: import.meta.dirname,
             },
           },
           rules: {
@@ -131,6 +144,7 @@ export const createConfig = async () =>
             parser: (await import('typescript-eslint')).parser,
             parserOptions: {
               projectService: true,
+              tsconfigRootDir: import.meta.dirname,
             },
           },
           plugins: {

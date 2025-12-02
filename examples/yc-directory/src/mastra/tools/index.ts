@@ -16,7 +16,7 @@ export const ycDirectoryTool = createTool({
       batch: z.string(),
     }),
   ),
-  execute: async ({ context }) => {
+  execute: async () => {
     return YC_DATA;
   },
 });

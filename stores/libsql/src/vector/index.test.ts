@@ -11,6 +11,7 @@ describe('LibSQLVector', () => {
   beforeAll(async () => {
     vectorDB = new LibSQLVector({
       connectionUrl: 'file::memory:?cache=shared',
+      id: 'libsql-test',
     });
   });
 
@@ -1675,12 +1676,13 @@ describe('LibSQLVector', () => {
 // Use the shared test suite with factory pattern
 const libSQLVectorDB = new LibSQLVector({
   connectionUrl: 'file::memory:?cache=shared',
+  id: 'libsql-shared-test',
 });
 
 createVectorTestSuite({
   vector: libSQLVectorDB,
   createIndex: async (indexName: string) => {
-    await libSQLVectorDB.createIndex({ indexName, dimension: 4, metric: 'cosine' });
+    await libSQLVectorDB.createIndex({ indexName, dimension: 1536, metric: 'cosine' });
   },
   deleteIndex: async (indexName: string) => {
     try {

@@ -1,5 +1,6 @@
-import { ReadableStream } from 'stream/web';
+import { ReadableStream } from 'node:stream/web';
 import type { ChunkType } from '@mastra/core/stream';
+import { ChunkFrom } from '@mastra/core/stream';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { processMastraStream } from './process-mastra-stream';
 
@@ -45,10 +46,10 @@ describe('processMastraStream', () => {
 
   it('should process valid SSE messages and call onChunk', async () => {
     const testChunk: ChunkType = {
-      type: 'test',
+      type: 'text-delta',
       runId: 'run-123',
-      from: 'agent',
-      payload: { message: 'hello' },
+      from: ChunkFrom.AGENT,
+      payload: { id: '1', text: 'hello' },
     };
 
     const sseData = `data: ${JSON.stringify(testChunk)}\n\n`;
@@ -67,15 +68,15 @@ describe('processMastraStream', () => {
     const testChunk1: ChunkType = {
       type: 'message',
       runId: 'run-123',
-      from: 'agent',
+      from: ChunkFrom.AGENT,
       payload: { text: 'first message' },
     };
 
     const testChunk2: ChunkType = {
-      type: 'message',
+      type: 'text-delta',
       runId: 'run-123',
-      from: 'agent',
-      payload: { text: 'second message' },
+      from: ChunkFrom.AGENT,
+      payload: { id: '1', text: 'second message' },
     };
 
     const sseData = `data: ${JSON.stringify(testChunk1)}\n\ndata: ${JSON.stringify(testChunk2)}\n\n`;
@@ -95,14 +96,12 @@ describe('processMastraStream', () => {
     const testChunk: ChunkType = {
       type: 'message',
       runId: 'run-123',
-      from: 'agent',
+      from: ChunkFrom.AGENT,
       payload: { text: 'message before done' },
     };
 
     const sseData = `data: ${JSON.stringify(testChunk)}\n\ndata: [DONE]\n\n`;
     const stream = createMockStream(sseData);
-
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     await processMastraStream({
       stream,
@@ -111,9 +110,7 @@ describe('processMastraStream', () => {
 
     expect(mockOnChunk).toHaveBeenCalledTimes(1);
     expect(mockOnChunk).toHaveBeenCalledWith(testChunk);
-    expect(consoleSpy).toHaveBeenCalledWith('🏁 Stream finished');
-
-    consoleSpy.mockRestore();
+    // [DONE] marker is now filtered out during streaming to prevent premature termination
   });
 
   it('should handle JSON parsing errors gracefully', async () => {
@@ -121,7 +118,7 @@ describe('processMastraStream', () => {
     const validChunk: ChunkType = {
       type: 'message',
       runId: 'run-123',
-      from: 'agent',
+      from: ChunkFrom.AGENT,
       payload: { text: 'valid message' },
     };
     const validData = `data: ${JSON.stringify(validChunk)}\n\n`;
@@ -155,14 +152,14 @@ describe('processMastraStream', () => {
     const testChunk: ChunkType = {
       type: 'message',
       runId: 'run-123',
-      from: 'agent',
+      from: ChunkFrom.AGENT,
       payload: { text: 'complete message' },
     };
 
     // Split the SSE message across multiple chunks
     const chunks = [
       'data: {"type":"message","runId":"run-123"',
-      ',"from":"agent","payload":{"text":"complete message"}}\n\n',
+      ',"from":"AGENT","payload":{"text":"complete message"}}\n\n',
     ];
 
     const stream = createChunkedMockStream(chunks);
@@ -191,7 +188,7 @@ describe('processMastraStream', () => {
     const testChunk: ChunkType = {
       type: 'message',
       runId: 'run-123',
-      from: 'agent',
+      from: ChunkFrom.AGENT,
       payload: { text: 'valid message' },
     };
 
@@ -213,7 +210,7 @@ describe('processMastraStream', () => {
     const testChunk: ChunkType = {
       type: 'message',
       runId: 'run-123',
-      from: 'agent',
+      from: ChunkFrom.AGENT,
       payload: { text: 'test message' },
     };
 
@@ -234,40 +231,31 @@ describe('processMastraStream', () => {
     expect(releaseLockSpy).toHaveBeenCalled();
   });
 
-  it('should handle onChunk errors by logging them as JSON parse errors', async () => {
+  it('should propagate onChunk errors to the caller', async () => {
     const testChunk: ChunkType = {
-      type: 'message',
+      type: 'text-delta',
       runId: 'run-123',
-      from: 'agent',
-      payload: { text: 'first message' },
+      from: ChunkFrom.AGENT,
+      payload: { id: '1', text: 'first message' },
     };
 
     const sseData = `data: ${JSON.stringify(testChunk)}\n\n`;
     const stream = createMockStream(sseData);
 
     // Make the call to onChunk reject
-    mockOnChunk.mockRejectedValueOnce(new Error('onChunk error'));
+    const onChunkError = new Error('onChunk error');
+    mockOnChunk.mockRejectedValueOnce(onChunkError);
 
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    // Should not throw an error but handle it gracefully
-    await processMastraStream({
-      stream,
-      onChunk: mockOnChunk,
-    });
+    // Should propagate the error from onChunk
+    await expect(
+      processMastraStream({
+        stream,
+        onChunk: mockOnChunk,
+      }),
+    ).rejects.toThrow('onChunk error');
 
     expect(mockOnChunk).toHaveBeenCalledTimes(1);
     expect(mockOnChunk).toHaveBeenCalledWith(testChunk);
-
-    // Should log the onChunk error as a JSON parse error
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '❌ JSON parse error:',
-      expect.any(Error),
-      'Data:',
-      JSON.stringify(testChunk),
-    );
-
-    consoleErrorSpy.mockRestore();
   });
 
   it('should handle stream read errors', async () => {
@@ -292,14 +280,14 @@ describe('processMastraStream', () => {
     const validChunk1: ChunkType = {
       type: 'message',
       runId: 'run-123',
-      from: 'agent',
+      from: ChunkFrom.AGENT,
       payload: { text: 'first valid message' },
     };
 
     const validChunk2: ChunkType = {
       type: 'message',
       runId: 'run-123',
-      from: 'agent',
+      from: ChunkFrom.AGENT,
       payload: { text: 'second valid message' },
     };
 
@@ -307,7 +295,6 @@ describe('processMastraStream', () => {
 
     const stream = createMockStream(sseData);
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     await processMastraStream({
       stream,
@@ -324,17 +311,16 @@ describe('processMastraStream', () => {
       'Data:',
       '{invalid json}',
     );
-    expect(consoleSpy).toHaveBeenCalledWith('🏁 Stream finished');
+    // [DONE] marker is now filtered out during streaming to prevent premature termination
 
     consoleErrorSpy.mockRestore();
-    consoleSpy.mockRestore();
   });
 
   it('should handle data lines without "data: " prefix', async () => {
     const testChunk: ChunkType = {
       type: 'message',
       runId: 'run-123',
-      from: 'agent',
+      from: ChunkFrom.AGENT,
       payload: { text: 'valid message' },
     };
 

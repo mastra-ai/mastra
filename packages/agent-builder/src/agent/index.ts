@@ -1,13 +1,17 @@
-import type { CoreMessage } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import type { AiMessageType, AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
+import type {
+  AiMessageType,
+  AgentGenerateOptions,
+  AgentStreamOptions,
+  AgentExecutionOptions,
+} from '@mastra/core/agent';
+import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { CoreMessage } from '@mastra/core/llm';
+import type { MastraModelOutput, OutputSchema } from '@mastra/core/stream';
 import { Memory } from '@mastra/memory';
-import { TokenLimiter } from '@mastra/memory/processors';
 import { AgentBuilderDefaults } from '../defaults';
 import { ToolSummaryProcessor } from '../processors/tool-summary';
-import { WriteToDiskProcessor } from '../processors/write-file';
 import type { AgentBuilderConfig, GenerateAgentOptions } from '../types';
-import { agentBuilderTemplateWorkflow, workflowBuilderWorkflow } from '../workflows';
 
 // =============================================================================
 // Template Merge Workflow Implementation
@@ -26,7 +30,7 @@ import { agentBuilderTemplateWorkflow, workflowBuilderWorkflow } from '../workfl
 // - Block: removing files, downgrading deps, changing TS target/module, modifying CI/CD secrets
 //
 // Usage with Mastra templates (see https://mastra.ai/api/templates.json):
-//   const run = await agentBuilderTemplateWorkflow.createRunAsync();
+//   const run = await agentBuilderTemplateWorkflow.createRun();
 //   const result = await run.start({
 //     inputData: {
 //       repo: 'https://github.com/mastra-ai/template-pdf-questions',
@@ -49,6 +53,7 @@ export class AgentBuilder extends Agent {
     const combinedInstructions = additionalInstructions + AgentBuilderDefaults.DEFAULT_INSTRUCTIONS(config.projectPath);
 
     const agentConfig = {
+      id: 'agent-builder',
       name: 'agent-builder',
       description:
         'An AI agent specialized in generating Mastra agents, tools, and workflows from natural language requirements.',
@@ -56,23 +61,19 @@ export class AgentBuilder extends Agent {
       model: config.model,
       tools: async () => {
         return {
-          ...(await AgentBuilderDefaults.DEFAULT_TOOLS(config.projectPath, config.mode)),
+          ...(await AgentBuilderDefaults.listToolsForMode(config.projectPath, config.mode)),
           ...(config.tools || {}),
         };
       },
-      workflows: {
-        'merge-template': agentBuilderTemplateWorkflow,
-        'workflow-builder': workflowBuilderWorkflow,
-      },
       memory: new Memory({
         options: AgentBuilderDefaults.DEFAULT_MEMORY_CONFIG,
-        processors: [
-          new WriteToDiskProcessor({ prefix: 'before-filter' }),
-          new ToolSummaryProcessor({ summaryModel: config.summaryModel || config.model }),
-          new TokenLimiter(100000),
-          new WriteToDiskProcessor({ prefix: 'after-filter' }),
-        ],
       }),
+      inputProcessors: [
+        // use the write to disk processor to debug the agent's context
+        // new WriteToDiskProcessor({ prefix: 'before-filter' }),
+        new ToolSummaryProcessor({ summaryModel: config.summaryModel || config.model }),
+        // new WriteToDiskProcessor({ prefix: 'after-filter' }),
+      ],
     };
 
     super(agentConfig);
@@ -83,13 +84,13 @@ export class AgentBuilder extends Agent {
    * Enhanced generate method with AgentBuilder-specific configuration
    * Overrides the base Agent generate method to provide additional project context
    */
-  generate: Agent['generate'] = async (
+  generateLegacy: Agent['generateLegacy'] = async (
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     generateOptions: (GenerateAgentOptions & AgentGenerateOptions<any, any>) | undefined = {},
   ): Promise<any> => {
-    const { ...baseOptions } = generateOptions;
+    const { maxSteps, ...baseOptions } = generateOptions;
 
-    const originalInstructions = await this.getInstructions({ runtimeContext: generateOptions?.runtimeContext });
+    const originalInstructions = await this.getInstructions({ requestContext: generateOptions?.requestContext });
     const additionalInstructions = baseOptions.instructions;
 
     let enhancedInstructions = originalInstructions as string;
@@ -101,7 +102,7 @@ export class AgentBuilder extends Agent {
 
     const enhancedOptions = {
       ...baseOptions,
-      maxSteps: 300, // Higher default for code generation
+      maxSteps: maxSteps || 100, // Higher default for code generation
       temperature: 0.3, // Lower temperature for more consistent code generation
       instructions: enhancedInstructions,
       context: enhancedContext,
@@ -111,20 +112,20 @@ export class AgentBuilder extends Agent {
       projectPath: this.builderConfig.projectPath,
     });
 
-    return super.generate(messages, enhancedOptions);
+    return super.generateLegacy(messages, enhancedOptions);
   };
 
   /**
    * Enhanced stream method with AgentBuilder-specific configuration
    * Overrides the base Agent stream method to provide additional project context
    */
-  stream: Agent['stream'] = async (
+  streamLegacy: Agent['streamLegacy'] = async (
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     streamOptions: (GenerateAgentOptions & AgentStreamOptions<any, any>) | undefined = {},
   ): Promise<any> => {
-    const { ...baseOptions } = streamOptions;
+    const { maxSteps, ...baseOptions } = streamOptions;
 
-    const originalInstructions = await this.getInstructions({ runtimeContext: streamOptions?.runtimeContext });
+    const originalInstructions = await this.getInstructions({ requestContext: streamOptions?.requestContext });
     const additionalInstructions = baseOptions.instructions;
 
     let enhancedInstructions = originalInstructions as string;
@@ -135,7 +136,7 @@ export class AgentBuilder extends Agent {
 
     const enhancedOptions = {
       ...baseOptions,
-      maxSteps: 100, // Higher default for code generation
+      maxSteps: maxSteps || 100, // Higher default for code generation
       temperature: 0.3, // Lower temperature for more consistent code generation
       instructions: enhancedInstructions,
       context: enhancedContext,
@@ -145,44 +146,70 @@ export class AgentBuilder extends Agent {
       projectPath: this.builderConfig.projectPath,
     });
 
-    return super.stream(messages, enhancedOptions);
+    return super.streamLegacy(messages, enhancedOptions);
   };
 
   /**
-   * Generate a Mastra agent from natural language requirements
+   * Enhanced stream method with AgentBuilder-specific configuration
+   * Overrides the base Agent stream method to provide additional project context
    */
-  async generateAgent(
-    requirements: string,
-    options?: {
-      outputFormat?: 'code' | 'explanation' | 'both';
-      runtimeContext?: any;
-    },
-  ) {
-    const prompt = `Generate a Mastra agent based on these requirements: ${requirements}
+  async stream<OUTPUT extends OutputSchema = undefined>(
+    messages: MessageListInput,
+    streamOptions?: AgentExecutionOptions<OUTPUT>,
+  ): Promise<MastraModelOutput<OUTPUT>> {
+    const { ...baseOptions } = streamOptions || {};
 
-Please provide:
-1. Complete agent code with proper configuration
-2. Any custom tools the agent needs
-3. Example usage
-4. Testing recommendations
+    const originalInstructions = await this.getInstructions({ requestContext: streamOptions?.requestContext });
+    const additionalInstructions = baseOptions.instructions;
 
-${options?.outputFormat === 'explanation' ? 'Focus on explaining the approach and architecture.' : ''}
-${options?.outputFormat === 'code' ? 'Focus on providing complete, working code.' : ''}
-${!options?.outputFormat || options.outputFormat === 'both' ? 'Provide both explanation and complete code.' : ''}`;
+    let enhancedInstructions = originalInstructions as string;
+    if (additionalInstructions) {
+      enhancedInstructions = `${originalInstructions}\n\n${additionalInstructions}`;
+    }
+    const enhancedContext = [...(baseOptions.context || [])];
 
-    return this.generate(prompt, {
-      runtimeContext: options?.runtimeContext,
+    const enhancedOptions = {
+      ...baseOptions,
+      temperature: 0.3, // Lower temperature for more consistent code generation
+      maxSteps: baseOptions?.maxSteps || 100,
+      instructions: enhancedInstructions,
+      context: enhancedContext,
+    };
+
+    this.logger.debug(`[AgentBuilder:${this.name}] Starting streaming with enhanced context`, {
+      projectPath: this.builderConfig.projectPath,
     });
+
+    return super.stream(messages, enhancedOptions);
   }
 
-  /**
-   * Get the default configuration for AgentBuilder
-   */
-  static defaultConfig(projectPath?: string) {
-    return {
-      instructions: AgentBuilderDefaults.DEFAULT_INSTRUCTIONS(projectPath),
-      memoryConfig: AgentBuilderDefaults.DEFAULT_MEMORY_CONFIG,
-      tools: AgentBuilderDefaults.DEFAULT_TOOLS,
+  async generate<OUTPUT extends OutputSchema = undefined>(
+    messages: MessageListInput,
+    options?: AgentExecutionOptions<OUTPUT>,
+  ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
+    const { ...baseOptions } = options || {};
+
+    const originalInstructions = await this.getInstructions({ requestContext: options?.requestContext });
+    const additionalInstructions = baseOptions.instructions;
+
+    let enhancedInstructions = originalInstructions as string;
+    if (additionalInstructions) {
+      enhancedInstructions = `${originalInstructions}\n\n${additionalInstructions}`;
+    }
+    const enhancedContext = [...(baseOptions.context || [])];
+
+    const enhancedOptions = {
+      ...baseOptions,
+      temperature: 0.3, // Lower temperature for more consistent code generation
+      maxSteps: baseOptions?.maxSteps || 100,
+      instructions: enhancedInstructions,
+      context: enhancedContext,
     };
+
+    this.logger.debug(`[AgentBuilder:${this.name}] Starting streaming with enhanced context`, {
+      projectPath: this.builderConfig.projectPath,
+    });
+
+    return super.generate(messages, enhancedOptions);
   }
 }

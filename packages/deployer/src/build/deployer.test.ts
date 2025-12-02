@@ -25,7 +25,7 @@ describe('getDeployer', () => {
 
   it('should support json imports', async () => {
     const bundle = await getDeployerBundler(join(_dirname, './plugins/__fixtures__/basic-with-json.js'), {
-      isDeployerRemoved: false,
+      hasCustomConfig: false,
     });
 
     const result = await bundle.generate({

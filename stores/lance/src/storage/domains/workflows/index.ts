@@ -1,8 +1,8 @@
 import type { Connection } from '@lancedb/lancedb';
-import type { StepResult, WorkflowRunState, WorkflowRuns } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { WorkflowRun } from '@mastra/core/storage';
-import { ensureDate, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import type { WorkflowRun, StorageListWorkflowRunsInput, WorkflowRuns } from '@mastra/core/storage';
+import { ensureDate, normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 function parseWorkflowRun(row: any): WorkflowRun {
   let parsedSnapshot: WorkflowRunState | string = row.snapshot;
@@ -38,13 +38,13 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
       // runId,
       // stepId,
       // result,
-      // runtimeContext,
+      // requestContext,
     }: {
       workflowName: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
-      runtimeContext: Record<string, any>;
+      requestContext: Record<string, any>;
     },
   ): Promise<Record<string, StepResult<any, any, any, any>>> {
     throw new Error('Method not implemented.');
@@ -72,10 +72,12 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
     try {
@@ -93,10 +95,13 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
         createdAt = now;
       }
 
+      const { status, value, ...rest } = snapshot;
+
       const record = {
         workflow_name: workflowName,
         run_id: runId,
-        snapshot: JSON.stringify(snapshot),
+        resourceId,
+        snapshot: JSON.stringify({ status, value, ...rest }), // this is to ensure status is always just before value, for when querying the db by status
         createdAt,
         updatedAt: now,
       };
@@ -174,15 +179,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns(args?: {
-    namespace?: string;
-    resourceId?: string;
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-  }): Promise<WorkflowRuns> {
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     try {
       const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
 
@@ -192,6 +189,17 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
 
       if (args?.workflowName) {
         conditions.push(`workflow_name = '${args.workflowName.replace(/'/g, "''")}'`);
+      }
+
+      if (args?.status) {
+        const escapedStatus = args.status
+          .replace(/\\/g, '\\\\')
+          .replace(/'/g, "''")
+          .replace(/%/g, '\\%')
+          .replace(/_/g, '\\_');
+        // Note: Using LIKE pattern since LanceDB doesn't support JSON extraction on string columns
+        // The pattern ensures we match the workflow status (which appears before "value") and not step status
+        conditions.push(`\`snapshot\` LIKE '%"status":"${escapedStatus}","value"%'`);
       }
 
       if (args?.resourceId) {
@@ -216,12 +224,23 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
         total = await table.countRows();
       }
 
-      if (args?.limit) {
-        query.limit(args.limit);
-      }
+      if (args?.perPage !== undefined && args?.page !== undefined) {
+        const normalizedPerPage = normalizePerPage(args.perPage, Number.MAX_SAFE_INTEGER);
 
-      if (args?.offset) {
-        query.offset(args.offset);
+        if (args.page < 0 || !Number.isInteger(args.page)) {
+          throw new MastraError(
+            {
+              id: 'LANCE_STORE_INVALID_PAGINATION_PARAMS',
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              details: { page: args.page, perPage: args.perPage },
+            },
+            new Error(`Invalid pagination parameters: page=${args.page}, perPage=${args.perPage}`),
+          );
+        }
+        const offset = args.page * normalizedPerPage;
+        query.limit(normalizedPerPage);
+        query.offset(offset);
       }
 
       const records = await query.toArray();
@@ -233,10 +252,10 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'LANCE_STORE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { namespace: args?.namespace ?? '', workflowName: args?.workflowName ?? '' },
+          details: { resourceId: args?.resourceId ?? '', workflowName: args?.workflowName ?? '' },
         },
         error,
       );

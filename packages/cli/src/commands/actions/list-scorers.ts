@@ -4,12 +4,12 @@ import { listAllScorers } from '../scorers/list-all-scorers';
 
 const origin = process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN;
 
-export const listScorers = async (args: any) => {
+export const listScorers = async (args: {}) => {
   await analytics.trackCommandExecution({
     command: 'scorers-list',
     args,
     execution: async () => {
-      await listAllScorers();
+      return listAllScorers();
     },
     origin,
   });

@@ -1,4 +1,4 @@
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'node:events';
 import { WebSocket } from 'ws';
 import { GeminiLiveErrorCode } from '../types';
 import { GeminiLiveError } from '../utils/errors';
@@ -167,7 +167,7 @@ export class ConnectionManager {
    */
   private log(message: string, ...args: unknown[]): void {
     if (this.debug) {
-      console.log(`[ConnectionManager] ${message}`, ...args);
+      console.info(`[ConnectionManager] ${message}`, ...args);
     }
   }
 }

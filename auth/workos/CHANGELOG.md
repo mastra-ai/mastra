@@ -1,5 +1,92 @@
 # @mastra/auth-workos
 
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- Allow provider to pass through options to the auth config ([#10284](https://github.com/mastra-ai/mastra/pull/10284))
+
+- Updated dependencies [[`a0a5b4b`](https://github.com/mastra-ai/mastra/commit/a0a5b4bbebe6c701ebbadf744873aa0d5ca01371)]:
+  - @mastra/auth@1.0.0-beta.1
+
+## 1.0.0-beta.0
+
+### Major Changes
+
+- Bump minimum required Node.js version to 22.13.0 ([#9706](https://github.com/mastra-ai/mastra/pull/9706))
+
+- Experimental auth -> auth ([#9660](https://github.com/mastra-ai/mastra/pull/9660))
+
+- Mark as stable ([`83d5942`](https://github.com/mastra-ai/mastra/commit/83d5942669ce7bba4a6ca4fd4da697a10eb5ebdc))
+
+### Patch Changes
+
+- Updated dependencies [[`dd1c38d`](https://github.com/mastra-ai/mastra/commit/dd1c38d1b75f1b695c27b40d8d9d6ed00d5e0f6f), [`83d5942`](https://github.com/mastra-ai/mastra/commit/83d5942669ce7bba4a6ca4fd4da697a10eb5ebdc)]:
+  - @mastra/auth@1.0.0-beta.0
+
+## 0.10.7
+
+### Patch Changes
+
+- Update package.json and README ([#7886](https://github.com/mastra-ai/mastra/pull/7886))
+
+- Updated dependencies []:
+  - @mastra/auth@0.1.3
+
+## 0.10.7-alpha.0
+
+### Patch Changes
+
+- Update package.json and README ([#7886](https://github.com/mastra-ai/mastra/pull/7886))
+
+- Updated dependencies []:
+  - @mastra/auth@0.1.3
+
+## 0.10.6
+
+### Patch Changes
+
+- dependencies updates: ([#7568](https://github.com/mastra-ai/mastra/pull/7568))
+  - Updated dependency [`@workos-inc/node@^7.69.2` ↗︎](https://www.npmjs.com/package/@workos-inc/node/v/7.69.2) (from `^7.69.1`, in `dependencies`)
+- Updated dependencies []:
+  - @mastra/auth@0.1.3
+
+## 0.10.6-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#7568](https://github.com/mastra-ai/mastra/pull/7568))
+  - Updated dependency [`@workos-inc/node@^7.69.2` ↗︎](https://www.npmjs.com/package/@workos-inc/node/v/7.69.2) (from `^7.69.1`, in `dependencies`)
+- Updated dependencies []:
+  - @mastra/auth@0.1.3
+
+## 0.10.5
+
+### Patch Changes
+
+- de3cbc6: Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+- cb9aa8c: Cookie vuln
+- Updated dependencies [de3cbc6]
+  - @mastra/auth@0.1.3
+
+## 0.10.5-alpha.1
+
+### Patch Changes
+
+- [#7343](https://github.com/mastra-ai/mastra/pull/7343) [`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e) Thanks [@LekoArts](https://github.com/LekoArts)! - Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+
+- Updated dependencies [[`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e)]:
+  - @mastra/auth@0.1.3-alpha.0
+
+## 0.10.5-alpha.0
+
+### Patch Changes
+
+- [#7220](https://github.com/mastra-ai/mastra/pull/7220) [`cb9aa8c`](https://github.com/mastra-ai/mastra/commit/cb9aa8c8564bafa1b6e5321cca5a1bc4d3170590) Thanks [@abhiaiyer91](https://github.com/abhiaiyer91)! - Cookie vuln
+
+- Updated dependencies []:
+  - @mastra/auth@0.1.2
+
 ## 0.10.4
 
 ### Patch Changes

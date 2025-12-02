@@ -1,6 +1,6 @@
 import { createWorkflow, createStep, mapVariable } from '@mastra/core/workflows';
 import { z } from 'zod';
-import { RuntimeContext } from '@mastra/core/di';
+import { RequestContext } from '@mastra/core/di';
 import { pdfContentExtractorTool } from '../tools/pdf-content-extractor-tool';
 import { adCopyGeneratorTool } from '../tools/ad-copy-generator-tool';
 import { imageGeneratorTool } from '../tools/image-generator-tool';
@@ -61,7 +61,7 @@ const extractContentStep = createStep({
       })
       .optional(),
   }),
-  execute: async ({ inputData, runtimeContext, mastra }) => {
+  execute: async ({ inputData, requestContext, mastra }) => {
     const { contentInput, inputType } = inputData;
 
     console.log(`📝 Processing ${inputType} content...`);
@@ -70,7 +70,7 @@ const extractContentStep = createStep({
       console.log('🌐 Extracting content from website URL...');
 
       try {
-        // Import mastra instance directly since runtime context access is complex in workflows
+        // Import mastra instance directly since request context access is complex in workflows
         const webContentAgent = mastra.getAgent('webContentAgent');
 
         // Use the agent to extract content
@@ -135,14 +135,23 @@ const extractContentStep = createStep({
 
       try {
         // Use the PDF content extractor tool
-        const extractionResult = await pdfContentExtractorTool.execute({
-          mastra,
-          context: {
+        const extractionResult = await pdfContentExtractorTool.execute(
+          {
             pdfUrl: contentInput,
             focusAreas: ['benefits', 'features', 'value-proposition'],
           },
-          runtimeContext: runtimeContext || new RuntimeContext(),
-        });
+          {
+            mastra,
+            requestContext: requestContext || new RequestContext(),
+          },
+        );
+
+        if ('error' in extractionResult) {
+          return {
+            processedContent: contentInput,
+            extractedData: undefined,
+          };
+        }
 
         return {
           processedContent: extractionResult.marketingSummary,
@@ -201,7 +210,7 @@ const generateAdCopyStep = createStep({
     body: z.string(),
     cta: z.string(),
   }),
-  execute: async ({ inputData, runtimeContext, mastra }) => {
+  execute: async ({ inputData, requestContext, mastra }) => {
     const { processedContent, extractedData, platform, campaignType, targetAudience, tone, productType } = inputData;
 
     console.log('✍️ Generating ad copy...');
@@ -210,9 +219,8 @@ const generateAdCopyStep = createStep({
     const finalTargetAudience = targetAudience || extractedData?.targetAudience || 'General audience';
 
     try {
-      const adCopyResults = await adCopyGeneratorTool.execute({
-        mastra,
-        context: {
+      const adCopyResults = await adCopyGeneratorTool.execute(
+        {
           content: processedContent,
           platform: platform as 'facebook' | 'google' | 'instagram' | 'linkedin' | 'twitter' | 'tiktok' | 'generic',
           campaignType: campaignType as 'awareness' | 'consideration' | 'conversion' | 'retention',
@@ -221,15 +229,30 @@ const generateAdCopyStep = createStep({
           productType,
           keyBenefits,
         },
-        runtimeContext: runtimeContext || new RuntimeContext(),
-      });
+        {
+          mastra,
+          requestContext: requestContext || new RequestContext(),
+        },
+      );
+
+      if ('error' in adCopyResults) {
+        return {
+          headline: `Amazing ${productType || 'Product'} for ${finalTargetAudience}`,
+          body: `Discover how ${processedContent.substring(0, 50)}... can change everything.`,
+          cta: 'Get Started Now',
+        };
+      }
 
       // Return just the first ad set for simplicity
-      const firstAdSet = adCopyResults.adSets[0] || {
-        headline: `Amazing ${productType || 'Product'} for ${finalTargetAudience}`,
-        body: `Discover how ${processedContent.substring(0, 50)}... can change everything.`,
-        cta: 'Get Started Now',
-      };
+      const firstAdSet = adCopyResults.adSets[0];
+
+      if (!firstAdSet) {
+        return {
+          headline: `Amazing ${productType || 'Product'} for ${finalTargetAudience}`,
+          body: `Discover how ${processedContent.substring(0, 50)}... can change everything.`,
+          cta: 'Get Started Now',
+        };
+      }
 
       return {
         headline: firstAdSet.headline,
@@ -262,7 +285,7 @@ const generateImageStep = createStep({
   outputSchema: z.object({
     imageUrl: z.string().optional(),
   }),
-  execute: async ({ inputData, runtimeContext, mastra }) => {
+  execute: async ({ inputData, requestContext, mastra }) => {
     const { generateImages, imageStyle = 'modern', platform, headline, body } = inputData;
 
     if (!generateImages) {
@@ -275,9 +298,8 @@ const generateImageStep = createStep({
     try {
       const imagePrompt = `Professional promotional image for advertisement: ${headline}. ${body.substring(0, 100)}...`;
 
-      const imageResult = await imageGeneratorTool.execute({
-        mastra,
-        context: {
+      const imageResult = await imageGeneratorTool.execute(
+        {
           prompt: imagePrompt,
           style: imageStyle as 'photographic' | 'digital_art' | 'illustration' | 'minimalist' | 'vintage' | 'modern',
           platform:
@@ -286,8 +308,15 @@ const generateImageStep = createStep({
               : (platform as 'facebook' | 'instagram' | 'linkedin' | 'twitter' | 'generic') || 'generic',
           size: platform === 'instagram' ? '1024x1024' : '1792x1024',
         },
-        runtimeContext: runtimeContext || new RuntimeContext(),
-      });
+        {
+          mastra,
+          requestContext: requestContext || new RequestContext(),
+        },
+      );
+
+      if ('error' in imageResult) {
+        return { imageUrl: undefined };
+      }
 
       console.log('✅ Generated promotional image');
       return { imageUrl: imageResult.imageUrl };

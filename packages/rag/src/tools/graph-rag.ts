@@ -28,21 +28,23 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
     inputSchema,
     outputSchema,
     description: toolDescription,
-    execute: async ({ context, mastra, runtimeContext }) => {
-      const indexName: string = runtimeContext.get('indexName') ?? options.indexName;
-      const vectorStoreName: string = runtimeContext.get('vectorStoreName') ?? options.vectorStoreName;
+    execute: async (inputData, context) => {
+      const { requestContext, mastra } = context || {};
+      const indexName: string = requestContext?.get('indexName') ?? options.indexName;
+      const vectorStoreName: string = requestContext?.get('vectorStoreName') ?? options.vectorStoreName;
       if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
       if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`);
-      const includeSources: boolean = runtimeContext.get('includeSources') ?? options.includeSources ?? true;
-      const randomWalkSteps: number | undefined = runtimeContext.get('randomWalkSteps') ?? graphOptions.randomWalkSteps;
-      const restartProb: number | undefined = runtimeContext.get('restartProb') ?? graphOptions.restartProb;
-      const topK: number = runtimeContext.get('topK') ?? context.topK ?? 10;
-      const filter: Record<string, any> = runtimeContext.get('filter') ?? context.filter;
-      const queryText = context.queryText;
+      const includeSources: boolean = requestContext?.get('includeSources') ?? options.includeSources ?? true;
+      const randomWalkSteps: number | undefined =
+        requestContext?.get('randomWalkSteps') ?? graphOptions.randomWalkSteps;
+      const restartProb: number | undefined = requestContext?.get('restartProb') ?? graphOptions.restartProb;
+      const topK: number = requestContext?.get('topK') ?? inputData.topK ?? 10;
+      const filter: Record<string, any> = requestContext?.get('filter') ?? (inputData.filter as Record<string, any>);
+      const queryText = inputData.queryText;
       const providerOptions: Record<string, Record<string, any>> | undefined =
-        runtimeContext.get('providerOptions') ?? options.providerOptions;
+        requestContext?.get('providerOptions') ?? options.providerOptions;
 
-      const enableFilter = !!runtimeContext.get('filter') || (options.enableFilter ?? false);
+      const enableFilter = !!requestContext?.get('filter') || (options.enableFilter ?? false);
 
       const logger = mastra?.getLogger();
       if (!logger) {
@@ -75,11 +77,10 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
             try {
               return typeof filter === 'string' ? JSON.parse(filter) : filter;
             } catch (error) {
-              // Log the error and use empty object
               if (logger) {
-                logger.warn('Failed to parse filter as JSON, using empty filter', { filter, error });
+                logger.error('Invalid filter', { filter, error });
               }
-              return {};
+              throw new Error(`Invalid filter format: ${error instanceof Error ? error.message : String(error)}`);
             }
           })();
         }

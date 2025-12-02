@@ -1,15 +1,19 @@
-import { randomUUID } from 'crypto';
-import fs from 'fs';
-import path from 'path';
-import { simulateReadableStream } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
+import { afterAll, afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { z } from 'zod';
-import { createTool, Mastra, Telemetry } from '..';
+import { z as zv4 } from 'zod-v4';
 import { Agent } from '../agent';
-import { RuntimeContext } from '../di';
+import { RequestContext } from '../di';
+import { MastraError } from '../error';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
+import { Mastra } from '../mastra';
+import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 import { MockStore } from '../storage/mock';
-import type { StreamEvent, WatchEvent } from './types';
+import { createTool } from '../tools';
+import type { ChunkType, StepFailure, StreamEvent, WorkflowStreamEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
 const testStorage = new MockStore();
@@ -53,16 +57,19 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
+        options: {
+          validateInputs: false,
+        },
       });
       workflow.then(step1).then(step2).commit();
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
-      const run = await workflow.createRunAsync({
+      const run = await workflow.createRun({
         runId,
       });
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -222,6 +229,9 @@ describe('Workflow', () => {
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({}),
         steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
+        options: {
+          validateInputs: false,
+        },
       });
 
       promptEvalWorkflow
@@ -237,9 +247,9 @@ describe('Workflow', () => {
         workflows: { 'test-workflow': promptEvalWorkflow },
       });
 
-      const run = await promptEvalWorkflow.createRunAsync();
+      const run = await promptEvalWorkflow.createRun();
 
-      const { stream, getWorkflowState } = run.stream({ inputData: { input: 'test' } });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: { input: 'test' } });
 
       for await (const data of stream) {
         if (data.type === 'step-suspended') {
@@ -301,6 +311,309 @@ describe('Workflow', () => {
       });
     });
 
+    it('should handle basic suspend and resume flow using resumeLabel', async () => {
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          await suspend(undefined, { resumeLabel: 'test-resume-label' });
+          return undefined;
+        })
+        .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
+      const evaluateToneAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.8 },
+        completenessScore: { score: 0.7 },
+      });
+      const improveResponseAction = vi.fn().mockResolvedValue({ improvedOutput: 'improved output' });
+      const evaluateImprovedAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.9 },
+        completenessScore: { score: 0.8 },
+      });
+
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+      });
+      const evaluateTone = createStep({
+        id: 'evaluateToneConsistency',
+        execute: evaluateToneAction,
+        inputSchema: z.object({ modelOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+      const improveResponse = createStep({
+        id: 'improveResponse',
+        execute: improveResponseAction,
+        inputSchema: z.object({ toneScore: z.any(), completenessScore: z.any() }),
+        outputSchema: z.object({ improvedOutput: z.string() }),
+      });
+      const evaluateImproved = createStep({
+        id: 'evaluateImprovedResponse',
+        execute: evaluateImprovedAction,
+        inputSchema: z.object({ improvedOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+
+      const promptEvalWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+        steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
+        options: {
+          validateInputs: false,
+        },
+      });
+
+      promptEvalWorkflow
+        .then(getUserInput)
+        .then(promptAgent)
+        .then(evaluateTone)
+        .then(improveResponse)
+        .then(evaluateImproved)
+        .commit();
+
+      new Mastra({
+        storage: testStorage,
+        workflows: { 'test-workflow': promptEvalWorkflow },
+      });
+
+      const run = await promptEvalWorkflow.createRun();
+
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: { input: 'test' } });
+
+      for await (const data of stream) {
+        if (data.type === 'step-suspended') {
+          expect(promptAgentAction).toHaveBeenCalledTimes(1);
+
+          // make it async to show that execution is not blocked
+          setImmediate(() => {
+            const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
+            run.resume({ resumeData: resumeData as any, label: 'test-resume-label' });
+          });
+          expect(evaluateToneAction).not.toHaveBeenCalledTimes(1);
+        }
+      }
+
+      expect(evaluateToneAction).toHaveBeenCalledTimes(1);
+
+      const resumeResult = await getWorkflowState();
+
+      expect(resumeResult.steps).toEqual({
+        input: { input: 'test' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          resumePayload: { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } },
+          resumedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          payload: { modelOutput: 'test output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        improveResponse: {
+          status: 'success',
+          output: { improvedOutput: 'improved output' },
+          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        evaluateImprovedResponse: {
+          status: 'success',
+          output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
+          payload: { improvedOutput: 'improved output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
+    it('should continue streaming current run on subsequent stream calls', async () => {
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          await suspend();
+          return undefined;
+        })
+        .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
+      const evaluateToneAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.8 },
+        completenessScore: { score: 0.7 },
+      });
+      const improveResponseAction = vi.fn().mockResolvedValue({ improvedOutput: 'improved output' });
+      const evaluateImprovedAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.9 },
+        completenessScore: { score: 0.8 },
+      });
+
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+      });
+      const evaluateTone = createStep({
+        id: 'evaluateToneConsistency',
+        execute: evaluateToneAction,
+        inputSchema: z.object({ modelOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+      const improveResponse = createStep({
+        id: 'improveResponse',
+        execute: improveResponseAction,
+        inputSchema: z.object({ toneScore: z.any(), completenessScore: z.any() }),
+        outputSchema: z.object({ improvedOutput: z.string() }),
+      });
+      const evaluateImproved = createStep({
+        id: 'evaluateImprovedResponse',
+        execute: evaluateImprovedAction,
+        inputSchema: z.object({ improvedOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+
+      const promptEvalWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+        steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
+      });
+
+      promptEvalWorkflow
+        .then(getUserInput)
+        .then(promptAgent)
+        .then(evaluateTone)
+        .then(improveResponse)
+        .then(evaluateImproved)
+        .commit();
+
+      new Mastra({
+        storage: testStorage,
+        workflows: { 'test-workflow': promptEvalWorkflow },
+      });
+
+      const run = await promptEvalWorkflow.createRun();
+
+      const { getWorkflowState } = run.streamLegacy({ inputData: { input: 'test' } });
+
+      const result = await getWorkflowState();
+
+      expect(result.status).toBe('suspended');
+
+      if (result.status !== 'suspended') {
+        expect.fail('Workflow is not suspended');
+      }
+
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+
+      const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
+      expect(evaluateToneAction).not.toHaveBeenCalledTimes(1);
+      run.resume({ resumeData: resumeData as any, step: promptAgent });
+
+      const { stream, getWorkflowState: getWorkflowState2 } = run.streamLegacy();
+
+      let index = 0;
+
+      for await (const data of stream) {
+        if (index === 0) {
+          expect(data.payload).toMatchObject({
+            id: 'promptAgent',
+            payload: { userInput: 'test input' },
+            startedAt: expect.any(Number),
+            resumePayload: { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } },
+            resumedAt: expect.any(Number),
+            suspendedAt: expect.any(Number),
+          });
+        }
+
+        index++;
+      }
+
+      expect(evaluateToneAction).toHaveBeenCalledTimes(1);
+
+      const resumeResult = await getWorkflowState2();
+
+      expect(resumeResult.steps).toEqual({
+        input: { input: 'test' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          resumePayload: { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } },
+          resumedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          payload: { modelOutput: 'test output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        improveResponse: {
+          status: 'success',
+          output: { improvedOutput: 'improved output' },
+          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        evaluateImprovedResponse: {
+          status: 'success',
+          output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
+          payload: { improvedOutput: 'improved output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
     it('should be able to use an agent as a step', async () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
@@ -312,6 +625,7 @@ describe('Workflow', () => {
       });
 
       const agent = new Agent({
+        id: 'test-agent-1',
         name: 'test-agent-1',
         instructions: 'test agent instructions"',
         model: new MockLanguageModelV1({
@@ -333,6 +647,7 @@ describe('Workflow', () => {
       });
 
       const agent2 = new Agent({
+        id: 'test-agent-2',
         name: 'test-agent-2',
         instructions: 'test agent instructions',
         model: new MockLanguageModelV1({
@@ -395,10 +710,10 @@ describe('Workflow', () => {
         .then(agentStep2)
         .commit();
 
-      const run = await workflow.createRunAsync({
+      const run = await workflow.createRun({
         runId: 'test-run-id',
       });
-      const { stream } = await run.stream({
+      const { stream } = run.streamLegacy({
         inputData: {
           prompt1: 'Capital of France, just the name',
           prompt2: 'Capital of UK, just the name',
@@ -425,6 +740,8 @@ describe('Workflow', () => {
               prompt2: 'Capital of UK, just the name',
             },
             startedAt: expect.any(Number),
+            stepCallId: expect.any(String),
+            status: 'running',
           },
           type: 'step-start',
         },
@@ -443,6 +760,7 @@ describe('Workflow', () => {
         {
           payload: {
             id: 'start',
+            stepCallId: expect.any(String),
             metadata: {},
           },
           type: 'step-finish',
@@ -455,6 +773,8 @@ describe('Workflow', () => {
               prompt2: 'Capital of UK, just the name',
             },
             startedAt: expect.any(Number),
+            stepCallId: expect.any(String),
+            status: 'running',
           },
           type: 'step-start',
         },
@@ -473,6 +793,7 @@ describe('Workflow', () => {
           payload: {
             id: 'mapping_mock-uuid-1',
             metadata: {},
+            stepCallId: expect.any(String),
           },
           type: 'step-finish',
         },
@@ -483,6 +804,8 @@ describe('Workflow', () => {
               prompt: 'Capital of France, just the name',
             },
             startedAt: expect.any(Number),
+            stepCallId: expect.any(String),
+            status: 'running',
           },
           type: 'step-start',
         },
@@ -502,6 +825,13 @@ describe('Workflow', () => {
           type: 'tool-call-delta',
         },
         {
+          args: {
+            prompt: 'Capital of France, just the name',
+          },
+          name: 'test-agent-1',
+          type: 'tool-call-streaming-finish',
+        },
+        {
           payload: {
             id: 'test-agent-1',
             output: {
@@ -516,6 +846,7 @@ describe('Workflow', () => {
           payload: {
             id: 'test-agent-1',
             metadata: {},
+            stepCallId: expect.any(String),
           },
           type: 'step-finish',
         },
@@ -526,6 +857,8 @@ describe('Workflow', () => {
               text: 'Paris',
             },
             startedAt: expect.any(Number),
+            stepCallId: expect.any(String),
+            status: 'running',
           },
           type: 'step-start',
         },
@@ -544,6 +877,7 @@ describe('Workflow', () => {
           payload: {
             id: 'mapping_mock-uuid-2',
             metadata: {},
+            stepCallId: expect.any(String),
           },
           type: 'step-finish',
         },
@@ -554,6 +888,8 @@ describe('Workflow', () => {
               prompt: 'Capital of UK, just the name',
             },
             startedAt: expect.any(Number),
+            stepCallId: expect.any(String),
+            status: 'running',
           },
           type: 'step-start',
         },
@@ -573,6 +909,13 @@ describe('Workflow', () => {
           type: 'tool-call-delta',
         },
         {
+          args: {
+            prompt: 'Capital of UK, just the name',
+          },
+          name: 'test-agent-2',
+          type: 'tool-call-streaming-finish',
+        },
+        {
           payload: {
             id: 'test-agent-2',
             endedAt: expect.any(Number),
@@ -587,6 +930,7 @@ describe('Workflow', () => {
           payload: {
             id: 'test-agent-2',
             metadata: {},
+            stepCallId: expect.any(String),
           },
           type: 'step-finish',
         },
@@ -598,6 +942,96 @@ describe('Workflow', () => {
         },
       ]);
     });
+
+    it('should pass agentOptions when wrapping agent with createStep', async () => {
+      const onFinishSpy = vi.fn();
+      const onChunkSpy = vi.fn();
+      const maxSteps = 5;
+
+      // Spy to capture what's passed to the model
+      const doStreamSpy = vi.fn<any>(async ({ prompt, temperature }) => {
+        // Verify instructions were overridden in the messages
+        const systemMessage = prompt?.find((m: any) => m.role === 'system');
+        expect(systemMessage?.content).toContain('overridden instructions');
+        expect(systemMessage?.content).not.toContain('original instructions');
+
+        // Verify temperature was passed through
+        expect(temperature).toBe(0.7);
+
+        return {
+          stream: simulateReadableStream({
+            chunks: [
+              { type: 'text-delta', textDelta: 'Response' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                logprobs: undefined,
+                usage: { completionTokens: 10, promptTokens: 3 },
+              },
+            ],
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      });
+
+      const agent = new Agent({
+        id: 'test-agent-with-options',
+        name: 'Test Agent With Options',
+        instructions: 'original instructions',
+        model: new MockLanguageModelV1({
+          doStream: doStreamSpy,
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow-agent-options',
+        inputSchema: z.object({
+          prompt: z.string(),
+        }),
+        outputSchema: z.object({
+          text: z.string(),
+        }),
+      });
+
+      new Mastra({
+        workflows: { 'test-workflow-agent-options': workflow },
+        agents: { 'test-agent-with-options': agent },
+        idGenerator: randomUUID,
+      });
+
+      // Create step with multiple agent options to verify they're all passed through
+      const agentStep = createStep(agent, {
+        maxSteps,
+        onFinish: onFinishSpy,
+        onChunk: onChunkSpy,
+        instructions: 'overridden instructions',
+        temperature: 0.7,
+      });
+
+      workflow
+        .map({ prompt: { value: 'test', schema: z.string() } })
+        .then(agentStep)
+        .commit();
+
+      const run = await workflow.createRun({
+        runId: 'test-run-id-options',
+      });
+
+      const result = await run.start({
+        inputData: {
+          prompt: 'Test prompt',
+        },
+      });
+
+      expect(result.status).toBe('success');
+      if (result.status === 'success') {
+        expect(result.result).toEqual({ text: 'Response' });
+      }
+
+      expect(doStreamSpy).toHaveBeenCalled();
+      expect(onFinishSpy).toHaveBeenCalled();
+      expect(onChunkSpy).toHaveBeenCalled();
+    }, 10000);
 
     it('should handle sleep waiting flow', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
@@ -621,16 +1055,19 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
+        options: {
+          validateInputs: false,
+        },
       });
       workflow.then(step1).sleep(1000).then(step2).commit();
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
-      const run = await workflow.createRunAsync({
+      const run = await workflow.createRun({
         runId,
       });
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -793,11 +1230,11 @@ describe('Workflow', () => {
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
-      const run = await workflow.createRunAsync({
+      const run = await workflow.createRun({
         runId,
       });
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -957,10 +1394,10 @@ describe('Workflow', () => {
         workflows: { 'test-workflow': workflow },
       });
 
-      const run = await workflow.createRunAsync({ runId: 'test-run-id' });
+      const run = await workflow.createRun({ runId: 'test-run-id' });
       const originalInput = { originalInput: 'original-data' };
 
-      const { stream, getWorkflowState } = run.stream({ inputData: originalInput });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: originalInput });
 
       for await (const data of stream) {
         if (data.type === 'step-suspended') {
@@ -977,7 +1414,7 @@ describe('Workflow', () => {
       expect.assertions(3);
       // Verify that the input property is preserved from the original snapshot context
       // This is the key test: input should come from snapshot.context.input, not from resumeData
-      expect(result.steps.input).toEqual(originalInput);
+      expect(result.input).toEqual(originalInput);
 
       // Also verify that the step received the original input as payload, not the resume data
       expect(result.steps.step1.payload).toEqual(originalInput);
@@ -990,8 +1427,10 @@ describe('Workflow', () => {
         });
       }
     });
+  });
 
-    it('should handle waitForEvent waiting flow', async () => {
+  describe('Streaming (vNext)', () => {
+    it('should generate a stream', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
       const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
 
@@ -1013,45 +1452,49 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
+        options: {
+          validateInputs: false,
+        },
       });
-      workflow.then(step1).waitForEvent('user-event-test', step2).commit();
+      workflow.then(step1).then(step2).commit();
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
-      const run = await workflow.createRunAsync({
+      const run = await workflow.createRun({
         runId,
       });
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
-
-      setTimeout(() => {
-        run.sendEvent('user-event-test', {
-          value: 'eventdata',
-        });
-      }, 2000);
+      const streamResult = run.streamVNext({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
-      for await (const data of stream) {
+      for await (const data of streamResult.fullStream) {
         collectedStreamData.push(JSON.parse(JSON.stringify(data)));
       }
       watchData = collectedStreamData;
 
-      const executionResult = await getWorkflowState();
+      const executionResult = await streamResult.result;
+      if (!executionResult) {
+        expect.fail('Execution result is not set');
+      }
 
-      expect(watchData.length).toBe(9);
+      expect(watchData.length).toBe(6);
       expect(watchData).toMatchObject([
         {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'start',
+          payload: {},
+          type: 'workflow-start',
+          from: 'WORKFLOW',
+          runId,
         },
         {
           payload: {
             id: 'step1',
+            payload: {},
+            startedAt: expect.any(Number),
           },
-          type: 'step-start',
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId,
         },
         {
           payload: {
@@ -1059,28 +1502,24 @@ describe('Workflow', () => {
             output: {
               result: 'success1',
             },
+            endedAt: expect.any(Number),
             status: 'success',
           },
-          type: 'step-result',
-        },
-        {
-          payload: {
-            id: 'step1',
-            metadata: {},
-          },
-          type: 'step-finish',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId,
         },
         {
           payload: {
             id: 'step2',
+            payload: {
+              result: 'success1',
+            },
+            startedAt: expect.any(Number),
           },
-          type: 'step-waiting',
-        },
-        {
-          payload: {
-            id: 'step2',
-          },
-          type: 'step-start',
+          from: 'WORKFLOW',
+          runId,
+          type: 'workflow-step-start',
         },
         {
           payload: {
@@ -1088,22 +1527,27 @@ describe('Workflow', () => {
             output: {
               result: 'success2',
             },
+            endedAt: expect.any(Number),
             status: 'success',
           },
-          type: 'step-result',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId,
         },
         {
           payload: {
-            id: 'step2',
             metadata: {},
+            output: {
+              usage: {
+                inputTokens: 0,
+                outputTokens: 0,
+                totalTokens: 0,
+              },
+            },
           },
-          type: 'step-finish',
-        },
-        {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'finish',
+          type: 'workflow-finish',
+          from: 'WORKFLOW',
+          runId,
         },
       ]);
       // Verify execution completed successfully
@@ -1120,13 +1564,1600 @@ describe('Workflow', () => {
         payload: {
           result: 'success1',
         },
-        resumePayload: {
-          value: 'eventdata',
-        },
-        resumedAt: expect.any(Number),
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+    });
+
+    it('should generate a stream for a single step workflow successfully with state', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ state }) => {
+          return { result: 'success', value: state.value };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), value: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+          // someOtherValue: z.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+          value: z.string(),
+        }),
+        stateSchema: z.object({
+          value: z.string(),
+          otherValue: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      const streamResult = run.streamVNext({
+        inputData: {},
+        initialState: { value: 'test-state', otherValue: 'test-other-state' },
+        outputOptions: { includeState: true },
+      });
+
+      const executionResult = await streamResult.result;
+
+      // Verify execution completed successfully
+      expect(executionResult.steps.step1).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(executionResult.state).toEqual({ value: 'test-state', otherValue: 'test-other-state' });
+
+      const run2 = await workflow.createRun();
+      const streamResult2 = run2.stream({
+        inputData: {},
+        initialState: { value: 'test-state', otherValue: 'test-other-state' },
+        outputOptions: { includeState: true },
+      });
+
+      const executionResult2 = await streamResult2.result;
+
+      // Verify execution completed successfully
+      expect(executionResult2.steps.step1).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(executionResult2.state).toEqual({ value: 'test-state', otherValue: 'test-other-state' });
+    });
+
+    it('should handle basic suspend and resume flow', async () => {
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          await suspend();
+          return undefined;
+        })
+        .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
+      const evaluateToneAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.8 },
+        completenessScore: { score: 0.7 },
+      });
+      const improveResponseAction = vi.fn().mockResolvedValue({ improvedOutput: 'improved output' });
+      const evaluateImprovedAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.9 },
+        completenessScore: { score: 0.8 },
+      });
+
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+      });
+      const evaluateTone = createStep({
+        id: 'evaluateToneConsistency',
+        execute: evaluateToneAction,
+        inputSchema: z.object({ modelOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+      const improveResponse = createStep({
+        id: 'improveResponse',
+        execute: improveResponseAction,
+        inputSchema: z.object({ toneScore: z.any(), completenessScore: z.any() }),
+        outputSchema: z.object({ improvedOutput: z.string() }),
+      });
+      const evaluateImproved = createStep({
+        id: 'evaluateImprovedResponse',
+        execute: evaluateImprovedAction,
+        inputSchema: z.object({ improvedOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+
+      const promptEvalWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+        steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
+      });
+
+      promptEvalWorkflow
+        .then(getUserInput)
+        .then(promptAgent)
+        .then(evaluateTone)
+        .then(improveResponse)
+        .then(evaluateImproved)
+        .commit();
+
+      new Mastra({
+        storage: testStorage,
+        workflows: { 'test-workflow': promptEvalWorkflow },
+      });
+
+      const run = await promptEvalWorkflow.createRun();
+
+      let streamResult = run.streamVNext({ inputData: { input: 'test' } });
+
+      for await (const data of streamResult.fullStream) {
+        if (data.type === 'workflow-step-suspended') {
+          expect(promptAgentAction).toHaveBeenCalledTimes(1);
+
+          // make it async to show that execution is not blocked
+          expect(evaluateToneAction).not.toHaveBeenCalledTimes(1);
+        }
+      }
+
+      const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
+      const errStreamResult = run.resumeStreamVNext({ resumeData, step: getUserInput });
+      for await (const _data of errStreamResult.fullStream) {
+      }
+
+      try {
+        await errStreamResult.result;
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).toBe(
+          'This workflow step "getUserInput" was not suspended. Available suspended steps: [promptAgent]',
+        );
+      }
+
+      streamResult = run.resumeStreamVNext({ resumeData, step: promptAgent });
+      console.log('created stream');
+      for await (const _data of streamResult.fullStream) {
+        // console.log('data===', _data);
+      }
+
+      expect(evaluateToneAction).toHaveBeenCalledTimes(1);
+
+      const resumeResult = await streamResult.result;
+      if (!resumeResult) {
+        expect.fail('Resume result is not set');
+      }
+
+      expect(resumeResult.steps).toEqual({
+        input: { input: 'test' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          resumePayload: { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } },
+          resumedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          payload: { modelOutput: 'test output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        improveResponse: {
+          status: 'success',
+          output: { improvedOutput: 'improved output' },
+          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        evaluateImprovedResponse: {
+          status: 'success',
+          output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
+          payload: { improvedOutput: 'improved output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
+    it('should handle basic suspend and resume flow that does not close on suspend', async () => {
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          await suspend();
+          return undefined;
+        })
+        .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
+      const evaluateToneAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.8 },
+        completenessScore: { score: 0.7 },
+      });
+      const improveResponseAction = vi.fn().mockResolvedValue({ improvedOutput: 'improved output' });
+      const evaluateImprovedAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.9 },
+        completenessScore: { score: 0.8 },
+      });
+
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+      });
+      const evaluateTone = createStep({
+        id: 'evaluateToneConsistency',
+        execute: evaluateToneAction,
+        inputSchema: z.object({ modelOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+      const improveResponse = createStep({
+        id: 'improveResponse',
+        execute: improveResponseAction,
+        inputSchema: z.object({ toneScore: z.any(), completenessScore: z.any() }),
+        outputSchema: z.object({ improvedOutput: z.string() }),
+      });
+      const evaluateImproved = createStep({
+        id: 'evaluateImprovedResponse',
+        execute: evaluateImprovedAction,
+        inputSchema: z.object({ improvedOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+
+      const promptEvalWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+        steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
+      });
+
+      promptEvalWorkflow
+        .then(getUserInput)
+        .then(promptAgent)
+        .then(evaluateTone)
+        .then(improveResponse)
+        .then(evaluateImproved)
+        .commit();
+
+      new Mastra({
+        storage: testStorage,
+        workflows: { 'test-workflow': promptEvalWorkflow },
+      });
+
+      const run = await promptEvalWorkflow.createRun();
+
+      let streamResult = run.streamVNext({ inputData: { input: 'test' }, closeOnSuspend: false });
+
+      for await (const data of streamResult.fullStream) {
+        if (data.type === 'workflow-step-suspended') {
+          expect(promptAgentAction).toHaveBeenCalledTimes(1);
+
+          // make it async to show that execution is not blocked
+          expect(evaluateToneAction).not.toHaveBeenCalledTimes(1);
+
+          setImmediate(() => {
+            const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
+            run.resume({ resumeData: resumeData as any, step: promptAgent });
+          });
+        }
+      }
+
+      expect(evaluateToneAction).toHaveBeenCalledTimes(1);
+
+      const resumeResult = await streamResult.result;
+      if (!resumeResult) {
+        expect.fail('Resume result is not set');
+      }
+
+      expect(resumeResult.steps).toEqual({
+        input: { input: 'test' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          resumePayload: { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } },
+          resumedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          payload: { modelOutput: 'test output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        improveResponse: {
+          status: 'success',
+          output: { improvedOutput: 'improved output' },
+          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        evaluateImprovedResponse: {
+          status: 'success',
+          output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
+          payload: { improvedOutput: 'improved output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
+    it('should handle custom event emission using writer', async () => {
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+        execute: async ({ inputData }) => {
+          return {
+            userInput: inputData.input,
+          };
+        },
+      });
+
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+        resumeSchema: z.object({ userInput: z.string() }),
+        execute: async ({ suspend, writer, inputData, resumeData }) => {
+          await writer.write({
+            type: 'custom-event',
+            payload: {
+              input: resumeData?.userInput || inputData.userInput,
+            },
+          });
+
+          if (!resumeData) {
+            await suspend({});
+          }
+
+          return { modelOutput: 'test output' };
+        },
+      });
+
+      const resumableWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+        steps: [getUserInput, promptAgent],
+      });
+
+      resumableWorkflow.then(getUserInput).then(promptAgent).commit();
+
+      new Mastra({
+        storage: testStorage,
+        workflows: { 'test-workflow': resumableWorkflow },
+      });
+
+      const run = await resumableWorkflow.createRun();
+
+      let streamResult = run.streamVNext({ inputData: { input: 'test input for stream' } });
+
+      for await (const data of streamResult.fullStream) {
+        if (data.type === 'workflow-step-output') {
+          expect(data.payload.output).toMatchObject({
+            type: 'custom-event',
+            payload: {
+              input: 'test input for stream',
+            },
+          });
+        }
+      }
+
+      let result = await streamResult.result;
+
+      const resumeData = { userInput: 'test input for resumption' };
+      streamResult = run.resumeStreamVNext({ resumeData, step: promptAgent });
+      for await (const data of streamResult.fullStream) {
+        if (data.type === 'workflow-step-output') {
+          expect(data.payload.output).toMatchObject({
+            type: 'custom-event',
+            payload: {
+              input: 'test input for resumption',
+            },
+          });
+        }
+      }
+
+      result = await streamResult.result;
+      if (!result) {
+        expect.fail('Resume result is not set');
+      }
+
+      expect(result.steps).toEqual({
+        input: { input: 'test input for stream' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input for stream' },
+          payload: { input: 'test input for stream' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input for stream' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          resumePayload: { userInput: 'test input for resumption' },
+          resumedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          suspendPayload: {},
+          suspendOutput: {
+            modelOutput: 'test output',
+          },
+        },
+      });
+    });
+
+    it('should be able to use an agent as a step', async () => {
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: z.object({}),
+        options: {
+          validateInputs: false,
+        },
+      });
+
+      const agent = new Agent({
+        id: 'test-agent-1',
+        name: 'test-agent-1',
+        instructions: 'test agent instructions"',
+        model: new MockLanguageModelV2({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Paris' },
+                { type: 'text-start', id: '1' },
+                {
+                  type: 'finish',
+                  id: '2',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ],
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+      });
+
+      const agent2 = new Agent({
+        id: 'test-agent-2',
+        name: 'test-agent-2',
+        instructions: 'test agent instructions',
+        model: new MockLanguageModelV2({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'London' },
+                { type: 'text-start', id: '1' },
+                {
+                  type: 'finish',
+                  id: '2',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ],
+            }),
+
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+      });
+
+      const startStep = createStep({
+        id: 'start',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: z.object({ prompt1: z.string(), prompt2: z.string() }),
+        execute: async ({ inputData }) => {
+          return {
+            prompt1: inputData.prompt1,
+            prompt2: inputData.prompt2,
+          };
+        },
+      });
+
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+        idGenerator: randomUUID,
+      });
+
+      const agentStep1 = createStep(agent);
+      const agentStep2 = createStep(agent2);
+
+      workflow
+        .then(startStep)
+        .map({
+          prompt: {
+            step: startStep,
+            path: 'prompt1',
+          },
+        })
+        .then(agentStep1)
+        .map({
+          prompt: {
+            step: startStep,
+            path: 'prompt2',
+          },
+        })
+        .then(agentStep2)
+        .commit();
+
+      const run = await workflow.createRun({
+        runId: 'test-run-id',
+      });
+      const streamResult = run.streamVNext({
+        inputData: {
+          prompt1: 'Capital of France, just the name',
+          prompt2: 'Capital of UK, just the name',
+        },
+      });
+
+      const values: ChunkType[] = [];
+      for await (const value of streamResult.fullStream) {
+        values.push(value);
+      }
+      const workflowEvents = values.filter(value => value.type !== 'workflow-step-output');
+      const agentEvents = values.filter(value => value.type === 'workflow-step-output');
+
+      expect(agentEvents.map(event => event?.payload?.output?.type)).toEqual([
+        'start',
+        'step-start',
+        'text-start',
+        'text-delta',
+        'text-start',
+        'step-finish',
+        'finish',
+        'start',
+        'step-start',
+        'text-start',
+        'text-delta',
+        'text-start',
+        'step-finish',
+        'finish',
+      ]);
+
+      expect(workflowEvents).toMatchObject([
+        {
+          type: 'workflow-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {},
+        },
+        {
+          type: 'workflow-step-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'start',
+            id: 'start',
+            stepCallId: expect.any(String),
+            payload: {
+              prompt1: 'Capital of France, just the name',
+              prompt2: 'Capital of UK, just the name',
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
+          },
+        },
+        {
+          type: 'workflow-step-result',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'start',
+            id: 'start',
+            stepCallId: expect.any(String),
+            status: 'success',
+            output: {
+              prompt1: 'Capital of France, just the name',
+              prompt2: 'Capital of UK, just the name',
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        {
+          type: 'workflow-step-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'mapping_mock-uuid-1',
+            id: 'mapping_mock-uuid-1',
+            stepCallId: expect.any(String),
+            payload: {
+              prompt1: 'Capital of France, just the name',
+              prompt2: 'Capital of UK, just the name',
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
+          },
+        },
+        {
+          type: 'workflow-step-result',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'mapping_mock-uuid-1',
+            id: 'mapping_mock-uuid-1',
+            stepCallId: expect.any(String),
+            status: 'success',
+            output: {
+              prompt: 'Capital of France, just the name',
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        {
+          type: 'workflow-step-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'test-agent-1',
+            id: 'test-agent-1',
+            stepCallId: expect.any(String),
+            payload: {
+              prompt: 'Capital of France, just the name',
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
+          },
+        },
+        {
+          type: 'workflow-step-result',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'test-agent-1',
+            id: 'test-agent-1',
+            stepCallId: expect.any(String),
+            status: 'success',
+            output: {},
+            endedAt: expect.any(Number),
+          },
+        },
+        {
+          type: 'workflow-step-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'mapping_mock-uuid-2',
+            id: 'mapping_mock-uuid-2',
+            stepCallId: expect.any(String),
+            payload: {},
+            startedAt: expect.any(Number),
+            status: 'running',
+          },
+        },
+        {
+          type: 'workflow-step-result',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'mapping_mock-uuid-2',
+            id: 'mapping_mock-uuid-2',
+            stepCallId: expect.any(String),
+            status: 'success',
+            output: {
+              prompt: 'Capital of UK, just the name',
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        {
+          type: 'workflow-step-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'test-agent-2',
+            id: 'test-agent-2',
+            stepCallId: expect.any(String),
+            payload: {
+              prompt: 'Capital of UK, just the name',
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
+          },
+        },
+        {
+          type: 'workflow-step-result',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'test-agent-2',
+            id: 'test-agent-2',
+            stepCallId: expect.any(String),
+            status: 'success',
+            output: {},
+            endedAt: expect.any(Number),
+          },
+        },
+        {
+          type: 'workflow-finish',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            output: {
+              usage: {
+                inputTokens: 20,
+                outputTokens: 40,
+                totalTokens: 60,
+              },
+            },
+            metadata: {},
+          },
+        },
+      ]);
+    });
+
+    it('should be able to use an agent with v1 model as a step', async () => {
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: z.object({}),
+      });
+
+      const agent = new Agent({
+        id: 'test-agent-1',
+        name: 'test-agent-1',
+        instructions: 'test agent instructions"',
+        model: new MockLanguageModelV1({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-delta', textDelta: 'Paris' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { completionTokens: 10, promptTokens: 3 },
+                },
+              ],
+            }),
+
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+      });
+
+      const agent2 = new Agent({
+        id: 'test-agent-2',
+        name: 'test-agent-2',
+        instructions: 'test agent instructions',
+        model: new MockLanguageModelV1({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-delta', textDelta: 'London' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { completionTokens: 10, promptTokens: 3 },
+                },
+              ],
+            }),
+
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+      });
+
+      const startStep = createStep({
+        id: 'start',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: z.object({ prompt1: z.string(), prompt2: z.string() }),
+        execute: async ({ inputData }) => {
+          return {
+            prompt1: inputData.prompt1,
+            prompt2: inputData.prompt2,
+          };
+        },
+      });
+
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+        idGenerator: randomUUID,
+      });
+
+      const agentStep1 = createStep(agent);
+      const agentStep2 = createStep(agent2);
+
+      workflow
+        .then(startStep)
+        .map({
+          prompt: {
+            step: startStep,
+            path: 'prompt1',
+          },
+        })
+        .then(agentStep1)
+        .map({
+          prompt: {
+            step: startStep,
+            path: 'prompt2',
+          },
+        })
+        .then(agentStep2)
+        .commit();
+
+      const run = await workflow.createRun({
+        runId: 'test-run-id',
+      });
+      const streamResult = run.streamVNext({
+        inputData: {
+          prompt1: 'Capital of France, just the name',
+          prompt2: 'Capital of UK, just the name',
+        },
+      });
+
+      const values: ChunkType[] = [];
+      for await (const value of streamResult.fullStream) {
+        values.push(value);
+      }
+      const workflowEvents = values.filter(value => value.type !== 'workflow-step-output');
+      const agentEvents = values.filter(value => value.type === 'workflow-step-output');
+
+      expect(agentEvents.map(event => event?.payload?.output?.type)).toEqual([
+        'step-start',
+        'text-delta',
+        'step-finish',
+        'finish',
+        'step-start',
+        'text-delta',
+        'step-finish',
+        'finish',
+      ]);
+
+      expect(workflowEvents).toMatchObject([
+        {
+          type: 'workflow-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {},
+        },
+        {
+          type: 'workflow-step-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'start',
+            id: 'start',
+            stepCallId: expect.any(String),
+            payload: {
+              prompt1: 'Capital of France, just the name',
+              prompt2: 'Capital of UK, just the name',
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
+          },
+        },
+        {
+          type: 'workflow-step-result',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'start',
+            id: 'start',
+            stepCallId: expect.any(String),
+            status: 'success',
+            output: {
+              prompt1: 'Capital of France, just the name',
+              prompt2: 'Capital of UK, just the name',
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        {
+          type: 'workflow-step-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'mapping_mock-uuid-1',
+            id: 'mapping_mock-uuid-1',
+            stepCallId: expect.any(String),
+            payload: {
+              prompt1: 'Capital of France, just the name',
+              prompt2: 'Capital of UK, just the name',
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
+          },
+        },
+        {
+          type: 'workflow-step-result',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'mapping_mock-uuid-1',
+            id: 'mapping_mock-uuid-1',
+            stepCallId: expect.any(String),
+            status: 'success',
+            output: {
+              prompt: 'Capital of France, just the name',
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        {
+          type: 'workflow-step-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'test-agent-1',
+            id: 'test-agent-1',
+            stepCallId: expect.any(String),
+            payload: {
+              prompt: 'Capital of France, just the name',
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
+          },
+        },
+        {
+          type: 'workflow-step-result',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'test-agent-1',
+            id: 'test-agent-1',
+            stepCallId: expect.any(String),
+            status: 'success',
+            output: {},
+            endedAt: expect.any(Number),
+          },
+        },
+        {
+          type: 'workflow-step-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'mapping_mock-uuid-2',
+            id: 'mapping_mock-uuid-2',
+            stepCallId: expect.any(String),
+            payload: {},
+            startedAt: expect.any(Number),
+            status: 'running',
+          },
+        },
+        {
+          type: 'workflow-step-result',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'mapping_mock-uuid-2',
+            id: 'mapping_mock-uuid-2',
+            stepCallId: expect.any(String),
+            status: 'success',
+            output: {
+              prompt: 'Capital of UK, just the name',
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        {
+          type: 'workflow-step-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'test-agent-2',
+            id: 'test-agent-2',
+            stepCallId: expect.any(String),
+            payload: {
+              prompt: 'Capital of UK, just the name',
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
+          },
+        },
+        {
+          type: 'workflow-step-result',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'test-agent-2',
+            id: 'test-agent-2',
+            stepCallId: expect.any(String),
+            status: 'success',
+            output: {},
+            endedAt: expect.any(Number),
+          },
+        },
+        {
+          type: 'workflow-finish',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            output: {
+              usage: {
+                inputTokens: 0,
+                outputTokens: 0,
+                totalTokens: 0,
+              },
+            },
+            metadata: {},
+          },
+        },
+      ]);
+    });
+
+    it('should pass agentOptions when wrapping agent with createStep', async () => {
+      const onFinishSpy = vi.fn();
+      const onChunkSpy = vi.fn();
+      const maxSteps = 5;
+
+      // Spy to capture what's passed to the model
+      const doStreamSpy = vi.fn<any>(async ({ prompt, temperature }) => {
+        // Verify instructions were overridden in the messages
+        const systemMessage = prompt?.find((m: any) => m.role === 'system');
+        expect(systemMessage?.content).toContain('overridden instructions');
+        expect(systemMessage?.content).not.toContain('original instructions');
+
+        // Verify temperature was passed through
+        expect(temperature).toBe(0.7);
+
+        return {
+          stream: simulateReadableStream({
+            chunks: [
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: 'Response' },
+              {
+                type: 'finish',
+                id: '2',
+                finishReason: 'stop',
+                logprobs: undefined,
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ],
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      });
+
+      const agent = new Agent({
+        id: 'test-agent-with-options-v2',
+        name: 'test-agent-with-options-v2',
+        instructions: 'original instructions',
+        model: new MockLanguageModelV2({
+          doStream: doStreamSpy,
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow-agent-options-v2',
+        inputSchema: z.object({
+          prompt: z.string(),
+        }),
+        outputSchema: z.object({
+          text: z.string(),
+        }),
+        options: {
+          validateInputs: false,
+        },
+      });
+
+      new Mastra({
+        workflows: { 'test-workflow-agent-options-v2': workflow },
+        agents: { 'test-agent-with-options-v2': agent },
+        idGenerator: randomUUID,
+      });
+
+      // Create step with multiple agent options to verify they're all passed through
+      const agentStep = createStep(agent, {
+        maxSteps,
+        onFinish: onFinishSpy,
+        onChunk: onChunkSpy,
+        instructions: 'overridden instructions',
+        modelSettings: {
+          temperature: 0.7,
+        },
+      });
+
+      workflow
+        .map({ prompt: { value: 'test', schema: z.string() } })
+        .then(agentStep)
+        .commit();
+
+      const run = await workflow.createRun({
+        runId: 'test-run-id-options-v2',
+      });
+
+      const result = await run.start({
+        inputData: {
+          prompt: 'Test prompt',
+        },
+      });
+
+      expect(result.status).toBe('success');
+      if (result.status === 'success') {
+        expect(result.result).toEqual({ text: 'Response' });
+      }
+
+      expect(doStreamSpy).toHaveBeenCalled();
+      expect(onFinishSpy).toHaveBeenCalled();
+      expect(onChunkSpy).toHaveBeenCalled();
+    }, 10000);
+
+    it('should handle sleep waiting flow', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step1, step2],
+        options: {
+          validateInputs: false,
+        },
+      });
+      workflow.then(step1).sleep(1000).then(step2).commit();
+
+      const runId = 'test-run-id';
+      let watchData: StreamEvent[] = [];
+      const run = await workflow.createRun({
+        runId,
+      });
+
+      const streamResult = run.streamVNext({ inputData: {} });
+
+      // Start watching the workflow
+      const collectedStreamData: StreamEvent[] = [];
+      for await (const data of streamResult.fullStream) {
+        collectedStreamData.push(JSON.parse(JSON.stringify(data)));
+      }
+      watchData = collectedStreamData;
+
+      const executionResult = await streamResult.result;
+      if (!executionResult) {
+        expect.fail('Execution result is not set');
+      }
+
+      expect(watchData.length).toBe(8);
+      expect(watchData).toMatchObject([
+        {
+          payload: {},
+          type: 'workflow-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
+        },
+        {
+          payload: {
+            id: 'step1',
+            startedAt: expect.any(Number),
+            status: 'running',
+            payload: {},
+          },
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
+        },
+        {
+          payload: {
+            id: 'step1',
+            output: {
+              result: 'success1',
+            },
+            endedAt: expect.any(Number),
+            status: 'success',
+          },
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
+        },
+        {
+          payload: {
+            id: 'sleep_mock-uuid-1',
+            startedAt: expect.any(Number),
+            status: 'waiting',
+            payload: {
+              result: 'success1',
+            },
+          },
+          type: 'workflow-step-waiting',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
+        },
+        {
+          payload: {
+            id: 'sleep_mock-uuid-1',
+            endedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              result: 'success1',
+            },
+          },
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
+        },
+        {
+          payload: {
+            id: 'step2',
+            payload: {
+              result: 'success1',
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
+          },
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
+        },
+        {
+          payload: {
+            id: 'step2',
+            output: {
+              result: 'success2',
+            },
+            endedAt: expect.any(Number),
+            status: 'success',
+          },
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
+        },
+        {
+          payload: {
+            metadata: {},
+            output: {
+              usage: {
+                inputTokens: 0,
+                outputTokens: 0,
+                totalTokens: 0,
+              },
+            },
+          },
+          type: 'workflow-finish',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
+        },
+      ]);
+      // Verify execution completed successfully
+      expect(executionResult.steps.step1).toEqual({
+        status: 'success',
+        output: { result: 'success1' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(executionResult.steps.step2).toEqual({
+        status: 'success',
+        output: { result: 'success2' },
+        payload: {
+          result: 'success1',
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    });
+
+    it('should handle sleep waiting flow with fn parameter', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ value: 1000 });
+      const step2Action = vi.fn<any>().mockResolvedValue({ value: 2000 });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.number() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step1, step2],
+      });
+      workflow
+        .then(step1)
+        .sleep(async ({ inputData }) => {
+          return inputData.value;
+        })
+        .then(step2)
+        .commit();
+
+      const runId = 'test-run-id';
+      let watchData: StreamEvent[] = [];
+      const run = await workflow.createRun({
+        runId,
+      });
+
+      const streamResult = run.streamVNext({ inputData: {} });
+
+      // Start watching the workflow
+      const collectedStreamData: StreamEvent[] = [];
+      for await (const data of streamResult.fullStream) {
+        collectedStreamData.push(JSON.parse(JSON.stringify(data)));
+      }
+      watchData = collectedStreamData;
+
+      const executionResult = await streamResult.result;
+      if (!executionResult) {
+        expect.fail('Execution result is not set');
+      }
+
+      expect(watchData.length).toBe(8);
+      expect(watchData).toMatchObject([
+        {
+          payload: {},
+          type: 'workflow-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
+        },
+        {
+          payload: {
+            id: 'step1',
+            startedAt: expect.any(Number),
+            status: 'running',
+            payload: {},
+          },
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
+        },
+        {
+          payload: {
+            id: 'step1',
+            output: {
+              value: 1000,
+            },
+            endedAt: expect.any(Number),
+            status: 'success',
+          },
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
+        },
+        {
+          payload: {
+            id: 'sleep_mock-uuid-1',
+            startedAt: expect.any(Number),
+            status: 'waiting',
+            payload: {
+              value: 1000,
+            },
+          },
+          type: 'workflow-step-waiting',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
+        },
+        {
+          payload: {
+            id: 'sleep_mock-uuid-1',
+            endedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              value: 1000,
+            },
+          },
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
+        },
+        {
+          payload: {
+            id: 'step2',
+            payload: {
+              value: 1000,
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
+          },
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
+        },
+        {
+          payload: {
+            id: 'step2',
+            output: {
+              value: 2000,
+            },
+            endedAt: expect.any(Number),
+            status: 'success',
+          },
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
+        },
+        {
+          payload: {
+            metadata: {},
+            output: {
+              usage: {
+                inputTokens: 0,
+                outputTokens: 0,
+                totalTokens: 0,
+              },
+            },
+          },
+          type: 'workflow-finish',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
+        },
+      ]);
+      // Verify execution completed successfully
+      expect(executionResult.steps.step1).toEqual({
+        status: 'success',
+        output: { value: 1000 },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(executionResult.steps.step2).toEqual({
+        status: 'success',
+        output: { value: 2000 },
+        payload: {
+          value: 1000,
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    });
+
+    it('should preserve input property from snapshot context after resume', async () => {
+      const step1Action = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          await suspend();
+          return undefined;
+        })
+        .mockImplementationOnce(() => ({ result: 'resumed' }));
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({ originalInput: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ originalInput: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).commit();
+
+      new Mastra({
+        storage: testStorage,
+        workflows: { 'test-workflow': workflow },
+      });
+
+      const run = await workflow.createRun({ runId: 'test-run-id' });
+      const originalInput = { originalInput: 'original-data' };
+
+      let streamResult = run.streamVNext({ inputData: originalInput });
+
+      for await (const _data of streamResult) {
+      }
+
+      const resumeData = { stepId: 'step1', context: { differentData: 'resume-data' } };
+      streamResult = run.resumeStreamVNext({ resumeData: resumeData as any, step: step1 });
+      for await (const _data of streamResult) {
+      }
+
+      const result = await streamResult.result;
+      if (!result) {
+        expect.fail('Execution result is not set');
+      }
+
+      expect.assertions(3);
+      // Verify that the input property is preserved from the original snapshot context
+      // This is the key test: input should come from snapshot.context.input, not from resumeData
+      expect(result.steps.input).toEqual(originalInput);
+
+      // Also verify that the step received the original input as payload, not the resume data
+      expect(result.steps.step1.payload).toEqual(originalInput);
+
+      // Verify that resume data is separate from the input
+      if (result.steps.step1.status === 'success') {
+        expect(result.steps.step1).toMatchObject({
+          output: { result: 'resumed' },
+          resumePayload: { stepId: 'step1', context: { differentData: 'resume-data' } },
+        });
+      }
     });
   });
 
@@ -1164,7 +3195,7 @@ describe('Workflow', () => {
 
       workflow.then(step1).then(step2).commit();
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       const result = await run.start({ inputData: { value: 'bail' } });
 
       expect(result.steps['step1']).toEqual({
@@ -1177,7 +3208,7 @@ describe('Workflow', () => {
 
       expect(result.steps['step2']).toBeUndefined();
 
-      const run2 = await workflow.createRunAsync();
+      const run2 = await workflow.createRun();
       const result2 = await run2.start({ inputData: { value: 'no-bail' } });
 
       expect(result2.steps['step1']).toEqual({
@@ -1197,7 +3228,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should throw error when execution flow not defined', () => {
+    it('should throw error when execution flow not defined', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
@@ -1215,12 +3246,12 @@ describe('Workflow', () => {
         steps: [step1],
       });
 
-      expect(() => workflow.createRun()).toThrowError(
+      await expect(workflow.createRun()).rejects.toThrowError(
         'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
       );
     });
 
-    it('should throw error when execution graph is not committed', () => {
+    it('should throw error when execution graph is not committed', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
@@ -1240,9 +3271,54 @@ describe('Workflow', () => {
 
       workflow.then(step1);
 
-      expect(() => workflow.createRun()).toThrowError(
+      expect(workflow.committed).toBe(false);
+
+      await expect(workflow.createRun()).rejects.toThrowError(
         'Uncommitted step flow changes detected. Call .commit() to register the steps.',
       );
+    });
+
+    it('should automatically commit uncommitted workflow when registering in mastra instance', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1);
+
+      expect(workflow.committed).toBe(false);
+
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
+
+      expect(workflow.committed).toBe(true);
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(execute).toHaveBeenCalled();
+      expect(result.status).toBe('success');
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
     });
 
     it('should execute a single step workflow successfully', async () => {
@@ -1265,13 +3341,199 @@ describe('Workflow', () => {
 
       workflow.then(step1).commit();
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       const result = await run.start({ inputData: {} });
 
       expect(execute).toHaveBeenCalled();
       expect(result.steps['step1']).toEqual({
         status: 'success',
         output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    });
+
+    it('should execute a single step workflow successfully with state', async () => {
+      let calls = 0;
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ state }) => {
+          calls++;
+          return { result: 'success', value: state.value };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), value: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+          // someOtherValue: z.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+          value: z.string(),
+        }),
+        stateSchema: z.object({
+          value: z.string(),
+          otherValue: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({
+        inputData: {},
+        initialState: { value: 'test-state', otherValue: 'test-other-state' },
+      });
+
+      expect(calls).toBe(1);
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    });
+
+    it('should execute a single step nested workflow successfully with state', async () => {
+      let calls = 0;
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ state }) => {
+          calls++;
+          return { result: 'success', value: state.value };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), value: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+          // someOtherValue: z.string(),
+        }),
+      });
+
+      const nestedWorkflow = createWorkflow({
+        id: 'nested-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), value: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+          // someOtherValue: z.string(),
+        }),
+        steps: [step1],
+      })
+        .then(step1)
+        .commit();
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+          value: z.string(),
+        }),
+        stateSchema: z.object({
+          value: z.string(),
+          otherValue: z.string(),
+        }),
+        steps: [nestedWorkflow],
+      });
+
+      workflow.then(nestedWorkflow).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({
+        inputData: {},
+        initialState: { value: 'test-state', otherValue: 'test-other-state' },
+      });
+
+      expect(calls).toBe(1);
+      expect(result.steps['nested-workflow']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    });
+
+    it('should execute a single step nested workflow successfully with state being set by the nested workflow', async () => {
+      let calls = 0;
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ state, setState }) => {
+          calls++;
+          setState({ ...state, value: state.value + '!!!' });
+          return {};
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema: z.object({
+          value: z.string(),
+          // someOtherValue: z.string(),
+        }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ state }) => {
+          calls++;
+          return { result: 'success', value: state.value };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), value: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+          // someOtherValue: z.string(),
+        }),
+      });
+
+      const nestedWorkflow = createWorkflow({
+        id: 'nested-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), value: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+          // someOtherValue: z.string(),
+        }),
+        steps: [step1, step2],
+      })
+        .then(step1)
+        .then(step2)
+        .commit();
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+          value: z.string(),
+        }),
+        stateSchema: z.object({
+          value: z.string(),
+          otherValue: z.string(),
+        }),
+        steps: [nestedWorkflow],
+      });
+
+      workflow.then(nestedWorkflow).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({
+        inputData: {},
+        initialState: { value: 'test-state', otherValue: 'test-other-state' },
+      });
+
+      expect(calls).toBe(2);
+      expect(result.steps['nested-workflow']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state!!!' },
         payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
@@ -1300,7 +3562,7 @@ describe('Workflow', () => {
 
       workflow.then(step1).commit();
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       const result = await run.start({ inputData: {} });
 
       expect(execute).toHaveBeenCalled();
@@ -1343,7 +3605,7 @@ describe('Workflow', () => {
 
       workflow.parallel([step1, step2]).commit();
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       const result = await run.start({ inputData: {} });
 
       expect(step1Action).toHaveBeenCalled();
@@ -1361,6 +3623,310 @@ describe('Workflow', () => {
         step2: {
           status: 'success',
           output: { value: 'step2' },
+          payload: {},
+
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
+    it('should properly update snapshot when executing multiple steps in parallel', async () => {
+      // Create step actions with delays to simulate real execution
+      const initialStepAction = vi.fn().mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return { result: 'initial step done' };
+      });
+
+      const parallelStep1Action = vi.fn().mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return { result: 'parallelStep1 done' };
+      });
+
+      const parallelStep2Action = vi.fn().mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return { result: 'parallelStep2 done' };
+      });
+
+      const parallelStep3Action = vi.fn().mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return { result: 'parallelStep3 done' };
+      });
+
+      const finalStepAction = vi.fn().mockImplementation(async () => {
+        return { result: 'All done!' };
+      });
+
+      // Create steps
+      const initialStep = createStep({
+        id: 'initialStep',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: initialStepAction,
+      });
+
+      const parallelStep1 = createStep({
+        id: 'parallelStep1',
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: parallelStep1Action,
+      });
+
+      const parallelStep2 = createStep({
+        id: 'parallelStep2',
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: parallelStep2Action,
+      });
+
+      const parallelStep3 = createStep({
+        id: 'parallelStep3',
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: parallelStep3Action,
+      });
+
+      const finalStep = createStep({
+        id: 'finalStep',
+        inputSchema: z.object({
+          parallelStep1: z.object({ result: z.string() }),
+          parallelStep2: z.object({ result: z.string() }),
+          parallelStep3: z.object({ result: z.string() }),
+        }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: finalStepAction,
+      });
+
+      // Create workflow
+      const testParallelWorkflow = createWorkflow({
+        id: 'test-parallel-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [initialStep, parallelStep1, parallelStep2, parallelStep3, finalStep],
+      })
+        .then(initialStep)
+        .parallel([parallelStep1, parallelStep2, parallelStep3])
+        .then(finalStep)
+        .commit();
+
+      // Initialize Mastra with testStorage
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-parallel-workflow': testParallelWorkflow },
+      });
+
+      // Create and start workflow run (fire and forget)
+      const run = await testParallelWorkflow.createRun();
+
+      // Start workflow without awaiting
+      const workflowPromise = run.start({ inputData: { input: 'test' } });
+
+      // Poll to verify parallel steps go through "running" state
+      let foundAllRunning = false;
+      let allStepsPresentThroughout = true;
+      const seenSteps = new Set<string>();
+      const pollResults: any[] = [];
+
+      // Wait a bit for the workflow to start
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Poll until workflow completes
+      while (true) {
+        const currentResult = await testParallelWorkflow.getWorkflowRunExecutionResult(run.runId);
+
+        if (!currentResult) {
+          allStepsPresentThroughout = false;
+          break;
+        }
+        const runningSteps = Object.keys(currentResult.steps).filter(
+          stepName => currentResult.steps[stepName]?.status === 'running',
+        );
+        const runningStepIsInActiveStepsPath = runningSteps.every(stepName => currentResult.activeStepsPath[stepName]);
+
+        expect(runningStepIsInActiveStepsPath).toBe(true);
+
+        expect(runningSteps.length).toBe(Object.keys(currentResult.activeStepsPath).length);
+
+        pollResults.push({
+          status: currentResult.status,
+          stepStatuses: {
+            initialStep: currentResult.steps?.['initialStep']?.status,
+            parallelStep1: currentResult.steps?.['parallelStep1']?.status,
+            parallelStep2: currentResult.steps?.['parallelStep2']?.status,
+            parallelStep3: currentResult.steps?.['parallelStep3']?.status,
+            finalStep: currentResult.steps?.['finalStep']?.status,
+          },
+        });
+
+        // Track which steps we've seen
+        if (currentResult.steps) {
+          Object.keys(currentResult.steps).forEach(stepName => {
+            if (stepName !== 'input' && stepName !== 'metadata') {
+              seenSteps.add(stepName);
+            }
+          });
+        }
+
+        // Check if all three parallel steps are running simultaneously
+        const parallelStep1Status = currentResult.steps?.['parallelStep1']?.status;
+        const parallelStep2Status = currentResult.steps?.['parallelStep2']?.status;
+        const parallelStep3Status = currentResult.steps?.['parallelStep3']?.status;
+
+        if (
+          parallelStep1Status === 'running' &&
+          parallelStep2Status === 'running' &&
+          parallelStep3Status === 'running'
+        ) {
+          foundAllRunning = true;
+        }
+
+        // Verify no step disappears once it has appeared
+        if (seenSteps.has('parallelStep1') && !currentResult.steps?.['parallelStep1']) {
+          allStepsPresentThroughout = false;
+        }
+        if (seenSteps.has('parallelStep2') && !currentResult.steps?.['parallelStep2']) {
+          allStepsPresentThroughout = false;
+        }
+        if (seenSteps.has('parallelStep3') && !currentResult.steps?.['parallelStep3']) {
+          allStepsPresentThroughout = false;
+        }
+
+        // Break if workflow is complete
+        if (currentResult.status === 'success' || currentResult.status === 'failed') {
+          break;
+        }
+
+        // Poll every 50ms
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+
+      // Wait for workflow to complete
+      await workflowPromise;
+
+      // Get final workflow execution result
+      const result = await testParallelWorkflow.getWorkflowRunExecutionResult(run.runId);
+
+      // Verify all parallel steps went through running state
+      expect(foundAllRunning).toBe(true);
+
+      // Verify no step information disappeared during polling
+      expect(allStepsPresentThroughout).toBe(true);
+
+      // Verify all step actions were called
+      expect(initialStepAction).toHaveBeenCalled();
+      expect(parallelStep1Action).toHaveBeenCalled();
+      expect(parallelStep2Action).toHaveBeenCalled();
+      expect(parallelStep3Action).toHaveBeenCalled();
+      expect(finalStepAction).toHaveBeenCalled();
+
+      // Verify workflow status
+      expect(result?.status).toBe('success');
+
+      // Verify all steps have correct status and output
+      expect(result?.steps).toMatchObject({
+        initialStep: {
+          status: 'success',
+          output: { result: 'initial step done' },
+          payload: {},
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        parallelStep1: {
+          status: 'success',
+          output: { result: 'parallelStep1 done' },
+          payload: {},
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        parallelStep2: {
+          status: 'success',
+          output: { result: 'parallelStep2 done' },
+          payload: {},
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        parallelStep3: {
+          status: 'success',
+          output: { result: 'parallelStep3 done' },
+          payload: {},
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        finalStep: {
+          status: 'success',
+          output: { result: 'All done!' },
+          payload: {},
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      // Verify that parallel steps started after initial step
+      expect(result?.steps['parallelStep1']?.startedAt).toBeGreaterThanOrEqual(result?.steps['initialStep']?.endedAt!);
+      expect(result?.steps['parallelStep2']?.startedAt).toBeGreaterThanOrEqual(result?.steps['initialStep']?.endedAt!);
+      expect(result?.steps['parallelStep3']?.startedAt).toBeGreaterThanOrEqual(result?.steps['initialStep']?.endedAt!);
+
+      // Verify that final step started after all parallel steps completed
+      const maxParallelEndTime = Math.max(
+        result?.steps['parallelStep1']?.endedAt!,
+        result?.steps['parallelStep2']?.endedAt!,
+        result?.steps['parallelStep3']?.endedAt!,
+      );
+      expect(result?.steps['finalStep']?.startedAt).toBeGreaterThanOrEqual(maxParallelEndTime);
+    });
+
+    it('should execute multiple steps in parallel with state', async () => {
+      const step1Action = vi.fn().mockImplementation(async ({ state }) => {
+        return { value: 'step1', value2: state.value };
+      });
+      const step2Action = vi.fn().mockImplementation(async ({ state }) => {
+        return { value: 'step2', value2: state.value };
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        stateSchema: z.object({ value: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        stateSchema: z.object({ value: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        stateSchema: z.object({ value: z.string() }),
+        steps: [step1, step2],
+      });
+
+      workflow.parallel([step1, step2]).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {}, initialState: { value: 'test-state' } });
+
+      expect(step1Action).toHaveBeenCalled();
+      expect(step2Action).toHaveBeenCalled();
+      expect(result.steps).toEqual({
+        input: {},
+        step1: {
+          status: 'success',
+          output: { value: 'step1', value2: 'test-state' },
+          payload: {},
+
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        step2: {
+          status: 'success',
+          output: { value: 'step2', value2: 'test-state' },
           payload: {},
 
           startedAt: expect.any(Number),
@@ -1390,7 +3956,7 @@ describe('Workflow', () => {
 
       workflow.then(step1).commit();
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       const result = await run.start({ inputData: {} });
 
       expect(result.steps).toEqual({
@@ -1431,7 +3997,7 @@ describe('Workflow', () => {
 
         workflow.then(step1).then(step2).commit();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: { inputData: 'test-input' } });
 
         expect(result.steps.step1).toEqual({
@@ -1461,17 +4027,6 @@ describe('Workflow', () => {
           return { value: 'step1-result' };
         });
 
-        const step2Action = vi.fn().mockImplementation(async ({ getStepResult }) => {
-          // Test accessing previous step result with type
-          const step1Result = getStepResult(step1);
-          expect(step1Result).toEqual({ value: 'step1-result' });
-
-          const failedStep = getStepResult(nonExecutedStep);
-          expect(failedStep).toBe(null);
-
-          return { value: 'step2-result' };
-        });
-
         const step1 = createStep({
           id: 'step1',
           execute: step1Action,
@@ -1480,7 +4035,18 @@ describe('Workflow', () => {
         });
         const step2 = createStep({
           id: 'step2',
-          execute: step2Action,
+          execute: async ({ getStepResult }) => {
+            // Test accessing previous step result with type
+            const step1Result = getStepResult(step1);
+            expect(step1Result).toEqual({ value: 'step1-result' });
+            const step1ResultFromString = getStepResult('step1');
+            expect(step1ResultFromString).toEqual({ value: 'step1-result' });
+
+            const failedStep = getStepResult(nonExecutedStep);
+            expect(failedStep).toBe(null);
+
+            return { value: 'step2-result' };
+          },
           inputSchema: z.object({ value: z.string() }),
           outputSchema: z.object({ value: z.string() }),
         });
@@ -1500,11 +4066,11 @@ describe('Workflow', () => {
 
         workflow.then(step1).then(step2).commit();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: { inputValue: 'test-input' } });
 
         expect(step1Action).toHaveBeenCalled();
-        expect(step2Action).toHaveBeenCalled();
+        // expect(step2Action).toHaveBeenCalled();
         expect(result.steps).toEqual({
           input: { inputValue: 'test-input' },
           step1: {
@@ -1551,7 +4117,7 @@ describe('Workflow', () => {
 
         workflow.then(step1).commit();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         await run.start({ inputData: { inputData: 'test-input' } });
 
         expect(execute).toHaveBeenCalledWith(
@@ -1593,7 +4159,7 @@ describe('Workflow', () => {
 
         workflow.then(step1).then(step2).commit();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: { cool: 'test-input' } });
 
         expect(execute).toHaveBeenCalledWith(
@@ -1645,7 +4211,7 @@ describe('Workflow', () => {
 
         workflow.then(step1).then(step2).commit();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: { cool: 'test-input' } });
 
         expect(execute).toHaveBeenCalledWith(
@@ -1664,7 +4230,7 @@ describe('Workflow', () => {
         });
       });
 
-      it('should resolve trigger data and DI runtimeContext values via .map()', async () => {
+      it('should resolve trigger data and DI requestContext values via .map()', async () => {
         const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
         const triggerSchema = z.object({
           cool: z.string(),
@@ -1700,18 +4266,18 @@ describe('Workflow', () => {
               path: 'cool',
             }),
             test2: {
-              runtimeContextPath: 'life',
+              requestContextPath: 'life',
               schema: z.number(),
             },
           })
           .then(step2)
           .commit();
 
-        const runtimeContext = new RuntimeContext<{ life: number }>();
-        runtimeContext.set('life', 42);
+        const requestContext = new RequestContext<{ life: number }>();
+        requestContext.set('life', 42);
 
-        const run = await workflow.createRunAsync();
-        const result = await run.start({ inputData: { cool: 'test-input' }, runtimeContext });
+        const run = await workflow.createRun();
+        const result = await run.start({ inputData: { cool: 'test-input' }, requestContext });
 
         expect(execute).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -1786,7 +4352,7 @@ describe('Workflow', () => {
           })
           .commit();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: { cool: 'test-input' } });
 
         if (result.status !== 'success') {
@@ -1875,7 +4441,7 @@ describe('Workflow', () => {
           })
           .commit();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: { cool: 'test-input' } });
 
         if (result.status !== 'success') {
@@ -1948,7 +4514,7 @@ describe('Workflow', () => {
           .then(step2)
           .commit();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         await run.start({ inputData: {} });
 
         expect(step2Action).toHaveBeenCalledWith(
@@ -1986,7 +4552,7 @@ describe('Workflow', () => {
 
         workflow.then(step1).then(step2).commit();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: {} });
 
         expect(result.steps).toEqual({
@@ -2036,7 +4602,7 @@ describe('Workflow', () => {
 
         workflow.then(step1).then(step2).commit();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: {} });
 
         expect(result.steps).toEqual({
@@ -2095,7 +4661,7 @@ describe('Workflow', () => {
           .then(step2)
           .commit();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: {} });
 
         expect(result.steps).toMatchObject({
@@ -2162,7 +4728,7 @@ describe('Workflow', () => {
           .then(step2)
           .commit();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: { cool: 'test-input' } });
 
         expect(execute).toHaveBeenCalledWith(
@@ -2220,7 +4786,7 @@ describe('Workflow', () => {
           .then(step2)
           .commit();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: { cool: 'test-input' } });
 
         expect(execute).toHaveBeenCalledWith(
@@ -2311,7 +4877,7 @@ describe('Workflow', () => {
           .then(step4)
           .commit();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: { status: 'success' } });
 
         expect(step1Action).toHaveBeenCalled();
@@ -2322,6 +4888,95 @@ describe('Workflow', () => {
           step1: { status: 'success', output: { status: 'success' } },
           step2: { status: 'success', output: { result: 'step2' } },
           step4: { status: 'success', output: { result: 'step2' } },
+        });
+      });
+
+      it('should follow conditional chains with state', async () => {
+        const step1Action = vi.fn().mockImplementation(({ state }) => {
+          return Promise.resolve({ status: 'success', value: state.value });
+        });
+        const step2Action = vi.fn().mockImplementation(({ state }) => {
+          return Promise.resolve({ result: 'step2', value: state.value });
+        });
+        const step3Action = vi.fn().mockImplementation(({ state }) => {
+          return Promise.resolve({ result: 'step3', value: state.value });
+        });
+
+        const step1 = createStep({
+          id: 'step1',
+          execute: step1Action,
+          inputSchema: z.object({ status: z.string() }),
+          outputSchema: z.object({ status: z.string() }),
+          stateSchema: z.object({ value: z.string() }),
+        });
+        const step2 = createStep({
+          id: 'step2',
+          execute: step2Action,
+          inputSchema: z.object({ status: z.string() }),
+          outputSchema: z.object({ result: z.string() }),
+          stateSchema: z.object({ value: z.string() }),
+        });
+        const step3 = createStep({
+          id: 'step3',
+          execute: step3Action,
+          inputSchema: z.object({ status: z.string() }),
+          outputSchema: z.object({ result: z.string() }),
+          stateSchema: z.object({ value: z.string() }),
+        });
+        const step4 = createStep({
+          id: 'step4',
+          execute: async ({ inputData, state }) => {
+            return { result: inputData.result, value: state.value };
+          },
+          inputSchema: z.object({ result: z.string() }),
+          outputSchema: z.object({ result: z.string() }),
+          stateSchema: z.object({ value: z.string() }),
+        });
+
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: z.object({ status: z.string() }),
+          outputSchema: z.object({ result: z.string() }),
+          steps: [step1, step2, step3],
+          stateSchema: z.object({ value: z.string() }),
+        });
+
+        workflow
+          .then(step1)
+          .branch([
+            [
+              async ({ inputData }) => {
+                return inputData.status === 'success';
+              },
+              step2,
+            ],
+            [
+              async ({ inputData }) => {
+                return inputData.status === 'failed';
+              },
+              step3,
+            ],
+          ])
+          .map({
+            result: {
+              step: [step3, step2],
+              path: 'result',
+            },
+          })
+          .then(step4)
+          .commit();
+
+        const run = await workflow.createRun();
+        const result = await run.start({ inputData: { status: 'success' }, initialState: { value: 'test-state' } });
+
+        expect(step1Action).toHaveBeenCalled();
+        expect(step2Action).toHaveBeenCalled();
+        expect(step3Action).not.toHaveBeenCalled();
+        expect(result.steps).toMatchObject({
+          input: { status: 'success' },
+          step1: { status: 'success', output: { status: 'success', value: 'test-state' } },
+          step2: { status: 'success', output: { result: 'step2', value: 'test-state' } },
+          step4: { status: 'success', output: { result: 'step2', value: 'test-state' } },
         });
       });
 
@@ -2355,7 +5010,7 @@ describe('Workflow', () => {
 
         workflow.then(step1).then(step2).commit();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         let result: Awaited<ReturnType<typeof run.start>> | undefined = undefined;
         try {
           result = await run.start({ inputData: {} });
@@ -2406,6 +5061,9 @@ describe('Workflow', () => {
           inputSchema: z.object({}),
           outputSchema: z.object({}),
           steps: [step1, step2, step3],
+          options: {
+            validateInputs: false,
+          },
         });
         workflow
           .then(step1)
@@ -2433,7 +5091,7 @@ describe('Workflow', () => {
           ])
           .commit();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: { status: 'success' } });
 
         expect(step1Action).toHaveBeenCalled();
@@ -2468,6 +5126,7 @@ describe('Workflow', () => {
           id: 'step1',
           execute: step1Action,
           inputSchema: z.object({}),
+          resumeSchema: z.object({ count: z.number() }),
           outputSchema: z.object({ count: z.number() }),
         });
         const step2 = createStep({
@@ -2481,6 +5140,9 @@ describe('Workflow', () => {
           id: 'test-workflow',
           inputSchema: z.object({}),
           outputSchema: z.object({}),
+          options: {
+            validateInputs: false,
+          },
         });
 
         workflow
@@ -2497,7 +5159,7 @@ describe('Workflow', () => {
           ])
           .commit();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: { count: 5 } });
 
         expect(step2Action).toHaveBeenCalled();
@@ -2543,12 +5205,12 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result: z.string(),
         }),
-        steps: [step1],
+        steps: [step1, step2],
       });
 
       workflow.then(step1).sleep(1000).then(step2).commit();
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       const startTime = Date.now();
       const result = await run.start({ inputData: {} });
       const endTime = Date.now();
@@ -2570,7 +5232,8 @@ describe('Workflow', () => {
         endedAt: expect.any(Number),
       });
 
-      expect(endTime - startTime).toBeGreaterThanOrEqual(1000);
+      // Allow for slight timing variance (999ms is close enough to 1000ms)
+      expect(endTime - startTime).toBeGreaterThanOrEqual(990);
     });
 
     it('should execute a sleep step with fn parameter', async () => {
@@ -2596,7 +5259,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result: z.string(),
         }),
-        steps: [step1],
+        steps: [step1, step2],
       });
 
       workflow
@@ -2607,7 +5270,7 @@ describe('Workflow', () => {
         .then(step2)
         .commit();
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       const startTime = Date.now();
       const result = await run.start({ inputData: {} });
       const endTime = Date.now();
@@ -2655,7 +5318,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result: z.string(),
         }),
-        steps: [step1],
+        steps: [step1, step2],
       });
 
       workflow
@@ -2664,7 +5327,7 @@ describe('Workflow', () => {
         .then(step2)
         .commit();
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       const startTime = Date.now();
       const result = await run.start({ inputData: {} });
       const endTime = Date.now();
@@ -2712,7 +5375,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result: z.string(),
         }),
-        steps: [step1],
+        steps: [step1, step2],
       });
 
       workflow
@@ -2723,7 +5386,7 @@ describe('Workflow', () => {
         .then(step2)
         .commit();
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       const startTime = Date.now();
       const result = await run.start({ inputData: {} });
       const endTime = Date.now();
@@ -2748,7 +5411,7 @@ describe('Workflow', () => {
       expect(endTime - startTime).toBeGreaterThan(900);
     });
 
-    it('should execute a waitForEvent step', async () => {
+    it('should throw error if waitForEvent is used', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
@@ -2773,95 +5436,19 @@ describe('Workflow', () => {
           result: z.string(),
           resumed: z.any(),
         }),
-        steps: [step1],
+        steps: [step1, step2],
       });
 
-      workflow.then(step1).waitForEvent('hello-event', step2).commit();
-
-      const run = await workflow.createRunAsync();
-      const startTime = Date.now();
-      setTimeout(() => {
-        run.sendEvent('hello-event', { data: 'hello' });
-      }, 1000);
-      const result = await run.start({ inputData: {} });
-      console.dir({ result }, { depth: null });
-      const endTime = Date.now();
-
-      expect(execute).toHaveBeenCalled();
-      expect(result.steps['step1']).toEqual({
-        status: 'success',
-        output: { result: 'success' },
-        payload: {},
-        startedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
-
-      expect(result.steps['step2']).toEqual({
-        status: 'success',
-        output: { result: 'success', resumed: { data: 'hello' } },
-        payload: { result: 'success' },
-        resumePayload: { data: 'hello' },
-        resumedAt: expect.any(Number),
-        startedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
-
-      expect(endTime - startTime).toBeGreaterThan(900);
-    });
-
-    it('should execute a waitForEvent step after timeout', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
-      const step1 = createStep({
-        id: 'step1',
-        execute,
-        inputSchema: z.object({}),
-        outputSchema: z.object({ result: z.string() }),
-      });
-      const step2 = createStep({
-        id: 'step2',
-        execute: async ({ inputData, resumeData }) => {
-          return { result: inputData.result, resumed: resumeData };
-        },
-        inputSchema: z.object({ result: z.string() }),
-        outputSchema: z.object({ result: z.string(), resumed: z.any() }),
-        resumeSchema: z.any(),
-      });
-
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({}),
-        outputSchema: z.object({
-          result: z.string(),
-          resumed: z.any(),
-        }),
-        steps: [step1],
-      });
-
-      workflow.then(step1).waitForEvent('hello-event', step2, { timeout: 1000 }).commit();
-
-      const run = await workflow.createRunAsync();
-      const startTime = Date.now();
-      const result = await run.start({ inputData: {} });
-      const endTime = Date.now();
-
-      expect(execute).toHaveBeenCalled();
-      expect(result.steps['step1']).toEqual({
-        status: 'success',
-        output: { result: 'success' },
-        payload: {},
-        startedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
-
-      expect(result.steps['step2']).toEqual({
-        status: 'failed',
-        error: expect.any(Error),
-        payload: { result: 'success' },
-        startedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
-
-      expect(endTime - startTime).toBeGreaterThan(900);
+      try {
+        // @ts-expect-error - we expect this to throw an error
+        workflow.then(step1).waitForEvent('hello-event', step2).commit();
+      } catch (error) {
+        expect(error).toBeInstanceOf(MastraError);
+        expect(error).toHaveProperty(
+          'message',
+          'waitForEvent has been removed. Please use suspend & resume flow instead. See https://mastra.ai/en/docs/workflows/suspend-and-resume for more details.',
+        );
+      }
     });
 
     it('should only update workflow status to success after all steps have run successfully', async () => {
@@ -2905,8 +5492,8 @@ describe('Workflow', () => {
         workflows: { incrementWorkflow },
       });
 
-      const run = await incrementWorkflow.createRunAsync();
-      const { stream, getWorkflowState } = run.stream({ inputData: { value: 0 } });
+      const run = await incrementWorkflow.createRun();
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: { value: 0 } });
 
       for await (const data of stream) {
         if (data.type === 'step-finish' && (data as any).payload.id === 'increment') {
@@ -2919,6 +5506,114 @@ describe('Workflow', () => {
       }
       const finalResult = await getWorkflowState();
       expect(finalResult.status).toBe('success');
+    });
+
+    it('should return workflow run execution result with nested workflow steps information', async () => {
+      const incrementStep = createStep({
+        id: 'increment',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const nestedIncrementWorkflowAgain = createWorkflow({
+        id: 'nested-increment-workflow-again',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(incrementStep)
+        .commit();
+
+      const nestedIncrementWorkflow = createWorkflow({
+        id: 'nested-increment-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(nestedIncrementWorkflowAgain)
+        .commit();
+
+      const incrementWorkflow = createWorkflow({
+        id: 'increment-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(nestedIncrementWorkflow)
+        .then(
+          createStep({
+            id: 'final',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            execute: async ({ inputData }) => {
+              return { value: inputData.value };
+            },
+          }),
+        )
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { incrementWorkflow },
+      });
+
+      const run = await incrementWorkflow.createRun();
+      await run.start({ inputData: { value: 0 } });
+      const result = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
+      expect(result?.status).toBe('success');
+      expect(result?.steps).toMatchObject({
+        'nested-increment-workflow': {
+          payload: {
+            value: 0,
+          },
+          startedAt: expect.any(Number),
+          status: 'success',
+          output: {
+            value: 1,
+          },
+          endedAt: expect.any(Number),
+        },
+        'nested-increment-workflow.nested-increment-workflow-again': {
+          payload: {
+            value: 0,
+          },
+          startedAt: expect.any(Number),
+          status: 'success',
+          output: {
+            value: 1,
+          },
+          endedAt: expect.any(Number),
+        },
+        'nested-increment-workflow.nested-increment-workflow-again.increment': {
+          payload: {
+            value: 0,
+          },
+          startedAt: expect.any(Number),
+          status: 'success',
+          output: {
+            value: 1,
+          },
+          endedAt: expect.any(Number),
+        },
+        final: {
+          payload: {
+            value: 1,
+          },
+          startedAt: expect.any(Number),
+          status: 'success',
+          output: {
+            value: 1,
+          },
+          endedAt: expect.any(Number),
+        },
+      });
     });
   }, 10000); //we have a 5 second timeout for the final step in the workflow
 
@@ -2952,7 +5647,7 @@ describe('Workflow', () => {
 
       workflow.then(step1).sleep(1000).then(step2).commit();
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       const p = run.start({ inputData: { value: 'test' } });
 
       setTimeout(() => {
@@ -3002,7 +5697,7 @@ describe('Workflow', () => {
 
       workflow.then(step1).then(step2).commit();
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       const p = run.start({ inputData: { value: 'test' } });
 
       await run.cancel();
@@ -3065,7 +5760,7 @@ describe('Workflow', () => {
 
       workflow.then(step1).then(step2).commit();
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       const p = run.start({ inputData: { value: 'test' } });
 
       setTimeout(() => {
@@ -3115,7 +5810,7 @@ describe('Workflow', () => {
 
       workflow.then(step1).commit();
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
 
       const result = await run.start({ inputData: {} });
 
@@ -3171,7 +5866,7 @@ describe('Workflow', () => {
         .then(step2)
         .commit();
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       await expect(run.start({ inputData: {} })).resolves.toMatchObject({
         steps: {
           step1: {
@@ -3194,6 +5889,118 @@ describe('Workflow', () => {
           },
         },
       });
+    });
+
+    it('should persist error message without stack trace in snapshot', async () => {
+      const mockStorage = new MockStore();
+      const persistSpy = vi.spyOn(mockStorage, 'persistWorkflowSnapshot');
+
+      const mastra = new Mastra({
+        storage: mockStorage,
+      });
+
+      const errorMessage = 'Test error: step execution failed.';
+      const failingAction = vi.fn<any>().mockImplementation(() => {
+        throw new Error(errorMessage);
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: failingAction,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        mastra,
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+      expect(persistSpy).toHaveBeenCalled();
+
+      const persistCall = persistSpy.mock.calls[persistSpy.mock.calls.length - 1];
+      const snapshot = persistCall?.[0]?.snapshot;
+
+      expect(snapshot).toBeDefined();
+      expect(snapshot.status).toBe('failed');
+
+      const step1Result = snapshot.context.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result?.status).toBe('failed');
+
+      const failedStepResult = step1Result as Extract<typeof step1Result, { status: 'failed' }>;
+      expect(failedStepResult.error).toBeDefined();
+      expect(failedStepResult.error).toBe('Error: ' + errorMessage);
+      expect(String(failedStepResult.error)).not.toContain('at Object.execute');
+      expect(String(failedStepResult.error)).not.toContain('at ');
+      expect(String(failedStepResult.error)).not.toContain('\n');
+    });
+
+    it('should persist MastraError message without stack trace in snapshot', async () => {
+      const mockStorage = new MockStore();
+      const persistSpy = vi.spyOn(mockStorage, 'persistWorkflowSnapshot');
+
+      const mastra = new Mastra({
+        storage: mockStorage,
+      });
+
+      const errorMessage = 'Step execution failed.';
+      const failingAction = vi.fn<any>().mockImplementation(() => {
+        throw new MastraError({
+          id: 'VALIDATION_ERROR',
+          domain: 'MASTRA_WORKFLOW',
+          category: 'USER',
+          text: errorMessage,
+          details: { field: 'test' },
+        });
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: failingAction,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        mastra,
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+      expect(persistSpy).toHaveBeenCalled();
+
+      const persistCall = persistSpy.mock.calls[persistSpy.mock.calls.length - 1];
+      const snapshot = persistCall?.[0]?.snapshot;
+
+      expect(snapshot).toBeDefined();
+      expect(snapshot.status).toBe('failed');
+
+      const step1Result = snapshot.context.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result?.status).toBe('failed');
+
+      const failedStepResult = step1Result as Extract<typeof step1Result, { status: 'failed' }>;
+      expect(failedStepResult.error).toBeDefined();
+      expect(failedStepResult.error).toBe('Error: ' + errorMessage);
+      expect(String(failedStepResult.error)).not.toContain('at Object.execute');
+      expect(String(failedStepResult.error)).not.toContain('at ');
+      expect(String(failedStepResult.error)).not.toContain('\n');
     });
 
     it('should handle step execution errors within branches', async () => {
@@ -3234,7 +6041,7 @@ describe('Workflow', () => {
 
       workflow.parallel([step1, step2]).then(step3).commit();
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       const result = await run.start({ inputData: {} });
 
       expect(result.steps).toMatchObject({
@@ -3303,7 +6110,7 @@ describe('Workflow', () => {
         .then(workflow)
         .commit();
 
-      const run = await mainWorkflow.createRunAsync();
+      const run = await mainWorkflow.createRun();
       const result = await run.start({ inputData: {} });
 
       expect(result.steps).toMatchObject({
@@ -3400,7 +6207,7 @@ describe('Workflow', () => {
         })
         .commit();
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       const result = await run.start({ inputData: {} });
 
       expect(step2Action).toHaveBeenCalled();
@@ -3422,6 +6229,7 @@ describe('Workflow', () => {
 
   describe('Loops', () => {
     it('should run an until loop', async () => {
+      let count = 0;
       const increment = vi.fn().mockImplementation(async ({ inputData }) => {
         // Get the current value (either from trigger or previous increment)
         const currentValue = inputData.value;
@@ -3460,6 +6268,9 @@ describe('Workflow', () => {
       });
 
       const counterWorkflow = createWorkflow({
+        options: {
+          validateInputs: false,
+        },
         steps: [incrementStep, finalStep],
         id: 'counter-workflow',
         inputSchema: z.object({
@@ -3472,13 +6283,14 @@ describe('Workflow', () => {
       });
 
       counterWorkflow
-        .dountil(incrementStep, async ({ inputData }) => {
+        .dountil(incrementStep, async ({ inputData, iterationCount }) => {
+          expect(iterationCount).toBe(++count);
           return (inputData?.value ?? 0) >= 12;
         })
         .then(finalStep)
         .commit();
 
-      const run = await counterWorkflow.createRunAsync();
+      const run = await counterWorkflow.createRun();
       const result = await run.start({ inputData: { target: 10, value: 0 } });
 
       expect(increment).toHaveBeenCalledTimes(12);
@@ -3490,6 +6302,7 @@ describe('Workflow', () => {
     });
 
     it('should run a while loop', async () => {
+      let count = 0;
       const increment = vi.fn().mockImplementation(async ({ inputData }) => {
         // Get the current value (either from trigger or previous increment)
         const currentValue = inputData.value;
@@ -3528,6 +6341,9 @@ describe('Workflow', () => {
       });
 
       const counterWorkflow = createWorkflow({
+        options: {
+          validateInputs: false,
+        },
         steps: [incrementStep, finalStep],
         id: 'counter-workflow',
         inputSchema: z.object({
@@ -3540,13 +6356,14 @@ describe('Workflow', () => {
       });
 
       counterWorkflow
-        .dowhile(incrementStep, async ({ inputData }) => {
+        .dowhile(incrementStep, async ({ inputData, iterationCount }) => {
+          expect(iterationCount).toBe(++count);
           return (inputData?.value ?? 0) < 12;
         })
         .then(finalStep)
         .commit();
 
-      const run = await counterWorkflow.createRunAsync();
+      const run = await counterWorkflow.createRun();
       const result = await run.start({ inputData: { target: 10, value: 0 } });
 
       expect(increment).toHaveBeenCalledTimes(12);
@@ -3596,11 +6413,14 @@ describe('Workflow', () => {
         outputSchema: z.object({
           finalValue: z.number(),
         }),
+        options: {
+          validateInputs: false,
+        },
       });
 
       counterWorkflow.foreach(mapStep).then(finalStep).commit();
 
-      const run = await counterWorkflow.createRunAsync();
+      const run = await counterWorkflow.createRun();
       const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
 
       const endTime = Date.now();
@@ -3625,6 +6445,99 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
+    });
+
+    it('should suspend and resume when running a single item concurrency (default) for loop', async () => {
+      const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) {
+          return suspend({});
+        }
+        return { value: inputData.value + 11 + resumeData.resumeValue };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        resumeSchema: z.object({
+          resumeValue: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        options: {
+          validateInputs: false,
+        },
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+      });
+
+      counterWorkflow.foreach(mapStep).then(finalStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { counterWorkflow },
+      });
+
+      const run = await counterWorkflow.createRun();
+      const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+
+      expect(result.status).toBe('suspended');
+
+      let resumedResult = await run.resume({ resumeData: { resumeValue: 0 } });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 5 } });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 0 } });
+      expect(resumedResult.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(6);
+      expect(resumedResult.steps).toEqual({
+        input: [{ value: 1 }, { value: 22 }, { value: 333 }],
+        map: {
+          status: 'success',
+          output: [{ value: 12 }, { value: 33 + 5 }, { value: 344 }],
+          payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
+          resumePayload: { resumeValue: 0 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 1 + 11 + (22 + 11 + 5) + (333 + 11) },
+          payload: [{ value: 12 }, { value: 33 + 5 }, { value: 344 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+      expect(resumedResult.steps.map.suspendOutput).toBeUndefined();
     });
 
     it('should run a all item concurrency for loop', async () => {
@@ -3664,11 +6577,14 @@ describe('Workflow', () => {
         outputSchema: z.object({
           finalValue: z.number(),
         }),
+        options: {
+          validateInputs: false,
+        },
       });
 
       counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
 
-      const run = await counterWorkflow.createRunAsync();
+      const run = await counterWorkflow.createRun();
       const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
 
       const endTime = Date.now();
@@ -3691,6 +6607,313 @@ describe('Workflow', () => {
           output: { finalValue: 1 + 11 + (22 + 11) + (333 + 11) },
           payload: [{ value: 12 }, { value: 33 }, { value: 344 }],
 
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
+    it('should suspend and resume when running all items concurrency for loop', async () => {
+      const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData && inputData.value > 5) {
+          return suspend({});
+        }
+        return { value: inputData.value + 11 + (resumeData?.resumeValue ?? 0) };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        resumeSchema: z.object({
+          resumeValue: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        options: {
+          validateInputs: false,
+        },
+      });
+
+      counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { counterWorkflow },
+      });
+
+      const run = await counterWorkflow.createRun();
+      const result = await run.start({ inputData: [{ value: 22 }, { value: 1 }, { value: 333 }] });
+
+      expect(result.status).toBe('suspended');
+
+      let resumedResult = await run.resume({ resumeData: { resumeValue: 5 } });
+      expect(resumedResult.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(5);
+      expect(resumedResult.steps).toEqual({
+        input: [{ value: 22 }, { value: 1 }, { value: 333 }],
+        map: {
+          status: 'success',
+          output: [{ value: 33 + 5 }, { value: 12 }, { value: 344 + 5 }],
+          payload: [{ value: 22 }, { value: 1 }, { value: 333 }],
+          resumePayload: { resumeValue: 5 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 22 + 11 + 5 + 1 + 11 + (333 + 11 + 5) },
+          payload: [{ value: 33 + 5 }, { value: 12 }, { value: 344 + 5 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
+    it('should suspend and resume provided index when running all items concurrency for loop', async () => {
+      const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) {
+          return suspend({});
+        }
+        return { value: inputData.value + 11 + resumeData.resumeValue };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        resumeSchema: z.object({
+          resumeValue: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        options: {
+          validateInputs: false,
+        },
+      });
+
+      counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { counterWorkflow },
+      });
+
+      const run = await counterWorkflow.createRun();
+      const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+      expect(result.status).toBe('suspended');
+
+      let resumedResult = await run.resume({ resumeData: { resumeValue: 5 }, forEachIndex: 2 });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 0 }, forEachIndex: 1 });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 3 }, forEachIndex: 0 });
+      expect(resumedResult.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(6);
+      expect(resumedResult.steps).toEqual({
+        input: [{ value: 1 }, { value: 22 }, { value: 333 }],
+        map: {
+          status: 'success',
+          output: [{ value: 12 + 3 }, { value: 33 + 0 }, { value: 344 + 5 }],
+          payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
+          resumePayload: { resumeValue: 3 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 1 + 11 + 3 + (22 + 11 + 0) + (333 + 11 + 5) },
+          payload: [{ value: 12 + 3 }, { value: 33 + 0 }, { value: 344 + 5 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      const run2 = await counterWorkflow.createRun();
+      const result2 = await run2.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+      expect(result2.status).toBe('suspended');
+
+      let resumedResult2 = await run2.resume({ resumeData: { resumeValue: 5 }, forEachIndex: 0 });
+      expect(resumedResult2.status).toBe('suspended');
+
+      resumedResult2 = await run2.resume({ resumeData: { resumeValue: 0 }, forEachIndex: 1 });
+      expect(resumedResult2.status).toBe('suspended');
+
+      resumedResult2 = await run2.resume({ resumeData: { resumeValue: 3 }, forEachIndex: 2 });
+      expect(resumedResult2.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(12);
+      expect(resumedResult2.steps).toEqual({
+        input: [{ value: 1 }, { value: 22 }, { value: 333 }],
+        map: {
+          status: 'success',
+          output: [{ value: 12 + 5 }, { value: 33 + 0 }, { value: 344 + 3 }],
+          payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
+          resumePayload: { resumeValue: 3 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 1 + 11 + 5 + (22 + 11 + 0) + (333 + 11 + 3) },
+          payload: [{ value: 12 + 5 }, { value: 33 + 0 }, { value: 344 + 3 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
+    it('should suspend and resume provided label when running all items concurrency for loop', async () => {
+      let rl = 0;
+      const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) {
+          const newRl = rl++;
+          console.log('suspend', `test-label-${newRl}`);
+          return suspend({}, { resumeLabel: `test-label-${newRl}` });
+        }
+        return { value: inputData.value + 11 + resumeData.resumeValue };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        resumeSchema: z.object({
+          resumeValue: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        options: {
+          validateInputs: false,
+        },
+      });
+
+      counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { counterWorkflow },
+      });
+
+      const run = await counterWorkflow.createRun();
+      const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+      expect(result.status).toBe('suspended');
+
+      let resumedResult = await run.resume({ resumeData: { resumeValue: 5 }, label: 'test-label-2' });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 0 }, label: 'test-label-1' });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 3 }, label: 'test-label-0' });
+      expect(resumedResult.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(6);
+      expect(resumedResult.steps).toEqual({
+        input: [{ value: 1 }, { value: 22 }, { value: 333 }],
+        map: {
+          status: 'success',
+          output: [{ value: 12 + 3 }, { value: 33 + 0 }, { value: 344 + 5 }],
+          payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
+          resumePayload: { resumeValue: 3 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 1 + 11 + 3 + (22 + 11 + 0) + (333 + 11 + 5) },
+          payload: [{ value: 12 + 3 }, { value: 33 + 0 }, { value: 344 + 5 }],
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
@@ -3734,11 +6957,14 @@ describe('Workflow', () => {
         outputSchema: z.object({
           finalValue: z.number(),
         }),
+        options: {
+          validateInputs: false,
+        },
       });
 
       counterWorkflow.foreach(mapStep, { concurrency: 2 }).then(finalStep).commit();
 
-      const run = await counterWorkflow.createRunAsync();
+      const run = await counterWorkflow.createRun();
       const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
 
       const endTime = Date.now();
@@ -3760,6 +6986,192 @@ describe('Workflow', () => {
           status: 'success',
           output: { finalValue: 1 + 11 + (22 + 11) + (333 + 11) },
           payload: [{ value: 12 }, { value: 33 }, { value: 344 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
+    it('should suspend and resume when running a partial item concurrency for loop', async () => {
+      const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData && inputData.value > 5) {
+          return suspend({});
+        }
+        return { value: inputData.value + 11 + (resumeData?.resumeValue ?? 0) };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        resumeSchema: z.object({
+          resumeValue: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        options: {
+          validateInputs: false,
+        },
+      });
+
+      counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { counterWorkflow },
+      });
+
+      const run = await counterWorkflow.createRun();
+      const result = await run.start({
+        inputData: [{ value: 22 }, { value: 1 }, { value: 333 }, { value: 444 }, { value: 1000 }],
+      });
+
+      expect(result.status).toBe('suspended');
+
+      let resumedResult = await run.resume({ resumeData: { resumeValue: 5 } });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 5 } });
+      expect(resumedResult.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(9);
+      expect(resumedResult.steps).toEqual({
+        input: [{ value: 22 }, { value: 1 }, { value: 333 }, { value: 444 }, { value: 1000 }],
+        map: {
+          status: 'success',
+          output: [{ value: 33 + 5 }, { value: 12 }, { value: 344 + 5 }, { value: 455 + 5 }, { value: 1011 + 5 }],
+          payload: [{ value: 22 }, { value: 1 }, { value: 333 }, { value: 444 }, { value: 1000 }],
+          resumePayload: { resumeValue: 5 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 22 + 11 + 5 + 1 + 11 + (333 + 11 + 5) + (444 + 11 + 5) + (1000 + 11 + 5) },
+          payload: [{ value: 33 + 5 }, { value: 12 }, { value: 344 + 5 }, { value: 455 + 5 }, { value: 1011 + 5 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
+    it('should suspend and resume provided index when running a partial item concurrency for loop', async () => {
+      const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData && inputData.value > 5) {
+          return suspend({});
+        }
+        return { value: inputData.value + 11 + (resumeData?.resumeValue ?? 0) };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        resumeSchema: z.object({
+          resumeValue: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        options: { validateInputs: false },
+      });
+
+      counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { counterWorkflow },
+      });
+
+      const run = await counterWorkflow.createRun();
+      const result = await run.start({
+        inputData: [{ value: 22 }, { value: 1 }, { value: 333 }, { value: 444 }, { value: 1000 }],
+      });
+
+      expect(result.status).toBe('suspended');
+
+      let resumedResult = await run.resume({ resumeData: { resumeValue: 5 }, forEachIndex: 2 });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 3 }, forEachIndex: 0 });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 2 }, forEachIndex: 3 });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 8 }, forEachIndex: 4 });
+      expect(resumedResult.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(9);
+      expect(resumedResult.steps).toEqual({
+        input: [{ value: 22 }, { value: 1 }, { value: 333 }, { value: 444 }, { value: 1000 }],
+        map: {
+          status: 'success',
+          output: [{ value: 33 + 3 }, { value: 12 }, { value: 344 + 5 }, { value: 455 + 2 }, { value: 1011 + 8 }],
+          payload: [{ value: 22 }, { value: 1 }, { value: 333 }, { value: 444 }, { value: 1000 }],
+          resumePayload: { resumeValue: 8 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 22 + 11 + 3 + 1 + 11 + (333 + 11 + 5) + (444 + 11 + 2) + (1000 + 11 + 8) },
+          payload: [{ value: 33 + 3 }, { value: 12 }, { value: 344 + 5 }, { value: 455 + 2 }, { value: 1011 + 8 }],
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
@@ -3869,7 +7281,7 @@ describe('Workflow', () => {
         ])
         .commit();
 
-      const run = await counterWorkflow.createRunAsync();
+      const run = await counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 1 } });
 
       expect(start).toHaveBeenCalledTimes(1);
@@ -3983,7 +7395,7 @@ describe('Workflow', () => {
         ])
         .commit();
 
-      const run = await counterWorkflow.createRunAsync();
+      const run = await counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 6 } });
 
       expect(start).toHaveBeenCalledTimes(1);
@@ -3997,7 +7409,7 @@ describe('Workflow', () => {
   });
 
   describe('Schema Validation', () => {
-    it.skip('should validate trigger data against schema', async () => {
+    it('should throw error if trigger data is invalid', async () => {
       const triggerSchema = z.object({
         required: z.string(),
         nested: z.object({
@@ -4019,34 +7431,1711 @@ describe('Workflow', () => {
         }),
       });
 
+      const step2 = createStep({
+        id: 'step2',
+        execute: vi.fn<any>().mockResolvedValue({ result: 'step2 success' }),
+        inputSchema: z.object({
+          required: z.string(),
+          nested: z.object({
+            value: z.number(),
+          }),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      });
+
+      const step3 = createStep({
+        id: 'step3',
+        execute: vi.fn<any>().mockResolvedValue({ result: 'step3 success' }),
+        inputSchema: z.object({
+          required: z.string(),
+          nested: z.object({
+            value: z.number(),
+          }),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      });
+
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: triggerSchema,
-        outputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
         steps: [step1],
+        options: { validateInputs: true },
       });
+
+      const parallelWorkflow = createWorkflow({
+        id: 'parallel-workflow',
+        inputSchema: z.object({
+          required: z.string(),
+          nested: z.object({
+            value: z.number(),
+          }),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1, step2, step3],
+        options: { validateInputs: true },
+      });
+
+      parallelWorkflow.parallel([step1, step2, step3]).commit();
 
       workflow.then(step1).commit();
 
-      // Should fail validation
-      await expect(
-        workflow.execute({
+      try {
+        const run = await workflow.createRun();
+        await run.start({
           inputData: {
             required: 'test',
             // @ts-expect-error
             nested: { value: 'not-a-number' },
           },
-        }),
-      ).rejects.toThrow();
+        });
+        expect.fail('Expected error to be thrown');
+      } catch (error) {
+        expect((error as any)?.stack).toContain(
+          'Error: Invalid input data: \n- nested.value: Expected number, received string',
+        );
+      }
 
-      // Should pass validation
-      const run = await workflow.createRunAsync();
-      await run.start({
+      try {
+        const run = await parallelWorkflow.createRun();
+        await run.start({
+          inputData: {
+            required: 'test',
+            // @ts-expect-error
+            nested: { value: 'not-a-number' },
+          },
+        });
+
+        expect.fail('Expected error to be thrown');
+      } catch (error) {
+        expect((error as any)?.stack).toContain(
+          'Error: Invalid input data: \n- nested.value: Expected number, received string',
+        );
+      }
+    });
+
+    it('should use default value from inputSchema', async () => {
+      const triggerSchema = z.object({
+        required: z.string(),
+        nested: z
+          .object({
+            value: z.number(),
+          })
+          .optional()
+          .default({ value: 1 }),
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ inputData }) => {
+          return inputData;
+        },
+        inputSchema: triggerSchema,
+        outputSchema: triggerSchema,
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: triggerSchema,
+        outputSchema: triggerSchema,
+        steps: [step1],
+        options: { validateInputs: true },
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({
         inputData: {
           required: 'test',
-          nested: { value: 42 },
         },
       });
+
+      expect(result.status).toBe('success');
+      expect(result.steps.step1).toEqual({
+        status: 'success',
+        payload: { required: 'test', nested: { value: 1 } },
+        output: { required: 'test', nested: { value: 1 } },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      // @ts-ignore
+      expect(result.result).toEqual({ required: 'test', nested: { value: 1 } });
+    });
+
+    it('should throw error if inputData is invalid', async () => {
+      const successAction = vi.fn<any>().mockImplementation(() => {
+        return { result: 'success' };
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: successAction,
+        inputSchema: z.object({
+          start: z.string(),
+        }),
+        outputSchema: z.object({
+          start: z.string(),
+        }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: successAction,
+        inputSchema: z.object({
+          start: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          start: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        options: { validateInputs: true },
+      });
+
+      workflow.then(step1).then(step2).commit();
+
+      const run = await workflow.createRun();
+
+      const result = await run.start({
+        inputData: {
+          start: '2',
+        },
+      });
+
+      expect(result.status).toBe('failed'); // Assert status first
+
+      // Type guard for result.error
+      if (result.status === 'failed') {
+        // This check helps TypeScript narrow down the type of 'result'
+        expect(result.error).toContain('Error: Step input validation failed: \n- start: Required'); // Now safe to access
+      } else {
+        // This case should not be reached in this specific test.
+        // If it is, the test should fail clearly.
+        throw new Error("Assertion failed: workflow status was not 'failed' as expected.");
+      }
+
+      expect(result.steps?.input).toEqual({ start: '2' });
+      const step1Result = result.steps?.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result).toMatchObject({
+        status: 'success',
+        payload: { start: '2' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+        output: { result: 'success' },
+      });
+      const step2Result = result.steps?.step2;
+      expect(step2Result).toBeDefined();
+      expect(step2Result).toMatchObject({
+        status: 'failed',
+        payload: { result: 'success' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+        error: expect.any(String),
+      });
+      expect((step2Result as any)?.error).toContain('Error: Step input validation failed: \n- start: Required');
+    });
+
+    it('should use default value from inputSchema for step input', async () => {
+      const successAction = vi.fn<any>().mockImplementation(() => {
+        return { result: 'success' };
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async () => {
+          return {};
+        },
+        inputSchema: z.object({
+          start: z.string(),
+        }),
+        outputSchema: z.object({
+          start: z.string().optional(),
+        }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: successAction,
+        inputSchema: z.object({
+          start: z.string().optional().default('test'),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          start: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        options: { validateInputs: true },
+      });
+
+      workflow
+        .then(step1)
+        .map({
+          start: mapVariable({
+            step: step1,
+            path: 'start',
+          }),
+        })
+        .then(step2)
+        .commit();
+
+      const run = await workflow.createRun();
+
+      const result = await run.start({
+        inputData: {
+          start: '2',
+        },
+      });
+
+      expect(result.status).toBe('success');
+
+      expect(result.steps?.input).toEqual({ start: '2' });
+      const step1Result = result.steps?.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result).toMatchObject({
+        status: 'success',
+        payload: { start: '2' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+        output: {},
+      });
+      const step2Result = result.steps?.step2;
+      expect(step2Result).toBeDefined();
+      expect(step2Result).toMatchObject({
+        status: 'success',
+        payload: { start: 'test' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+        output: { result: 'success' },
+      });
+    });
+
+    it('should throw error if inputData is invalid in workflow with .map()', async () => {
+      const successAction = vi.fn<any>().mockImplementation(() => {
+        return { result: 'success' };
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ inputData }) => {
+          return { start: inputData.start };
+        },
+        inputSchema: z.object({
+          start: z.number(),
+        }),
+        outputSchema: z.object({
+          start: z.number(),
+        }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: successAction,
+        inputSchema: z.object({
+          start: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          start: z.number(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        options: { validateInputs: true },
+      });
+
+      workflow
+        .then(step1)
+        .map(async ({ inputData }) => {
+          return {
+            start: inputData.start,
+          };
+        })
+        .then(step2)
+        .commit();
+
+      const run = await workflow.createRun();
+
+      const result = await run.start({
+        inputData: {
+          start: 2,
+        },
+      });
+
+      expect(result.status).toBe('failed'); // Assert status first
+
+      // Type guard for result.error
+      if (result.status === 'failed') {
+        // This check helps TypeScript narrow down the type of 'result'
+        expect(result.error).toContain(
+          'Error: Step input validation failed: \n- start: Expected string, received number',
+        ); // Now safe to access
+      } else {
+        // This case should not be reached in this specific test.
+        // If it is, the test should fail clearly.
+        throw new Error("Assertion failed: workflow status was not 'failed' as expected.");
+      }
+
+      expect(result.steps?.input).toEqual({ start: 2 });
+      const step1Result = result.steps?.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result).toMatchObject({
+        status: 'success',
+        payload: { start: 2 },
+        output: { start: 2 },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      const step2Result = result.steps?.step2;
+      expect(step2Result).toBeDefined();
+      expect(step2Result).toMatchObject({
+        status: 'failed',
+        payload: { start: 2 },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+        error: expect.any(String),
+      });
+      expect((step2Result as any)?.error).toContain(
+        'Error: Step input validation failed: \n- start: Expected string, received number',
+      );
+    });
+
+    it('should throw error when you try to resume a workflow step with invalid resume data', async () => {
+      const resumeStep = createStep({
+        id: 'resume',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        resumeSchema: z.object({ value: z.number() }),
+        suspendSchema: z.object({ message: z.string() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          const finalValue = (resumeData?.value ?? 0) + inputData.value;
+
+          if (!resumeData?.value || finalValue < 10) {
+            return await suspend({ message: `Please provide additional information. now value is ${inputData.value}` });
+          }
+
+          return { value: finalValue };
+        },
+      });
+
+      const incrementStep = createStep({
+        id: 'increment',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const incrementWorkflow = createWorkflow({
+        id: 'increment-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        options: { validateInputs: true },
+      })
+        .then(incrementStep)
+        .then(resumeStep)
+        .then(
+          createStep({
+            id: 'final',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            execute: async ({ inputData }) => ({ value: inputData.value }),
+          }),
+        )
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { incrementWorkflow },
+      });
+
+      const run = await incrementWorkflow.createRun();
+      const result = await run.start({ inputData: { value: 0 } });
+      expect(result.status).toBe('suspended');
+
+      try {
+        await run.resume({
+          resumeData: { number: 2 },
+          step: ['resume'],
+        });
+      } catch (error) {
+        const errMessage = (error as { message: string })?.message;
+        expect(errMessage).toBe('Invalid resume data: \n- value: Required');
+      }
+
+      const wflowRun = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
+      expect(wflowRun?.status).toBe('suspended');
+
+      const resumeResult = await run.resume({
+        resumeData: { value: 21 },
+        step: ['resume'],
+      });
+
+      expect(resumeResult.status).toBe('success');
+    });
+
+    it('should use default value from resumeSchema when resuming a workflow', async () => {
+      const resumeStep = createStep({
+        id: 'resume',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        resumeSchema: z.object({ value: z.number().optional().default(21) }),
+        suspendSchema: z.object({ message: z.string() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          const finalValue = (resumeData?.value ?? 0) + inputData.value;
+
+          if (!resumeData?.value || finalValue < 10) {
+            return await suspend({ message: `Please provide additional information. now value is ${inputData.value}` });
+          }
+
+          return { value: finalValue };
+        },
+      });
+
+      const incrementStep = createStep({
+        id: 'increment',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const incrementWorkflow = createWorkflow({
+        id: 'increment-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        options: { validateInputs: true },
+      })
+        .then(incrementStep)
+        .then(resumeStep)
+        .then(
+          createStep({
+            id: 'final',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            execute: async ({ inputData }) => ({ value: inputData.value }),
+          }),
+        )
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { incrementWorkflow },
+      });
+
+      const run = await incrementWorkflow.createRun();
+      const result = await run.start({ inputData: { value: 0 } });
+      expect(result.status).toBe('suspended');
+
+      const resumeResult = await run.resume({
+        resumeData: {},
+        step: ['resume'],
+      });
+
+      expect(resumeResult.steps.resume).toEqual({
+        status: 'success',
+        payload: { value: 1 },
+        resumePayload: { value: 21 },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+        resumedAt: expect.any(Number),
+        suspendedAt: expect.any(Number),
+        suspendPayload: { message: 'Please provide additional information. now value is 1' },
+        output: { value: 22 },
+      });
+
+      expect(resumeResult.status).toBe('success');
+    });
+
+    it('should throw error if inputData is invalid in nested workflows', async () => {
+      const start = vi.fn().mockImplementation(async ({ inputData }) => {
+        // Get the current value (either from trigger or previous increment)
+        const currentValue = inputData.startValue || 0;
+
+        // Increment the value
+        const newValue = currentValue + 1;
+
+        return { newValue };
+      });
+      const startStep = createStep({
+        id: 'start',
+        inputSchema: z.object({ startValue: z.number() }),
+        outputSchema: z.object({
+          newValue: z.number(),
+        }),
+        execute: start,
+      });
+
+      const other = vi.fn().mockImplementation(async () => {
+        return { other: 26 };
+      });
+      const otherStep = createStep({
+        id: 'other',
+        inputSchema: z.object({ newValue: z.number() }),
+        outputSchema: z.object({ newValue: z.number(), other: z.number() }),
+        execute: other,
+      });
+
+      const final = vi.fn().mockImplementation(async ({ getStepResult }) => {
+        const startVal = getStepResult(startStep)?.newValue ?? 0;
+        const otherVal = getStepResult(otherStep)?.other ?? 0;
+        return { finalValue: startVal + otherVal };
+      });
+      const last = vi.fn().mockImplementation(async () => {
+        return { success: true };
+      });
+      const finalStep = createStep({
+        id: 'final',
+        inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+        outputSchema: z.object({ success: z.boolean() }),
+        execute: final,
+      });
+
+      const counterWorkflow = createWorkflow({
+        id: 'counter-workflow',
+        inputSchema: z.object({
+          startValue: z.number(),
+        }),
+        outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: true },
+      });
+
+      const wfA = createWorkflow({
+        id: 'nested-workflow-a',
+        inputSchema: counterWorkflow.inputSchema,
+        outputSchema: z.object({ finalValue: z.number() }),
+      })
+        .then(startStep)
+        .then(otherStep)
+        .then(finalStep)
+        .commit();
+      const wfB = createWorkflow({
+        id: 'nested-workflow-b',
+        inputSchema: counterWorkflow.inputSchema,
+        outputSchema: z.object({ finalValue: z.number() }),
+      })
+        .then(startStep)
+        .map({
+          other: mapVariable({
+            step: startStep,
+            path: 'newValue',
+          }),
+          newValue: mapVariable({
+            step: startStep,
+            path: 'newValue',
+          }),
+        })
+        .then(finalStep)
+        .commit();
+      counterWorkflow
+        .parallel([wfA, wfB])
+        .then(
+          createStep({
+            id: 'last-step',
+            inputSchema: z.object({
+              'nested-workflow-a': z.object({ finalValue: z.number() }),
+              'nested-workflow-b': z.object({ finalValue: z.number() }),
+            }),
+            outputSchema: z.object({ success: z.boolean() }),
+            execute: last,
+          }),
+        )
+        .commit();
+
+      const run = await counterWorkflow.createRun();
+      const result = await run.start({ inputData: { startValue: 0 } });
+
+      expect(result.status).toBe('failed');
+
+      expect(start).toHaveBeenCalledTimes(2);
+      expect(other).toHaveBeenCalledTimes(1);
+      expect(final).toHaveBeenCalledTimes(1);
+      expect(last).toHaveBeenCalledTimes(0);
+      // @ts-ignore
+      expect(result.steps['nested-workflow-a'].error).toContain(
+        'Error: Step input validation failed: \n- newValue: Required',
+      );
+
+      // @ts-ignore
+      expect(result.steps['nested-workflow-b'].output).toEqual({
+        finalValue: 1,
+      });
+
+      expect(result.steps['last-step']).toBeUndefined();
+    });
+
+    it('should allow a steps input schema to be a subset of the previous step output schema', async () => {
+      const prevStep = createStep({
+        id: 'prev-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ a: z.string(), b: z.string().optional() }),
+        execute: async () => {
+          return { a: 'a', b: 'b' };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.boolean(),
+      });
+
+      const sharedStepAttrs = {
+        outputSchema: z.boolean(),
+        execute: async () => true,
+      } satisfies Partial<Parameters<typeof createStep>[0]>;
+
+      const equalStep = createStep({
+        id: 'equal-step',
+        inputSchema: prevStep.outputSchema,
+        ...sharedStepAttrs,
+      });
+      // this is ok
+      workflow.then(prevStep).then(equalStep).commit();
+      const run = await workflow.createRun();
+      const result = await run.start({
+        inputData: {
+          value: 'test',
+        },
+      });
+      expect(result.status).toBe('success');
+      expect(result.steps).toEqual({
+        input: {
+          value: 'test',
+        },
+        'prev-step': {
+          status: 'success',
+          payload: {
+            value: 'test',
+          },
+          output: {
+            a: 'a',
+            b: 'b',
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        'equal-step': {
+          status: 'success',
+          payload: {
+            a: 'a',
+            b: 'b',
+          },
+          output: true,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      const missingRequiredKeyStep = createStep({
+        id: 'missing-required-key-step',
+        inputSchema: prevStep.outputSchema.omit({ a: true }),
+        ...sharedStepAttrs,
+      });
+      const missingRequiredKeyWorkflow = createWorkflow({
+        id: 'missing-required-key-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.boolean(),
+      });
+
+      missingRequiredKeyWorkflow.then(prevStep).then(missingRequiredKeyStep).commit();
+      const run2 = await missingRequiredKeyWorkflow.createRun();
+      const result2 = await run2.start({
+        inputData: {
+          value: 'test',
+        },
+      });
+      expect(result2.status).toBe('success');
+      expect(result2.steps).toEqual({
+        input: {
+          value: 'test',
+        },
+        'prev-step': {
+          status: 'success',
+          payload: {
+            value: 'test',
+          },
+          output: {
+            a: 'a',
+            b: 'b',
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        'missing-required-key-step': {
+          status: 'success',
+          payload: {
+            b: 'b',
+          },
+          output: true,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      const missingOptionalKeyStep = createStep({
+        id: 'missing-optional-key-step',
+        inputSchema: prevStep.outputSchema.omit({ b: true }),
+        ...sharedStepAttrs,
+      });
+
+      const missingOptionalKeyWorkflow = createWorkflow({
+        id: 'missing-optional-key-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.boolean(),
+      });
+
+      missingOptionalKeyWorkflow.then(prevStep).then(missingOptionalKeyStep).commit();
+      const run3 = await missingOptionalKeyWorkflow.createRun();
+      const result3 = await run3.start({
+        inputData: {
+          value: 'test',
+        },
+      });
+      expect(result3.status).toBe('success');
+      expect(result3.steps).toEqual({
+        input: {
+          value: 'test',
+        },
+        'prev-step': {
+          status: 'success',
+          payload: {
+            value: 'test',
+          },
+          output: {
+            a: 'a',
+            b: 'b',
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        'missing-optional-key-step': {
+          status: 'success',
+          payload: {
+            a: 'a',
+          },
+          output: true,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      const extraOptionalKeyStep = createStep({
+        id: 'extra-optional-key-step',
+        inputSchema: prevStep.outputSchema.extend({ c: z.string().optional() }),
+        ...sharedStepAttrs,
+      });
+
+      const extraOptionalKeyWorkflow = createWorkflow({
+        id: 'extra-optional-key-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.boolean(),
+      });
+
+      extraOptionalKeyWorkflow.then(prevStep).then(extraOptionalKeyStep).commit();
+      const run4 = await extraOptionalKeyWorkflow.createRun();
+      const result4 = await run4.start({
+        inputData: {
+          value: 'test',
+        },
+      });
+      expect(result4.status).toBe('success');
+      expect(result4.steps).toEqual({
+        input: {
+          value: 'test',
+        },
+        'prev-step': {
+          status: 'success',
+          payload: {
+            value: 'test',
+          },
+          output: {
+            a: 'a',
+            b: 'b',
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        'extra-optional-key-step': {
+          status: 'success',
+          payload: {
+            a: 'a',
+            b: 'b',
+          },
+          output: true,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      const extraRequiredKeyStep = createStep({
+        id: 'extra-required-key-step',
+        inputSchema: prevStep.outputSchema.extend({ c: z.string() }),
+        ...sharedStepAttrs,
+      });
+
+      const errWorkflow = createWorkflow({
+        id: 'error-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.boolean(),
+      });
+
+      //@ts-expect-error -- extra-required-step should not be allowed
+      errWorkflow.then(prevStep).then(extraRequiredKeyStep).commit();
+
+      const errorRun = await errWorkflow.createRun();
+      const errorResult = await errorRun.start({
+        inputData: {
+          value: 'test',
+        },
+      });
+      expect(errorResult.status).toBe('failed');
+      expect(errorResult.steps['extra-required-key-step'].status).toBe('failed');
+      expect((errorResult.steps['extra-required-key-step'] as StepFailure<any, any, any, any>).error).toBe(
+        'Error: Step input validation failed: \n- c: Required',
+      );
+
+      const distinctTypeStep = createStep({
+        id: 'distinct-type-step',
+        inputSchema: z.string(),
+        ...sharedStepAttrs,
+      });
+
+      const errWorkflow2 = createWorkflow({
+        id: 'error-workflow-2',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.boolean(),
+      });
+
+      //@ts-expect-error -- distinct-type-step should not be allowed
+      errWorkflow2.then(prevStep).then(distinctTypeStep).commit();
+
+      const errorRun2 = await errWorkflow2.createRun();
+      const errorResult2 = await errorRun2.start({
+        inputData: {
+          value: 'test',
+        },
+      });
+      expect(errorResult2.status).toBe('failed');
+      expect(errorResult2.steps['distinct-type-step'].status).toBe('failed');
+      expect((errorResult2.steps['distinct-type-step'] as StepFailure<any, any, any, any>).error).toBe(
+        'Error: Step input validation failed: \n- : Expected string, received object',
+      );
+    });
+  });
+
+  describe('Schema Validation Zod-v4', () => {
+    it('should throw error if trigger data is invalid', async () => {
+      const triggerSchema = zv4.object({
+        required: zv4.string(),
+        nested: zv4.object({
+          value: zv4.number(),
+        }),
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        // @ts-ignore
+        execute: vi.fn<any>().mockResolvedValue({ result: 'success' }),
+        inputSchema: zv4.object({
+          required: zv4.string(),
+          nested: zv4.object({
+            value: zv4.number(),
+          }),
+        }),
+        outputSchema: zv4.object({
+          result: zv4.string(),
+        }),
+      });
+
+      // @ts-ignore
+      const step2 = createStep({
+        id: 'step2',
+        execute: vi.fn<any>().mockResolvedValue({ result: 'step2 success' }),
+        inputSchema: zv4.object({
+          required: zv4.string(),
+          nested: zv4.object({
+            value: zv4.number(),
+          }),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      });
+
+      const step3 = createStep({
+        id: 'step3',
+        // @ts-ignore
+        execute: vi.fn<any>().mockResolvedValue({ result: 'step3 success' }),
+        inputSchema: zv4.object({
+          required: zv4.string(),
+          nested: zv4.object({
+            value: zv4.number(),
+          }),
+        }),
+        outputSchema: zv4.object({
+          result: zv4.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        // @ts-ignore
+        inputSchema: triggerSchema,
+        // @ts-ignore
+        outputSchema: zv4.object({
+          result: zv4.string(),
+        }),
+        steps: [step1],
+        options: { validateInputs: true },
+      });
+
+      const parallelWorkflow = createWorkflow({
+        id: 'parallel-workflow',
+        // @ts-ignore
+        inputSchema: zv4.object({
+          required: zv4.string(),
+          nested: zv4.object({
+            value: zv4.number(),
+          }),
+        }),
+        // @ts-ignore
+        outputSchema: zv4.object({
+          result: zv4.string(),
+        }),
+        steps: [step1, step2, step3],
+        options: { validateInputs: true },
+      });
+
+      parallelWorkflow.parallel([step1, step2, step3]).commit();
+
+      workflow.then(step1).commit();
+
+      try {
+        const run = await workflow.createRun();
+        await run.start({
+          inputData: {
+            required: 'test',
+            nested: { value: 'not-a-number' },
+          },
+        });
+        expect.fail('Invalid input: expected error to be thrown');
+      } catch (error) {
+        expect((error as any)?.stack).toContain(
+          'Error: Invalid input data: \n- nested.value: Invalid input: expected number, received string',
+        );
+      }
+
+      try {
+        const run = await parallelWorkflow.createRun();
+        await run.start({
+          inputData: {
+            required: 'test',
+            // @ts-expect-error
+            nested: { value: 'not-a-number' },
+          },
+        });
+
+        expect.fail('Invalid input: expected error to be thrown');
+      } catch (error) {
+        expect((error as any)?.stack).toContain(
+          'Error: Invalid input data: \n- nested.value: Invalid input: expected number, received string',
+        );
+      }
+    });
+
+    it('should use default value from inputSchema', async () => {
+      const triggerSchema = zv4.object({
+        required: zv4.string(),
+        nested: zv4
+          .object({
+            value: zv4.number(),
+          })
+          .optional()
+          .default({ value: 1 }),
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        // @ts-ignore
+        execute: async ({ inputData }) => {
+          return inputData;
+        },
+        inputSchema: triggerSchema,
+        outputSchema: triggerSchema,
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        // @ts-ignore
+        inputSchema: triggerSchema,
+        // @ts-ignore
+        outputSchema: triggerSchema,
+        steps: [step1],
+        options: { validateInputs: true },
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({
+        inputData: {
+          required: 'test',
+        },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.steps.step1).toEqual({
+        status: 'success',
+        payload: { required: 'test', nested: { value: 1 } },
+        output: { required: 'test', nested: { value: 1 } },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      // @ts-ignore
+      expect(result.result).toEqual({ required: 'test', nested: { value: 1 } });
+    });
+
+    it('should throw error if inputData is invalid', async () => {
+      const successAction = vi.fn<any>().mockImplementation(() => {
+        return { result: 'success' };
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        // @ts-ignore
+        execute: successAction,
+        inputSchema: zv4.object({
+          start: zv4.string(),
+        }),
+        outputSchema: zv4.object({
+          start: zv4.string(),
+        }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        // @ts-ignore
+        execute: successAction,
+        inputSchema: zv4.object({
+          start: zv4.string(),
+        }),
+        outputSchema: zv4.object({
+          result: zv4.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        // @ts-ignore
+        inputSchema: zv4.object({
+          start: zv4.string(),
+        }),
+        // @ts-ignore
+        outputSchema: zv4.object({
+          result: zv4.string(),
+        }),
+        options: { validateInputs: true },
+      });
+
+      workflow.then(step1).then(step2).commit();
+
+      const run = await workflow.createRun();
+
+      const result = await run.start({
+        inputData: {
+          start: '2',
+        },
+      });
+
+      expect(result.status).toBe('failed'); // Assert status first
+
+      // Type guard for result.error
+      if (result.status === 'failed') {
+        // This check helps TypeScript narrow down the type of 'result'
+        expect(result.error).toContain(
+          'Error: Step input validation failed: \n- start: Invalid input: expected string, received undefined',
+        ); // Now safe to access
+      } else {
+        // This case should not be reached in this specific test.
+        // If it is, the test should fail clearly.
+        throw new Error("Assertion failed: workflow status was not 'failed' as expected.");
+      }
+
+      expect(result.steps?.input).toEqual({ start: '2' });
+      const step1Result = result.steps?.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result).toMatchObject({
+        status: 'success',
+        payload: { start: '2' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+        output: { result: 'success' },
+      });
+      const step2Result = result.steps?.step2;
+      expect(step2Result).toBeDefined();
+      expect(step2Result).toMatchObject({
+        status: 'failed',
+        payload: { result: 'success' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+        error: expect.any(String),
+      });
+      expect((step2Result as any)?.error).toContain(
+        'Error: Step input validation failed: \n- start: Invalid input: expected string, received undefined',
+      );
+    });
+
+    it('should use default value from inputSchema for step input', async () => {
+      const successAction = vi.fn<any>().mockImplementation(() => {
+        return { result: 'success' };
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        // @ts-ignore
+        execute: async () => {
+          return {};
+        },
+        inputSchema: zv4.object({
+          start: zv4.string(),
+        }),
+        outputSchema: zv4.object({
+          start: zv4.string().optional(),
+        }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        // @ts-ignore
+        execute: successAction,
+        inputSchema: zv4.object({
+          start: zv4.string().optional().default('test'),
+        }),
+        outputSchema: zv4.object({
+          result: zv4.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        // @ts-ignore
+        inputSchema: zv4.object({
+          start: zv4.string(),
+        }),
+        // @ts-ignore
+        outputSchema: zv4.object({
+          result: zv4.string(),
+        }),
+        options: { validateInputs: true },
+      });
+
+      workflow
+        .then(step1)
+        .map({
+          // @ts-ignore
+          start: mapVariable({
+            step: step1,
+            path: 'start',
+          }),
+        })
+        .then(step2)
+        .commit();
+
+      const run = await workflow.createRun();
+
+      const result = await run.start({
+        inputData: {
+          start: '2',
+        },
+      });
+
+      expect(result.status).toBe('success');
+
+      expect(result.steps?.input).toEqual({ start: '2' });
+      const step1Result = result.steps?.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result).toMatchObject({
+        status: 'success',
+        payload: { start: '2' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+        output: {},
+      });
+      const step2Result = result.steps?.step2;
+      expect(step2Result).toBeDefined();
+      expect(step2Result).toMatchObject({
+        status: 'success',
+        payload: { start: 'test' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+        output: { result: 'success' },
+      });
+    });
+
+    it('should throw error if inputData is invalid in workflow with .map()', async () => {
+      const successAction = vi.fn<any>().mockImplementation(() => {
+        return { result: 'success' };
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        // @ts-ignore
+        execute: async ({ inputData }) => {
+          return { start: inputData.start };
+        },
+        inputSchema: zv4.object({
+          start: zv4.number(),
+        }),
+        outputSchema: zv4.object({
+          start: zv4.number(),
+        }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        // @ts-ignore
+        execute: successAction,
+        inputSchema: zv4.object({
+          start: zv4.string(),
+        }),
+        outputSchema: zv4.object({
+          result: zv4.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        // @ts-ignore
+        inputSchema: zv4.object({
+          start: zv4.number(),
+        }),
+        // @ts-ignore
+        outputSchema: zv4.object({
+          result: zv4.string(),
+        }),
+        options: { validateInputs: true },
+      });
+
+      workflow
+        .then(step1)
+        .map(async ({ inputData }) => {
+          return {
+            start: inputData.start,
+          };
+        })
+        .then(step2)
+        .commit();
+
+      const run = await workflow.createRun();
+
+      const result = await run.start({
+        inputData: {
+          start: 2,
+        },
+      });
+
+      expect(result.status).toBe('failed'); // Assert status first
+
+      // Type guard for result.error
+      if (result.status === 'failed') {
+        // This check helps TypeScript narrow down the type of 'result'
+        expect(result.error).toContain(
+          'Error: Step input validation failed: \n- start: Invalid input: expected string, received number',
+        ); // Now safe to access
+      } else {
+        // This case should not be reached in this specific test.
+        // If it is, the test should fail clearly.
+        throw new Error("Assertion failed: workflow status was not 'failed' as expected.");
+      }
+
+      expect(result.steps?.input).toEqual({ start: 2 });
+      const step1Result = result.steps?.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result).toMatchObject({
+        status: 'success',
+        payload: { start: 2 },
+        output: { start: 2 },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      const step2Result = result.steps?.step2;
+      expect(step2Result).toBeDefined();
+      expect(step2Result).toMatchObject({
+        status: 'failed',
+        payload: { start: 2 },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+        error: expect.any(String),
+      });
+      expect((step2Result as any)?.error).toContain(
+        'Error: Step input validation failed: \n- start: Invalid input: expected string, received number',
+      );
+    });
+
+    it('should throw error when you try to resume a workflow step with invalid resume data', async () => {
+      const resumeStep = createStep({
+        id: 'resume',
+        // @ts-ignore
+        inputSchema: zv4.object({ value: zv4.number() }),
+        // @ts-ignore
+        outputSchema: zv4.object({ value: zv4.number() }),
+        // @ts-ignore
+        resumeSchema: zv4.object({ value: zv4.number() }),
+        // @ts-ignore
+        suspendSchema: zv4.object({ message: zv4.string() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          const finalValue = (resumeData?.value ?? 0) + inputData.value;
+
+          if (!resumeData?.value || finalValue < 10) {
+            return await suspend({ message: `Please provide additional information. now value is ${inputData.value}` });
+          }
+
+          return { value: finalValue };
+        },
+      });
+
+      const incrementStep = createStep({
+        id: 'increment',
+        // @ts-ignore
+        inputSchema: zv4.object({
+          value: zv4.number(),
+        }),
+        // @ts-ignore
+        outputSchema: zv4.object({
+          value: zv4.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const incrementWorkflow = createWorkflow({
+        id: 'increment-workflow',
+        // @ts-ignore
+        inputSchema: zv4.object({ value: zv4.number() }),
+        // @ts-ignore
+        outputSchema: zv4.object({ value: zv4.number() }),
+        options: { validateInputs: true },
+      })
+        .then(incrementStep)
+        .then(resumeStep)
+        .then(
+          createStep({
+            id: 'final',
+            // @ts-ignore
+            inputSchema: zv4.object({ value: zv4.number() }),
+            // @ts-ignore
+            outputSchema: zv4.object({ value: zv4.number() }),
+            execute: async ({ inputData }) => ({ value: inputData.value }),
+          }),
+        )
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { incrementWorkflow },
+      });
+
+      const run = await incrementWorkflow.createRun();
+      const result = await run.start({ inputData: { value: 0 } });
+      expect(result.status).toBe('suspended');
+
+      try {
+        await run.resume({
+          resumeData: { number: 2 },
+          step: ['resume'],
+        });
+      } catch (error) {
+        const errMessage = (error as { message: string })?.message;
+        expect(errMessage).toBe('Invalid resume data: \n- value: Invalid input: expected number, received undefined');
+      }
+
+      const wflowRun = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
+      expect(wflowRun?.status).toBe('suspended');
+
+      const resumeResult = await run.resume({
+        resumeData: { value: 21 },
+        step: ['resume'],
+      });
+
+      expect(resumeResult.status).toBe('success');
+    });
+
+    it('should use default value from resumeSchema when resuming a workflow', async () => {
+      const resumeStep = createStep({
+        id: 'resume',
+        // @ts-ignore
+        inputSchema: zv4.object({ value: zv4.number() }),
+        // @ts-ignore
+        outputSchema: zv4.object({ value: zv4.number() }),
+        // @ts-ignore
+        resumeSchema: zv4.object({ value: zv4.number().optional().default(21) }),
+        // @ts-ignore
+        suspendSchema: zv4.object({ message: zv4.string() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          const finalValue = (resumeData?.value ?? 0) + inputData.value;
+
+          if (!resumeData?.value || finalValue < 10) {
+            return await suspend({ message: `Please provide additional information. now value is ${inputData.value}` });
+          }
+
+          return { value: finalValue };
+        },
+      });
+
+      const incrementStep = createStep({
+        id: 'increment',
+        // @ts-ignore
+        inputSchema: zv4.object({
+          value: zv4.number(),
+        }),
+        // @ts-ignore
+        outputSchema: zv4.object({
+          value: zv4.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const incrementWorkflow = createWorkflow({
+        id: 'increment-workflow',
+        // @ts-ignore
+        inputSchema: zv4.object({ value: zv4.number() }),
+        // @ts-ignore
+        outputSchema: zv4.object({ value: zv4.number() }),
+        options: { validateInputs: true },
+      })
+        .then(incrementStep)
+        .then(resumeStep)
+        .then(
+          createStep({
+            id: 'final',
+            // @ts-ignore
+            inputSchema: zv4.object({ value: zv4.number() }),
+            // @ts-ignore
+            outputSchema: zv4.object({ value: zv4.number() }),
+            execute: async ({ inputData }) => ({ value: inputData.value }),
+          }),
+        )
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { incrementWorkflow },
+      });
+
+      const run = await incrementWorkflow.createRun();
+      const result = await run.start({ inputData: { value: 0 } });
+      expect(result.status).toBe('suspended');
+
+      const resumeResult = await run.resume({
+        resumeData: {},
+        step: ['resume'],
+      });
+
+      expect(resumeResult.steps.resume).toEqual({
+        status: 'success',
+        payload: { value: 1 },
+        resumePayload: { value: 21 },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+        resumedAt: expect.any(Number),
+        suspendedAt: expect.any(Number),
+        suspendPayload: { message: 'Please provide additional information. now value is 1' },
+        output: { value: 22 },
+      });
+
+      expect(resumeResult.status).toBe('success');
+    });
+
+    it('should throw error if inputData is invalid in nested workflows', async () => {
+      const start = vi.fn().mockImplementation(async ({ inputData }) => {
+        // Get the current value (either from trigger or previous increment)
+        const currentValue = inputData.startValue || 0;
+
+        // Increment the value
+        const newValue = currentValue + 1;
+
+        return { newValue };
+      });
+      const startStep = createStep({
+        id: 'start',
+        // @ts-ignore
+        inputSchema: zv4.object({ startValue: zv4.number() }),
+        // @ts-ignore
+        outputSchema: zv4.object({
+          newValue: zv4.number(),
+        }),
+        execute: start,
+      });
+
+      const other = vi.fn().mockImplementation(async () => {
+        return { other: 26 };
+      });
+      const otherStep = createStep({
+        id: 'other',
+        // @ts-ignore
+        inputSchema: zv4.object({ newValue: zv4.number() }),
+        // @ts-ignore
+        outputSchema: zv4.object({ newValue: zv4.number(), other: zv4.number() }),
+        execute: other,
+      });
+
+      const final = vi.fn().mockImplementation(async ({ getStepResult }) => {
+        const startVal = getStepResult(startStep)?.newValue ?? 0;
+        const otherVal = getStepResult(otherStep)?.other ?? 0;
+        return { finalValue: startVal + otherVal };
+      });
+      const last = vi.fn().mockImplementation(async () => {
+        return { success: true };
+      });
+      const finalStep = createStep({
+        id: 'final',
+        // @ts-ignore
+        inputSchema: zv4.object({ newValue: zv4.number(), other: zv4.number() }),
+        // @ts-ignore
+        outputSchema: zv4.object({ success: zv4.boolean() }),
+        execute: final,
+      });
+
+      const counterWorkflow = createWorkflow({
+        id: 'counter-workflow',
+        // @ts-ignore
+        inputSchema: zv4.object({
+          startValue: zv4.number(),
+        }),
+        // @ts-ignore
+        outputSchema: zv4.object({
+          success: zv4.boolean(),
+        }),
+        options: { validateInputs: true },
+      });
+
+      const wfA = createWorkflow({
+        id: 'nested-workflow-a',
+        inputSchema: counterWorkflow.inputSchema,
+        // @ts-ignore
+        outputSchema: zv4.object({ finalValue: zv4.number() }),
+      })
+        .then(startStep)
+        .then(otherStep)
+        .then(finalStep)
+        .commit();
+      const wfB = createWorkflow({
+        id: 'nested-workflow-b',
+        inputSchema: counterWorkflow.inputSchema,
+        // @ts-ignore
+        outputSchema: zv4.object({ finalValue: zv4.number() }),
+      })
+        .then(startStep)
+        .map({
+          // @ts-ignore
+          other: mapVariable({
+            step: startStep,
+            path: 'newValue',
+          }),
+          // @ts-ignore
+          newValue: mapVariable({
+            step: startStep,
+            path: 'newValue',
+          }),
+        })
+        .then(finalStep)
+        .commit();
+      counterWorkflow
+        .parallel([wfA, wfB])
+        .then(
+          // @ts-ignore
+          createStep({
+            id: 'last-step',
+            // @ts-ignore
+            execute: last,
+            inputSchema: zv4.object({
+              'nested-workflow-a': zv4.object({ finalValue: zv4.number() }),
+              'nested-workflow-b': zv4.object({ finalValue: zv4.number() }),
+            }),
+            outputSchema: zv4.object({ success: zv4.boolean() }),
+          }),
+        )
+        .commit();
+
+      const run = await counterWorkflow.createRun();
+      const result = await run.start({ inputData: { startValue: 0 } });
+
+      expect(result.status).toBe('failed');
+
+      expect(start).toHaveBeenCalledTimes(2);
+      expect(other).toHaveBeenCalledTimes(1);
+      expect(final).toHaveBeenCalledTimes(1);
+      expect(last).toHaveBeenCalledTimes(0);
+      // @ts-ignore
+      expect(result.steps['nested-workflow-a'].error).toContain(
+        'Error: Step input validation failed: \n- newValue: Invalid input: expected number, received undefined',
+      );
+
+      // @ts-ignore
+      expect(result.steps['nested-workflow-b'].output).toEqual({
+        finalValue: 1,
+      });
+
+      expect(result.steps['last-step']).toBeUndefined();
     });
   });
 
@@ -4113,7 +9202,7 @@ describe('Workflow', () => {
         ])
         .commit();
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       const result = await run.start({ inputData: {} });
 
       expect(result.steps['nested-a']).toEqual({
@@ -4168,7 +9257,7 @@ describe('Workflow', () => {
 
       workflow.then(step1).then(step2).commit();
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       const step1Spy = vi.spyOn(step1, 'execute');
       const step2Spy = vi.spyOn(step2, 'execute');
       const result = await run.start({ inputData: {} });
@@ -4229,7 +9318,7 @@ describe('Workflow', () => {
 
       workflow.then(step1).then(step2).commit();
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       const step1Spy = vi.spyOn(step1, 'execute');
       const step2Spy = vi.spyOn(step2, 'execute');
       const result = await run.start({ inputData: {} });
@@ -4268,13 +9357,13 @@ describe('Workflow', () => {
       });
 
       // @ts-ignore
-      const toolAction = vi.fn<any>().mockImplementation(async ({ context }) => {
-        return { name: context.name };
+      const toolAction = vi.fn<any>().mockImplementation(async (input, _context) => {
+        return { name: input.name };
       });
 
       const randomTool = createTool({
         id: 'random-tool',
-        execute: toolAction,
+        execute: toolAction as any,
         description: 'random-tool',
         inputSchema: z.object({ name: z.string() }),
         outputSchema: z.object({ name: z.string() }),
@@ -4286,9 +9375,11 @@ describe('Workflow', () => {
         outputSchema: z.object({ name: z.string() }),
       });
 
-      workflow.then(step1).then(createStep(randomTool)).commit();
+      const toolStep = createStep(randomTool);
 
-      const run = await workflow.createRunAsync();
+      workflow.then(step1).then(toolStep).commit();
+
+      const run = await workflow.createRun();
       const result = await run.start({ inputData: {} });
 
       expect(step1Action).toHaveBeenCalled();
@@ -4309,422 +9400,11 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-    });
-  });
 
-  describe('Watch', () => {
-    it('should watch workflow state changes and call onTransition', async () => {
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const workflowSteps = workflow.steps;
 
-      const step1 = createStep({
-        id: 'step1',
-        execute: step1Action,
-        inputSchema: z.object({}),
-        outputSchema: z.object({ value: z.string() }),
-      });
-      const step2 = createStep({
-        id: 'step2',
-        execute: step2Action,
-        inputSchema: z.object({ value: z.string() }),
-        outputSchema: z.object({}),
-      });
-
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        steps: [step1, step2],
-      });
-      workflow.then(step1).then(step2).commit();
-
-      let watchData: WatchEvent[] = [];
-      const onTransition = data => {
-        watchData.push(JSON.parse(JSON.stringify(data)));
-      };
-
-      const run = await workflow.createRunAsync();
-
-      // Start watching the workflow
-      run.watch(onTransition);
-
-      const executionResult = await run.start({ inputData: {} });
-
-      expect(watchData.length).toBe(5);
-      expect(watchData[1]).toEqual({
-        type: 'watch',
-        payload: {
-          currentStep: {
-            id: 'step1',
-            status: 'success',
-            output: { result: 'success1' },
-            payload: {},
-            startedAt: expect.any(Number),
-            endedAt: expect.any(Number),
-          },
-          workflowState: {
-            status: 'running',
-            steps: {
-              input: {},
-              step1: {
-                status: 'success',
-                output: { result: 'success1' },
-                payload: {},
-                startedAt: expect.any(Number),
-                endedAt: expect.any(Number),
-              },
-            },
-            result: null,
-            error: null,
-          },
-        },
-        eventTimestamp: expect.any(Number),
-      });
-
-      expect(watchData[watchData.length - 1]).toEqual({
-        type: 'watch',
-        payload: {
-          currentStep: undefined,
-          workflowState: {
-            status: 'success',
-            steps: {
-              input: {},
-              step1: {
-                status: 'success',
-                output: { result: 'success1' },
-                payload: {},
-                startedAt: expect.any(Number),
-                endedAt: expect.any(Number),
-              },
-              step2: {
-                status: 'success',
-                output: { result: 'success2' },
-                payload: { result: 'success1' },
-                startedAt: expect.any(Number),
-                endedAt: expect.any(Number),
-              },
-            },
-            result: { result: 'success2' },
-            error: null,
-          },
-        },
-        eventTimestamp: expect.any(Number),
-      });
-
-      // Verify execution completed successfully
-      expect(executionResult.steps.step1).toEqual({
-        status: 'success',
-        output: { result: 'success1' },
-        payload: {},
-        startedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
-      expect(executionResult.steps.step2).toEqual({
-        status: 'success',
-        output: { result: 'success2' },
-        payload: { result: 'success1' },
-        startedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
-    });
-
-    it('should watch workflow state changes and call onTransition when attaching from separate run', async () => {
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
-
-      const step1 = createStep({
-        id: 'step1',
-        execute: step1Action,
-        inputSchema: z.object({}),
-        outputSchema: z.object({ value: z.string() }),
-      });
-      const step2 = createStep({
-        id: 'step2',
-        execute: step2Action,
-        inputSchema: z.object({ value: z.string() }),
-        outputSchema: z.object({}),
-      });
-
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        steps: [step1, step2],
-      });
-      workflow.then(step1).then(step2).commit();
-
-      let watchData: WatchEvent[] = [];
-      const onTransition = data => {
-        watchData.push(JSON.parse(JSON.stringify(data)));
-      };
-
-      const run = await workflow.createRunAsync();
-      const run2 = await workflow.createRunAsync({ runId: run.runId });
-
-      // Start watching the workflow
-      run2.watch(onTransition);
-
-      const executionResult = await run.start({ inputData: {} });
-
-      expect(watchData.length).toBe(5);
-      expect(watchData[1]).toEqual({
-        type: 'watch',
-        payload: {
-          currentStep: {
-            id: 'step1',
-            status: 'success',
-            output: { result: 'success1' },
-            payload: {},
-            startedAt: expect.any(Number),
-            endedAt: expect.any(Number),
-          },
-          workflowState: {
-            status: 'running',
-            steps: {
-              input: {},
-              step1: {
-                status: 'success',
-                output: { result: 'success1' },
-                payload: {},
-                startedAt: expect.any(Number),
-                endedAt: expect.any(Number),
-              },
-            },
-            result: null,
-            error: null,
-          },
-        },
-        eventTimestamp: expect.any(Number),
-      });
-      expect(watchData[watchData.length - 1]).toEqual({
-        type: 'watch',
-        payload: {
-          currentStep: undefined,
-          workflowState: {
-            status: 'success',
-            steps: {
-              input: {},
-              step1: {
-                status: 'success',
-                output: { result: 'success1' },
-                payload: {},
-                startedAt: expect.any(Number),
-                endedAt: expect.any(Number),
-              },
-              step2: {
-                status: 'success',
-                output: { result: 'success2' },
-                payload: { result: 'success1' },
-                startedAt: expect.any(Number),
-                endedAt: expect.any(Number),
-              },
-            },
-            result: { result: 'success2' },
-            error: null,
-          },
-        },
-        eventTimestamp: expect.any(Number),
-      });
-
-      // Verify execution completed successfully
-      expect(executionResult.steps.step1).toEqual({
-        status: 'success',
-        output: { result: 'success1' },
-        payload: {},
-        startedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
-      expect(executionResult.steps.step2).toEqual({
-        status: 'success',
-        output: { result: 'success2' },
-        payload: { result: 'success1' },
-        startedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
-    });
-
-    it('should unsubscribe from transitions when unwatch is called', async () => {
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
-
-      const step1 = createStep({
-        id: 'step1',
-        execute: step1Action,
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-      });
-      const step2 = createStep({
-        id: 'step2',
-        execute: step2Action,
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-      });
-
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        steps: [step1, step2],
-      });
-      workflow.then(step1).then(step2).commit();
-
-      const onTransition = vi.fn();
-      const onTransition2 = vi.fn();
-
-      const run = await workflow.createRunAsync();
-
-      run.watch(onTransition);
-      run.watch(onTransition2);
-
-      await run.start({ inputData: {} });
-
-      expect(onTransition).toHaveBeenCalledTimes(5);
-      expect(onTransition2).toHaveBeenCalledTimes(5);
-
-      const run2 = await workflow.createRunAsync();
-
-      run2.watch(onTransition2);
-
-      await run2.start({ inputData: {} });
-
-      expect(onTransition).toHaveBeenCalledTimes(5);
-      expect(onTransition2).toHaveBeenCalledTimes(10);
-
-      const run3 = await workflow.createRunAsync();
-
-      run3.watch(onTransition);
-
-      await run3.start({ inputData: {} });
-
-      expect(onTransition).toHaveBeenCalledTimes(10);
-      expect(onTransition2).toHaveBeenCalledTimes(10);
-    });
-
-    it('should be able to use all action types in a workflow', async () => {
-      const step1Action = vi.fn<any>().mockResolvedValue({ name: 'step1' });
-
-      const step1 = createStep({
-        id: 'step1',
-        execute: step1Action,
-        inputSchema: z.object({}),
-        outputSchema: z.object({ name: z.string() }),
-      });
-
-      // @ts-ignore
-      const toolAction = vi.fn<any>().mockImplementation(async ({ context }) => {
-        return { name: context.name };
-      });
-
-      const randomTool = createTool({
-        id: 'random-tool',
-        execute: toolAction,
-        description: 'random-tool',
-        inputSchema: z.object({ name: z.string() }),
-        outputSchema: z.object({ name: z.string() }),
-      });
-
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({}),
-        outputSchema: z.object({ name: z.string() }),
-      });
-
-      workflow.then(step1).then(createStep(randomTool)).commit();
-
-      const { stream, getWorkflowState } = (await workflow.createRunAsync()).stream({ inputData: {} });
-
-      const values: StreamEvent[] = [];
-      for await (const value of stream.values()) {
-        values.push(value);
-      }
-
-      expect(values).toMatchObject([
-        {
-          payload: {
-            runId: 'mock-uuid-1',
-          },
-          type: 'start',
-        },
-        {
-          payload: {
-            id: 'step1',
-            payload: {},
-            startedAt: expect.any(Number),
-          },
-          type: 'step-start',
-        },
-        {
-          payload: {
-            id: 'step1',
-            endedAt: expect.any(Number),
-            output: {
-              name: 'step1',
-            },
-            status: 'success',
-          },
-          type: 'step-result',
-        },
-        {
-          payload: {
-            id: 'step1',
-            metadata: {},
-          },
-          type: 'step-finish',
-        },
-        {
-          payload: {
-            id: 'random-tool',
-            payload: {
-              name: 'step1',
-            },
-            startedAt: expect.any(Number),
-          },
-          type: 'step-start',
-        },
-        {
-          payload: {
-            id: 'random-tool',
-            endedAt: expect.any(Number),
-            output: {
-              name: 'step1',
-            },
-            status: 'success',
-          },
-          type: 'step-result',
-        },
-        {
-          payload: {
-            id: 'random-tool',
-            metadata: {},
-          },
-          type: 'step-finish',
-        },
-        {
-          payload: {
-            runId: 'mock-uuid-1',
-          },
-          type: 'finish',
-        },
-      ]);
-
-      const result = await getWorkflowState();
-
-      expect(step1Action).toHaveBeenCalled();
-      expect(toolAction).toHaveBeenCalled();
-      expect(result.steps.step1).toEqual({
-        status: 'success',
-        output: { name: 'step1' },
-        payload: {},
-        startedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
-      expect(result.steps['random-tool']).toEqual({
-        status: 'success',
-        output: { name: 'step1' },
-        payload: { name: 'step1' },
-        startedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
+      expect(workflowSteps['random-tool']?.component).toBe('TOOL');
+      expect(workflowSteps['random-tool']?.description).toBe('random-tool');
     });
   });
 
@@ -4753,517 +9433,152 @@ describe('Workflow', () => {
       })
         .then(step1)
         .commit();
-      const run = await workflow.createRunAsync();
-      const run2 = await workflow.createRunAsync({ runId: run.runId });
+      const run = await workflow.createRun();
+      const run2 = await workflow.createRun({ runId: run.runId });
 
       expect(run.runId).toBeDefined();
       expect(run2.runId).toBeDefined();
       expect(run.runId).toBe(run2.runId);
     });
-    it('should handle basic suspend and resume flow', async () => {
-      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
-      const promptAgentAction = vi
+
+    it('should return correct status from storage when creating run with existing runId from different workflow instance', async () => {
+      const suspendStepAction = vi
         .fn()
         .mockImplementationOnce(async ({ suspend }) => {
-          await suspend();
-          return undefined;
-        })
-        .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
-      const evaluateToneAction = vi.fn().mockResolvedValue({
-        toneScore: { score: 0.8 },
-        completenessScore: { score: 0.7 },
-      });
-      const improveResponseAction = vi.fn().mockResolvedValue({ improvedOutput: 'improved output' });
-      const evaluateImprovedAction = vi.fn().mockResolvedValue({
-        toneScore: { score: 0.9 },
-        completenessScore: { score: 0.8 },
-      });
-
-      const getUserInput = createStep({
-        id: 'getUserInput',
-        execute: getUserInputAction,
-        inputSchema: z.object({ input: z.string() }),
-        outputSchema: z.object({ userInput: z.string() }),
-      });
-      const promptAgent = createStep({
-        id: 'promptAgent',
-        execute: promptAgentAction,
-        inputSchema: z.object({ userInput: z.string() }),
-        outputSchema: z.object({ modelOutput: z.string() }),
-      });
-      const evaluateTone = createStep({
-        id: 'evaluateToneConsistency',
-        execute: evaluateToneAction,
-        inputSchema: z.object({ modelOutput: z.string() }),
-        outputSchema: z.object({
-          toneScore: z.any(),
-          completenessScore: z.any(),
-        }),
-      });
-      const improveResponse = createStep({
-        id: 'improveResponse',
-        execute: improveResponseAction,
-        inputSchema: z.object({ toneScore: z.any(), completenessScore: z.any() }),
-        outputSchema: z.object({ improvedOutput: z.string() }),
-      });
-      const evaluateImproved = createStep({
-        id: 'evaluateImprovedResponse',
-        execute: evaluateImprovedAction,
-        inputSchema: z.object({ improvedOutput: z.string() }),
-        outputSchema: z.object({
-          toneScore: z.any(),
-          completenessScore: z.any(),
-        }),
-      });
-
-      const promptEvalWorkflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({ input: z.string() }),
-        outputSchema: z.object({}),
-        steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
-      });
-
-      promptEvalWorkflow
-        .then(getUserInput)
-        .then(promptAgent)
-        .then(evaluateTone)
-        .then(improveResponse)
-        .then(evaluateImproved)
-        .commit();
-
-      // Create a new storage instance for initial run
-      const initialStorage = new MockStore();
-
-      new Mastra({
-        logger: false,
-        storage: initialStorage,
-        workflows: { 'test-workflow': promptEvalWorkflow },
-      });
-
-      const run = await promptEvalWorkflow.createRunAsync();
-
-      // Create a promise to track when the workflow is ready to resume
-      let resolveWorkflowSuspended: (value: unknown) => void;
-      const workflowSuspended = new Promise(resolve => {
-        resolveWorkflowSuspended = resolve;
-      });
-
-      run.watch(data => {
-        const isPromptAgentSuspended =
-          data?.payload?.currentStep?.id === 'promptAgent' && data?.payload?.currentStep?.status === 'suspended';
-        if (isPromptAgentSuspended) {
-          resolveWorkflowSuspended({ stepId: 'promptAgent', context: { userInput: 'test input for resumption' } });
-        }
-      });
-
-      const initialResult = await run.start({ inputData: { input: 'test' } });
-      expect(initialResult.steps.promptAgent.status).toBe('suspended');
-      expect(promptAgentAction).toHaveBeenCalledTimes(1);
-
-      // Wait for the workflow to be ready to resume
-      const resumeData = await workflowSuspended;
-      const resumeResult = await run.resume({ resumeData: resumeData as any, step: promptAgent });
-
-      if (!resumeResult) {
-        throw new Error('Resume failed to return a result');
-      }
-
-      expect(resumeResult.steps).toEqual({
-        input: { input: 'test' },
-        getUserInput: {
-          status: 'success',
-          output: { userInput: 'test input' },
-          payload: { input: 'test' },
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        },
-        promptAgent: {
-          status: 'success',
-          output: { modelOutput: 'test output' },
-          payload: { userInput: 'test input' },
-          resumePayload: { context: { userInput: 'test input for resumption' }, stepId: 'promptAgent' },
-          resumedAt: expect.any(Number),
-          suspendedAt: expect.any(Number),
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        },
-        evaluateToneConsistency: {
-          status: 'success',
-          output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
-          payload: { modelOutput: 'test output' },
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        },
-        improveResponse: {
-          status: 'success',
-          output: { improvedOutput: 'improved output' },
-          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        },
-        evaluateImprovedResponse: {
-          status: 'success',
-          output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
-          payload: { improvedOutput: 'improved output' },
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        },
-      });
-    });
-
-    it('should handle parallel steps with conditional suspend', async () => {
-      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
-      const promptAgentAction = vi.fn().mockResolvedValue({ modelOutput: 'test output' });
-      const evaluateToneAction = vi.fn().mockResolvedValue({
-        toneScore: { score: 0.8 },
-        completenessScore: { score: 0.7 },
-      });
-      const humanInterventionAction = vi
-        .fn()
-        .mockImplementationOnce(async ({ suspend, resumeData }) => {
-          if (!resumeData?.humanPrompt) {
-            return suspend();
-          }
-        })
-        .mockImplementationOnce(() => ({ improvedOutput: 'human intervention output' }));
-      const explainResponseAction = vi.fn().mockResolvedValue({
-        improvedOutput: 'explanation output',
-      });
-
-      const getUserInput = createStep({
-        id: 'getUserInput',
-        execute: getUserInputAction,
-        inputSchema: z.object({ input: z.string() }),
-        outputSchema: z.object({ userInput: z.string() }),
-      });
-      const promptAgent = createStep({
-        id: 'promptAgent',
-        execute: promptAgentAction,
-        inputSchema: z.object({ userInput: z.string() }),
-        outputSchema: z.object({ modelOutput: z.string() }),
-      });
-      const evaluateTone = createStep({
-        id: 'evaluateToneConsistency',
-        execute: evaluateToneAction,
-        inputSchema: z.object({ modelOutput: z.string() }),
-        outputSchema: z.object({
-          toneScore: z.any(),
-          completenessScore: z.any(),
-        }),
-      });
-      const humanIntervention = createStep({
-        id: 'humanIntervention',
-        execute: humanInterventionAction,
-        inputSchema: z.object({ toneScore: z.any(), completenessScore: z.any() }),
-        outputSchema: z.object({ improvedOutput: z.string() }),
-      });
-      const explainResponse = createStep({
-        id: 'explainResponse',
-        execute: explainResponseAction,
-        inputSchema: z.object({ toneScore: z.any(), completenessScore: z.any() }),
-        outputSchema: z.object({ improvedOutput: z.string() }),
-      });
-
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({ input: z.string() }),
-        outputSchema: z.object({}),
-        steps: [getUserInput, promptAgent, evaluateTone, humanIntervention, explainResponse],
-      });
-
-      workflow
-        .then(getUserInput)
-        .then(promptAgent)
-        .then(evaluateTone)
-        .branch([
-          [() => Promise.resolve(true), humanIntervention],
-          [() => Promise.resolve(false), explainResponse],
-        ])
-        .commit();
-
-      new Mastra({
-        logger: false,
-        workflows: { 'test-workflow': workflow },
-        storage: testStorage,
-      });
-
-      const run = await workflow.createRunAsync();
-
-      // Create a promise to track when the workflow is ready to resume
-      let resolveWorkflowSuspended: (value: unknown) => void;
-      const workflowSuspended = new Promise(resolve => {
-        resolveWorkflowSuspended = resolve;
-      });
-
-      run.watch(async data => {
-        const suspended =
-          data.payload?.currentStep?.id === 'humanIntervention' && data.payload?.currentStep?.status === 'suspended';
-        if (suspended) {
-          resolveWorkflowSuspended({
-            humanPrompt: 'What improvements would you suggest?',
-          });
-        }
-      });
-
-      const initialResult = await run.start({ inputData: { input: 'test' } });
-
-      expect(initialResult.steps.humanIntervention.status).toBe('suspended');
-      expect(initialResult.steps.explainResponse).toBeUndefined();
-      expect(getUserInputAction).toHaveBeenCalledTimes(1);
-      expect(promptAgentAction).toHaveBeenCalledTimes(1);
-      expect(evaluateToneAction).toHaveBeenCalledTimes(1);
-      expect(humanInterventionAction).toHaveBeenCalledTimes(1);
-      expect(explainResponseAction).not.toHaveBeenCalled();
-
-      // Wait for the workflow to be ready to resume
-      const resumeData = await workflowSuspended;
-      const run2 = await workflow.createRunAsync({ runId: run.runId });
-      const resumeResult = await run2.resume({ resumeData: resumeData as any, step: humanIntervention });
-
-      if (!resumeResult) {
-        throw new Error('Resume failed to return a result');
-      }
-
-      expect(getUserInputAction).toHaveBeenCalledTimes(1);
-      expect(promptAgentAction).toHaveBeenCalledTimes(1);
-      expect(evaluateToneAction).toHaveBeenCalledTimes(1);
-      expect(humanInterventionAction).toHaveBeenCalledTimes(2);
-
-      expect(resumeResult.steps).toEqual({
-        input: { input: 'test' },
-        getUserInput: {
-          status: 'success',
-          output: { userInput: 'test input' },
-          payload: { input: 'test' },
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        },
-        promptAgent: {
-          status: 'success',
-          output: { modelOutput: 'test output' },
-          payload: { userInput: 'test input' },
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        },
-        evaluateToneConsistency: {
-          status: 'success',
-          output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
-          payload: { modelOutput: 'test output' },
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        },
-        humanIntervention: {
-          status: 'success',
-          output: { improvedOutput: 'human intervention output' },
-          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
-          resumePayload: { humanPrompt: 'What improvements would you suggest?' },
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-          resumedAt: expect.any(Number),
-          suspendedAt: expect.any(Number),
-        },
-      });
-    });
-
-    it('should handle complex workflow with multiple suspends', async () => {
-      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
-      const promptAgentAction = vi.fn().mockResolvedValue({ modelOutput: 'test output' });
-
-      const evaluateToneAction = vi.fn().mockResolvedValue({
-        toneScore: { score: 0.8 },
-        completenessScore: { score: 0.7 },
-      });
-      const improveResponseAction = vi
-        .fn()
-        .mockImplementationOnce(async ({ suspend }) => {
-          await suspend();
-        })
-        .mockImplementationOnce(() => ({ improvedOutput: 'improved output' }));
-      const evaluateImprovedAction = vi.fn().mockResolvedValue({
-        toneScore: { score: 0.9 },
-        completenessScore: { score: 0.8 },
-      });
-      const humanInterventionAction = vi
-        .fn()
-        .mockImplementationOnce(async ({ suspend }) => {
-          await suspend();
+          return suspend({ message: 'Workflow suspended' });
         })
         .mockImplementationOnce(() => {
-          return { improvedOutput: 'human intervention output' };
+          return { result: 'completed' };
         });
-      const explainResponseAction = vi.fn().mockResolvedValue({
-        improvedOutput: 'explanation output',
+
+      const suspendStep = createStep({
+        id: 'suspendStep',
+        execute: suspendStepAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ resumeMessage: z.string() }),
       });
 
-      const getUserInput = createStep({
-        id: 'getUserInput',
-        execute: getUserInputAction,
+      const workflow1 = createWorkflow({
+        id: 'test-resume-workflow',
         inputSchema: z.object({ input: z.string() }),
-        outputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [suspendStep],
+      })
+        .then(suspendStep)
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-resume-workflow': workflow1 },
       });
-      const promptAgent = createStep({
-        id: 'promptAgent',
-        execute: promptAgentAction,
-        inputSchema: z.object({ userInput: z.string() }),
-        outputSchema: z.object({ modelOutput: z.string() }),
+
+      // Start workflow and cause it to suspend
+      const run1 = await workflow1.createRun({ runId: 'test-run-id-123' });
+      const result = await run1.start({ inputData: { input: 'test' } });
+
+      expect(result.status).toBe('suspended');
+      expect(result.steps.suspendStep.status).toBe('suspended');
+
+      // Simulate a different workflow instance (e.g., different API request)
+      // This is the scenario: first API call starts workflow and causes suspend,
+      // second API call needs to continue the same workflow
+      const workflow2 = createWorkflow({
+        id: 'test-resume-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [suspendStep],
+      })
+        .then(suspendStep)
+        .commit();
+
+      workflow2.__registerMastra(mastra);
+
+      // Create run with the same runId from different workflow instance
+      // Before fix: would return run with 'pending' status
+      // After fix: returns run with correct 'suspended' status from storage
+      const run2 = await workflow2.createRun({ runId: 'test-run-id-123' });
+
+      // The run status should reflect the actual state from storage, not default to 'pending'
+      // This allows the user to check run.workflowRunStatus === 'suspended' and then resume
+      expect(run2.workflowRunStatus).toBe('suspended');
+
+      // Verify we can actually resume the workflow from the different instance
+      // This proves the fix works: different API request can resume a suspended workflow
+      const resumeResult = await run2.resume({
+        resumeData: { resumeMessage: 'resumed from different instance' },
+        step: 'suspendStep',
       });
-      const evaluateTone = createStep({
-        id: 'evaluateToneConsistency',
-        execute: evaluateToneAction,
-        inputSchema: z.object({ modelOutput: z.string() }),
-        outputSchema: z.object({
-          toneScore: z.any(),
-          completenessScore: z.any(),
-        }),
+
+      expect(resumeResult.status).toBe('success');
+      expect(suspendStepAction).toHaveBeenCalledTimes(2); // Once for suspend, once for resume
+    });
+
+    it('should update run status from storage snapshot when run exists in memory map', async () => {
+      const suspendStepAction = vi.fn().mockImplementation(async ({ suspend }) => {
+        return suspend({ message: 'Workflow suspended' });
       });
-      const improveResponse = createStep({
-        id: 'improveResponse',
-        execute: improveResponseAction,
-        inputSchema: z.object({ toneScore: z.any(), completenessScore: z.any() }),
-        outputSchema: z.object({ improvedOutput: z.string() }),
-      });
-      const evaluateImproved = createStep({
-        id: 'evaluateImprovedResponse',
-        execute: evaluateImprovedAction,
-        inputSchema: z.object({ improvedOutput: z.string() }),
-        outputSchema: z.object({
-          toneScore: z.any(),
-          completenessScore: z.any(),
-        }),
-      });
-      const humanIntervention = createStep({
-        id: 'humanIntervention',
-        execute: humanInterventionAction,
-        inputSchema: z.object({ toneScore: z.any(), completenessScore: z.any() }),
-        outputSchema: z.object({ improvedOutput: z.string() }),
-      });
-      const explainResponse = createStep({
-        id: 'explainResponse',
-        execute: explainResponseAction,
-        inputSchema: z.object({ toneScore: z.any(), completenessScore: z.any() }),
-        outputSchema: z.object({ improvedOutput: z.string() }),
+
+      const suspendStep = createStep({
+        id: 'suspendStep',
+        execute: suspendStepAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
       });
 
       const workflow = createWorkflow({
-        id: 'test-workflow',
+        id: 'test-prove-issue-workflow',
         inputSchema: z.object({ input: z.string() }),
-        outputSchema: z.object({}),
-        steps: [
-          getUserInput,
-          promptAgent,
-          evaluateTone,
-          improveResponse,
-          evaluateImproved,
-          humanIntervention,
-          explainResponse,
-        ],
-      });
-
-      workflow
-        .then(getUserInput)
-        .then(promptAgent)
-        .then(evaluateTone)
-        .then(improveResponse)
-        .then(evaluateImproved)
-        .map({
-          toneScore: {
-            step: evaluateTone,
-            path: 'toneScore',
-          },
-          completenessScore: {
-            step: evaluateTone,
-            path: 'completenessScore',
-          },
-        })
-        .parallel([humanIntervention, explainResponse])
+        outputSchema: z.object({ result: z.string() }),
+        steps: [suspendStep],
+      })
+        .then(suspendStep)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
-        workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        workflows: { 'test-prove-issue-workflow': workflow },
       });
 
-      const run = await workflow.createRunAsync();
-      const started = run.start({ inputData: { input: 'test' } });
-      let improvedResponseResultPromise: Promise<any | undefined>;
+      const runId = 'test-prove-issue-run-id';
 
-      const resultPromise = new Promise<any>((resolve, reject) => {
-        let hasResumed = false;
-        let hasResumedImproveResponse = false;
-        run.watch(async data => {
-          const state = data.payload?.workflowState;
+      // Step 1: Create a run and start it, causing it to suspend
+      // This stores the run in memory map AND persists suspended status to storage
+      const run1 = await workflow.createRun({ runId });
+      const result = await run1.start({ inputData: { input: 'test' } });
 
-          if (state.status !== 'suspended') {
-            return;
-          }
+      expect(result.status).toBe('suspended');
 
-          const isHumanInterventionSuspended = state.steps?.humanIntervention?.status === 'suspended';
-          const isImproveResponseSuspended = state.steps?.improveResponse?.status === 'suspended';
-
-          if (isHumanInterventionSuspended) {
-            if (!hasResumed) {
-              hasResumed = true;
-
-              try {
-                const resumed = await run.resume({
-                  step: humanIntervention,
-                  resumeData: {
-                    humanPrompt: 'What improvements would you suggest?',
-                  },
-                });
-                resolve(resumed as any);
-              } catch (error) {
-                reject(error);
-              }
-            }
-          } else if (isImproveResponseSuspended) {
-            if (!hasResumedImproveResponse) {
-              hasResumedImproveResponse = true;
-              const resumed = run.resume({
-                step: improveResponse,
-                resumeData: {
-                  ...data.payload.workflowState.steps,
-                },
-              });
-              improvedResponseResultPromise = resumed;
-            }
-          }
-        });
+      // Step 2: Manually verify storage has the suspended status
+      const storageSnapshot = await mastra.getStorage()?.loadWorkflowSnapshot({
+        workflowName: 'test-prove-issue-workflow',
+        runId,
       });
+      expect(storageSnapshot?.status).toBe('suspended'); // Storage has correct status
 
-      const result = await resultPromise;
-      const initialResult = await started;
-      expect(initialResult?.steps.improveResponse.status).toBe('suspended');
-      // @ts-ignore
-      const improvedResponseResult = await improvedResponseResultPromise;
+      // Step 3: Simulate stale status in memory - manually set run status to 'pending'
+      // This simulates what happens when the run exists in memory with stale status
+      // (e.g., from a previous request where status wasn't updated, or when Run status
+      // isn't automatically updated during execution)
+      run1.workflowRunStatus = 'pending' as any; // Force stale status in memory
 
-      expect(improvedResponseResult?.steps.humanIntervention.status).toBe('suspended');
-      expect(improvedResponseResult?.steps.improveResponse.status).toBe('success');
-      expect(improvedResponseResult?.steps.evaluateImprovedResponse.status).toBe('success');
+      // Verify the run in memory now has stale status
+      expect(run1.workflowRunStatus).toBe('pending');
 
-      if (!result) {
-        throw new Error('Resume failed to return a result');
-      }
+      // Step 4: Call createRun again with the same runId
+      // createRun checks the in-memory run-map first, then looks up storage
+      // It should update the run's status from storage to reflect the actual state
+      const run2 = await workflow.createRun({ runId });
 
-      expect(humanInterventionAction).toHaveBeenCalledTimes(2);
-      expect(explainResponseAction).toHaveBeenCalledTimes(1);
+      // Verify run2 is the same instance from memory map
+      expect(run2).toBe(run1); // Same instance from memory map
 
-      expect(result.steps).toMatchObject({
-        input: { input: 'test' },
-        getUserInput: { status: 'success', output: { userInput: 'test input' } },
-        promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
-        evaluateToneConsistency: {
-          status: 'success',
-          output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
-        },
-        improveResponse: { status: 'success', output: { improvedOutput: 'improved output' } },
-        evaluateImprovedResponse: {
-          status: 'success',
-          output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
-        },
-        humanIntervention: { status: 'success', output: { improvedOutput: 'human intervention output' } },
-      });
+      // The run status should be updated from storage, not remain stale in memory
+      expect(run2.workflowRunStatus).toBe('suspended');
     });
 
     it('should handle basic suspend and resume flow with async await syntax', async () => {
@@ -5353,7 +9668,7 @@ describe('Workflow', () => {
         workflows: { 'test-workflow': promptEvalWorkflow },
       });
 
-      const run = await promptEvalWorkflow.createRunAsync();
+      const run = await promptEvalWorkflow.createRun();
 
       const initialResult = await run.start({ inputData: { input: 'test' } });
       expect(initialResult.steps.promptAgent.status).toBe('suspended');
@@ -5499,20 +9814,255 @@ describe('Workflow', () => {
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
     });
 
-    it('should work with runtimeContext - bug #4442', async () => {
+    it('should handle basic suspend and resume flow with async await syntax with state', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
-      const promptAgentAction = vi.fn().mockImplementation(async ({ suspend, runtimeContext, resumeData }) => {
+      const promptAgentAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          return suspend({ testPayload: 'hello' });
+        })
+        .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
+      const evaluateToneAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.8 },
+        completenessScore: { score: 0.7 },
+      });
+      const improveResponseAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend, state, setState }) => {
+          setState({ ...state, value: 'test state' });
+          await suspend();
+          return undefined;
+        })
+        .mockImplementationOnce(() => ({ improvedOutput: 'improved output' }));
+      const evaluateImprovedAction = vi.fn().mockImplementation(({ state }) => ({
+        toneScore: { score: 0.9 },
+        completenessScore: { score: 0.8 },
+        value: state.value,
+      }));
+
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+        suspendSchema: z.object({ testPayload: z.string() }),
+        resumeSchema: z.object({ userInput: z.string() }),
+      });
+      const evaluateTone = createStep({
+        id: 'evaluateToneConsistency',
+        execute: evaluateToneAction,
+        inputSchema: z.object({ modelOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+      const improveResponse = createStep({
+        id: 'improveResponse',
+        execute: improveResponseAction,
+        resumeSchema: z.object({
+          toneScore: z.object({ score: z.number() }),
+          completenessScore: z.object({ score: z.number() }),
+        }),
+        inputSchema: z.object({ toneScore: z.any(), completenessScore: z.any() }),
+        outputSchema: z.object({ improvedOutput: z.string() }),
+      });
+      const evaluateImproved = createStep({
+        id: 'evaluateImprovedResponse',
+        execute: evaluateImprovedAction,
+        inputSchema: z.object({ improvedOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+
+      const promptEvalWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+      });
+
+      promptEvalWorkflow
+        .then(getUserInput)
+        .then(promptAgent)
+        .then(evaluateTone)
+        .then(improveResponse)
+        .then(evaluateImproved)
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-workflow': promptEvalWorkflow },
+      });
+
+      const run = await promptEvalWorkflow.createRun();
+
+      const initialResult = await run.start({ inputData: { input: 'test' } });
+      expect(initialResult.steps.promptAgent.status).toBe('suspended');
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+      // expect(initialResult.activePaths.size).toBe(1);
+      // expect(initialResult.activePaths.get('promptAgent')?.status).toBe('suspended');
+      // expect(initialResult.activePaths.get('promptAgent')?.suspendPayload).toEqual({ testPayload: 'hello' });
+      expect(initialResult.steps).toEqual({
+        input: { input: 'test' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'suspended',
+          payload: { userInput: 'test input' },
+          suspendPayload: { testPayload: 'hello' },
+          startedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
+      });
+
+      const newCtx = {
+        userInput: 'test input for resumption',
+      };
+
+      expect(initialResult.steps.promptAgent.status).toBe('suspended');
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+
+      const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx });
+      if (!firstResumeResult) {
+        throw new Error('Resume failed to return a result');
+      }
+
+      // expect(firstResumeResult.activePaths.size).toBe(1);
+      // expect(firstResumeResult.activePaths.get('improveResponse')?.status).toBe('suspended');
+      expect(firstResumeResult.steps).toEqual({
+        input: { input: 'test' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input' },
+          suspendPayload: { testPayload: 'hello' },
+          resumePayload: { userInput: 'test input for resumption' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: {
+            toneScore: { score: 0.8 },
+            completenessScore: { score: 0.7 },
+          },
+          payload: { modelOutput: 'test output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        improveResponse: {
+          status: 'suspended',
+          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          startedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
+      });
+
+      const secondResumeResult = await run.resume({
+        step: improveResponse,
+        resumeData: {
+          toneScore: { score: 0.8 },
+          completenessScore: { score: 0.7 },
+        },
+      });
+      if (!secondResumeResult) {
+        throw new Error('Resume failed to return a result');
+      }
+
+      expect(promptAgentAction).toHaveBeenCalledTimes(2);
+
+      expect(secondResumeResult.steps).toEqual({
+        input: { input: 'test' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input' },
+          suspendPayload: { testPayload: 'hello' },
+          resumePayload: { userInput: 'test input for resumption' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: {
+            toneScore: { score: 0.8 },
+            completenessScore: { score: 0.7 },
+          },
+          payload: { modelOutput: 'test output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        improveResponse: {
+          status: 'success',
+          output: { improvedOutput: 'improved output' },
+          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          resumePayload: {
+            toneScore: { score: 0.8 },
+            completenessScore: { score: 0.7 },
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        evaluateImprovedResponse: {
+          status: 'success',
+          output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 }, value: 'test state' },
+          payload: { improvedOutput: 'improved output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      expect(promptAgentAction).toHaveBeenCalledTimes(2);
+    });
+
+    it('should work with requestContext - bug #4442', async () => {
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi.fn().mockImplementation(async ({ suspend, requestContext, resumeData }) => {
         if (!resumeData) {
-          runtimeContext.set('responses', [...(runtimeContext.get('responses') ?? []), 'first message']);
+          requestContext.set('responses', [...(requestContext.get('responses') ?? []), 'first message']);
           return await suspend({ testPayload: 'hello' });
         }
 
-        runtimeContext.set('responses', [...(runtimeContext.get('responses') ?? []), 'promptAgentAction']);
+        requestContext.set('responses', [...(requestContext.get('responses') ?? []), 'promptAgentAction']);
 
         return undefined;
       });
-      const runtimeContextAction = vi.fn().mockImplementation(async ({ runtimeContext }) => {
-        return runtimeContext.get('responses');
+      const requestContextAction = vi.fn().mockImplementation(async ({ requestContext }) => {
+        return requestContext.get('responses');
       });
 
       const getUserInput = createStep({
@@ -5529,9 +10079,9 @@ describe('Workflow', () => {
         suspendSchema: z.object({ testPayload: z.string() }),
         resumeSchema: z.object({ userInput: z.string() }),
       });
-      const runtimeContextStep = createStep({
-        id: 'runtimeContextAction',
-        execute: runtimeContextAction,
+      const requestContextStep = createStep({
+        id: 'requestContextAction',
+        execute: requestContextAction,
         inputSchema: z.object({ modelOutput: z.string() }),
         outputSchema: z.array(z.string()),
       });
@@ -5540,9 +10090,10 @@ describe('Workflow', () => {
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({}),
+        options: { validateInputs: false },
       });
 
-      promptEvalWorkflow.then(getUserInput).then(promptAgent).then(runtimeContextStep).commit();
+      promptEvalWorkflow.then(getUserInput).then(promptAgent).then(requestContextStep).commit();
 
       new Mastra({
         logger: false,
@@ -5550,7 +10101,7 @@ describe('Workflow', () => {
         workflows: { 'test-workflow': promptEvalWorkflow },
       });
 
-      const run = await promptEvalWorkflow.createRunAsync();
+      const run = await promptEvalWorkflow.createRun();
 
       const initialResult = await run.start({ inputData: { input: 'test' } });
       expect(initialResult.steps.promptAgent.status).toBe('suspended');
@@ -5562,25 +10113,25 @@ describe('Workflow', () => {
 
       const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx });
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
-      expect(firstResumeResult.steps.runtimeContextAction.status).toBe('success');
+      expect(firstResumeResult.steps.requestContextAction.status).toBe('success');
       // @ts-ignore
-      expect(firstResumeResult.steps.runtimeContextAction.output).toEqual(['first message', 'promptAgentAction']);
+      expect(firstResumeResult.steps.requestContextAction.output).toEqual(['first message', 'promptAgentAction']);
     });
 
-    it('should work with custom runtimeContext - bug #4442', async () => {
+    it('should work with custom requestContext - bug #4442', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
-      const promptAgentAction = vi.fn().mockImplementation(async ({ suspend, runtimeContext, resumeData }) => {
+      const promptAgentAction = vi.fn().mockImplementation(async ({ suspend, requestContext, resumeData }) => {
         if (!resumeData) {
-          runtimeContext.set('responses', [...(runtimeContext.get('responses') ?? []), 'first message']);
+          requestContext.set('responses', [...(requestContext.get('responses') ?? []), 'first message']);
           return await suspend({ testPayload: 'hello' });
         }
 
-        runtimeContext.set('responses', [...(runtimeContext.get('responses') ?? []), 'promptAgentAction']);
+        requestContext.set('responses', [...(requestContext.get('responses') ?? []), 'promptAgentAction']);
 
         return undefined;
       });
-      const runtimeContextAction = vi.fn().mockImplementation(async ({ runtimeContext }) => {
-        return runtimeContext.get('responses');
+      const requestContextAction = vi.fn().mockImplementation(async ({ requestContext }) => {
+        return requestContext.get('responses');
       });
 
       const getUserInput = createStep({
@@ -5597,9 +10148,9 @@ describe('Workflow', () => {
         suspendSchema: z.object({ testPayload: z.string() }),
         resumeSchema: z.object({ userInput: z.string() }),
       });
-      const runtimeContextStep = createStep({
-        id: 'runtimeContextAction',
-        execute: runtimeContextAction,
+      const requestContextStep = createStep({
+        id: 'requestContextAction',
+        execute: requestContextAction,
         inputSchema: z.object({ modelOutput: z.string() }),
         outputSchema: z.array(z.string()),
       });
@@ -5608,9 +10159,10 @@ describe('Workflow', () => {
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({}),
+        options: { validateInputs: false },
       });
 
-      promptEvalWorkflow.then(getUserInput).then(promptAgent).then(runtimeContextStep).commit();
+      promptEvalWorkflow.then(getUserInput).then(promptAgent).then(requestContextStep).commit();
 
       new Mastra({
         logger: false,
@@ -5618,26 +10170,27 @@ describe('Workflow', () => {
         workflows: { 'test-workflow': promptEvalWorkflow },
       });
 
-      const run = await promptEvalWorkflow.createRunAsync();
+      const run = await promptEvalWorkflow.createRun();
 
-      const runtimeContext = new RuntimeContext();
-      const initialResult = await run.start({ inputData: { input: 'test' }, runtimeContext });
+      const requestContext = new RequestContext();
+      const initialResult = await run.start({ inputData: { input: 'test' }, requestContext });
       expect(initialResult.steps.promptAgent.status).toBe('suspended');
       expect(promptAgentAction).toHaveBeenCalledTimes(1);
-      expect(runtimeContext.get('responses')).toEqual(['first message']);
+      expect(requestContext.get('responses')).toEqual(['first message']);
 
       const newCtx = {
         userInput: 'test input for resumption',
       };
 
-      const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx, runtimeContext });
+      const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx, requestContext });
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
-      expect(firstResumeResult.steps.runtimeContextAction.status).toBe('success');
+      expect(firstResumeResult.steps.requestContextAction.status).toBe('success');
       // @ts-ignore
-      expect(firstResumeResult.steps.runtimeContextAction.output).toEqual(['first message', 'promptAgentAction']);
+      expect(firstResumeResult.steps.requestContextAction.output).toEqual(['first message', 'promptAgentAction']);
     });
 
     it('should handle basic suspend and resume in a dountil workflow', async () => {
+      let count = 0;
       const resumeStep = createStep({
         id: 'resume',
         inputSchema: z.object({ value: z.number() }),
@@ -5688,7 +10241,10 @@ describe('Workflow', () => {
             .then(incrementStep)
             .then(resumeStep)
             .commit(),
-          async ({ inputData }) => inputData.value >= 10,
+          async ({ inputData, iterationCount }) => {
+            expect(iterationCount).toBe(++count);
+            return inputData.value >= 10;
+          },
         )
         .then(
           createStep({
@@ -5706,7 +10262,7 @@ describe('Workflow', () => {
         workflows: { dowhileWorkflow },
       });
 
-      const run = await dowhileWorkflow.createRunAsync();
+      const run = await dowhileWorkflow.createRun();
       const result = await run.start({ inputData: { value: 0 } });
       expect(result.steps['simple-resume-workflow']).toMatchObject({
         status: 'suspended',
@@ -5731,14 +10287,120 @@ describe('Workflow', () => {
       });
     });
 
+    it('should handle writer.custom during resume operations', async () => {
+      let customEvents: WorkflowStreamEvent[] = [];
+
+      const stepWithWriter = createStep({
+        id: 'step-with-writer',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number(), success: z.boolean() }),
+        suspendSchema: z.object({ suspendValue: z.number() }),
+        resumeSchema: z.object({ resumeValue: z.number() }),
+        execute: async ({ inputData, resumeData, writer, suspend }) => {
+          if (!resumeData?.resumeValue) {
+            // First run - emit custom event and suspend
+            await writer?.custom({
+              type: 'suspend-event',
+              data: { message: 'About to suspend', value: inputData.value },
+            });
+
+            await suspend({ suspendValue: inputData.value });
+            return { value: inputData.value, success: false };
+          } else {
+            // Resume - emit custom event to test that writer works on resume
+            await writer?.custom({
+              type: 'resume-event',
+              data: {
+                message: 'Successfully resumed',
+                originalValue: inputData.value,
+                resumeValue: resumeData.resumeValue,
+              },
+            });
+
+            return { value: resumeData.resumeValue, success: true };
+          }
+        },
+      });
+
+      const testWorkflow = createWorkflow({
+        id: 'test-resume-writer',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number(), success: z.boolean() }),
+      });
+
+      testWorkflow.then(stepWithWriter).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-resume-writer': testWorkflow },
+      });
+
+      // Create run and start workflow
+      const run = await testWorkflow.createRun();
+
+      // Use streaming to capture custom events
+      let streamResult = run.stream({ inputData: { value: 42 } });
+
+      // Collect all events from the stream - custom events come through directly
+      for await (const event of streamResult.fullStream) {
+        //@ts-expect-error `suspend-event` is custom
+        if (event.type === 'suspend-event') {
+          customEvents.push(event);
+        }
+      }
+
+      const firstResult = await streamResult.result;
+      expect(firstResult.status).toBe('suspended');
+
+      // Check that suspend event was emitted
+      expect(customEvents).toHaveLength(1);
+      expect(customEvents[0].type).toBe('suspend-event');
+      // @ts-expect-error data.message exists on this custom event
+      expect(customEvents[0].data.message).toBe('About to suspend');
+      // @ts-expect-error data.value exists on this custom event
+      expect(customEvents[0].data.value).toBe(42);
+
+      // Reset events for resume test
+      customEvents = [];
+
+      // Resume the workflow using streaming
+      streamResult = run.resumeStream({
+        resumeData: { resumeValue: 99 },
+      });
+
+      // Collect events from resume stream
+      for await (const event of streamResult.fullStream) {
+        // @ts-expect-error `resume-event` is custom
+        if (event.type === 'resume-event') {
+          customEvents.push(event);
+        }
+      }
+
+      const resumeResult = await streamResult.result;
+      expect(resumeResult.status).toBe('success');
+      // @ts-expect-error output exists on success result
+      expect(resumeResult.result).toEqual({ value: 99, success: true });
+
+      // Check that resume event was emitted (this proves writer.custom works during resume)
+      expect(customEvents).toHaveLength(1);
+      expect(customEvents[0].type).toBe('resume-event');
+      // @ts-expect-error data.message exists on this custom event
+      expect(customEvents[0].data.message).toBe('Successfully resumed');
+      // @ts-expect-error data.originalValue exists on this custom event
+      expect(customEvents[0].data.originalValue).toBe(42);
+      // @ts-expect-error data.resumeValue exists on this custom event
+      expect(customEvents[0].data.resumeValue).toBe(99);
+    });
+
     it('should handle basic suspend and resume in nested dountil workflow - bug #5650', async () => {
       let incrementLoopValue = 2;
       const resumeStep = createStep({
         id: 'resume',
         inputSchema: z.object({ value: z.number() }),
         outputSchema: z.object({ value: z.number() }),
-        execute: async ({ inputData, runtimeContext, getInitData }) => {
-          const shouldNotExist = runtimeContext?.get('__mastraWorflowInputData');
+        execute: async ({ inputData, requestContext, getInitData }) => {
+          const shouldNotExist = requestContext?.get('__mastraWorflowInputData');
           expect(shouldNotExist).toBeUndefined();
           const initData = getInitData();
 
@@ -5762,8 +10424,8 @@ describe('Workflow', () => {
         suspendSchema: z.object({
           optionsToIncrementBy: z.array(z.number()),
         }),
-        execute: async ({ inputData, resumeData, suspend, runtimeContext }) => {
-          const shouldNotExist = runtimeContext?.get('__mastraWorflowInputData');
+        execute: async ({ inputData, resumeData, suspend, requestContext }) => {
+          const shouldNotExist = requestContext?.get('__mastraWorflowInputData');
           expect(shouldNotExist).toBeUndefined();
           if (!resumeData?.amountToIncrementBy) {
             return suspend({ optionsToIncrementBy: [1, 2, 3] });
@@ -5810,7 +10472,7 @@ describe('Workflow', () => {
         workflows: { dowhileWorkflow },
       });
 
-      const run = await dowhileWorkflow.createRunAsync();
+      const run = await dowhileWorkflow.createRun();
       const result = await run.start({ inputData: { value: 2 } });
       expect(result.steps['simple-resume-workflow']).toMatchObject({
         status: 'suspended',
@@ -5866,7 +10528,7 @@ describe('Workflow', () => {
         workflows: { incrementWorkflow },
       });
 
-      const run = await incrementWorkflow.createRunAsync();
+      const run = await incrementWorkflow.createRun();
       const result = await run.start({ inputData: { value: 0 } });
       expect(result.status).toBe('success');
 
@@ -5937,7 +10599,7 @@ describe('Workflow', () => {
         workflows: { incrementWorkflow },
       });
 
-      const run = await incrementWorkflow.createRunAsync();
+      const run = await incrementWorkflow.createRun();
       const result = await run.start({ inputData: { value: 0 } });
       expect(result.status).toBe('suspended');
 
@@ -6009,7 +10671,7 @@ describe('Workflow', () => {
         .commit();
 
       // Test 1: Start workflow and suspend
-      const run1 = await testWorkflow.createRunAsync();
+      const run1 = await testWorkflow.createRun();
       const result1 = await run1.start({ inputData: { value: 42 } });
       expect(result1.status).toBe('suspended');
       expect(result1.suspended).toEqual([['suspend-step']]);
@@ -6023,7 +10685,7 @@ describe('Workflow', () => {
       expect(explicitResumeResult.result.final).toBe('Completed: processed-explicit-resume');
 
       // Test 3: Auto-resume without step parameter (new feature)
-      const run2 = await testWorkflow.createRunAsync();
+      const run2 = await testWorkflow.createRun();
       const result2 = await run2.start({ inputData: { value: 100 } });
       expect(result2.status).toBe('suspended');
 
@@ -6118,7 +10780,7 @@ describe('Workflow', () => {
         workflows: { workflowUntilVar },
       });
 
-      const run = await workflowUntilVar.createRunAsync();
+      const run = await workflowUntilVar.createRun();
 
       const result = await run.start({
         inputData: { value: 0, condition: false },
@@ -6140,6 +10802,2998 @@ describe('Workflow', () => {
       expect(thridResume.steps['step-1'].payload.value).toBe(3);
 
       expect(thridResume.status).toBe('suspended');
+    });
+
+    it('should preserve state across suspend and resume cycles', async () => {
+      const stateValuesObserved: any[] = [];
+
+      const step1 = createStep({
+        id: 'step-1',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema: z.object({ count: z.number(), items: z.array(z.string()) }),
+        execute: async ({ state, setState, suspend, resumeData }) => {
+          stateValuesObserved.push({ step: 'step-1', state: { ...state } });
+
+          if (!resumeData) {
+            // First run: update state and suspend
+            setState({ ...state, count: state.count + 1, items: [...state.items, 'item-1'] });
+            await suspend({});
+            return {};
+          }
+
+          // After resume: state should be preserved
+          return {};
+        },
+        resumeSchema: z.object({ proceed: z.boolean() }),
+      });
+
+      const step2 = createStep({
+        id: 'step-2',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ finalCount: z.number(), itemCount: z.number() }),
+        stateSchema: z.object({ count: z.number(), items: z.array(z.string()) }),
+        execute: async ({ state }) => {
+          stateValuesObserved.push({ step: 'step-2', state: { ...state } });
+          return { finalCount: state.count, itemCount: state.items.length };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'state-persistence-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ finalCount: z.number(), itemCount: z.number() }),
+        stateSchema: z.object({ count: z.number(), items: z.array(z.string()) }),
+        steps: [step1, step2],
+        mastra: new Mastra({ logger: false, storage: testStorage }),
+      })
+        .then(step1)
+        .then(step2)
+        .commit();
+
+      const run = await workflow.createRun();
+
+      // Start workflow with initial state
+      const startResult = await run.start({
+        inputData: {},
+        initialState: { count: 0, items: [] },
+      });
+
+      expect(startResult.status).toBe('suspended');
+      expect(stateValuesObserved).toHaveLength(1);
+      expect(stateValuesObserved[0]).toEqual({
+        step: 'step-1',
+        state: { count: 0, items: [] },
+      });
+
+      // Resume workflow
+      const resumeResult = await run.resume({
+        step: 'step-1',
+        resumeData: { proceed: true },
+      });
+
+      expect(resumeResult.status).toBe('success');
+      // After resume, step-1 runs again and step-2 runs
+      expect(stateValuesObserved.length).toBeGreaterThanOrEqual(2);
+
+      // Step-2 should see the updated state
+      const step2Observation = stateValuesObserved.find(o => o.step === 'step-2');
+      expect(step2Observation?.state).toEqual({
+        count: 1,
+        items: ['item-1'],
+      });
+    });
+  });
+
+  describe('Restart', () => {
+    afterAll(async () => {
+      const pathToDb = path.join(process.cwd(), 'mastra.db');
+
+      if (fs.existsSync(pathToDb)) {
+        fs.rmSync(pathToDb);
+      }
+    });
+
+    it('should throw error if trying to restart a workflow execution that was not previously active', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ step1Result: z.number() }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return {
+            step2Result: inputData.step1Result + 1,
+          };
+        },
+        inputSchema: z.object({ step1Result: z.number() }),
+        outputSchema: z.object({ step2Result: z.number() }),
+      });
+
+      const step3 = createStep({
+        id: 'step3',
+        execute: async ({ inputData }) => {
+          return {
+            final: inputData.step2Result + 1,
+          };
+        },
+        inputSchema: z.object({ step2Result: z.number() }),
+        outputSchema: z.object({ final: z.number() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'testWorkflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({
+          final: z.number(),
+        }),
+        steps: [step1, step2, step3],
+      });
+
+      workflow.then(step1).then(step2).then(step3).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { testWorkflow: workflow },
+      });
+
+      const runId = 'test-run-id';
+
+      const run = await workflow.createRun({ runId });
+      await expect(run.restart()).rejects.toThrow('This workflow run was not active');
+
+      const result = await run.start({ inputData: { value: 0 } });
+
+      expect(result.status).toBe('success');
+
+      await expect(run.restart()).rejects.toThrow('This workflow run was not active');
+
+      expect(execute).toHaveBeenCalled();
+    });
+
+    it('should restart a workflow execution that was previously active', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ step1Result: z.number() }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return {
+            step2Result: inputData.step1Result + 1,
+          };
+        },
+        inputSchema: z.object({ step1Result: z.number() }),
+        outputSchema: z.object({ step2Result: z.number() }),
+      });
+
+      const step3 = createStep({
+        id: 'step3',
+        execute: async ({ inputData }) => {
+          return {
+            final: inputData.step2Result + 1,
+          };
+        },
+        inputSchema: z.object({ step2Result: z.number() }),
+        outputSchema: z.object({ final: z.number() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'testWorkflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({
+          final: z.number(),
+        }),
+        steps: [step1, step2, step3],
+      });
+
+      workflow.then(step1).then(step2).then(step3).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { testWorkflow: workflow },
+      });
+
+      const runId = 'test-run-id';
+      const storage = mastra.getStorage();
+
+      //mimic a workflow run that was previously active
+      await storage?.persistWorkflowSnapshot({
+        workflowName: 'testWorkflow',
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          activePaths: [1],
+          activeStepsPath: { step2: [1] },
+          value: {},
+          context: {
+            input: { value: 0 },
+            step1: {
+              payload: { value: 0 },
+              startedAt: Date.now(),
+              status: 'success',
+              output: { step1Result: 2 },
+              endedAt: Date.now(),
+            },
+            step2: {
+              payload: { step1Result: 2 },
+              startedAt: Date.now(),
+              status: 'running',
+            },
+          } as any,
+          serializedStepGraph: workflow.serializedStepGraph as any,
+          suspendedPaths: {},
+          waitingPaths: {},
+          resumeLabels: {},
+          timestamp: Date.now(),
+        },
+      });
+
+      const run = await workflow.createRun({ runId });
+      const restartResult = await run.restart();
+
+      expect(restartResult.status).toBe('success');
+      expect(restartResult).toMatchObject({
+        status: 'success',
+        steps: {
+          input: {
+            value: 0,
+          },
+          step1: {
+            payload: {
+              value: 0,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              step1Result: 2,
+            },
+            endedAt: expect.any(Number),
+          },
+          step2: {
+            payload: {
+              step1Result: 2,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              step2Result: 3,
+            },
+            endedAt: expect.any(Number),
+          },
+          step3: {
+            payload: {
+              step2Result: 3,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              final: 4,
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        input: {
+          value: 0,
+        },
+        result: {
+          final: 4,
+        },
+      });
+
+      expect(execute).toHaveBeenCalledTimes(0);
+    });
+
+    it('should restart a workflow execution that was previously active and has nested workflows', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const executeStep2 = vi.fn<any>().mockResolvedValue({ step2Result: 3 });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ step1Result: z.number() }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: executeStep2,
+        inputSchema: z.object({ step1Result: z.number() }),
+        outputSchema: z.object({ step2Result: z.number() }),
+      });
+
+      const step3 = createStep({
+        id: 'step3',
+        execute: async ({ inputData }) => {
+          return {
+            nestedFinal: inputData.step2Result + 1,
+          };
+        },
+        inputSchema: z.object({ step2Result: z.number() }),
+        outputSchema: z.object({ nestedFinal: z.number() }),
+      });
+
+      const step4 = createStep({
+        id: 'step4',
+        execute: async ({ inputData }) => {
+          return {
+            final: inputData.nestedFinal + 1,
+          };
+        },
+        inputSchema: z.object({ nestedFinal: z.number() }),
+        outputSchema: z.object({ final: z.number() }),
+      });
+
+      const nestedWorkflow = createWorkflow({
+        id: 'nestedWorkflow',
+        inputSchema: z.object({ step1Result: z.number() }),
+        outputSchema: z.object({
+          nestedFinal: z.number(),
+        }),
+        steps: [step2, step3],
+      })
+        .then(step2)
+        .then(step3)
+        .commit();
+
+      const workflow = createWorkflow({
+        id: 'testWorkflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({
+          final: z.number(),
+        }),
+      })
+        .then(step1)
+        .then(nestedWorkflow)
+        .then(step4)
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { testWorkflow: workflow },
+      });
+
+      const runId = 'test-run-id';
+      const storage = mastra.getStorage();
+
+      //mimic a workflow run that was previously active
+      await storage?.persistWorkflowSnapshot({
+        workflowName: 'testWorkflow',
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          activePaths: [1],
+          activeStepsPath: { nestedWorkflow: [1] },
+          value: {},
+          context: {
+            input: { value: 0 },
+            step1: {
+              payload: { value: 0 },
+              startedAt: Date.now(),
+              status: 'success',
+              output: { step1Result: 2 },
+              endedAt: Date.now(),
+            },
+            nestedWorkflow: {
+              payload: { step1Result: 2 },
+              startedAt: Date.now(),
+              status: 'running',
+            },
+          } as any,
+          serializedStepGraph: workflow.serializedStepGraph as any,
+          suspendedPaths: {},
+          waitingPaths: {},
+          resumeLabels: {},
+          timestamp: Date.now(),
+        },
+      });
+
+      //mimic a workflow run that was previously active for the nested workflow
+      await storage?.persistWorkflowSnapshot({
+        workflowName: 'nestedWorkflow',
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          activePaths: [1],
+          activeStepsPath: { step3: [1] },
+          value: {},
+          context: {
+            input: { step1Result: 2 },
+            step2: {
+              payload: { step1Result: 2 },
+              startedAt: Date.now(),
+              status: 'success',
+              output: { step2Result: 3 },
+              endedAt: Date.now(),
+            },
+            step3: {
+              payload: { step2Result: 3 },
+              startedAt: Date.now(),
+              status: 'running',
+            },
+          } as any,
+          serializedStepGraph: nestedWorkflow.serializedStepGraph as any,
+          suspendedPaths: {},
+          waitingPaths: {},
+          resumeLabels: {},
+          timestamp: Date.now(),
+        },
+      });
+
+      const run = await workflow.createRun({ runId });
+      const restartResult = await run.restart();
+
+      expect(restartResult.status).toBe('success');
+      expect(restartResult).toMatchObject({
+        status: 'success',
+        steps: {
+          input: {
+            value: 0,
+          },
+          step1: {
+            payload: {
+              value: 0,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              step1Result: 2,
+            },
+            endedAt: expect.any(Number),
+          },
+          nestedWorkflow: {
+            payload: {
+              step1Result: 2,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              nestedFinal: 4,
+            },
+            endedAt: expect.any(Number),
+          },
+          step4: {
+            payload: {
+              nestedFinal: 4,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              final: 5,
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        input: {
+          value: 0,
+        },
+        result: {
+          final: 5,
+        },
+      });
+
+      expect(execute).toHaveBeenCalledTimes(0);
+      expect(executeStep2).toHaveBeenCalledTimes(0);
+
+      const runId2 = 'test-run-id-2';
+
+      //mimic a workflow run that was previously active
+      await storage?.persistWorkflowSnapshot({
+        workflowName: 'testWorkflow',
+        runId: runId2,
+        snapshot: {
+          runId: runId2,
+          status: 'running',
+          activePaths: [1],
+          activeStepsPath: { nestedWorkflow: [1] },
+          value: {},
+          context: {
+            input: { value: 0 },
+            step1: {
+              payload: { value: 0 },
+              startedAt: Date.now(),
+              status: 'success',
+              output: { step1Result: 2 },
+              endedAt: Date.now(),
+            },
+            nestedWorkflow: {
+              payload: { step1Result: 2 },
+              startedAt: Date.now(),
+              status: 'running',
+            },
+          } as any,
+          serializedStepGraph: workflow.serializedStepGraph as any,
+          suspendedPaths: {},
+          waitingPaths: {},
+          resumeLabels: {},
+          timestamp: Date.now(),
+        },
+      });
+
+      //mimic a workflow run that was previously created for the nested workflow but server died before it started running
+      await storage?.persistWorkflowSnapshot({
+        workflowName: 'nestedWorkflow',
+        runId: runId2,
+        snapshot: {
+          runId: runId2,
+          status: 'pending',
+          activePaths: [],
+          activeStepsPath: {},
+          value: {},
+          context: {
+            input: { step1Result: 2 },
+          } as any,
+          serializedStepGraph: nestedWorkflow.serializedStepGraph as any,
+          suspendedPaths: {},
+          waitingPaths: {},
+          resumeLabels: {},
+          timestamp: Date.now(),
+        },
+      });
+
+      const run2 = await workflow.createRun({ runId: runId2 });
+      const restartResult2 = await run2.restart();
+
+      expect(restartResult2.status).toBe('success');
+      expect(restartResult2).toMatchObject({
+        status: 'success',
+        steps: {
+          input: {
+            value: 0,
+          },
+          step1: {
+            payload: {
+              value: 0,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              step1Result: 2,
+            },
+            endedAt: expect.any(Number),
+          },
+          nestedWorkflow: {
+            payload: {
+              step1Result: 2,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              nestedFinal: 4,
+            },
+            endedAt: expect.any(Number),
+          },
+          step4: {
+            payload: {
+              nestedFinal: 4,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              final: 5,
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        input: {
+          value: 0,
+        },
+        result: {
+          final: 5,
+        },
+      });
+
+      expect(execute).toHaveBeenCalledTimes(0);
+      expect(executeStep2).toHaveBeenCalledTimes(1);
+    });
+
+    it('should successfully suspend and resume a restarted workflow execution', async () => {
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          return suspend({ testPayload: 'hello' });
+        })
+        .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
+      const evaluateToneAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.8 },
+        completenessScore: { score: 0.7 },
+      });
+      const improveResponseAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          await suspend();
+          return undefined;
+        })
+        .mockImplementationOnce(() => ({ improvedOutput: 'improved output' }));
+      const evaluateImprovedAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.9 },
+        completenessScore: { score: 0.8 },
+      });
+
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+        suspendSchema: z.object({ testPayload: z.string() }),
+        resumeSchema: z.object({ userInput: z.string() }),
+      });
+      const evaluateTone = createStep({
+        id: 'evaluateToneConsistency',
+        execute: evaluateToneAction,
+        inputSchema: z.object({ modelOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+      const improveResponse = createStep({
+        id: 'improveResponse',
+        execute: improveResponseAction,
+        resumeSchema: z.object({
+          toneScore: z.object({ score: z.number() }),
+          completenessScore: z.object({ score: z.number() }),
+        }),
+        inputSchema: z.object({ toneScore: z.any(), completenessScore: z.any() }),
+        outputSchema: z.object({ improvedOutput: z.string() }),
+      });
+      const evaluateImproved = createStep({
+        id: 'evaluateImprovedResponse',
+        execute: evaluateImprovedAction,
+        inputSchema: z.object({ improvedOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+
+      const promptEvalWorkflow = createWorkflow({
+        id: 'promptEvalWorkflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+      });
+
+      promptEvalWorkflow
+        .then(getUserInput)
+        .then(promptAgent)
+        .then(evaluateTone)
+        .then(improveResponse)
+        .then(evaluateImproved)
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { promptEvalWorkflow },
+      });
+
+      const runId = 'test-run-id';
+      const storage = mastra.getStorage();
+
+      //mimic a workflow run that was previously active
+      await storage?.persistWorkflowSnapshot({
+        workflowName: 'promptEvalWorkflow',
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          activePaths: [1],
+          activeStepsPath: { promptAgent: [1] },
+          value: {},
+          context: {
+            input: { input: 'test' },
+            getUserInput: {
+              payload: { input: 'test' },
+              startedAt: Date.now(),
+              status: 'success',
+              output: { userInput: 'test input' },
+              endedAt: Date.now(),
+            },
+            promptAgent: {
+              payload: { userInput: 'test input' },
+              startedAt: Date.now(),
+              status: 'running',
+            },
+          } as any,
+          serializedStepGraph: promptEvalWorkflow.serializedStepGraph as any,
+          suspendedPaths: {},
+          waitingPaths: {},
+          resumeLabels: {},
+          timestamp: Date.now(),
+        },
+      });
+
+      const run = await promptEvalWorkflow.createRun({ runId });
+
+      const initialResult = await run.restart();
+      expect(initialResult.steps.promptAgent.status).toBe('suspended');
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+      expect(initialResult.steps).toEqual({
+        input: { input: 'test' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'suspended',
+          payload: { userInput: 'test input' },
+          suspendPayload: { testPayload: 'hello' },
+          startedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
+      });
+
+      const newCtx = {
+        userInput: 'test input for resumption',
+      };
+
+      expect(initialResult.steps.promptAgent.status).toBe('suspended');
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+
+      const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx });
+      if (!firstResumeResult) {
+        throw new Error('Resume failed to return a result');
+      }
+
+      expect(firstResumeResult.steps).toEqual({
+        input: { input: 'test' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input' },
+          suspendPayload: { testPayload: 'hello' },
+          resumePayload: { userInput: 'test input for resumption' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: {
+            toneScore: { score: 0.8 },
+            completenessScore: { score: 0.7 },
+          },
+          payload: { modelOutput: 'test output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        improveResponse: {
+          status: 'suspended',
+          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          startedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
+      });
+
+      const secondResumeResult = await run.resume({
+        step: improveResponse,
+        resumeData: {
+          toneScore: { score: 0.8 },
+          completenessScore: { score: 0.7 },
+        },
+      });
+      if (!secondResumeResult) {
+        throw new Error('Resume failed to return a result');
+      }
+
+      expect(promptAgentAction).toHaveBeenCalledTimes(2);
+
+      expect(secondResumeResult.steps).toEqual({
+        input: { input: 'test' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input' },
+          suspendPayload: { testPayload: 'hello' },
+          resumePayload: { userInput: 'test input for resumption' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: {
+            toneScore: { score: 0.8 },
+            completenessScore: { score: 0.7 },
+          },
+          payload: { modelOutput: 'test output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        improveResponse: {
+          status: 'success',
+          output: { improvedOutput: 'improved output' },
+          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          resumePayload: {
+            toneScore: { score: 0.8 },
+            completenessScore: { score: 0.7 },
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        evaluateImprovedResponse: {
+          status: 'success',
+          output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
+          payload: { improvedOutput: 'improved output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      expect(promptAgentAction).toHaveBeenCalledTimes(2);
+      expect(getUserInputAction).toHaveBeenCalledTimes(0);
+    });
+
+    it('should restart workflow execution for a do-while workflow', async () => {
+      let count = 5;
+      const nextStep = createStep({
+        id: 'next',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        execute: async ({ inputData }) => {
+          return { value: inputData.value };
+        },
+      });
+
+      const incrementStep = createStep({
+        id: 'increment',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const simpleNestedWorkflow = createWorkflow({
+        id: 'simple-nested-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        steps: [incrementStep, nextStep],
+      })
+        .then(incrementStep)
+        .then(nextStep)
+        .commit();
+
+      const dowhileWorkflow = createWorkflow({
+        id: 'dowhile-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .dountil(simpleNestedWorkflow, async ({ inputData, iterationCount }) => {
+          expect(iterationCount).toBe(++count);
+          return inputData.value >= 10;
+        })
+        .then(
+          createStep({
+            id: 'final',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            execute: async ({ inputData }) => ({ value: inputData.value }),
+          }),
+        )
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { dowhileWorkflow },
+      });
+
+      const runId = 'test-run-id';
+      const storage = mastra.getStorage();
+
+      //mimic a workflow run that was previously active
+      await storage?.persistWorkflowSnapshot({
+        workflowName: 'dowhile-workflow',
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          activePaths: [0],
+          activeStepsPath: { 'simple-nested-workflow': [0] },
+          value: {},
+          context: {
+            input: { value: 0 },
+            'simple-nested-workflow': {
+              payload: { value: 5 },
+              startedAt: Date.now(),
+              status: 'running',
+              metadata: {
+                iterationCount: 6,
+              },
+            },
+          } as any,
+          serializedStepGraph: dowhileWorkflow.serializedStepGraph as any,
+          suspendedPaths: {},
+          waitingPaths: {},
+          resumeLabels: {},
+          timestamp: Date.now(),
+        },
+      });
+
+      //mimic a workflow run that was previously active for the nested workflow
+      await storage?.persistWorkflowSnapshot({
+        workflowName: 'simple-nested-workflow',
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          activePaths: [1],
+          activeStepsPath: { next: [1] },
+          value: {},
+          context: {
+            input: { value: 5 },
+            increment: {
+              payload: { value: 5 },
+              startedAt: Date.now(),
+              status: 'success',
+              output: { value: 6 },
+              endedAt: Date.now(),
+            },
+            next: {
+              payload: { value: 6 },
+              startedAt: Date.now(),
+              status: 'running',
+            },
+          } as any,
+          serializedStepGraph: simpleNestedWorkflow.serializedStepGraph as any,
+          suspendedPaths: {},
+          waitingPaths: {},
+          resumeLabels: {},
+          timestamp: Date.now(),
+        },
+      });
+
+      const run = await dowhileWorkflow.createRun({ runId });
+      const result = await run.restart();
+      expect(result).toMatchObject({
+        status: 'success',
+        steps: {
+          input: {
+            value: 0,
+          },
+          'simple-nested-workflow': {
+            payload: {
+              value: 9,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            metadata: {
+              iterationCount: 10,
+            },
+            output: {
+              value: 10,
+            },
+            endedAt: expect.any(Number),
+          },
+          final: {
+            payload: {
+              value: 10,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              value: 10,
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        input: {
+          value: 0,
+        },
+        result: {
+          value: 10,
+        },
+      });
+    });
+
+    it('should restart workflow execution for workflow with parallel steps', async () => {
+      const initialStepAction = vi.fn().mockImplementation(async () => {
+        return { result: 'initial step done' };
+      });
+
+      const parallelStep1Action = vi.fn().mockImplementation(async () => {
+        return { result: 'parallelStep1 done' };
+      });
+
+      const parallelStep2Action = vi.fn().mockImplementation(async () => {
+        return { result: 'parallelStep2 done' };
+      });
+
+      const parallelStep3Action = vi.fn().mockImplementation(async () => {
+        return { result: 'parallelStep3 done' };
+      });
+
+      const finalStepAction = vi.fn().mockImplementation(async () => {
+        return { result: 'All done!' };
+      });
+
+      // Create steps
+      const initialStep = createStep({
+        id: 'initialStep',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: initialStepAction,
+      });
+
+      const parallelStep1 = createStep({
+        id: 'parallelStep1',
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: parallelStep1Action,
+      });
+
+      const parallelStep2 = createStep({
+        id: 'parallelStep2',
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: parallelStep2Action,
+      });
+
+      const parallelStep3 = createStep({
+        id: 'parallelStep3',
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: parallelStep3Action,
+      });
+
+      const finalStep = createStep({
+        id: 'finalStep',
+        inputSchema: z.object({
+          parallelStep1: z.object({ result: z.string() }),
+          parallelStep2: z.object({ result: z.string() }),
+          parallelStep3: z.object({ result: z.string() }),
+        }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: finalStepAction,
+      });
+
+      // Create workflow
+      const testParallelWorkflow = createWorkflow({
+        id: 'test-parallel-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [initialStep, parallelStep1, parallelStep2, parallelStep3, finalStep],
+      })
+        .then(initialStep)
+        .parallel([parallelStep1, parallelStep2, parallelStep3])
+        .then(finalStep)
+        .commit();
+
+      // Initialize Mastra with testStorage
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-parallel-workflow': testParallelWorkflow },
+      });
+
+      const runId = 'test-run-id';
+      const storage = mastra.getStorage();
+
+      //mimic a workflow run that was previously active
+      await storage?.persistWorkflowSnapshot({
+        workflowName: 'test-parallel-workflow',
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          activePaths: [1],
+          activeStepsPath: { parallelStep2: [1, 1], parallelStep3: [1, 2] },
+          value: {},
+          context: {
+            input: { input: 'test' },
+            initialStep: {
+              payload: { input: 'test' },
+              startedAt: Date.now(),
+              status: 'success',
+              output: { result: 'initial step done' },
+              endedAt: Date.now(),
+            },
+            parallelStep1: {
+              payload: { result: 'initial step done' },
+              startedAt: Date.now(),
+              status: 'success',
+              output: { result: 'parallelStep1 done' },
+              endedAt: Date.now(),
+            },
+            parallelStep2: {
+              payload: { result: 'initial step done' },
+              startedAt: Date.now(),
+              status: 'running',
+            },
+            parallelStep3: {
+              payload: { result: 'initial step done' },
+              startedAt: Date.now(),
+              status: 'running',
+            },
+          } as any,
+          serializedStepGraph: testParallelWorkflow.serializedStepGraph as any,
+          suspendedPaths: {},
+          waitingPaths: {},
+          resumeLabels: {},
+          timestamp: Date.now(),
+        },
+      });
+
+      const run = await testParallelWorkflow.createRun({ runId });
+
+      // Start workflow without awaiting
+      const result = await run.restart();
+
+      expect(result.status).toBe('success');
+      expect(result).toMatchObject({
+        status: 'success',
+        steps: {
+          input: {
+            input: 'test',
+          },
+          parallelStep1: {
+            payload: {
+              result: 'initial step done',
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              result: 'parallelStep1 done',
+            },
+            endedAt: expect.any(Number),
+          },
+          parallelStep2: {
+            payload: {
+              result: 'initial step done',
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              result: 'parallelStep2 done',
+            },
+            endedAt: expect.any(Number),
+          },
+          parallelStep3: {
+            payload: {
+              result: 'initial step done',
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              result: 'parallelStep3 done',
+            },
+            endedAt: expect.any(Number),
+          },
+          finalStep: {
+            payload: {
+              parallelStep1: { result: 'parallelStep1 done' },
+              parallelStep2: { result: 'parallelStep2 done' },
+              parallelStep3: { result: 'parallelStep3 done' },
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: { result: 'All done!' },
+            endedAt: expect.any(Number),
+          },
+        },
+        input: {
+          input: 'test',
+        },
+        result: {
+          result: 'All done!',
+        },
+      });
+
+      expect(initialStepAction).toHaveBeenCalledTimes(0);
+      expect(parallelStep1Action).toHaveBeenCalledTimes(0);
+      expect(parallelStep2Action).toHaveBeenCalledTimes(1);
+      expect(parallelStep3Action).toHaveBeenCalledTimes(1);
+      expect(finalStepAction).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Time travel', () => {
+    afterEach(async () => {
+      await testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    });
+
+    it('should throw error if trying to timetravel a workflow execution that is still running', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ step1Result: z.number() }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return {
+            step2Result: inputData.step1Result + 1,
+          };
+        },
+        inputSchema: z.object({ step1Result: z.number() }),
+        outputSchema: z.object({ step2Result: z.number() }),
+      });
+
+      const step3 = createStep({
+        id: 'step3',
+        execute: async ({ inputData }) => {
+          return {
+            final: inputData.step2Result + 1,
+          };
+        },
+        inputSchema: z.object({ step2Result: z.number() }),
+        outputSchema: z.object({ final: z.number() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'testWorkflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({
+          final: z.number(),
+        }),
+        steps: [step1, step2, step3],
+      });
+
+      workflow.then(step1).then(step2).then(step3).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { testWorkflow: workflow },
+      });
+
+      const runId = 'test-run-id';
+
+      await testStorage.persistWorkflowSnapshot({
+        workflowName: 'testWorkflow',
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          activePaths: [1],
+          activeStepsPath: { step2: [1] },
+          value: {},
+          context: {
+            input: { value: 0 },
+            step1: {
+              payload: { value: 0 },
+              startedAt: Date.now(),
+              status: 'success',
+              output: { step1Result: 2 },
+              endedAt: Date.now(),
+            },
+            step2: {
+              payload: { step1Result: 2 },
+              startedAt: Date.now(),
+              status: 'running',
+            },
+          } as any,
+          serializedStepGraph: workflow.serializedStepGraph as any,
+          suspendedPaths: {},
+          waitingPaths: {},
+          resumeLabels: {},
+          timestamp: Date.now(),
+        },
+      });
+
+      const run = await workflow.createRun({ runId });
+
+      await expect(run.timeTravel({ step: 'step2', inputData: { step1Result: 2 } })).rejects.toThrow(
+        'This workflow run is still running, cannot time travel',
+      );
+    });
+
+    it('should throw error if validateInputs is true and trying to timetravel a workflow execution with invalid inputData', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ step1Result: z.number() }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return {
+            step2Result: inputData.step1Result + 1,
+          };
+        },
+        inputSchema: z.object({ step1Result: z.number() }),
+        outputSchema: z.object({ step2Result: z.number() }),
+      });
+
+      const step3 = createStep({
+        id: 'step3',
+        execute: async ({ inputData }) => {
+          return {
+            final: inputData.step2Result + 1,
+          };
+        },
+        inputSchema: z.object({ step2Result: z.number() }),
+        outputSchema: z.object({ final: z.number() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'testWorkflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({
+          final: z.number(),
+        }),
+        steps: [step1, step2, step3],
+        options: {
+          validateInputs: true,
+        },
+      });
+
+      workflow.then(step1).then(step2).then(step3).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { testWorkflow: workflow },
+      });
+
+      const run = await workflow.createRun();
+
+      await expect(run.timeTravel({ step: 'step2', inputData: { invalidPayload: 2 } })).rejects.toThrow(
+        'Invalid inputData: \n- step1Result: Required',
+      );
+    });
+
+    it('should throw error if trying to timetravel to a non-existent step', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ step1Result: z.number() }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return {
+            step2Result: inputData.step1Result + 1,
+          };
+        },
+        inputSchema: z.object({ step1Result: z.number() }),
+        outputSchema: z.object({ step2Result: z.number() }),
+      });
+
+      const step3 = createStep({
+        id: 'step3',
+        execute: async ({ inputData }) => {
+          return {
+            final: inputData.step2Result + 1,
+          };
+        },
+        inputSchema: z.object({ step2Result: z.number() }),
+        outputSchema: z.object({ final: z.number() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'testWorkflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({
+          final: z.number(),
+        }),
+      });
+
+      workflow.then(step1).then(step2).then(step3).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { testWorkflow: workflow },
+      });
+
+      const run = await workflow.createRun();
+
+      await expect(run.timeTravel({ step: 'step4', inputData: { step1Result: 2 } })).rejects.toThrow(
+        "Time travel target step not found in execution graph: 'step4'. Verify the step id/path.",
+      );
+    });
+
+    it('should timeTravel a workflow execution', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ step1Result: z.number() }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return {
+            step2Result: inputData.step1Result + 1,
+          };
+        },
+        inputSchema: z.object({ step1Result: z.number() }),
+        outputSchema: z.object({ step2Result: z.number() }),
+      });
+
+      const step3 = createStep({
+        id: 'step3',
+        execute: async ({ inputData }) => {
+          return {
+            final: inputData.step2Result + 1,
+          };
+        },
+        inputSchema: z.object({ step2Result: z.number() }),
+        outputSchema: z.object({ final: z.number() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'testWorkflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({
+          final: z.number(),
+        }),
+        steps: [step1, step2, step3],
+      });
+
+      workflow.then(step1).then(step2).then(step3).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { testWorkflow: workflow },
+      });
+
+      const run = await workflow.createRun();
+      const result = await run.timeTravel({
+        step: step2,
+        context: {
+          step1: {
+            payload: { value: 0 },
+            startedAt: Date.now(),
+            status: 'success',
+            output: { step1Result: 2 },
+            endedAt: Date.now(),
+          },
+        },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result).toEqual({
+        status: 'success',
+        input: {
+          value: 0,
+        },
+        steps: {
+          input: {
+            value: 0,
+          },
+          step1: {
+            payload: {
+              value: 0,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              step1Result: 2,
+            },
+            endedAt: expect.any(Number),
+          },
+          step2: {
+            payload: {
+              step1Result: 2,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              step2Result: 3,
+            },
+            endedAt: expect.any(Number),
+          },
+          step3: {
+            payload: {
+              step2Result: 3,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              final: 4,
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        result: {
+          final: 4,
+        },
+      });
+
+      expect(execute).toHaveBeenCalledTimes(0);
+
+      const run2 = await workflow.createRun();
+      const result2 = await run2.timeTravel({
+        step: 'step2',
+        inputData: { step1Result: 2 },
+      });
+
+      expect(result2.status).toBe('success');
+      expect(result2).toEqual({
+        status: 'success',
+        input: {},
+        steps: {
+          input: {},
+          step1: {
+            payload: {},
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              step1Result: 2,
+            },
+            endedAt: expect.any(Number),
+          },
+          step2: {
+            payload: {
+              step1Result: 2,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              step2Result: 3,
+            },
+            endedAt: expect.any(Number),
+          },
+          step3: {
+            payload: {
+              step2Result: 3,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              final: 4,
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        result: {
+          final: 4,
+        },
+      });
+
+      expect(execute).toHaveBeenCalledTimes(0);
+    });
+
+    it('should timeTravel a workflow execution that was previously ran', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ step1Result: z.number() }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          if (inputData.step1Result < 3) {
+            throw new Error('Simulated error');
+          }
+          return {
+            step2Result: inputData.step1Result + 1,
+          };
+        },
+        inputSchema: z.object({ step1Result: z.number() }),
+        outputSchema: z.object({ step2Result: z.number() }),
+      });
+
+      const step3 = createStep({
+        id: 'step3',
+        execute: async ({ inputData }) => {
+          return {
+            final: inputData.step2Result + 1,
+          };
+        },
+        inputSchema: z.object({ step2Result: z.number() }),
+        outputSchema: z.object({ final: z.number() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'testWorkflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({
+          final: z.number(),
+        }),
+        steps: [step1, step2, step3],
+      });
+
+      workflow.then(step1).then(step2).then(step3).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { testWorkflow: workflow },
+      });
+
+      const run = await workflow.createRun();
+      const failedRun = await run.start({ inputData: { value: 0 } });
+      expect(failedRun.status).toBe('failed');
+      expect(failedRun.steps.step2).toEqual({
+        status: 'failed',
+        payload: { step1Result: 2 },
+        error: 'Error: Simulated error',
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      const result = await run.timeTravel({
+        step: step2,
+        context: {
+          step1: {
+            payload: failedRun.steps.step1.payload,
+            startedAt: Date.now(),
+            status: 'success',
+            output: { step1Result: 3 },
+            endedAt: Date.now(),
+          },
+        },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result).toEqual({
+        status: 'success',
+        input: {
+          value: 0,
+        },
+        steps: {
+          input: {
+            value: 0,
+          },
+          step1: {
+            payload: {
+              value: 0,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              step1Result: 3,
+            },
+            endedAt: expect.any(Number),
+          },
+          step2: {
+            payload: {
+              step1Result: 3,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              step2Result: 4,
+            },
+            endedAt: expect.any(Number),
+          },
+          step3: {
+            payload: {
+              step2Result: 4,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              final: 5,
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        result: {
+          final: 5,
+        },
+      });
+
+      expect(execute).toHaveBeenCalledTimes(1);
+
+      const result2 = await run.timeTravel({
+        step: 'step2',
+        inputData: { step1Result: 4 },
+      });
+
+      expect(result2.status).toBe('success');
+      expect(result2).toEqual({
+        status: 'success',
+        input: { value: 0 },
+        steps: {
+          input: { value: 0 },
+          step1: {
+            payload: { value: 0 },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              step1Result: 4,
+            },
+            endedAt: expect.any(Number),
+          },
+          step2: {
+            payload: {
+              step1Result: 4,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              step2Result: 5,
+            },
+            endedAt: expect.any(Number),
+          },
+          step3: {
+            payload: {
+              step2Result: 5,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              final: 6,
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        result: {
+          final: 6,
+        },
+      });
+
+      expect(execute).toHaveBeenCalledTimes(1);
+    });
+
+    it('should timeTravel a workflow execution that has nested workflows', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const executeStep2 = vi.fn<any>().mockResolvedValue({ step2Result: 3 });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ step1Result: z.number() }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: executeStep2,
+        inputSchema: z.object({ step1Result: z.number() }),
+        outputSchema: z.object({ step2Result: z.number() }),
+      });
+
+      const step3 = createStep({
+        id: 'step3',
+        execute: async ({ inputData }) => {
+          return {
+            nestedFinal: inputData.step2Result + 1,
+          };
+        },
+        inputSchema: z.object({ step2Result: z.number() }),
+        outputSchema: z.object({ nestedFinal: z.number() }),
+      });
+
+      const step4 = createStep({
+        id: 'step4',
+        execute: async ({ inputData }) => {
+          return {
+            final: inputData.nestedFinal + 1,
+          };
+        },
+        inputSchema: z.object({ nestedFinal: z.number() }),
+        outputSchema: z.object({ final: z.number() }),
+      });
+
+      const nestedWorkflow = createWorkflow({
+        id: 'nestedWorkflow',
+        inputSchema: z.object({ step1Result: z.number() }),
+        outputSchema: z.object({
+          nestedFinal: z.number(),
+        }),
+        steps: [step2, step3],
+        options: { validateInputs: false },
+      })
+        .then(step2)
+        .then(step3)
+        .commit();
+
+      const workflow = createWorkflow({
+        id: 'testWorkflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({
+          final: z.number(),
+        }),
+        options: { validateInputs: false },
+      })
+        .then(step1)
+        .then(nestedWorkflow)
+        .then(step4)
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { testWorkflow: workflow },
+      });
+
+      const run = await workflow.createRun();
+      const result = await run.timeTravel({
+        step: 'nestedWorkflow.step3',
+        context: {
+          step1: {
+            payload: { value: 0 },
+            startedAt: Date.now(),
+            status: 'success',
+            output: { step1Result: 2 },
+            endedAt: Date.now(),
+          },
+        },
+        nestedStepsContext: {
+          nestedWorkflow: {
+            step2: {
+              payload: { step1Result: 2 },
+              startedAt: Date.now(),
+              status: 'success',
+              output: { step2Result: 3 },
+              endedAt: Date.now(),
+            },
+          },
+        },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result).toEqual({
+        status: 'success',
+        input: { value: 0 },
+        steps: {
+          input: { value: 0 },
+          step1: {
+            payload: {
+              value: 0,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              step1Result: 2,
+            },
+            endedAt: expect.any(Number),
+          },
+          nestedWorkflow: {
+            payload: {
+              step1Result: 2,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              nestedFinal: 4,
+            },
+            endedAt: expect.any(Number),
+          },
+          step4: {
+            payload: {
+              nestedFinal: 4,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              final: 5,
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        result: {
+          final: 5,
+        },
+      });
+
+      expect(execute).toHaveBeenCalledTimes(0);
+      expect(executeStep2).toHaveBeenCalledTimes(0);
+
+      const nestedWorkflowSnapshot = await testStorage.loadWorkflowSnapshot({
+        workflowName: 'nestedWorkflow',
+        runId: run.runId,
+      });
+
+      expect(nestedWorkflowSnapshot?.context).toEqual({
+        input: { step1Result: 2 },
+        step2: {
+          status: 'success',
+          payload: { step1Result: 2 },
+          output: { step2Result: 3 },
+          endedAt: expect.any(Number),
+          startedAt: expect.any(Number),
+        },
+        step3: {
+          status: 'success',
+          payload: { step2Result: 3 },
+          output: { nestedFinal: 4 },
+          endedAt: expect.any(Number),
+          startedAt: expect.any(Number),
+        },
+      });
+
+      const run2 = await workflow.createRun();
+      const result2 = await run2.timeTravel({
+        step: [nestedWorkflow, step3],
+        inputData: { step2Result: 3 },
+      });
+
+      expect(result2.status).toBe('success');
+      expect(result2).toEqual({
+        status: 'success',
+        input: {},
+        steps: {
+          input: {},
+          step1: {
+            payload: {},
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {},
+            endedAt: expect.any(Number),
+          },
+          nestedWorkflow: {
+            payload: {},
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              nestedFinal: 4,
+            },
+            endedAt: expect.any(Number),
+          },
+          step4: {
+            payload: {
+              nestedFinal: 4,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              final: 5,
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        result: {
+          final: 5,
+        },
+      });
+
+      expect(execute).toHaveBeenCalledTimes(0);
+      expect(executeStep2).toHaveBeenCalledTimes(0);
+
+      const nestedWorkflowSnapshot2 = await testStorage.loadWorkflowSnapshot({
+        workflowName: 'nestedWorkflow',
+        runId: run2.runId,
+      });
+
+      expect(nestedWorkflowSnapshot2?.context).toEqual({
+        input: {},
+        step2: {
+          status: 'success',
+          payload: {},
+          output: { step2Result: 3 },
+          endedAt: expect.any(Number),
+          startedAt: expect.any(Number),
+        },
+        step3: {
+          status: 'success',
+          payload: { step2Result: 3 },
+          output: { nestedFinal: 4 },
+          endedAt: expect.any(Number),
+          startedAt: expect.any(Number),
+        },
+      });
+
+      const run3 = await workflow.createRun();
+      const result3 = await run3.timeTravel({
+        step: 'nestedWorkflow',
+        inputData: { step1Result: 2 },
+      });
+
+      expect(result3.status).toBe('success');
+      expect(result3).toEqual({
+        status: 'success',
+        input: {},
+        steps: {
+          input: {},
+          step1: {
+            payload: {},
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: { step1Result: 2 },
+            endedAt: expect.any(Number),
+          },
+          nestedWorkflow: {
+            payload: { step1Result: 2 },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              nestedFinal: 4,
+            },
+            endedAt: expect.any(Number),
+          },
+          step4: {
+            payload: {
+              nestedFinal: 4,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              final: 5,
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        result: {
+          final: 5,
+        },
+      });
+
+      expect(execute).toHaveBeenCalledTimes(0);
+      expect(executeStep2).toHaveBeenCalledTimes(1);
+
+      const nestedWorkflowSnapshot3 = await testStorage.loadWorkflowSnapshot({
+        workflowName: 'nestedWorkflow',
+        runId: run3.runId,
+      });
+
+      expect(nestedWorkflowSnapshot3?.context).toEqual({
+        input: { step1Result: 2 },
+        step2: {
+          status: 'success',
+          payload: { step1Result: 2 },
+          output: { step2Result: 3 },
+          endedAt: expect.any(Number),
+          startedAt: expect.any(Number),
+        },
+        step3: {
+          status: 'success',
+          payload: { step2Result: 3 },
+          output: { nestedFinal: 4 },
+          endedAt: expect.any(Number),
+          startedAt: expect.any(Number),
+        },
+      });
+    });
+
+    it('should successfully suspend and resume a timeTravelled workflow execution', async () => {
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          return suspend({ testPayload: 'hello' });
+        })
+        .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
+      const evaluateToneAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.8 },
+        completenessScore: { score: 0.7 },
+      });
+      const improveResponseAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          await suspend();
+          return undefined;
+        })
+        .mockImplementationOnce(() => ({ improvedOutput: 'improved output' }));
+      const evaluateImprovedAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.9 },
+        completenessScore: { score: 0.8 },
+      });
+
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+        suspendSchema: z.object({ testPayload: z.string() }),
+        resumeSchema: z.object({ userInput: z.string() }),
+      });
+      const evaluateTone = createStep({
+        id: 'evaluateToneConsistency',
+        execute: evaluateToneAction,
+        inputSchema: z.object({ modelOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+      const improveResponse = createStep({
+        id: 'improveResponse',
+        execute: improveResponseAction,
+        resumeSchema: z.object({
+          toneScore: z.object({ score: z.number() }),
+          completenessScore: z.object({ score: z.number() }),
+        }),
+        inputSchema: z.object({ toneScore: z.any(), completenessScore: z.any() }),
+        outputSchema: z.object({ improvedOutput: z.string() }),
+      });
+      const evaluateImproved = createStep({
+        id: 'evaluateImprovedResponse',
+        execute: evaluateImprovedAction,
+        inputSchema: z.object({ improvedOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+
+      const promptEvalWorkflow = createWorkflow({
+        id: 'promptEvalWorkflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+      });
+
+      promptEvalWorkflow
+        .then(getUserInput)
+        .then(promptAgent)
+        .then(evaluateTone)
+        .then(improveResponse)
+        .then(evaluateImproved)
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { promptEvalWorkflow },
+      });
+
+      const run = await promptEvalWorkflow.createRun();
+
+      const initialResult = await run.timeTravel({
+        step: 'promptAgent',
+        inputData: { userInput: 'test input' },
+      });
+      expect(initialResult.steps.promptAgent.status).toBe('suspended');
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+      expect(initialResult.steps).toEqual({
+        input: {},
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: {},
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'suspended',
+          payload: { userInput: 'test input' },
+          suspendPayload: { testPayload: 'hello' },
+          startedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
+      });
+
+      const newCtx = {
+        userInput: 'test input for resumption',
+      };
+
+      expect(initialResult.steps.promptAgent.status).toBe('suspended');
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+
+      const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx });
+      if (!firstResumeResult) {
+        throw new Error('Resume failed to return a result');
+      }
+
+      expect(firstResumeResult.steps).toEqual({
+        input: {},
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: {},
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input' },
+          suspendPayload: { testPayload: 'hello' },
+          resumePayload: { userInput: 'test input for resumption' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: {
+            toneScore: { score: 0.8 },
+            completenessScore: { score: 0.7 },
+          },
+          payload: { modelOutput: 'test output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        improveResponse: {
+          status: 'suspended',
+          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          startedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
+      });
+
+      expect(getUserInputAction).toHaveBeenCalledTimes(0);
+    });
+
+    it('should timetravel a suspended workflow execution', async () => {
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          return suspend({ testPayload: 'hello' });
+        })
+        .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
+      const evaluateToneAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.8 },
+        completenessScore: { score: 0.7 },
+      });
+      const improveResponseAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          await suspend();
+          return undefined;
+        })
+        .mockImplementationOnce(() => ({ improvedOutput: 'improved output' }));
+      const evaluateImprovedAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.9 },
+        completenessScore: { score: 0.8 },
+      });
+
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+        suspendSchema: z.object({ testPayload: z.string() }),
+        resumeSchema: z.object({ userInput: z.string() }),
+      });
+      const evaluateTone = createStep({
+        id: 'evaluateToneConsistency',
+        execute: evaluateToneAction,
+        inputSchema: z.object({ modelOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+      const improveResponse = createStep({
+        id: 'improveResponse',
+        execute: improveResponseAction,
+        resumeSchema: z.object({
+          toneScore: z.object({ score: z.number() }),
+          completenessScore: z.object({ score: z.number() }),
+        }),
+        inputSchema: z.object({ toneScore: z.any(), completenessScore: z.any() }),
+        outputSchema: z.object({ improvedOutput: z.string() }),
+      });
+      const evaluateImproved = createStep({
+        id: 'evaluateImprovedResponse',
+        execute: evaluateImprovedAction,
+        inputSchema: z.object({ improvedOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+
+      const promptEvalWorkflow = createWorkflow({
+        id: 'promptEvalWorkflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+      });
+
+      promptEvalWorkflow
+        .then(getUserInput)
+        .then(promptAgent)
+        .then(evaluateTone)
+        .then(improveResponse)
+        .then(evaluateImproved)
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { promptEvalWorkflow },
+      });
+
+      const run = await promptEvalWorkflow.createRun();
+
+      const initialResult = await run.start({
+        inputData: { input: 'test input' },
+      });
+      expect(initialResult.steps.promptAgent.status).toBe('suspended');
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+      expect(initialResult.steps).toEqual({
+        input: { input: 'test input' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test input' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'suspended',
+          payload: { userInput: 'test input' },
+          suspendPayload: { testPayload: 'hello' },
+          startedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
+      });
+
+      expect(initialResult.steps.promptAgent.status).toBe('suspended');
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+
+      const timeTravelResult = await run.timeTravel({
+        step: 'getUserInput',
+        resumeData: {
+          userInput: 'test input for resumption',
+        },
+      });
+
+      expect(timeTravelResult.steps).toEqual({
+        input: { input: 'test input' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test input' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input' },
+          suspendPayload: { testPayload: 'hello' },
+          resumePayload: { userInput: 'test input for resumption' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: {
+            toneScore: { score: 0.8 },
+            completenessScore: { score: 0.7 },
+          },
+          payload: { modelOutput: 'test output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        improveResponse: {
+          status: 'suspended',
+          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          startedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
+      });
+
+      expect(getUserInputAction).toHaveBeenCalledTimes(2);
+      expect(promptAgentAction).toHaveBeenCalledTimes(2);
+    });
+
+    it('should timeTravel workflow execution for a do-until workflow', async () => {
+      let count = 0;
+      const nextStep = createStep({
+        id: 'next',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        execute: async ({ inputData }) => {
+          return { value: inputData.value };
+        },
+      });
+
+      const incrementStep = createStep({
+        id: 'increment',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const firstStep = createStep({
+        id: 'first-step',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        execute: async ({ inputData }) => {
+          return inputData;
+        },
+      });
+
+      const simpleNestedWorkflow = createWorkflow({
+        id: 'simple-nested-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        steps: [incrementStep, nextStep],
+      })
+        .then(incrementStep)
+        .then(nextStep)
+        .commit();
+
+      const dowhileWorkflow = createWorkflow({
+        id: 'dowhile-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(firstStep)
+        .dountil(simpleNestedWorkflow, async ({ inputData, iterationCount }) => {
+          expect(iterationCount).toBe(++count);
+          return inputData.value >= 10;
+        })
+        .then(
+          createStep({
+            id: 'final',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            execute: async ({ inputData }) => ({ value: inputData.value }),
+          }),
+        )
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { dowhileWorkflow },
+      });
+
+      const run = await dowhileWorkflow.createRun();
+      const result = await run.timeTravel({
+        step: 'simple-nested-workflow.next',
+        context: {
+          'first-step': {
+            status: 'success',
+            payload: {
+              value: 0,
+            },
+            output: {
+              value: 0,
+            },
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          },
+        },
+        nestedStepsContext: {
+          'simple-nested-workflow': {
+            increment: {
+              payload: { value: 5 },
+              startedAt: Date.now(),
+              status: 'success',
+              output: { value: 6 },
+              endedAt: Date.now(),
+            },
+          },
+        },
+      });
+      expect(result).toEqual({
+        status: 'success',
+        input: {
+          value: 0,
+        },
+        steps: {
+          input: {
+            value: 0,
+          },
+          'first-step': {
+            status: 'success',
+            payload: {
+              value: 0,
+            },
+            output: {
+              value: 0,
+            },
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          'simple-nested-workflow': {
+            payload: {
+              value: 9,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            metadata: {
+              iterationCount: 5,
+            },
+            output: {
+              value: 10,
+            },
+            endedAt: expect.any(Number),
+          },
+          final: {
+            payload: {
+              value: 10,
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              value: 10,
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        result: {
+          value: 10,
+        },
+      });
+
+      const simpleNestedWorkflowSnapshot = await testStorage.loadWorkflowSnapshot({
+        workflowName: 'simple-nested-workflow',
+        runId: run.runId,
+      });
+      expect(simpleNestedWorkflowSnapshot?.context).toEqual({
+        input: {
+          value: 9,
+        },
+        increment: {
+          payload: {
+            value: 9,
+          },
+          startedAt: expect.any(Number),
+          status: 'success',
+          output: { value: 10 },
+          endedAt: expect.any(Number),
+        },
+        next: {
+          payload: {
+            value: 10,
+          },
+          startedAt: expect.any(Number),
+          status: 'success',
+          output: { value: 10 },
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
+    it('should timeTravel workflow execution for workflow with parallel steps', async () => {
+      const initialStepAction = vi.fn().mockImplementation(async () => {
+        return { result: 'initial step done' };
+      });
+
+      const nextStepAction = vi.fn().mockImplementation(async () => {
+        return { result: 'next step done' };
+      });
+
+      const parallelStep1Action = vi.fn().mockImplementation(async () => {
+        return { result: 'parallelStep1 done' };
+      });
+
+      const parallelStep2Action = vi.fn().mockImplementation(async () => {
+        return { result: 'parallelStep2 done' };
+      });
+
+      const parallelStep3Action = vi.fn().mockImplementation(async () => {
+        return { result: 'parallelStep3 done' };
+      });
+
+      const finalStepAction = vi.fn().mockImplementation(async () => {
+        return { result: 'All done!' };
+      });
+
+      // Create steps
+      const initialStep = createStep({
+        id: 'initialStep',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: initialStepAction,
+      });
+
+      const nextStep = createStep({
+        id: 'nextStep',
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: nextStepAction,
+      });
+
+      const parallelStep1 = createStep({
+        id: 'parallelStep1',
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: parallelStep1Action,
+      });
+
+      const parallelStep2 = createStep({
+        id: 'parallelStep2',
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: parallelStep2Action,
+      });
+
+      const parallelStep3 = createStep({
+        id: 'parallelStep3',
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: parallelStep3Action,
+      });
+
+      const finalStep = createStep({
+        id: 'finalStep',
+        inputSchema: z.object({
+          parallelStep1: z.object({ result: z.string() }),
+          parallelStep2: z.object({ result: z.string() }),
+          parallelStep3: z.object({ result: z.string() }),
+        }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: finalStepAction,
+      });
+
+      // Create workflow
+      const testParallelWorkflow = createWorkflow({
+        id: 'test-parallel-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        options: { validateInputs: false },
+      })
+        .then(initialStep)
+        .then(nextStep)
+        .parallel([parallelStep1, parallelStep2, parallelStep3])
+        .then(finalStep)
+        .commit();
+
+      // Initialize Mastra with testStorage
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-parallel-workflow': testParallelWorkflow },
+      });
+
+      const run = await testParallelWorkflow.createRun();
+
+      const result = await run.timeTravel({
+        step: 'nextStep',
+        inputData: {
+          result: 'initial step done',
+        },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result).toEqual({
+        status: 'success',
+        input: {},
+        steps: {
+          input: {},
+          initialStep: {
+            status: 'success',
+            payload: {},
+            output: {
+              result: 'initial step done',
+            },
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          nextStep: {
+            status: 'success',
+            payload: { result: 'initial step done' },
+            output: {
+              result: 'next step done',
+            },
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          parallelStep1: {
+            payload: {
+              result: 'next step done',
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              result: 'parallelStep1 done',
+            },
+            endedAt: expect.any(Number),
+          },
+          parallelStep2: {
+            payload: {
+              result: 'next step done',
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              result: 'parallelStep2 done',
+            },
+            endedAt: expect.any(Number),
+          },
+          parallelStep3: {
+            payload: {
+              result: 'next step done',
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              result: 'parallelStep3 done',
+            },
+            endedAt: expect.any(Number),
+          },
+          finalStep: {
+            payload: {
+              parallelStep1: { result: 'parallelStep1 done' },
+              parallelStep2: { result: 'parallelStep2 done' },
+              parallelStep3: { result: 'parallelStep3 done' },
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: { result: 'All done!' },
+            endedAt: expect.any(Number),
+          },
+        },
+        result: {
+          result: 'All done!',
+        },
+      });
+
+      expect(initialStepAction).toHaveBeenCalledTimes(0);
+      expect(nextStepAction).toHaveBeenCalledTimes(1);
+      expect(parallelStep1Action).toHaveBeenCalledTimes(1);
+      expect(parallelStep2Action).toHaveBeenCalledTimes(1);
+      expect(parallelStep3Action).toHaveBeenCalledTimes(1);
+      expect(finalStepAction).toHaveBeenCalledTimes(1);
+
+      const run2 = await testParallelWorkflow.createRun();
+      const result2 = await run2.timeTravel({
+        step: 'parallelStep2',
+        context: {
+          initialStep: {
+            status: 'success',
+            payload: { input: 'start' },
+            output: {
+              result: 'initial step done',
+            },
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          },
+          nextStep: {
+            status: 'success',
+            payload: { result: 'initial step done' },
+            output: {
+              result: 'next step done',
+            },
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          },
+          parallelStep1: {
+            payload: {
+              result: 'next step done',
+            },
+            startedAt: Date.now(),
+            status: 'success',
+            output: {
+              result: 'parallelStep1 done',
+            },
+            endedAt: Date.now(),
+          },
+          parallelStep3: {
+            payload: {
+              result: 'next step done',
+            },
+            startedAt: Date.now(),
+            status: 'success',
+            output: {
+              result: 'parallelStep3 done',
+            },
+            endedAt: Date.now(),
+          },
+        },
+      });
+
+      expect(result2.status).toBe('success');
+      expect(result2).toEqual({
+        status: 'success',
+        input: { input: 'start' },
+        steps: {
+          input: { input: 'start' },
+          initialStep: {
+            status: 'success',
+            payload: { input: 'start' },
+            output: {
+              result: 'initial step done',
+            },
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          nextStep: {
+            status: 'success',
+            payload: { result: 'initial step done' },
+            output: {
+              result: 'next step done',
+            },
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          parallelStep1: {
+            payload: {
+              result: 'next step done',
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              result: 'parallelStep1 done',
+            },
+            endedAt: expect.any(Number),
+          },
+          parallelStep2: {
+            payload: {
+              result: 'next step done',
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              result: 'parallelStep2 done',
+            },
+            endedAt: expect.any(Number),
+          },
+          parallelStep3: {
+            payload: {
+              result: 'next step done',
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              result: 'parallelStep3 done',
+            },
+            endedAt: expect.any(Number),
+          },
+          finalStep: {
+            payload: {
+              parallelStep1: { result: 'parallelStep1 done' },
+              parallelStep2: { result: 'parallelStep2 done' },
+              parallelStep3: { result: 'parallelStep3 done' },
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: { result: 'All done!' },
+            endedAt: expect.any(Number),
+          },
+        },
+        result: {
+          result: 'All done!',
+        },
+      });
+
+      expect(initialStepAction).toHaveBeenCalledTimes(0);
+      expect(nextStepAction).toHaveBeenCalledTimes(1);
+      expect(parallelStep1Action).toHaveBeenCalledTimes(1);
+      expect(parallelStep2Action).toHaveBeenCalledTimes(2);
+      expect(parallelStep3Action).toHaveBeenCalledTimes(1);
+      expect(finalStepAction).toHaveBeenCalledTimes(2);
+
+      const run3 = await testParallelWorkflow.createRun();
+      const result3 = await run3.timeTravel({
+        step: 'parallelStep2',
+        inputData: {
+          result: 'next step done',
+        },
+      });
+
+      expect(result3.status).toBe('success');
+      expect(result3).toEqual({
+        status: 'success',
+        input: {},
+        steps: {
+          input: {},
+          initialStep: {
+            status: 'success',
+            payload: {},
+            output: {},
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          nextStep: {
+            status: 'success',
+            payload: {},
+            output: {
+              result: 'next step done',
+            },
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          parallelStep1: {
+            payload: {
+              result: 'next step done',
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {},
+            endedAt: expect.any(Number),
+          },
+          parallelStep2: {
+            payload: {
+              result: 'next step done',
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              result: 'parallelStep2 done',
+            },
+            endedAt: expect.any(Number),
+          },
+          parallelStep3: {
+            payload: {
+              result: 'next step done',
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {},
+            endedAt: expect.any(Number),
+          },
+          finalStep: {
+            payload: {
+              parallelStep1: {},
+              parallelStep2: { result: 'parallelStep2 done' },
+              parallelStep3: {},
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: { result: 'All done!' },
+            endedAt: expect.any(Number),
+          },
+        },
+        result: {
+          result: 'All done!',
+        },
+      });
+
+      expect(initialStepAction).toHaveBeenCalledTimes(0);
+      expect(nextStepAction).toHaveBeenCalledTimes(1);
+      expect(parallelStep1Action).toHaveBeenCalledTimes(1);
+      expect(parallelStep2Action).toHaveBeenCalledTimes(3);
+      expect(parallelStep3Action).toHaveBeenCalledTimes(1);
+      expect(finalStepAction).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -6173,7 +13827,7 @@ describe('Workflow', () => {
       .then(simpleStep)
       .commit();
 
-    const run = await simpleWorkflow.createRunAsync();
+    const run = await simpleWorkflow.createRun();
 
     // Start workflow - should suspend
     const startResult = await run.start({ inputData: { value: 10 } });
@@ -6194,7 +13848,7 @@ describe('Workflow', () => {
     }
 
     // Test explicit step parameter still works (backwards compatibility)
-    const run2 = await simpleWorkflow.createRunAsync();
+    const run2 = await simpleWorkflow.createRun();
     const startResult2 = await run2.start({ inputData: { value: 20 } });
     expect(startResult2.status).toBe('suspended');
     if (startResult2.status === 'suspended') {
@@ -6254,7 +13908,7 @@ describe('Workflow', () => {
       ])
       .commit();
 
-    const run = await multiSuspendWorkflow.createRunAsync();
+    const run = await multiSuspendWorkflow.createRun();
 
     // Start workflow - both branch steps should suspend
     const startResult = await run.start({ inputData: { value: 100 } });
@@ -6309,7 +13963,7 @@ describe('Workflow', () => {
 
     it('should return empty result when mastra is not initialized', async () => {
       const workflow = createWorkflow({ id: 'test', inputSchema: z.object({}), outputSchema: z.object({}) });
-      const result = await workflow.getWorkflowRuns();
+      const result = await workflow.listWorkflowRuns();
       expect(result).toEqual({ runs: [], total: 0 });
     });
 
@@ -6330,7 +13984,14 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       });
 
-      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
+      let shouldPersist = true;
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        options: { shouldPersistSnapshot: () => shouldPersist },
+      });
       workflow.then(step1).then(step2).commit();
 
       new Mastra({
@@ -6342,19 +14003,87 @@ describe('Workflow', () => {
       });
 
       // Create a few runs
-      const run1 = await workflow.createRunAsync();
+      const run1 = await workflow.createRun();
       await run1.start({ inputData: {} });
 
-      const run2 = await workflow.createRunAsync();
+      const run2 = await workflow.createRun();
       await run2.start({ inputData: {} });
 
-      const { runs, total } = await workflow.getWorkflowRuns();
+      shouldPersist = false;
+      const run3 = await workflow.createRun();
+      await run3.start({ inputData: {} });
+
+      const { runs, total } = await workflow.listWorkflowRuns();
       expect(total).toBe(2);
       expect(runs).toHaveLength(2);
       expect(runs.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId, run2.runId]));
       expect(runs[0]?.workflowName).toBe('test-workflow');
       expect(runs[0]?.snapshot).toBeDefined();
       expect(runs[1]?.snapshot).toBeDefined();
+    });
+
+    it('should use shouldPersistSnapshot option', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+      const resumeStep = createStep({
+        id: 'resume-step',
+        execute: async ({ resumeData, suspend }) => {
+          if (!resumeData) {
+            return suspend({});
+          }
+          return { completed: true };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ completed: z.boolean() }),
+        resumeSchema: z.object({ resume: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ completed: z.boolean() }),
+        options: { shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended' },
+      });
+      workflow.then(step1).then(step2).then(resumeStep).commit();
+
+      new Mastra({
+        workflows: {
+          'test-workflow': workflow,
+        },
+        logger: false,
+        storage: testStorage,
+      });
+
+      // Create a few runs
+      const run1 = await workflow.createRun();
+      await run1.start({ inputData: {} });
+
+      const { runs, total } = await workflow.listWorkflowRuns();
+      expect(total).toBe(1);
+      expect(runs).toHaveLength(1);
+
+      await run1.resume({ resumeData: { resume: 'resume' }, step: 'resume-step' });
+
+      const { runs: afterResumeRuns, total: afterResumeTotal } = await workflow.listWorkflowRuns();
+      expect(afterResumeTotal).toBe(1);
+      expect(afterResumeRuns).toHaveLength(1);
+      expect(afterResumeRuns.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId]));
+      expect(afterResumeRuns[0]?.workflowName).toBe('test-workflow');
+      expect(afterResumeRuns[0]?.snapshot).toBeDefined();
+      expect((afterResumeRuns[0]?.snapshot as any).status).toBe('suspended');
     });
 
     it('should get workflow run by id from storage', async () => {
@@ -6386,10 +14115,10 @@ describe('Workflow', () => {
       });
 
       // Create a few runs
-      const run1 = await workflow.createRunAsync();
+      const run1 = await workflow.createRun();
       await run1.start({ inputData: {} });
 
-      const { runs, total } = await workflow.getWorkflowRuns();
+      const { runs, total } = await workflow.listWorkflowRuns();
       expect(total).toBe(1);
       expect(runs).toHaveLength(1);
       expect(runs.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId]));
@@ -6401,19 +14130,15 @@ describe('Workflow', () => {
       expect(run3?.workflowName).toBe('test-workflow');
       expect(run3?.snapshot).toEqual(runs[0].snapshot);
     });
-  });
 
-  describe('Accessing Mastra', () => {
-    it('should be able to access the deprecated mastra primitives', async () => {
-      let telemetry: Telemetry | undefined;
+    it('should persist resourceId when creating workflow runs', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+
       const step1 = createStep({
         id: 'step1',
+        execute: step1Action,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
-        execute: async ({ mastra }) => {
-          telemetry = mastra?.getTelemetry();
-          return {};
-        },
       });
 
       const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
@@ -6422,15 +14147,107 @@ describe('Workflow', () => {
       new Mastra({
         logger: false,
         storage: testStorage,
-        workflows: { 'test-workflow': workflow },
+        workflows: {
+          'test-workflow': workflow,
+        },
       });
 
-      // Access new instance properties directly - should work without warning
-      const run = await workflow.createRunAsync();
+      // Create run with resourceId
+      const resourceId = 'user-123';
+      const run = await workflow.createRun({ resourceId });
       await run.start({ inputData: {} });
 
-      expect(telemetry).toBeDefined();
-      expect(telemetry).toBeInstanceOf(Telemetry);
+      // Verify resourceId is persisted in storage
+      const { runs } = await workflow.listWorkflowRuns();
+      expect(runs).toHaveLength(1);
+      expect(runs[0]?.resourceId).toBe(resourceId);
+
+      // Verify getWorkflowRunById also returns resourceId
+      const runById = await workflow.getWorkflowRunById(run.runId);
+      expect(runById?.resourceId).toBe(resourceId);
+
+      // Create another run with different resourceId
+      const resourceId2 = 'user-456';
+      const run2 = await workflow.createRun({ resourceId: resourceId2 });
+      await run2.start({ inputData: {} });
+
+      // Verify both runs have correct resourceIds
+      const { runs: allRuns } = await workflow.listWorkflowRuns();
+      expect(allRuns).toHaveLength(2);
+      const runWithResource123 = allRuns.find(r => r.resourceId === resourceId);
+      const runWithResource456 = allRuns.find(r => r.resourceId === resourceId2);
+      expect(runWithResource123).toBeDefined();
+      expect(runWithResource456).toBeDefined();
+      expect(runWithResource123?.runId).toBe(run.runId);
+      expect(runWithResource456?.runId).toBe(run2.runId);
+
+      // Create run without resourceId to ensure it's optional
+      const run3 = await workflow.createRun();
+      await run3.start({ inputData: {} });
+
+      const { runs: finalRuns } = await workflow.listWorkflowRuns();
+      expect(finalRuns).toHaveLength(3);
+      const runWithoutResource = finalRuns.find(r => r.runId === run3.runId);
+      expect(runWithoutResource).toBeDefined();
+      expect(runWithoutResource?.resourceId).toBeUndefined();
+    });
+
+    it('should preserve resourceId when resuming a suspended workflow', async () => {
+      const suspendingStep = createStep({
+        id: 'suspendingStep',
+        execute: async ({ suspend, resumeData }) => {
+          if (!resumeData) {
+            return suspend({});
+          }
+          return { resumed: true, data: resumeData };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ resumed: z.boolean(), data: z.any() }),
+        resumeSchema: z.object({ message: z.string() }),
+      });
+
+      const finalStep = createStep({
+        id: 'finalStep',
+        execute: async () => ({ completed: true }),
+        inputSchema: z.object({ resumed: z.boolean(), data: z.any() }),
+        outputSchema: z.object({ completed: z.boolean() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow-with-suspend',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+      workflow.then(suspendingStep).then(finalStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-workflow-with-suspend': workflow },
+      });
+
+      const resourceId = 'user-789';
+      const run = await workflow.createRun({ resourceId });
+
+      const initialResult = await run.start({ inputData: {} });
+      expect(initialResult.status).toBe('suspended');
+
+      const runBeforeResume = await workflow.getWorkflowRunById(run.runId);
+      expect(runBeforeResume?.resourceId).toBe(resourceId);
+
+      const resumeResult = await run.resume({
+        step: 'suspendingStep',
+        resumeData: { message: 'resumed with data' },
+      });
+      expect(resumeResult.status).toBe('success');
+
+      // After resume, resourceId should be preserved in storage
+      const runAfterResume = await workflow.getWorkflowRunById(run.runId);
+      expect(runAfterResume?.resourceId).toBe(resourceId);
+
+      const { runs } = await workflow.listWorkflowRuns({ resourceId });
+      expect(runs).toHaveLength(1);
+      expect(runs[0]?.resourceId).toBe(resourceId);
     });
   });
 
@@ -6446,8 +14263,10 @@ describe('Workflow', () => {
       });
 
       const agent = new Agent({
+        id: 'test-agent-1',
         name: 'test-agent-1',
         instructions: 'test agent instructions',
+        description: 'test-agent-1 description',
         model: new MockLanguageModelV1({
           doStream: async () => ({
             stream: simulateReadableStream({
@@ -6467,8 +14286,10 @@ describe('Workflow', () => {
       });
 
       const agent2 = new Agent({
+        id: 'test-agent-2',
         name: 'test-agent-2',
         instructions: 'test agent instructions',
+        description: 'test-agent-2 description',
         model: new MockLanguageModelV1({
           doStream: async () => ({
             stream: simulateReadableStream({
@@ -6529,7 +14350,7 @@ describe('Workflow', () => {
         .then(agentStep2)
         .commit();
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       const result = await run.start({
         inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
       });
@@ -6553,6 +14374,13 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      const workflowSteps = workflow.steps;
+
+      expect(workflowSteps['test-agent-1']?.description).toBe('test-agent-1 description');
+      expect(workflowSteps['test-agent-2']?.description).toBe('test-agent-2 description');
+      expect(workflowSteps['test-agent-1']?.component).toBe('AGENT');
+      expect(workflowSteps['test-agent-2']?.component).toBe('AGENT');
     });
 
     it('should be able to use an agent in parallel', async () => {
@@ -6582,7 +14410,8 @@ describe('Workflow', () => {
       });
 
       const agent = new Agent({
-        name: 'test-agent-1',
+        id: 'test-agent-1',
+        name: 'Test Agent 1',
         instructions: 'test agent instructions',
         model: new MockLanguageModelV1({
           doStream: async () => ({
@@ -6603,7 +14432,8 @@ describe('Workflow', () => {
       });
 
       const agent2 = new Agent({
-        name: 'test-agent-2',
+        id: 'test-agent-2',
+        name: 'Test Agent 2',
         instructions: 'test agent instructions',
         model: new MockLanguageModelV1({
           doStream: async () => ({
@@ -6677,7 +14507,7 @@ describe('Workflow', () => {
 
       workflow.parallel([nestedWorkflow1, nestedWorkflow2]).then(finalStep).commit();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRun();
       const result = await run.start({
         inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
       });
@@ -6732,6 +14562,7 @@ describe('Workflow', () => {
       });
 
       const agent = new Agent({
+        id: 'test-agent-1',
         name: 'test-agent-1',
         instructions: 'test agent instructions',
         model: new MockLanguageModelV1({
@@ -6745,6 +14576,7 @@ describe('Workflow', () => {
       });
 
       const agent2 = new Agent({
+        id: 'test-agent-2',
         name: 'test-agent-2',
         instructions: 'test agent instructions',
         model: new MockLanguageModelV1({
@@ -6793,7 +14625,7 @@ describe('Workflow', () => {
             outputSchema: z.object({ text: z.string() }),
             execute: async ({ inputData, mastra }) => {
               const agent = mastra.getAgent('test-agent-1');
-              const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
+              const result = await agent.generateLegacy([{ role: 'user', content: inputData.prompt }]);
               return { text: result.text };
             },
           }),
@@ -6811,7 +14643,7 @@ describe('Workflow', () => {
             outputSchema: z.object({ text: z.string() }),
             execute: async ({ inputData, mastra }) => {
               const agent = mastra.getAgent('test-agent-2');
-              const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
+              const result = await agent.generateLegacy([{ role: 'user', content: inputData.prompt }]);
               return { text: result.text };
             },
           }),
@@ -6819,7 +14651,7 @@ describe('Workflow', () => {
 
         .commit();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRun();
       const result = await run.start({
         inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
       });
@@ -6856,6 +14688,7 @@ describe('Workflow', () => {
       });
 
       const agent = new Agent({
+        id: 'test-agent-1',
         name: 'test-agent-1',
         instructions: 'test agent instructions',
         model: new MockLanguageModelV1({
@@ -6868,6 +14701,7 @@ describe('Workflow', () => {
         }),
       });
       const agent2 = new Agent({
+        id: 'test-agent-2',
         name: 'test-agent-2',
         instructions: 'test agent instructions',
         model: new MockLanguageModelV1({
@@ -6892,7 +14726,7 @@ describe('Workflow', () => {
         outputSchema: z.object({ text: z.string() }),
         execute: async ({ inputData, mastra }) => {
           const agent = mastra.getAgent(inputData.agentName);
-          const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
+          const result = await agent.generateLegacy([{ role: 'user', content: inputData.prompt }]);
           return { text: result.text };
         },
       });
@@ -6942,7 +14776,7 @@ describe('Workflow', () => {
         )
         .commit();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRun();
       const result = await run.start({
         inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
       });
@@ -6986,7 +14820,7 @@ describe('Workflow', () => {
       const otherStep = createStep({
         id: 'other',
         inputSchema: z.object({ newValue: z.number() }),
-        outputSchema: z.object({ other: z.number() }),
+        outputSchema: z.object({ newValue: z.number(), other: z.number() }),
         execute: other,
       });
 
@@ -7011,12 +14845,14 @@ describe('Workflow', () => {
           startValue: z.number(),
         }),
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       });
 
       const wfA = createWorkflow({
         id: 'nested-workflow-a',
         inputSchema: counterWorkflow.inputSchema,
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       })
         .then(startStep)
         .then(otherStep)
@@ -7026,8 +14862,19 @@ describe('Workflow', () => {
         id: 'nested-workflow-b',
         inputSchema: counterWorkflow.inputSchema,
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       })
         .then(startStep)
+        .map({
+          finalValue: mapVariable({
+            step: startStep,
+            path: 'newValue',
+          }),
+          newValue: mapVariable({
+            step: startStep,
+            path: 'newValue',
+          }),
+        })
         .then(finalStep)
         .commit();
       counterWorkflow
@@ -7045,7 +14892,7 @@ describe('Workflow', () => {
         )
         .commit();
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
 
       expect(start).toHaveBeenCalledTimes(2);
@@ -7076,6 +14923,11 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      const workflowSteps = counterWorkflow.steps;
+
+      expect(workflowSteps['nested-workflow-a']?.component).toBe('WORKFLOW');
+      expect(workflowSteps['nested-workflow-b']?.component).toBe('WORKFLOW');
     });
 
     it('should be able clone workflows as steps', async () => {
@@ -7128,12 +14980,14 @@ describe('Workflow', () => {
           startValue: z.number(),
         }),
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       });
 
       const wfA = createWorkflow({
         id: 'nested-workflow-a',
         inputSchema: counterWorkflow.inputSchema,
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       })
         .then(startStep)
         .then(cloneStep(otherStep, { id: 'other-clone' }))
@@ -7143,6 +14997,7 @@ describe('Workflow', () => {
         id: 'nested-workflow-b',
         inputSchema: counterWorkflow.inputSchema,
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       })
         .then(startStep)
         .then(cloneStep(finalStep, { id: 'final-clone' }))
@@ -7165,7 +15020,7 @@ describe('Workflow', () => {
         )
         .commit();
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
 
       expect(start).toHaveBeenCalledTimes(2);
@@ -7223,7 +15078,7 @@ describe('Workflow', () => {
       const otherStep = createStep({
         id: 'other',
         inputSchema: z.object({ newValue: z.number() }),
-        outputSchema: z.object({ other: z.number() }),
+        outputSchema: z.object({ newValue: z.number(), other: z.number() }),
         execute: other,
       });
 
@@ -7248,12 +15103,14 @@ describe('Workflow', () => {
           startValue: z.number(),
         }),
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateInputs: false },
       });
 
       const wfA = createWorkflow({
         id: 'nested-workflow-a',
         inputSchema: counterWorkflow.inputSchema,
         outputSchema: finalStep.outputSchema,
+        options: { validateInputs: false },
       })
         .then(startStep)
         .then(otherStep)
@@ -7263,6 +15120,7 @@ describe('Workflow', () => {
         id: 'nested-workflow-b',
         inputSchema: counterWorkflow.inputSchema,
         outputSchema: z.object({ other: otherStep.outputSchema, final: finalStep.outputSchema }),
+        options: { validateInputs: false },
       })
         .then(startStep)
         .branch([
@@ -7292,7 +15150,7 @@ describe('Workflow', () => {
         )
         .commit();
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
 
       expect(start).toHaveBeenCalledTimes(2);
@@ -7351,7 +15209,7 @@ describe('Workflow', () => {
         const otherStep = createStep({
           id: 'other',
           inputSchema: z.object({ newValue: z.number() }),
-          outputSchema: z.object({ other: z.number() }),
+          outputSchema: z.object({ newValue: z.number(), other: z.number() }),
           execute: other,
         });
 
@@ -7379,12 +15237,14 @@ describe('Workflow', () => {
             startValue: z.number(),
           }),
           outputSchema: z.object({ success: z.boolean() }),
+          options: { validateInputs: false },
         });
 
         const wfA = createWorkflow({
           id: 'nested-workflow-a',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
           .then(otherStep)
@@ -7394,8 +15254,19 @@ describe('Workflow', () => {
           id: 'nested-workflow-b',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
+          .map({
+            finalValue: mapVariable({
+              step: finalStep,
+              path: 'finalValue',
+            }),
+            newValue: mapVariable({
+              step: startStep,
+              path: 'newValue',
+            }),
+          })
           .then(finalStep)
           .commit();
         counterWorkflow
@@ -7415,8 +15286,8 @@ describe('Workflow', () => {
             createStep({
               id: 'last-step',
               inputSchema: z.object({
-                'nested-workflow-a': wfA.outputSchema,
-                'nested-workflow-b': wfB.outputSchema,
+                'nested-workflow-a': wfA.outputSchema.optional(),
+                'nested-workflow-b': wfB.outputSchema.optional(),
               }),
               outputSchema: z.object({ success: z.boolean() }),
               execute: last,
@@ -7424,7 +15295,7 @@ describe('Workflow', () => {
           )
           .commit();
 
-        const run = counterWorkflow.createRun();
+        const run = await counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 0 } });
 
         expect(start).toHaveBeenCalledTimes(1);
@@ -7486,7 +15357,7 @@ describe('Workflow', () => {
         const otherStep = createStep({
           id: 'other',
           inputSchema: z.object({ newValue: z.number() }),
-          outputSchema: z.object({ other: z.number() }),
+          outputSchema: z.object({ newValue: z.number(), other: z.number() }),
           execute: other,
         });
 
@@ -7514,12 +15385,14 @@ describe('Workflow', () => {
             startValue: z.number(),
           }),
           outputSchema: z.object({ success: z.boolean() }),
+          options: { validateInputs: false },
         });
 
         const wfA = createWorkflow({
           id: 'nested-workflow-a',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
           .then(otherStep)
@@ -7529,8 +15402,15 @@ describe('Workflow', () => {
           id: 'nested-workflow-b',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
+          .map(async ({ inputData }) => {
+            return {
+              finalValue: inputData.newValue + 1,
+              newValue: inputData.newValue,
+            };
+          })
           .then(finalStep)
           .commit();
         counterWorkflow
@@ -7550,8 +15430,8 @@ describe('Workflow', () => {
             createStep({
               id: 'last-step',
               inputSchema: z.object({
-                'nested-workflow-a': wfA.outputSchema,
-                'nested-workflow-b': wfB.outputSchema,
+                'nested-workflow-a': wfA.outputSchema.optional(),
+                'nested-workflow-b': wfB.outputSchema.optional(),
               }),
               outputSchema: z.object({ success: z.boolean() }),
               execute: last,
@@ -7559,7 +15439,7 @@ describe('Workflow', () => {
           )
           .commit();
 
-        const run = counterWorkflow.createRun();
+        const run = await counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 0 } });
 
         expect(start).toHaveBeenCalledTimes(1);
@@ -7622,7 +15502,7 @@ describe('Workflow', () => {
         const otherStep = createStep({
           id: 'other',
           inputSchema: z.object({ newValue: z.number() }),
-          outputSchema: z.object({ other: z.number() }),
+          outputSchema: z.object({ newValue: z.number(), other: z.number() }),
           execute: other,
         });
 
@@ -7650,12 +15530,14 @@ describe('Workflow', () => {
             startValue: z.number(),
           }),
           outputSchema: z.object({ success: z.boolean() }),
+          options: { validateInputs: false },
         });
 
         const wfA = createWorkflow({
           id: 'nested-workflow-a',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
           .then(otherStep)
@@ -7665,6 +15547,7 @@ describe('Workflow', () => {
           id: 'nested-workflow-b',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
           .branch([
@@ -7674,6 +15557,7 @@ describe('Workflow', () => {
                 id: 'nested-workflow-c',
                 inputSchema: startStep.outputSchema,
                 outputSchema: otherStep.outputSchema,
+                options: { validateInputs: false },
               })
                 .then(otherStep)
                 .commit(),
@@ -7684,6 +15568,7 @@ describe('Workflow', () => {
                 id: 'nested-workflow-d',
                 inputSchema: startStep.outputSchema,
                 outputSchema: otherStep.outputSchema,
+                options: { validateInputs: false },
               })
                 .then(otherStep)
                 .commit(),
@@ -7694,12 +15579,15 @@ describe('Workflow', () => {
             createStep({
               id: 'map-results',
               inputSchema: z.object({
-                'nested-workflow-c': otherStep.outputSchema,
-                'nested-workflow-d': otherStep.outputSchema,
+                'nested-workflow-c': otherStep.outputSchema.optional(),
+                'nested-workflow-d': otherStep.outputSchema.optional(),
               }),
               outputSchema: otherStep.outputSchema,
               execute: async ({ inputData }) => {
-                return { other: inputData['nested-workflow-c']?.other ?? inputData['nested-workflow-d']?.other };
+                return {
+                  newValue: inputData['nested-workflow-c']?.newValue ?? inputData['nested-workflow-d']?.newValue ?? 0,
+                  other: inputData['nested-workflow-c']?.other ?? inputData['nested-workflow-d']?.other ?? 0,
+                };
               },
             }),
           )
@@ -7723,8 +15611,8 @@ describe('Workflow', () => {
             createStep({
               id: 'last-step',
               inputSchema: z.object({
-                'nested-workflow-a': wfA.outputSchema,
-                'nested-workflow-b': wfB.outputSchema,
+                'nested-workflow-a': wfA.outputSchema.optional(),
+                'nested-workflow-b': wfB.outputSchema.optional(),
               }),
               outputSchema: z.object({ success: z.boolean() }),
               execute: last,
@@ -7732,7 +15620,7 @@ describe('Workflow', () => {
           )
           .commit();
 
-        const run = counterWorkflow.createRun();
+        const run = await counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 1 } });
 
         expect(start).toHaveBeenCalledTimes(1);
@@ -7800,7 +15688,7 @@ describe('Workflow', () => {
         const otherStep = createStep({
           id: 'other',
           inputSchema: z.object({ newValue: z.number() }),
-          outputSchema: z.object({ other: z.number() }),
+          outputSchema: z.object({ newValue: z.number(), other: z.number() }),
           execute: other,
         });
 
@@ -7832,12 +15720,14 @@ describe('Workflow', () => {
           outputSchema: z.object({
             finalValue: z.number(),
           }),
+          options: { validateInputs: false },
         });
 
         const wfA = createWorkflow({
           id: 'nested-workflow-a',
           inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
         })
           .then(startStep)
           .then(otherStep)
@@ -7870,7 +15760,7 @@ describe('Workflow', () => {
           workflows: { counterWorkflow },
         });
 
-        const run = counterWorkflow.createRun();
+        const run = await counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 0 } });
         expect(begin).toHaveBeenCalledTimes(1);
         expect(start).toHaveBeenCalledTimes(1);
@@ -7885,6 +15775,133 @@ describe('Workflow', () => {
         expect(result.steps['last-step']).toEqual(undefined);
 
         const resumedResults = await run.resume({ step: [wfA, otherStep], resumeData: { newValue: 0 } });
+
+        // @ts-ignore
+        expect(resumedResults.steps['nested-workflow-a'].output).toEqual({
+          finalValue: 26 + 1,
+        });
+
+        expect(start).toHaveBeenCalledTimes(1);
+        expect(other).toHaveBeenCalledTimes(2);
+        expect(final).toHaveBeenCalledTimes(1);
+        expect(last).toHaveBeenCalledTimes(1);
+      });
+
+      it('should be able to resume suspended nested workflow step with only nested workflow step provided', async () => {
+        const start = vi.fn().mockImplementation(async ({ inputData }) => {
+          // Get the current value (either from trigger or previous increment)
+          const currentValue = inputData.startValue || 0;
+
+          // Increment the value
+          const newValue = currentValue + 1;
+
+          return { newValue };
+        });
+        const startStep = createStep({
+          id: 'start',
+          inputSchema: z.object({ startValue: z.number() }),
+          outputSchema: z.object({
+            newValue: z.number(),
+          }),
+          execute: start,
+        });
+
+        const other = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
+          if (!resumeData) {
+            return await suspend();
+          }
+          return { other: 26 };
+        });
+        const otherStep = createStep({
+          id: 'other',
+          inputSchema: z.object({ newValue: z.number() }),
+          outputSchema: z.object({ newValue: z.number(), other: z.number() }),
+          execute: other,
+        });
+
+        const final = vi.fn().mockImplementation(async ({ getStepResult }) => {
+          const startVal = getStepResult(startStep)?.newValue ?? 0;
+          const otherVal = getStepResult(otherStep)?.other ?? 0;
+          return { finalValue: startVal + otherVal };
+        });
+        const last = vi.fn().mockImplementation(async ({}) => {
+          return { success: true };
+        });
+        const begin = vi.fn().mockImplementation(async ({ inputData }) => {
+          return inputData;
+        });
+        const finalStep = createStep({
+          id: 'final',
+          inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+          outputSchema: z.object({
+            finalValue: z.number(),
+          }),
+          execute: final,
+        });
+
+        const counterWorkflow = createWorkflow({
+          id: 'counter-workflow',
+          inputSchema: z.object({
+            startValue: z.number(),
+          }),
+          outputSchema: z.object({
+            finalValue: z.number(),
+          }),
+          options: { validateInputs: false },
+        });
+
+        const wfA = createWorkflow({
+          id: 'nested-workflow-a',
+          inputSchema: counterWorkflow.inputSchema,
+          outputSchema: finalStep.outputSchema,
+          options: { validateInputs: false },
+        })
+          .then(startStep)
+          .then(otherStep)
+          .then(finalStep)
+          .commit();
+
+        counterWorkflow
+          .then(
+            createStep({
+              id: 'begin-step',
+              inputSchema: counterWorkflow.inputSchema,
+              outputSchema: counterWorkflow.inputSchema,
+              execute: begin,
+            }),
+          )
+          .then(wfA)
+          .then(
+            createStep({
+              id: 'last-step',
+              inputSchema: wfA.outputSchema,
+              outputSchema: z.object({ success: z.boolean() }),
+              execute: last,
+            }),
+          )
+          .commit();
+
+        new Mastra({
+          logger: false,
+          storage: testStorage,
+          workflows: { counterWorkflow },
+        });
+
+        const run = await counterWorkflow.createRun();
+        const result = await run.start({ inputData: { startValue: 0 } });
+        expect(begin).toHaveBeenCalledTimes(1);
+        expect(start).toHaveBeenCalledTimes(1);
+        expect(other).toHaveBeenCalledTimes(1);
+        expect(final).toHaveBeenCalledTimes(0);
+        expect(last).toHaveBeenCalledTimes(0);
+        expect(result.steps['nested-workflow-a']).toMatchObject({
+          status: 'suspended',
+        });
+
+        // @ts-ignore
+        expect(result.steps['last-step']).toEqual(undefined);
+
+        const resumedResults = await run.resume({ step: 'nested-workflow-a', resumeData: { newValue: 0 } });
 
         // @ts-ignore
         expect(resumedResults.steps['nested-workflow-a'].output).toEqual({
@@ -7959,7 +15976,7 @@ describe('Workflow', () => {
           workflows: { mainWorkflow },
         });
 
-        const run = mainWorkflow.createRun();
+        const run = await mainWorkflow.createRun();
 
         const initialResult = await run.start({ inputData: { suspect: 'initial-suspect' } });
 
@@ -7986,7 +16003,7 @@ describe('Workflow', () => {
         });
 
         const secondResumeResult = await run.resume({
-          step: ['sub-workflow-2', 'step-2'],
+          step: 'sub-workflow-2.step-2',
           resumeData: { suspect: 'second-suspect' },
         });
 
@@ -8002,18 +16019,18 @@ describe('Workflow', () => {
         expect((secondResumeResult as any).result).toEqual({ suspect: 'second-suspect' });
       });
 
-      it('should preserve runtime context in nested workflows after suspend/resume', async () => {
+      it('should preserve request context in nested workflows after suspend/resume', async () => {
         const testStorage = new MockStore();
 
-        // Step that sets runtime context data
+        // Step that sets request context data
         const setupStep = createStep({
           id: 'setup-step',
           inputSchema: z.object({}),
           outputSchema: z.object({
             setup: z.boolean(),
           }),
-          execute: async ({ runtimeContext }) => {
-            runtimeContext.set('test-key', 'test-context-value');
+          execute: async ({ requestContext }) => {
+            requestContext.set('test-key', 'test-context-value');
             return { setup: true };
           },
         });
@@ -8033,9 +16050,9 @@ describe('Workflow', () => {
           resumeSchema: z.object({
             confirmed: z.boolean(),
           }),
-          execute: async ({ resumeData, suspend, runtimeContext }) => {
-            // Verify runtime context is still available during suspend
-            expect(runtimeContext.get('test-key')).toBe('test-context-value');
+          execute: async ({ resumeData, suspend, requestContext }) => {
+            // Verify request context is still available during suspend
+            expect(requestContext.get('test-key')).toBe('test-context-value');
 
             if (!resumeData?.confirmed) {
               return await suspend({ message: 'Workflow suspended for testing' });
@@ -8044,7 +16061,7 @@ describe('Workflow', () => {
           },
         });
 
-        // Step in nested workflow that verifies runtime context access
+        // Step in nested workflow that verifies request context access
         const verifyContextStep = createStep({
           id: 'verify-context-step',
           inputSchema: z.object({
@@ -8054,14 +16071,14 @@ describe('Workflow', () => {
             success: z.boolean(),
             hasTestData: z.boolean(),
           }),
-          execute: async ({ runtimeContext, mastra, getInitData, inputData }) => {
+          execute: async ({ requestContext, mastra, getInitData, inputData }) => {
             // Verify all context is available in nested workflow after suspend/resume
-            const testData = runtimeContext.get('test-key');
+            const testData = requestContext.get('test-key');
             const initData = getInitData();
 
             expect(testData).toBe('test-context-value');
             expect(mastra).toBeDefined();
-            expect(runtimeContext).toBeDefined();
+            expect(requestContext).toBeDefined();
             expect(inputData).toEqual({ resumed: true });
             expect(initData).toEqual({ resumed: true });
 
@@ -8104,7 +16121,7 @@ describe('Workflow', () => {
           workflows: { mainWorkflow, nestedWorkflow },
         });
 
-        const run = mainWorkflow.createRun();
+        const run = await mainWorkflow.createRun();
 
         // Start workflow (should suspend)
         const suspendResult = await run.start({ inputData: {} });
@@ -8150,7 +16167,7 @@ describe('Workflow', () => {
         const otherStep = createStep({
           id: 'other',
           inputSchema: z.object({ newValue: z.number() }),
-          outputSchema: z.object({ other: z.number() }),
+          outputSchema: z.object({ newValue: z.number(), other: z.number() }),
           execute: other,
         });
 
@@ -8180,6 +16197,7 @@ describe('Workflow', () => {
           outputSchema: z.object({
             finalValue: z.number(),
           }),
+          options: { validateInputs: false },
         })
           .then(startStep)
           .then(otherStep)
@@ -8194,6 +16212,7 @@ describe('Workflow', () => {
           outputSchema: z.object({
             finalValue: z.number(),
           }),
+          options: { validateInputs: false },
         });
 
         counterWorkflow
@@ -8208,7 +16227,7 @@ describe('Workflow', () => {
           )
           .commit();
 
-        const run = counterWorkflow.createRun();
+        const run = await counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 0 } });
         const results = result.steps;
 
@@ -8265,7 +16284,7 @@ describe('Workflow', () => {
       const otherStep = createStep({
         id: 'other',
         inputSchema: z.object({ newValue: z.number() }),
-        outputSchema: z.object({ other: z.number() }),
+        outputSchema: z.object({ newValue: z.number(), other: z.number() }),
         execute: other,
       });
 
@@ -8309,6 +16328,7 @@ describe('Workflow', () => {
         id: 'nested-workflow-a',
         inputSchema: counterInputSchema,
         outputSchema: finalStep.outputSchema,
+        options: { validateInputs: false },
       })
         .then(startStep)
         .then(otherStep)
@@ -8319,6 +16339,7 @@ describe('Workflow', () => {
         id: 'nested-workflow-b',
         inputSchema: counterInputSchema,
         outputSchema: finalStep.outputSchema,
+        options: { validateInputs: false },
       })
         .then(passthroughStep)
         .then(wfA)
@@ -8328,6 +16349,7 @@ describe('Workflow', () => {
         id: 'nested-workflow-c',
         inputSchema: counterInputSchema,
         outputSchema: finalStep.outputSchema,
+        options: { validateInputs: false },
       })
         .then(passthroughStep)
         .then(wfB)
@@ -8338,6 +16360,7 @@ describe('Workflow', () => {
         inputSchema: counterInputSchema,
         outputSchema: counterOutputSchema,
         steps: [wfC, passthroughStep],
+        options: { validateInputs: false },
       });
 
       counterWorkflow
@@ -8366,7 +16389,7 @@ describe('Workflow', () => {
         workflows: { counterWorkflow },
       });
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRun();
       const passthroughSpy = vi.spyOn(passthroughStep, 'execute');
       const result = await run.start({ inputData: { startValue: 0 } });
       expect(passthroughSpy).toHaveBeenCalledTimes(2);
@@ -8531,7 +16554,7 @@ describe('Workflow', () => {
         workflows: { mainWorkflow, secondItemWorkflow },
       });
 
-      const run = await mainWorkflow.createRunAsync();
+      const run = await mainWorkflow.createRun();
 
       // Start workflow - should suspend at select-item
       const initialResult = await run.start({ inputData: {} });
@@ -8631,7 +16654,7 @@ describe('Workflow', () => {
         ])
         .commit();
 
-      const run = await testWorkflow.createRunAsync();
+      const run = await testWorkflow.createRun();
 
       // Start workflow - both steps should suspend
       const initialResult = await run.start({ inputData: { value: 10 } });
@@ -8676,48 +16699,53 @@ describe('Workflow', () => {
   });
 
   describe('Dependency Injection', () => {
-    it('should inject runtimeContext dependencies into steps during run', async () => {
-      const runtimeContext = new RuntimeContext();
+    it('should inject requestContext dependencies into steps during run', async () => {
+      const requestContext = new RequestContext();
       const testValue = 'test-dependency';
-      runtimeContext.set('testKey', testValue);
+      requestContext.set('testKey', testValue);
 
       const step = createStep({
         id: 'step1',
-        execute: async ({ runtimeContext }) => {
-          const value = runtimeContext.get('testKey');
+        execute: async ({ requestContext }) => {
+          const value = requestContext.get('testKey');
           return { injectedValue: value };
         },
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
-      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        options: { validateInputs: false },
+      });
       workflow.then(step).commit();
 
-      const run = workflow.createRun();
-      const result = await run.start({ runtimeContext });
+      const run = await workflow.createRun();
+      const result = await run.start({ requestContext });
 
       // @ts-ignore
       expect(result.steps.step1.output.injectedValue).toBe(testValue);
     });
 
-    it('should inject runtimeContext dependencies into steps during resume', async () => {
+    it('should inject requestContext dependencies into steps during resume', async () => {
       const initialStorage = new MockStore();
 
-      const runtimeContext = new RuntimeContext();
+      const requestContext = new RequestContext();
       const testValue = 'test-dependency';
-      runtimeContext.set('testKey', testValue);
+      requestContext.set('testKey', testValue);
 
       const mastra = new Mastra({
         logger: false,
         storage: initialStorage,
       });
 
-      const execute = vi.fn(async ({ runtimeContext, suspend, resumeData }) => {
+      const execute = vi.fn(async ({ requestContext, suspend, resumeData }) => {
         if (!resumeData?.human) {
           return await suspend();
         }
 
-        const value = runtimeContext.get('testKey');
+        const value = requestContext.get('testKey');
         return { injectedValue: value };
       });
 
@@ -8730,30 +16758,31 @@ describe('Workflow', () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         mastra,
-        inputSchema: z.object({}),
+        inputSchema: z.object({ human: z.boolean() }),
         outputSchema: z.object({}),
+        options: { validateInputs: false },
       });
       workflow.then(step).commit();
 
-      const run = workflow.createRun();
-      await run.start({ runtimeContext });
+      const run = await workflow.createRun();
+      await run.start({ requestContext });
 
-      const resumeruntimeContext = new RuntimeContext();
-      resumeruntimeContext.set('testKey', testValue + '2');
+      const resumerequestContext = new RequestContext();
+      resumerequestContext.set('testKey', testValue + '2');
 
       const result = await run.resume({
         step: step,
         resumeData: {
           human: true,
         },
-        runtimeContext: resumeruntimeContext,
+        requestContext: resumerequestContext,
       });
 
       // @ts-ignore
       expect(result?.steps.step1.output.injectedValue).toBe(testValue + '2');
     });
 
-    it('should have access to runtimeContext from before suspension during workflow resume', async () => {
+    it('should have access to requestContext from before suspension during workflow resume', async () => {
       const testValue = 'test-dependency';
       const resumeStep = createStep({
         id: 'resume',
@@ -8782,8 +16811,8 @@ describe('Workflow', () => {
         outputSchema: z.object({
           value: z.number(),
         }),
-        execute: async ({ inputData, runtimeContext }) => {
-          runtimeContext.set('testKey', testValue);
+        execute: async ({ inputData, requestContext }) => {
+          requestContext.set('testKey', testValue);
           return {
             value: inputData.value + 1,
           };
@@ -8802,8 +16831,8 @@ describe('Workflow', () => {
             id: 'final',
             inputSchema: z.object({ value: z.number() }),
             outputSchema: z.object({ value: z.number() }),
-            execute: async ({ inputData, runtimeContext }) => {
-              const testKey = runtimeContext.get('testKey');
+            execute: async ({ inputData, requestContext }) => {
+              const testKey = requestContext.get('testKey');
               expect(testKey).toBe(testValue);
               return { value: inputData.value };
             },
@@ -8817,7 +16846,7 @@ describe('Workflow', () => {
         workflows: { incrementWorkflow },
       });
 
-      const run = await incrementWorkflow.createRunAsync();
+      const run = await incrementWorkflow.createRun();
       const result = await run.start({ inputData: { value: 0 } });
       expect(result.status).toBe('suspended');
 
@@ -8829,7 +16858,7 @@ describe('Workflow', () => {
       expect(resumeResult.status).toBe('success');
     });
 
-    it('should not show removed runtimeContext values in subsequent steps', async () => {
+    it('should not show removed requestContext values in subsequent steps', async () => {
       const testValue = 'test-dependency';
       const resumeStep = createStep({
         id: 'resume',
@@ -8837,7 +16866,7 @@ describe('Workflow', () => {
         outputSchema: z.object({ value: z.number() }),
         resumeSchema: z.object({ value: z.number() }),
         suspendSchema: z.object({ message: z.string() }),
-        execute: async ({ inputData, resumeData, suspend, runtimeContext }) => {
+        execute: async ({ inputData, resumeData, suspend, requestContext }) => {
           const finalValue = (resumeData?.value ?? 0) + inputData.value;
 
           if (!resumeData?.value || finalValue < 10) {
@@ -8846,10 +16875,10 @@ describe('Workflow', () => {
             });
           }
 
-          const testKey = runtimeContext.get('testKey');
+          const testKey = requestContext.get('testKey');
           expect(testKey).toBe(testValue);
 
-          runtimeContext.delete('testKey');
+          requestContext.delete('testKey');
 
           return { value: finalValue };
         },
@@ -8863,8 +16892,8 @@ describe('Workflow', () => {
         outputSchema: z.object({
           value: z.number(),
         }),
-        execute: async ({ inputData, runtimeContext }) => {
-          runtimeContext.set('testKey', testValue);
+        execute: async ({ inputData, requestContext }) => {
+          requestContext.set('testKey', testValue);
           return {
             value: inputData.value + 1,
           };
@@ -8883,8 +16912,8 @@ describe('Workflow', () => {
             id: 'final',
             inputSchema: z.object({ value: z.number() }),
             outputSchema: z.object({ value: z.number() }),
-            execute: async ({ inputData, runtimeContext }) => {
-              const testKey = runtimeContext.get('testKey');
+            execute: async ({ inputData, requestContext }) => {
+              const testKey = requestContext.get('testKey');
               expect(testKey).toBeUndefined();
               return { value: inputData.value };
             },
@@ -8898,7 +16927,7 @@ describe('Workflow', () => {
         workflows: { incrementWorkflow },
       });
 
-      const run = await incrementWorkflow.createRunAsync();
+      const run = await incrementWorkflow.createRun();
       const result = await run.start({ inputData: { value: 0 } });
       expect(result.status).toBe('suspended');
 
@@ -8992,7 +17021,7 @@ describe('Workflow', () => {
       // This tests the fix: consecutive parallel calls should work with proper type inference
       workflow.parallel([step1, step2]).parallel([step3, step4]).commit();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRun();
       const step1Spy = vi.spyOn(step1, 'execute');
       const step2Spy = vi.spyOn(step2, 'execute');
       const step3Spy = vi.spyOn(step3, 'execute');
@@ -9069,32 +17098,6 @@ describe('Workflow', () => {
   });
 
   describe('Run count', () => {
-    it('runCount property should increment the run count when a step is executed multiple times', async () => {
-      const repeatingStep = createStep({
-        id: 'repeatingStep',
-        inputSchema: z.object({}),
-        outputSchema: z.object({
-          count: z.number(),
-        }),
-        execute: async ({ runCount }) => {
-          return { count: runCount };
-        },
-      });
-
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({}),
-        outputSchema: repeatingStep.outputSchema,
-      })
-        .dountil(repeatingStep, async ({ inputData }) => inputData.count === 3)
-        .commit();
-
-      const result = await workflow.createRun().start({ inputData: {} });
-
-      expect(result.status).toBe('success');
-      expect(result.steps.repeatingStep).toHaveProperty('output', { count: 3 });
-    });
-
     it('multiple steps should have different run counts', async () => {
       const step1 = createStep({
         id: 'step1',
@@ -9102,8 +17105,8 @@ describe('Workflow', () => {
         outputSchema: z.object({
           count: z.number(),
         }),
-        execute: async ({ runCount }) => {
-          return { count: runCount };
+        execute: async ({ retryCount }) => {
+          return { count: retryCount };
         },
       });
 
@@ -9113,8 +17116,8 @@ describe('Workflow', () => {
         outputSchema: z.object({
           count: z.number(),
         }),
-        execute: async ({ runCount }) => {
-          return { count: runCount };
+        execute: async ({ retryCount }) => {
+          return { count: retryCount };
         },
       });
 
@@ -9127,7 +17130,8 @@ describe('Workflow', () => {
         .dountil(step2, async ({ inputData }) => inputData.count === 10)
         .commit();
 
-      const result = await workflow.createRun().start({ inputData: {} });
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
 
       expect(result.status).toBe('success');
       expect(result.steps.step1).toHaveProperty('output', { count: 3 });
@@ -9138,6 +17142,9 @@ describe('Workflow', () => {
       const mockExec = vi.fn().mockImplementation(async ({ runCount }) => {
         return { count: runCount };
       });
+      const mockExecWithRetryCount = vi.fn().mockImplementation(async ({ retryCount }) => {
+        return { count: retryCount };
+      });
       const step = createStep({
         id: 'step',
         inputSchema: z.object({}),
@@ -9146,20 +17153,31 @@ describe('Workflow', () => {
         }),
         execute: mockExec,
       });
+      const step2 = createStep({
+        id: 'step2',
+        inputSchema: z.object({ count: z.number() }),
+        outputSchema: z.object({
+          count: z.number(),
+        }),
+        execute: mockExecWithRetryCount,
+      });
 
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({}),
         outputSchema: z.object({}),
+        options: { validateInputs: false },
       })
         .then(step)
+        .then(step2)
         .commit();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRun();
       await run.start({ inputData: {} });
 
       expect(mockExec).toHaveBeenCalledTimes(1);
-      expect(mockExec).toHaveBeenCalledWith(expect.objectContaining({ runCount: 0 }));
+      expect(mockExecWithRetryCount).toHaveBeenCalledTimes(1);
+      expect(mockExecWithRetryCount).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 0 }));
     });
   });
   describe('Parallel Suspended Steps', () => {
@@ -9210,7 +17228,7 @@ describe('Workflow', () => {
         .parallel([parallelStep1, parallelStep2])
         .commit();
 
-      const run = await parallelWorkflow.createRunAsync();
+      const run = await parallelWorkflow.createRun();
 
       // Start workflow - both parallel steps should suspend
       const startResult = await run.start({ inputData: { value: 100 } });
@@ -9275,7 +17293,7 @@ describe('Workflow', () => {
         .parallel([normalStep1, normalStep2])
         .commit();
 
-      const run = await normalParallelWorkflow.createRunAsync();
+      const run = await normalParallelWorkflow.createRun();
       const result = await run.start({ inputData: { value: 100 } });
 
       // Should complete immediately since no steps suspend
@@ -9338,7 +17356,7 @@ describe('Workflow', () => {
         .parallel([multiResumeStep1, multiResumeStep2])
         .commit();
 
-      const run = await multiCycleWorkflow.createRunAsync();
+      const run = await multiCycleWorkflow.createRun();
 
       // Initial start - both should suspend
       const startResult = await run.start({ inputData: { value: 10 } });
@@ -9384,75 +17402,131 @@ describe('Workflow', () => {
     });
   });
 
-  describe('typescript', () => {
-    it('should allow a steps input schema to be a subset of the previous step output schema', () => {
-      const prevStep = createStep({
-        id: 'prev-step',
-        inputSchema: z.object({ value: z.string() }),
-        outputSchema: z.object({ a: z.string(), b: z.string().optional() }),
-        execute: async () => {
-          return { a: 'a', b: 'b' };
+  describe('Suspend Data Access', () => {
+    it('should provide access to suspendData in workflow step on resume', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+      });
+
+      const suspendDataAccess = createStep({
+        id: 'suspend-data-access-test',
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        resumeSchema: z.object({
+          confirm: z.boolean(),
+        }),
+        suspendSchema: z.object({
+          reason: z.string(),
+          originalValue: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+          wasResumed: z.boolean(),
+          suspendReason: z.string().optional(),
+        }),
+        execute: async ({ inputData, resumeData, suspend, suspendData }) => {
+          const { value } = inputData;
+          const { confirm } = resumeData ?? {};
+
+          // On first execution, suspend with context
+          if (!confirm) {
+            return await suspend({
+              reason: 'User confirmation required',
+              originalValue: value,
+            });
+          }
+
+          // On resume, we can now access the suspend data!
+          const suspendReason = suspendData?.reason || 'Unknown';
+          const originalValue = suspendData?.originalValue || 'Unknown';
+
+          return {
+            result: `Processed ${originalValue} after ${suspendReason}`,
+            wasResumed: true,
+            suspendReason,
+          };
         },
       });
 
       const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({ value: z.string() }),
-        outputSchema: z.boolean(),
+        id: 'suspend-data-test-workflow',
+        mastra,
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+          wasResumed: z.boolean(),
+          suspendReason: z.string().optional(),
+        }),
       });
 
-      const sharedStepAttrs = {
-        outputSchema: z.boolean(),
-        execute: async () => true,
-      } satisfies Partial<Parameters<typeof createStep>[0]>;
+      workflow.then(suspendDataAccess).commit();
 
-      const equalStep = createStep({
-        id: 'equal-step',
-        inputSchema: prevStep.outputSchema,
-        ...sharedStepAttrs,
-      });
-      // this is ok
-      workflow.then(prevStep).then(equalStep);
+      const run = await workflow.createRun();
 
-      const missingRequiredKeyStep = createStep({
-        id: 'missing-required-key-step',
-        inputSchema: prevStep.outputSchema.omit({ a: true }),
-        ...sharedStepAttrs,
+      // Start the workflow - should suspend
+      const initialResult = await run.start({
+        inputData: { value: 'test-value' },
       });
-      // this is ok
-      workflow.then(prevStep).then(missingRequiredKeyStep);
 
-      const missingOptionalKeyStep = createStep({
-        id: 'missing-optional-key-step',
-        inputSchema: prevStep.outputSchema.omit({ b: true }),
-        ...sharedStepAttrs,
-      });
-      // this is ok
-      workflow.then(prevStep).then(missingOptionalKeyStep);
+      expect(initialResult.status).toBe('suspended');
 
-      const extraOptionalKeyStep = createStep({
-        id: 'extra-optional-key-step',
-        inputSchema: prevStep.outputSchema.extend({ c: z.string().optional() }),
-        ...sharedStepAttrs,
+      // Resume the workflow with confirmation
+      const resumedResult = await run.resume({
+        step: suspendDataAccess,
+        resumeData: { confirm: true },
       });
-      // this is ok
-      workflow.then(prevStep).then(extraOptionalKeyStep);
 
-      const extraRequiredKeyStep = createStep({
-        id: 'extra-required-key-step',
-        inputSchema: prevStep.outputSchema.extend({ c: z.string() }),
-        ...sharedStepAttrs,
-      });
-      // @ts-expect-error -- extra-required-key-step should not be allowed
-      workflow.then(prevStep).then(extraRequiredKeyStep);
+      expect(resumedResult.status).toBe('success');
+      expect(resumedResult.result.suspendReason).toBe('User confirmation required');
+      expect(resumedResult.result.result).toBe('Processed test-value after User confirmation required');
+    });
 
-      const distinctTypeStep = createStep({
-        id: 'distinct-type-step',
-        inputSchema: z.string(),
-        ...sharedStepAttrs,
+    it('should handle missing suspendData gracefully', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
       });
-      // @ts-expect-error -- distinct-type-step should not be allowed
-      workflow.then(prevStep).then(distinctTypeStep);
+
+      const stepWithoutSuspend = createStep({
+        id: 'no-suspend-step',
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        execute: async ({ inputData, suspendData }) => {
+          // Should handle missing suspendData gracefully
+          const message = suspendData ? 'Had suspend data' : 'No suspend data';
+          return { result: `${inputData.value}: ${message}` };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'no-suspend-workflow',
+        mastra,
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      });
+
+      workflow.then(stepWithoutSuspend).commit();
+
+      const run = await workflow.createRun();
+
+      const result = await run.start({
+        inputData: { value: 'test' },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.result.result).toBe('test: No suspend data');
     });
   });
 });

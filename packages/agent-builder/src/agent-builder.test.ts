@@ -1,6 +1,17 @@
 import type { MastraLanguageModel } from '@mastra/core/agent';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { MessageList } from '@mastra/core/agent';
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, vi } from 'vitest';
+
+// Mock the utils module
+vi.mock('./utils', async () => {
+  const actual = await vi.importActual('./utils');
+  return {
+    ...actual,
+    execFile: vi.fn(),
+  };
+});
+
 import { AgentBuilderDefaults } from './defaults';
 import { ToolSummaryProcessor } from './processors/tool-summary';
 import { AgentBuilder } from './index';
@@ -56,7 +67,7 @@ describe('AgentBuilder', () => {
         projectPath: '/test/project',
       });
 
-      const tools = builder.getTools({ runtimeContext: new RuntimeContext() });
+      const tools = builder.listTools({ requestContext: new RequestContext() });
       expect(tools).toBeDefined();
     });
 
@@ -92,17 +103,6 @@ describe('AgentBuilder', () => {
     });
   });
 
-  describe('AgentBuilder.defaultConfig', () => {
-    it('should return default configuration', () => {
-      const defaultConfig = AgentBuilder.defaultConfig('/test/project');
-
-      expect(defaultConfig).toHaveProperty('instructions');
-      expect(defaultConfig).toHaveProperty('memoryConfig');
-      expect(defaultConfig).toHaveProperty('tools');
-      expect(defaultConfig.memoryConfig).toEqual(AgentBuilderDefaults.DEFAULT_MEMORY_CONFIG);
-    });
-  });
-
   describe('AgentBuilder.createWithDefaults', () => {
     it('should create an instance with merged default settings', () => {
       const builder = new AgentBuilder({
@@ -114,15 +114,6 @@ describe('AgentBuilder', () => {
       });
 
       expect(builder).toBeInstanceOf(AgentBuilder);
-    });
-  });
-
-  describe('generateAgent method', () => {
-    it('should be defined and callable', async () => {
-      const builder = new AgentBuilder(mockConfig);
-
-      expect(builder.generateAgent).toBeDefined();
-      expect(typeof builder.generateAgent).toBe('function');
     });
   });
 
@@ -178,30 +169,37 @@ describe('AgentBuilder', () => {
       const processor = new ToolSummaryProcessor({ summaryModel: mockModel });
 
       // Test that the processor handles empty messages gracefully
-      const emptyMessages: any[] = [];
-      const result = await processor.process(emptyMessages);
+      const emptyMessageList = new MessageList();
+      const abort = () => {
+        throw new Error('Aborted');
+      };
+      const result = await processor.processInput({
+        messages: emptyMessageList.get.all.db(),
+        messageList: emptyMessageList,
+        abort,
+      });
       expect(result).toEqual([]);
 
       // Test that the processor doesn't throw when processing messages
       // (the actual resilience testing would require more complex mocking,
       // but this ensures the basic structure works)
-      const basicMessages = [
-        {
-          role: 'user' as const,
-          content: 'Hello',
-        },
-      ];
+      const basicMessageList = new MessageList();
+      basicMessageList.add([{ role: 'user', content: 'Hello' }], 'user');
 
-      const basicResult = await processor.process(basicMessages);
+      const basicResult = await processor.processInput({
+        messages: basicMessageList.get.all.db(),
+        messageList: basicMessageList,
+        abort,
+      });
       expect(basicResult).toHaveLength(1);
-      expect(basicResult[0].content).toBe('Hello');
+      expect(basicResult[0].content).toMatchObject({ format: 2, parts: [{ type: 'text', text: 'Hello' }] });
     });
   });
 
   describe('Server Management Tools', () => {
     it('should have manageServer and httpRequest tools available', async () => {
       const builder = new AgentBuilder(mockConfig);
-      const tools = await builder.getTools({ runtimeContext: new RuntimeContext() });
+      const tools = await builder.listTools({ requestContext: new RequestContext() });
 
       expect(tools.manageServer).toBeDefined();
       expect(tools.httpRequest).toBeDefined();
@@ -215,21 +213,19 @@ describe('AgentBuilder', () => {
     });
 
     it('should handle server stop with no running process', async () => {
-      // Mock exec to return "No process found"
-      const mockExec = vi.fn().mockResolvedValue({ stdout: 'No process found' });
-      const originalExec = require('child_process').exec;
+      // Mock execFile from utils to return "No process found"
+      const { execFile } = await import('./utils');
+      const mockExecFile = vi.mocked(execFile);
+      mockExecFile.mockResolvedValue({ stdout: 'No process found', stderr: '' });
 
-      try {
-        require('child_process').exec = mockExec;
+      const result = await AgentBuilderDefaults.stopMastraServer({ port: 9999 });
 
-        const result = await AgentBuilderDefaults.stopMastraServer({ port: 9999 });
+      expect(result.success).toBe(true);
+      expect(result.status).toBe('stopped');
+      expect(result.message).toContain('No Mastra server found running on port 9999');
 
-        expect(result.success).toBe(true);
-        expect(result.status).toBe('stopped');
-        expect(result.message).toContain('No Mastra server found running on port 9999');
-      } finally {
-        require('child_process').exec = originalExec;
-      }
+      // Verify that execFile was called with the correct arguments
+      expect(mockExecFile).toHaveBeenCalledWith('lsof', ['-ti', '9999']);
     });
   });
 

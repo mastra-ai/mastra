@@ -12,7 +12,7 @@
     "@mastra/core": "latest",
     "@mastra/evals": "latest",
     "@mastra/libsql": "latest",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "pnpm": {
     "overrides": {

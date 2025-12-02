@@ -1,4 +1,5 @@
-import type { z } from 'zod';
+import { z } from 'zod';
+import type { ZodLikeSchema } from '../types/zod-compat';
 
 export interface ValidationError<T = any> {
   error: true;
@@ -7,108 +8,169 @@ export interface ValidationError<T = any> {
 }
 
 /**
- * Validates input against a Zod schema and returns a structured error if validation fails
+ * Safely truncates data for error messages to avoid exposing sensitive information.
+ * @param data The data to truncate
+ * @param maxLength Maximum length of the truncated string (default: 200)
+ * @returns Truncated string representation
+ */
+function truncateForLogging(data: unknown, maxLength: number = 200): string {
+  try {
+    const stringified = JSON.stringify(data, null, 2);
+    if (stringified.length <= maxLength) {
+      return stringified;
+    }
+    return stringified.slice(0, maxLength) + '... (truncated)';
+  } catch {
+    return '[Unable to serialize data]';
+  }
+}
+
+/**
+ * Validates raw suspend data against a Zod schema.
+ *
  * @param schema The Zod schema to validate against
- * @param input The input to validate
+ * @param suspendData The raw suspend data to validate
  * @param toolId Optional tool ID for better error messages
- * @returns The validation error object if validation fails, undefined if successful
+ * @returns The validated data or a validation error
+ */
+export function validateToolSuspendData<T = any>(
+  schema: ZodLikeSchema | undefined,
+  suspendData: unknown,
+  toolId?: string,
+): { data: T | unknown; error?: ValidationError<T> } {
+  // If no schema, return suspend data as-is
+  if (!schema || !('safeParse' in schema)) {
+    return { data: suspendData };
+  }
+
+  // Validate the input directly - no unwrapping needed in v1.0
+  const validation = schema.safeParse(suspendData);
+
+  if (validation.success) {
+    return { data: validation.data };
+  }
+
+  // Validation failed, return error
+  const errorMessages = validation.error.issues
+    .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+    .join('\n');
+
+  const error: ValidationError<T> = {
+    error: true,
+    message: `Tool suspension data validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(suspendData)}`,
+    validationErrors: validation.error.format() as z.ZodFormattedError<T>,
+  };
+
+  return { data: suspendData, error };
+}
+
+/**
+ * Normalizes undefined/null input to an appropriate default value based on schema type.
+ * This handles LLMs (Claude Sonnet 4.5, Gemini 2.4, etc.) that send undefined/null
+ * instead of {} or [] when all parameters are optional.
+ *
+ * @param schema The Zod schema to check
+ * @param input The input to normalize
+ * @returns The normalized input (original value, {}, or [])
+ */
+function normalizeNullishInput(schema: ZodLikeSchema, input: unknown): unknown {
+  if (input !== undefined && input !== null) {
+    return input;
+  }
+
+  // Check if schema is an array type
+  if (schema instanceof z.ZodArray) {
+    return [];
+  }
+
+  // Check if schema is an object type
+  if (schema instanceof z.ZodObject) {
+    return {};
+  }
+
+  // For other schema types, return the original input and let Zod validate
+  return input;
+}
+
+/**
+ * Validates raw input data against a Zod schema.
+ *
+ * @param schema The Zod schema to validate against
+ * @param input The raw input data to validate
+ * @param toolId Optional tool ID for better error messages
+ * @returns The validated data or a validation error
  */
 export function validateToolInput<T = any>(
-  schema: z.ZodSchema<T> | undefined,
+  schema: ZodLikeSchema | undefined,
   input: unknown,
   toolId?: string,
 ): { data: T | unknown; error?: ValidationError<T> } {
+  // If no schema, return input as-is
   if (!schema || !('safeParse' in schema)) {
     return { data: input };
   }
 
-  // Store validation results to avoid duplicate validation
-  type ValidationAttempt = {
-    result: z.SafeParseReturnType<any, T>;
-    data: unknown;
-    structure: 'direct' | 'context' | 'inputData';
+  // Normalize undefined/null input to appropriate default for the schema type
+  // This handles LLMs that send undefined instead of {} or [] for optional parameters
+  const normalizedInput = normalizeNullishInput(schema, input);
+
+  // Validate the normalized input
+  const validation = schema.safeParse(normalizedInput);
+
+  if (validation.success) {
+    return { data: validation.data };
+  }
+
+  // Validation failed, return error
+  const errorMessages = validation.error.issues
+    .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+    .join('\n');
+
+  const error: ValidationError<T> = {
+    error: true,
+    message: `Tool input validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(input)}`,
+    validationErrors: validation.error.format() as z.ZodFormattedError<T>,
   };
 
-  const validationAttempts: ValidationAttempt[] = [];
+  return { data: input, error };
+}
 
-  // Try validating the input directly first
-  const directValidation = schema.safeParse(input);
-  validationAttempts.push({
-    result: directValidation,
-    data: input,
-    structure: 'direct',
-  });
-
-  if (directValidation.success) {
-    return { data: input };
+/**
+ * Validates tool output data against a Zod schema.
+ *
+ * @param schema The Zod schema to validate against
+ * @param output The output data to validate
+ * @param toolId Optional tool ID for better error messages
+ * @returns The validated data or a validation error
+ */
+export function validateToolOutput<T = any>(
+  schema: ZodLikeSchema | undefined,
+  output: unknown,
+  toolId?: string,
+  suspendCalled?: boolean,
+): { data: T | unknown; error?: ValidationError<T> } {
+  // If no schema, return output as-is
+  if (!schema || !('safeParse' in schema) || suspendCalled) {
+    return { data: output };
   }
 
-  // Handle ToolExecutionContext format { context: data, ... }
-  if (input && typeof input === 'object' && 'context' in input) {
-    const contextData = (input as any).context;
-    const contextValidation = schema.safeParse(contextData);
-    validationAttempts.push({
-      result: contextValidation,
-      data: contextData,
-      structure: 'context',
-    });
+  // Validate the output
+  const validation = schema.safeParse(output);
 
-    if (contextValidation.success) {
-      return { data: { ...(input as object), context: contextValidation.data } };
-    }
-
-    // Handle StepExecutionContext format { context: { inputData: data, ... }, ... }
-    if (contextData && typeof contextData === 'object' && 'inputData' in contextData) {
-      const inputDataValue = (contextData as any).inputData;
-      const inputDataValidation = schema.safeParse(inputDataValue);
-      validationAttempts.push({
-        result: inputDataValidation,
-        data: inputDataValue,
-        structure: 'inputData',
-      });
-
-      if (inputDataValidation.success) {
-        // For inputData unwrapping, preserve the structure if the original context had additional properties
-        // but return just the validated data if it was a pure inputData wrapper
-        const contextKeys = Object.keys(contextData);
-
-        // If context only has inputData, return the full structure with the validated data
-        // Otherwise, return just the validated inputData
-        if (contextKeys.length === 1 && contextKeys[0] === 'inputData') {
-          return { data: { ...(input as object), context: { inputData: inputDataValidation.data } } };
-        } else {
-          // Multiple keys in context, return just the validated data
-          return { data: inputDataValidation.data };
-        }
-      }
-    }
+  if (validation.success) {
+    return { data: validation.data };
   }
 
-  // All validations failed, find the best error to return
-  // Prefer the most specific error (deepest unwrapping level that has meaningful errors)
-  let bestAttempt = validationAttempts[0]; // Start with direct validation
+  // Validation failed, return error
+  const errorMessages = validation.error.issues
+    .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+    .join('\n');
 
-  for (const attempt of validationAttempts) {
-    if (!attempt.result.success && attempt.result.error.issues.length > 0) {
-      bestAttempt = attempt;
-    }
-  }
+  const error: ValidationError<T> = {
+    error: true,
+    message: `Tool output validation failed${toolId ? ` for ${toolId}` : ''}. The tool returned invalid output:\n${errorMessages}\n\nReturned output: ${truncateForLogging(output)}`,
+    validationErrors: validation.error.format() as z.ZodFormattedError<T>,
+  };
 
-  // Use the best validation attempt for error reporting
-  if (bestAttempt && !bestAttempt.result.success) {
-    const errorMessages = bestAttempt.result.error.issues
-      .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
-      .join('\n');
-
-    const error: ValidationError<T> = {
-      error: true,
-      message: `Tool validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(bestAttempt.data, null, 2)}`,
-      validationErrors: bestAttempt.result.error.format() as z.ZodFormattedError<T>,
-    };
-
-    return { data: input, error };
-  }
-
-  // This should not happen since we handle all valid cases above
-  return { data: input };
+  return { data: output, error };
 }

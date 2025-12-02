@@ -1,11 +1,12 @@
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
 import { PromptInjectionDetector } from './prompt-injection-detector';
 import type { PromptInjectionResult } from './prompt-injection-detector';
 
-function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id = 'test-id'): MastraMessageV2 {
+function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id = 'test-id'): MastraDBMessage {
   return {
     id,
     role,
@@ -20,30 +21,22 @@ function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id
 function createMockDetectionResult(
   flagged: boolean,
   attackTypes: string[] = [],
-  rewrittenContent?: string,
+  rewrittenContent?: string | null,
+  includeRewrittenContent?: boolean,
 ): PromptInjectionResult {
-  const allTypes = [
-    'injection',
-    'jailbreak',
-    'tool-exfiltration',
-    'data-exfiltration',
-    'system-override',
-    'role-manipulation',
-  ];
+  const categories = flagged ? attackTypes.map(type => ({ type, score: 0.8 })) : null;
 
-  const categoryScores = allTypes.reduce(
-    (scores, type) => {
-      scores[type] = attackTypes.includes(type) ? 0.8 : 0.1;
-      return scores;
-    },
-    {} as Record<string, number>,
-  );
-
-  return {
-    categories: categoryScores,
-    reason: flagged ? `Attack detected: ${attackTypes.join(', ')}` : undefined,
-    rewritten_content: rewrittenContent,
+  const result: PromptInjectionResult = {
+    categories,
+    reason: flagged ? `Attack detected: ${attackTypes.join(', ')}` : null,
   };
+
+  // Include rewritten_content if explicitly provided or if includeRewrittenContent is true
+  if (rewrittenContent !== undefined || includeRewrittenContent) {
+    result.rewritten_content = rewrittenContent ?? null;
+  }
+
+  return result;
 }
 
 function setupMockModel(result: PromptInjectionResult | PromptInjectionResult[]): MockLanguageModelV1 {
@@ -78,7 +71,7 @@ describe('PromptInjectionDetector', () => {
         model,
       });
 
-      expect(detector.name).toBe('prompt-injection-detector');
+      expect(detector.id).toBe('prompt-injection-detector');
     });
 
     it('should use default detection types when none specified', () => {
@@ -87,7 +80,7 @@ describe('PromptInjectionDetector', () => {
         model,
       });
 
-      expect(detector.name).toBe('prompt-injection-detector');
+      expect(detector.id).toBe('prompt-injection-detector');
     });
 
     it('should accept custom detection types', () => {
@@ -97,7 +90,7 @@ describe('PromptInjectionDetector', () => {
         detectionTypes: ['custom-injection', 'custom-jailbreak'],
       });
 
-      expect(detector.name).toBe('prompt-injection-detector');
+      expect(detector.id).toBe('prompt-injection-detector');
     });
 
     it('should accept custom threshold and strategy', () => {
@@ -108,7 +101,7 @@ describe('PromptInjectionDetector', () => {
         strategy: 'rewrite',
       });
 
-      expect(detector.name).toBe('prompt-injection-detector');
+      expect(detector.id).toBe('prompt-injection-detector');
     });
   });
 
@@ -330,7 +323,7 @@ describe('PromptInjectionDetector', () => {
     });
 
     it('should filter message if no rewritten content is available', async () => {
-      const model = setupMockModel(createMockDetectionResult(true, ['injection'])); // No rewritten_content
+      const model = setupMockModel(createMockDetectionResult(true, ['injection'], undefined, true)); // No rewritten_content
       const detector = new PromptInjectionDetector({
         model,
         strategy: 'rewrite',
@@ -355,9 +348,9 @@ describe('PromptInjectionDetector', () => {
     it('should handle mixed content with rewriting and filtering', async () => {
       const rewrittenContent = 'How can I learn about cybersecurity?';
       const model = setupMockModel([
-        createMockDetectionResult(false),
-        createMockDetectionResult(true, ['injection'], rewrittenContent),
-        createMockDetectionResult(true, ['data-exfiltration']), // No rewrite
+        createMockDetectionResult(false, [], undefined, true),
+        createMockDetectionResult(true, ['injection'], rewrittenContent, true),
+        createMockDetectionResult(true, ['data-exfiltration'], undefined, true), // No rewrite
       ]);
       const detector = new PromptInjectionDetector({
         model,
@@ -386,10 +379,10 @@ describe('PromptInjectionDetector', () => {
 
   describe('threshold handling', () => {
     it('should flag content when any score exceeds threshold', async () => {
-      const mockResult = createMockDetectionResult(false, []);
-      // Override with high injection score to exceed threshold
-      mockResult.categories!.injection = 0.75; // Above threshold (0.6)
-      mockResult.reason = 'High injection score';
+      const mockResult: PromptInjectionResult = {
+        categories: [{ type: 'injection', score: 0.75 }], // Above threshold (0.6)
+        reason: 'High injection score',
+      };
       const model = setupMockModel(mockResult);
       const detector = new PromptInjectionDetector({
         model,
@@ -409,9 +402,10 @@ describe('PromptInjectionDetector', () => {
     });
 
     it('should not flag content when scores are below threshold', async () => {
-      const mockResult = createMockDetectionResult(false, []);
-      // Set injection score below threshold
-      mockResult.categories!.injection = 0.8; // Below threshold (0.9)
+      const mockResult: PromptInjectionResult = {
+        categories: [{ type: 'injection', score: 0.8 }], // Below threshold (0.9)
+        reason: null,
+      };
       const model = setupMockModel(mockResult);
       const detector = new PromptInjectionDetector({
         model,
@@ -431,8 +425,8 @@ describe('PromptInjectionDetector', () => {
 
   describe('custom detection types', () => {
     it('should work with custom detection types', async () => {
-      const mockResult = {
-        categories: { 'custom-attack': 0.9, 'social-engineering': 0.1 },
+      const mockResult: PromptInjectionResult = {
+        categories: [{ type: 'custom-attack', score: 0.9 }],
         reason: 'Detected custom attack pattern',
       };
       const model = setupMockModel(mockResult);
@@ -465,7 +459,7 @@ describe('PromptInjectionDetector', () => {
 
       const mockAbort = vi.fn();
 
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: 'test',
         role: 'user',
         content: {
@@ -492,7 +486,7 @@ describe('PromptInjectionDetector', () => {
 
       const mockAbort = vi.fn();
 
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: 'test',
         role: 'user',
         content: {
@@ -600,7 +594,7 @@ describe('PromptInjectionDetector', () => {
         instructions: customInstructions,
       });
 
-      expect(detector.name).toBe('prompt-injection-detector');
+      expect(detector.id).toBe('prompt-injection-detector');
     });
   });
 
@@ -666,6 +660,49 @@ describe('PromptInjectionDetector', () => {
       }).rejects.toThrow('Multiple attacks blocked');
 
       expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('injection, jailbreak, data-exfiltration'));
+    });
+  });
+
+  describe('provider options support (issue #8112)', () => {
+    it('should pass providerOptions to the internal detection agent', async () => {
+      // Create a mock V2 model that captures the options passed to doGenerate
+      const mockResult = createMockDetectionResult(false);
+
+      const mockModel = new MastraLanguageModelV2Mock({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: JSON.stringify(mockResult) }],
+          warnings: [],
+        }),
+      });
+
+      // Create detector with providerOptions
+      const detector = new PromptInjectionDetector({
+        model: mockModel,
+        providerOptions: {
+          openai: {
+            reasoningEffort: 'low',
+          },
+        },
+      });
+
+      const mockAbort = vi.fn();
+      const messages = [createTestMessage('Test message', 'user')];
+
+      await detector.processInput({ messages, abort: mockAbort as any });
+
+      // Verify providerOptions were passed to the internal agent's generate call
+      expect(mockModel.doGenerateCalls).toHaveLength(1);
+      const generateCall = mockModel.doGenerateCalls[0];
+
+      // Verify providerOptions are passed through
+      expect(generateCall.providerOptions).toEqual({
+        openai: {
+          reasoningEffort: 'low',
+        },
+      });
     });
   });
 });

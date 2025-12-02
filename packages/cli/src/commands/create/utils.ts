@@ -1,11 +1,17 @@
-import fs from 'fs/promises';
 import child_process from 'node:child_process';
+import fsSync from 'node:fs';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import util from 'node:util';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
 
 import { DepsService } from '../../services/service.deps.js';
-import { getPackageManager, getPackageManagerInstallCommand } from '../utils.js';
+import { getPackageManagerAddCommand } from '../../utils/package-manager.js';
+import type { PackageManager } from '../../utils/package-manager.js';
+import { interactivePrompt } from '../init/utils.js';
+import type { LLMProvider } from '../init/utils.js';
+import { getPackageManager } from '../utils.js';
 
 const exec = util.promisify(child_process.exec);
 
@@ -38,17 +44,54 @@ const execWithTimeout = async (command: string, timeoutMs?: number) => {
   }
 };
 
+async function getInitCommand(pm: PackageManager): Promise<string> {
+  switch (pm) {
+    case 'npm':
+      return 'npm init -y';
+    case 'pnpm':
+      return 'pnpm init';
+    case 'yarn':
+      return 'yarn init -y';
+    case 'bun':
+      return 'bun init -y';
+    default:
+      return 'npm init -y';
+  }
+}
+
+async function initializePackageJson(pm: PackageManager): Promise<void> {
+  // Run the init command
+  const initCommand = await getInitCommand(pm);
+  await exec(initCommand);
+
+  // Read and update package.json directly (more reliable than pkg set)
+  const packageJsonPath = path.join(process.cwd(), 'package.json');
+  const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf-8'));
+
+  packageJson.type = 'module';
+  packageJson.engines = {
+    ...packageJson.engines,
+    node: '>=22.13.0',
+  };
+
+  await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
+}
+
 async function installMastraDependency(
-  pm: string,
+  pm: PackageManager,
   dependency: string,
   versionTag: string,
   isDev: boolean,
   timeout?: number,
 ) {
-  let installCommand = getPackageManagerInstallCommand(pm);
+  let installCommand = getPackageManagerAddCommand(pm);
 
   if (isDev) {
-    installCommand = `${installCommand} --save-dev`;
+    /**
+     * All our package managers support -D for devDependencies. We can't use --save-dev across the board because yarn and bun don't alias it.
+     * npm: -D, --save-dev. pnpm: -D, --save-dev. yarn: -D, --dev. bun: -D, --dev
+     */
+    installCommand = `${installCommand} -D`;
   }
 
   try {
@@ -73,10 +116,16 @@ export const createMastraProject = async ({
   projectName: name,
   createVersionTag,
   timeout,
+  llmProvider,
+  llmApiKey,
+  needsInteractive,
 }: {
   projectName?: string;
   createVersionTag?: string;
   timeout?: number;
+  llmProvider?: LLMProvider;
+  llmApiKey?: string;
+  needsInteractive?: boolean;
 }) => {
   p.intro(color.inverse(' Mastra Create '));
 
@@ -86,6 +135,12 @@ export const createMastraProject = async ({
       message: 'What do you want to name your project?',
       placeholder: 'my-mastra-app',
       defaultValue: 'my-mastra-app',
+      validate: value => {
+        if (value.length === 0) return 'Project name cannot be empty';
+        if (fsSync.existsSync(value)) {
+          return `A directory named "${value}" already exists. Please choose a different name.`;
+        }
+      },
     }));
 
   if (p.isCancel(projectName)) {
@@ -93,12 +148,23 @@ export const createMastraProject = async ({
     process.exit(0);
   }
 
+  let result: Awaited<ReturnType<typeof interactivePrompt>> | undefined = undefined;
+
+  if (needsInteractive) {
+    result = await interactivePrompt({
+      options: { showBanner: false },
+      skip: { llmProvider: llmProvider !== undefined, llmApiKey: llmApiKey !== undefined },
+    });
+  }
   const s = p.spinner();
+  const originalCwd = process.cwd();
+  let projectPath: string | null = null;
 
   try {
     s.start('Creating project');
     try {
       await fs.mkdir(projectName);
+      projectPath = path.resolve(originalCwd, projectName);
     } catch (error) {
       if (error instanceof Error && 'code' in error && error.code === 'EEXIST') {
         s.stop(`A directory named "${projectName}" already exists. Please choose a different name.`);
@@ -111,13 +177,11 @@ export const createMastraProject = async ({
 
     process.chdir(projectName);
     const pm = getPackageManager();
-    const installCommand = getPackageManagerInstallCommand(pm);
+    const installCommand = getPackageManagerAddCommand(pm);
 
     s.message('Initializing project structure');
     try {
-      await exec(`npm init -y`);
-      await exec(`npm pkg set type="module"`);
-      await exec(`npm pkg set engines.node=">=20.9.0"`);
+      await initializePackageJson(pm);
       const depsService = new DepsService();
       await depsService.addScriptsToPackageJson({
         dev: 'mastra dev',
@@ -134,8 +198,8 @@ export const createMastraProject = async ({
 
     s.start(`Installing ${pm} dependencies`);
     try {
-      await exec(`${pm} ${installCommand} zod@^3`);
-      await exec(`${pm} ${installCommand} typescript @types/node --save-dev`);
+      await exec(`${pm} ${installCommand} zod@^4`);
+      await exec(`${pm} ${installCommand} -D typescript @types/node`);
       await exec(`echo '{
   "compilerOptions": {
     "target": "ES2022",
@@ -160,7 +224,7 @@ export const createMastraProject = async ({
 
     s.stop(`${pm} dependencies installed`);
 
-    s.start('Installing mastra');
+    s.start('Installing Mastra CLI');
     const versionTag = createVersionTag ? `@${createVersionTag}` : '@latest';
 
     try {
@@ -168,9 +232,9 @@ export const createMastraProject = async ({
     } catch (error) {
       throw new Error(`Failed to install Mastra CLI: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-    s.stop('mastra installed');
+    s.stop('Mastra CLI installed');
 
-    s.start('Installing dependencies');
+    s.start('Installing Mastra dependencies');
     try {
       await installMastraDependency(pm, '@mastra/core', versionTag, false, timeout);
       await installMastraDependency(pm, '@mastra/libsql', versionTag, false, timeout);
@@ -198,14 +262,28 @@ export const createMastraProject = async ({
     s.stop('.gitignore added');
 
     p.outro('Project created successfully');
-    console.log('');
+    console.info('');
 
-    return { projectName };
+    return { projectName, result };
   } catch (error) {
     s.stop();
 
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
     p.cancel(`Project creation failed: ${errorMessage}`);
+
+    // Clean up: remove the created directory on failure
+    if (projectPath && fsSync.existsSync(projectPath)) {
+      try {
+        // Change back to original directory before cleanup
+        process.chdir(originalCwd);
+        await fs.rm(projectPath, { recursive: true, force: true });
+      } catch (cleanupError) {
+        // Log but don't throw - we want to exit with the original error
+        console.error(
+          `Warning: Failed to clean up project directory: ${cleanupError instanceof Error ? cleanupError.message : 'Unknown error'}`,
+        );
+      }
+    }
 
     process.exit(1);
   }

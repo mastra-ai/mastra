@@ -13,16 +13,16 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Setup Node.js 20.x
-        uses: actions/setup-node@v4
+      - name: Setup Node.js 22.x
+        uses: actions/setup-node@v5
         with:
-          node-version: 20.19.1
-          registry-url: 'https://registry.yarnpkg.com'
+          node-version: 22.13.0
+          package-manager-cache: false
 
       - name: Install dependencies
-        run: npm install --registry=https://registry.yarnpkg.com
+        run: npm install
         working-directory: scripts/gh-issue-triage
 
       - name: Label Issue
@@ -33,7 +33,7 @@ jobs:
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.event.repository.name }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-          MASTRA_BASE_URL: 'https://few-substantial-engine.mastra.cloud'
+          MASTRA_BASE_URL: 'https://shrilling-scarce-finland.mastra.cloud'
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_TEAM_ID: ${{ secrets.SLACK_TEAM_ID }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}

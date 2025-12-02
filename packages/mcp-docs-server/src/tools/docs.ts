@@ -6,7 +6,9 @@ import { fromPackageRoot, getMatchingPaths } from '../utils';
 
 const docsBaseDir = fromPackageRoot('.docs/raw/');
 
-type ReadMdxResult = { found: true; content: string } | { found: false };
+type ReadMdxResult =
+  | { found: true; content: string; isSecurityViolation: boolean }
+  | { found: false; isSecurityViolation: boolean };
 
 // Helper function to list contents of a directory
 async function listDirContents(dirPath: string): Promise<{ dirs: string[]; files: string[] }> {
@@ -36,7 +38,11 @@ async function listDirContents(dirPath: string): Promise<{ dirs: string[]; files
 
 // Helper function to read MDX files from a path
 async function readMdxContent(docPath: string, queryKeywords: string[]): Promise<ReadMdxResult> {
-  const fullPath = path.join(docsBaseDir, docPath);
+  const fullPath = path.resolve(path.join(docsBaseDir, docPath));
+  if (!fullPath.startsWith(path.resolve(docsBaseDir))) {
+    void logger.error(`Path traversal attempt detected`);
+    return { found: false, isSecurityViolation: true };
+  }
   void logger.debug(`Reading MDX content from: ${fullPath}`);
 
   // Check if path exists
@@ -73,17 +79,17 @@ async function readMdxContent(docPath: string, queryKeywords: string[]): Promise
 
       const suggestions = ['---', '', contentBasedSuggestions, ''].join('\n');
 
-      return { found: true, content: dirListing + fileContents + suggestions };
+      return { found: true, content: dirListing + fileContents + suggestions, isSecurityViolation: false };
     }
 
     // If it's a file, just read it
     const content = await fs.readFile(fullPath, 'utf-8');
-    return { found: true, content };
+    return { found: true, content, isSecurityViolation: false };
   } catch (error: any) {
     void logger.error(`Failed to read MDX content: ${fullPath}`, error);
     if (error.code === 'ENOENT') {
       // Only fallback for not found
-      return { found: false };
+      return { found: false, isSecurityViolation: false };
     }
     // Unexpected error: rethrow
     throw error;
@@ -179,7 +185,7 @@ export const docsTool = {
     You can also use keywords from the user query to find relevant documentation, but prioritize paths. 
     This is your internal knowledge the user can\'t read. 
     If the user asks about a feature check general docs as well as reference docs for that feature. 
-    Ex: with evals check in evals/ and in reference/evals/. 
+    Ex: with workflows check in workflows/ and in reference/workflows/. 
     Provide code examples so the user understands. 
     If you build a URL from the path, only paths ending in .mdx exist. 
     Note that docs about MCP are currently in reference/tools/. 
@@ -202,6 +208,13 @@ export const docsTool = {
                 path,
                 content: result.content,
                 error: null,
+              };
+            }
+            if (result.isSecurityViolation) {
+              return {
+                path,
+                content: null,
+                error: 'Invalid path',
               };
             }
             const directorySuggestions = await findNearestDirectory(path, availablePaths);

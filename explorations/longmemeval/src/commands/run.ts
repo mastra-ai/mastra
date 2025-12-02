@@ -335,7 +335,8 @@ For example, if the user previously mentioned they prefer a specific software, t
 Be specific rather than generic when the user has expressed clear preferences in past conversations. If there is a clear preference, focus in on that, and do not add additional irrelevant information.`;
 
     const agent = new Agent({
-      name: 'longmemeval-agent',
+      id: 'longmemeval-agent',
+      name: 'LongMemEval Agent',
       model: modelProvider,
       instructions: agentInstructions,
       memory,
@@ -354,7 +355,8 @@ Be specific rather than generic when the user has expressed clear preferences in
     });
 
     const evalAgent = new Agent({
-      name: 'longmemeval-metric-agent',
+      id: 'longmemeval-metric-agent',
+      name: 'LongMemEval Metric Agent',
       model: retry4o.model,
       instructions: 'You are an evaluation assistant. Answer questions precisely and concisely.',
     });

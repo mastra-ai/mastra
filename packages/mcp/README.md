@@ -117,10 +117,10 @@ const mcp = new MCPClient({
 });
 
 // Get all tools from all configured servers namespaced with the server name
-const tools = await mcp.getTools();
+const tools = await mcp.listTools();
 
 // Get tools grouped into a toolset object per-server
-const toolsets = await mcp.getToolsets();
+const toolsets = await mcp.listToolsets();
 ```
 
 ## Logging
@@ -221,7 +221,7 @@ See the `examples/server-logging.ts` file for comprehensive examples of various 
 
 The MCPClient class provides two ways to access MCP tools:
 
-#### Tools (`getTools()`)
+#### Tools (`listTools()`)
 
 Use this when:
 
@@ -235,14 +235,15 @@ import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
 
 const agent = new Agent({
+  id: 'cli-assistant',
   name: 'CLI Assistant',
   instructions: 'You help users with CLI tasks',
   model: openai('gpt-4'),
-  tools: await mcp.getTools(), // Tools are fixed at agent creation
+  tools: await mcp.listTools(), // Tools are fixed at agent creation
 });
 ```
 
-#### Toolsets (`getToolsets()`)
+#### Toolsets (`listToolsets()`)
 
 Use this when:
 
@@ -284,7 +285,7 @@ const mcp = new MCPClient({
 });
 
 // Get the current toolsets configured for this user
-const toolsets = await mcp.getToolsets();
+const toolsets = await mcp.listToolsets();
 
 // Use the agent with user-specific tool configurations
 const response = await agent.generate('What is the weather in London?', {
@@ -321,7 +322,7 @@ const mcp = new MCPClient({
 });
 
 // Get resources from all connected MCP servers
-const resources = await mcp.getResources();
+const resources = await mcp.resources.get();
 
 // Resources are grouped by server name
 console.log(Object.keys(resources)); // ['weather', 'dataService']
@@ -557,5 +558,4 @@ The client includes comprehensive error handling:
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/specification)
 - [@modelcontextprotocol/sdk Documentation](https://github.com/modelcontextprotocol/typescript-sdk)
 - [Mastra Docs: Using MCP With Mastra](/docs/agents/mcp-guide)
-- [Mastra Docs: MCPConfiguration Reference](/reference/tools/mcp-configuration)
 - [Mastra Docs: MastraMCPClient Reference](/reference/tools/client)

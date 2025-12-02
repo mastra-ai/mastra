@@ -1,6 +1,7 @@
-import { createScorer } from '@mastra/core/scores';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
+import type { MastraDBMessage } from '@mastra/core/agent';
+import { createScorer } from '@mastra/core/evals';
 import nlp from 'compromise';
+import { getTextContentFromMastraDBMessage } from '../../utils';
 
 function normalizeString(str: string): string {
   // Remove diacritics and convert to lowercase
@@ -74,25 +75,34 @@ function calculateCoverage({ original, simplified }: { original: string[]; simpl
 }
 
 export function createCompletenessScorer() {
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
-    name: 'Completeness',
+  return createScorer({
+    id: 'completeness-scorer',
+    name: 'Completeness Scorer',
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
+    type: 'agent',
   })
     .preprocess(async ({ run }) => {
       const isInputInvalid =
         !run.input ||
-        run.input.inputMessages.some((i: { content: string }) => i.content === null || i.content === undefined);
+        run.input.inputMessages.some((i: MastraDBMessage) => {
+          const content = getTextContentFromMastraDBMessage(i);
+          return content === null || content === undefined;
+        });
 
       const isOutputInvalid =
-        !run.output || run.output.some((i: { content: string }) => i.content === null || i.content === undefined);
+        !run.output ||
+        run.output.some((i: MastraDBMessage) => {
+          const content = getTextContentFromMastraDBMessage(i);
+          return content === null || content === undefined;
+        });
 
       if (isInputInvalid || isOutputInvalid) {
         throw new Error('Inputs cannot be null or undefined');
       }
 
-      const input = run.input?.inputMessages.map((i: { content: string }) => i.content).join(', ') || '';
-      const output = run.output?.map(({ content }: { content: string }) => content).join(', ') || '';
+      const input = run.input?.inputMessages.map(i => getTextContentFromMastraDBMessage(i)).join(', ') || '';
+      const output = run.output?.map(i => getTextContentFromMastraDBMessage(i)).join(', ') || '';
 
       const inputToProcess = input;
       const outputToProcess = output;

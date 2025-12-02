@@ -8,9 +8,9 @@
   },
   "keywords": [],
   "author": "",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "pnpm": {
     "neverBuiltDependencies": []
   },
-  "packageManager": "pnpm@10.12.4"
+  "packageManager": "pnpm@10.18.2"
 }

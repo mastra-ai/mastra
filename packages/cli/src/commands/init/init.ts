@@ -1,45 +1,37 @@
-import child_process from 'node:child_process';
-import util from 'node:util';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
 
 import { DepsService } from '../../services/service.deps';
-import { getPackageManagerInstallCommand } from '../utils';
 
+import { gitInit } from '../utils';
 import { installMastraDocsMCPServer } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
-import {
-  createComponentsDir,
-  createMastraDir,
-  getAISDKPackage,
-  getAISDKPackageVersion,
-  getAPIKey,
-  writeAPIKey,
-  writeCodeSample,
-  writeIndexFile,
-} from './utils';
-import type { Components, LLMProvider } from './utils';
+import { createComponentsDir, createMastraDir, getAPIKey, writeAPIKey, writeCodeSample, writeIndexFile } from './utils';
+import type { Component, LLMProvider } from './utils';
 
 const s = p.spinner();
 
-const exec = util.promisify(child_process.exec);
-
 export const init = async ({
-  directory,
-  addExample = false,
+  directory = 'src/',
   components,
   llmProvider = 'openai',
   llmApiKey,
+  addExample = false,
   configureEditorWithDocsMCP,
+  versionTag,
+  initGit = false,
 }: {
-  directory: string;
-  components: string[];
-  llmProvider: LLMProvider;
-  addExample: boolean;
+  directory?: string;
+  components: Component[];
+  llmProvider?: LLMProvider;
   llmApiKey?: string;
+  addExample?: boolean;
   configureEditorWithDocsMCP?: Editor;
+  versionTag?: string;
+  initGit?: boolean;
 }) => {
   s.start('Initializing Mastra');
+  const packageVersionTag = versionTag ? `@${versionTag}` : '';
 
   try {
     const result = await createMastraDir(directory);
@@ -57,6 +49,7 @@ export const init = async ({
         addExample,
         addWorkflow: components.includes('workflows'),
         addAgent: components.includes('agents'),
+        addScorers: components.includes('scorers'),
       }),
       ...components.map(component => createComponentsDir(dirPath, component)),
       writeAPIKey({ provider: llmProvider, apiKey: llmApiKey }),
@@ -65,44 +58,62 @@ export const init = async ({
     if (addExample) {
       await Promise.all([
         ...components.map(component =>
-          writeCodeSample(dirPath, component as Components, llmProvider, components as Components[]),
+          writeCodeSample(dirPath, component as Component, llmProvider, components as Component[]),
         ),
       ]);
 
       const depService = new DepsService();
+
       const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
       if (needsLibsql) {
-        await depService.installPackages(['@mastra/libsql']);
+        await depService.installPackages([`@mastra/libsql${packageVersionTag}`]);
       }
       const needsMemory =
         components.includes(`agents`) && (await depService.checkDependencies(['@mastra/memory'])) !== `ok`;
       if (needsMemory) {
-        await depService.installPackages(['@mastra/memory']);
+        await depService.installPackages([`@mastra/memory${packageVersionTag}`]);
       }
 
       const needsLoggers = (await depService.checkDependencies(['@mastra/loggers'])) !== `ok`;
       if (needsLoggers) {
-        await depService.installPackages(['@mastra/loggers']);
+        await depService.installPackages([`@mastra/loggers${packageVersionTag}`]);
+      }
+
+      const needsObservability = (await depService.checkDependencies(['@mastra/observability'])) !== `ok`;
+      if (needsObservability) {
+        await depService.installPackages([`@mastra/observability${packageVersionTag}`]);
+      }
+
+      const needsEvals =
+        components.includes(`scorers`) && (await depService.checkDependencies(['@mastra/evals'])) !== `ok`;
+      if (needsEvals) {
+        await depService.installPackages([`@mastra/evals${packageVersionTag}`]);
       }
     }
 
     const key = await getAPIKey(llmProvider || 'openai');
 
-    const aiSdkPackage = getAISDKPackage(llmProvider);
-    const aiSdkPackageVersion = getAISDKPackageVersion(llmProvider);
-    const depsService = new DepsService();
-    const pm = depsService.packageManager;
-    const installCommand = getPackageManagerInstallCommand(pm);
-    await exec(`${pm} ${installCommand} ${aiSdkPackage}@${aiSdkPackageVersion}`);
-
     if (configureEditorWithDocsMCP) {
       await installMastraDocsMCPServer({
         editor: configureEditorWithDocsMCP,
         directory: process.cwd(),
+        versionTag,
       });
     }
 
     s.stop();
+
+    if (initGit) {
+      const s = p.spinner();
+      try {
+        s.start('Initializing git repository');
+        await gitInit({ cwd: process.cwd() });
+        s.stop('Git repository initialized');
+      } catch {
+        s.stop();
+      }
+    }
+
     if (!llmApiKey) {
       p.note(`
       ${color.green('Mastra initialized successfully!')}

@@ -1,7 +1,7 @@
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import type { StorageResourceType } from '@mastra/core/storage';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 
 let role: 'assistant' | 'user' = 'assistant';
 export const getRole = () => {
@@ -61,7 +61,7 @@ export const createSampleMessageV1 = ({
     role: getRole(),
     type: 'text',
     threadId,
-    content: [{ type: 'text', text: content }],
+    content,
     createdAt,
     resourceId,
   }) satisfies MastraMessageV1;
@@ -80,7 +80,7 @@ export const createSampleMessageV2 = ({
   content?: Partial<MastraMessageContentV2>;
   createdAt?: Date;
   thread?: StorageThreadType;
-}): MastraMessageV2 => {
+}): MastraDBMessage => {
   return {
     id: randomUUID(),
     threadId,
@@ -93,7 +93,6 @@ export const createSampleMessageV2 = ({
       content: content?.content || `Sample content ${randomUUID()}`,
       ...content,
     },
-    type: 'v2',
   };
 };
 

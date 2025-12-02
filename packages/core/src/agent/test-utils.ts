@@ -1,182 +1,141 @@
 import { expect } from 'vitest';
-import { MastraMemory } from '../memory';
-import type { StorageThreadType, MastraMessageV1, MastraMessageV2, MemoryConfig } from '../memory';
-import type { StorageGetMessagesArg } from '../storage';
+import type { CoreMessage } from '../llm';
+import type { MastraMessageV1 } from '../memory';
+import { MockMemory } from '../memory/mock';
+import type { MastraDBMessage } from './message-list';
 import { MessageList } from './message-list';
 
-export class MockMemory extends MastraMemory {
-  threads: Record<string, StorageThreadType> = {};
-  messages: Map<string, MastraMessageV1 | MastraMessageV2> = new Map();
+export { MockMemory };
 
-  constructor() {
-    super({ name: 'mock' });
-    Object.defineProperty(this, 'storage', {
-      get: () => ({
-        init: async () => {},
-        getThreadById: this.getThreadById.bind(this),
-        saveThread: async ({ thread }: { thread: StorageThreadType }) => {
-          return this.saveThread({ thread });
-        },
-        getMessages: this.getMessages.bind(this),
-        saveMessages: this.saveMessages.bind(this),
-      }),
+const toolArgs = {
+  weather: { location: 'New York' },
+  calculator: { expression: '2+2' },
+  search: { query: 'latest AI developments' },
+};
+
+const toolResults = {
+  weather: 'Pretty hot',
+  calculator: '4',
+  search: 'Anthropic blah blah blah',
+};
+
+/**
+ * Creates a simulated conversation history with alternating messages and occasional tool calls
+ * @param threadId Thread ID for the messages
+ * @param messageCount Number of turn pairs (user + assistant) to generate
+ * @param toolFrequency How often to include tool calls (e.g., 3 means every 3rd assistant message)
+ * @returns Array of messages representing the conversation
+ */
+export function generateConversationHistory({
+  threadId,
+  resourceId = 'test-resource',
+  messageCount = 5,
+  toolFrequency = 3,
+  toolNames = ['weather', 'calculator', 'search'],
+}: {
+  threadId: string;
+  resourceId?: string;
+  messageCount?: number;
+  toolFrequency?: number;
+  toolNames?: (keyof typeof toolArgs)[];
+}): {
+  messages: MastraMessageV1[];
+  messagesV2: MastraDBMessage[];
+  fakeCore: CoreMessage[];
+  counts: { messages: number; toolCalls: number; toolResults: number };
+} {
+  const counts = { messages: 0, toolCalls: 0, toolResults: 0 };
+  // Create some words that will each be about one token
+  const words = ['apple', 'banana', 'orange', 'grape'];
+  // Arguments for different tools
+
+  const messages: MastraDBMessage[] = [];
+  const startTime = Date.now();
+
+  // Generate message pairs (user message followed by assistant response)
+  for (let i = 0; i < messageCount; i++) {
+    // Create user message content
+    const userContent = Array(25).fill(words).flat().join(' '); // ~100 tokens
+
+    // Add user message
+    messages.push({
+      role: 'user',
+      content: { format: 2, parts: [{ type: 'text', text: userContent }] },
+      id: `message-${i * 2}`,
+      threadId,
+      resourceId,
+      createdAt: new Date(startTime + i * 2000), // Each pair 2 seconds apart
     });
-    this._hasOwnStorage = true;
-  }
+    counts.messages++;
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.threads[threadId] || null;
-  }
+    // Determine if this assistant message should include a tool call
+    const includeTool = i > 0 && i % toolFrequency === 0;
+    const toolIndex = includeTool ? (i / toolFrequency) % toolNames.length : -1;
+    const toolName = includeTool ? toolNames[toolIndex] : '';
 
-  async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {
-    const newThread = { ...thread, updatedAt: new Date() };
-    if (!newThread.createdAt) {
-      newThread.createdAt = new Date();
-    }
-    this.threads[thread.id] = newThread;
-    return this.threads[thread.id] as StorageThreadType;
-  }
-
-  // Overloads for getMessages
-  async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  async getMessages(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<MastraMessageV1[] | MastraMessageV2[]>;
-
-  // Implementation for getMessages
-  async getMessages({
-    threadId,
-    resourceId,
-    format = 'v1',
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    let results = Array.from(this.messages.values());
-    if (threadId) results = results.filter(m => m.threadId === threadId);
-    if (resourceId) results = results.filter(m => m.resourceId === resourceId);
-    if (format === 'v2') return results as MastraMessageV2[];
-    return results as MastraMessageV1[];
-  }
-
-  // saveMessages for both v1 and v2
-  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
-  async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
-    const { messages, format } = args as any;
-
-    for (const msg of messages) {
-      const existing = this.messages.get(msg.id);
-      if (existing) {
-        this.messages.set(msg.id, {
-          ...existing,
-          ...msg,
-          createdAt: existing.createdAt,
-        });
-      } else {
-        this.messages.set(msg.id, msg);
-      }
-    }
-    return this.getMessages({ threadId: messages[0].threadId, resourceId: messages[0].resourceId, format });
-  }
-
-  async rememberMessages() {
-    const list = new MessageList().add(Array.from(this.messages.values()), `memory`);
-    return { messages: list.get.remembered.v1(), messagesV2: list.get.remembered.v2() };
-  }
-
-  async getThreadsByResourceId() {
-    return [];
-  }
-
-  async getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page: number;
-      perPage: number;
-    } & any, // ThreadSortOptions
-  ): Promise<any & { threads: StorageThreadType[] }> {
-    // Mock implementation - return empty results with pagination info
-    return {
-      threads: [],
-      totalCount: 0,
-      totalPages: 0,
-      currentPage: args.page,
-      perPage: args.perPage,
-      hasNextPage: false,
-      hasPreviousPage: false,
-    };
-  }
-  async query() {
-    return { messages: [], uiMessages: [] };
-  }
-  async deleteThread(threadId: string) {
-    delete this.threads[threadId];
-  }
-
-  async deleteMessages(messageIds: string[]): Promise<void> {
-    // Mock implementation - remove messages by ID
-    for (const messageId of messageIds) {
-      this.messages.delete(messageId);
+    // Create assistant message
+    if (includeTool && toolName) {
+      // Assistant message with tool result only (matching old behavior)
+      messages.push({
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: `tool-${i}`,
+                toolName,
+                args: toolArgs[toolName as keyof typeof toolArgs] || {},
+                result: toolResults[toolName as keyof typeof toolResults] || {},
+              },
+            },
+          ],
+        },
+        id: `tool-call-${i * 2 + 1}`,
+        threadId,
+        resourceId,
+        createdAt: new Date(startTime + i * 2000 + 1000), // 1 second after user message
+      });
+      counts.messages++;
+      counts.toolCalls++;
+      counts.toolResults++;
+    } else {
+      // Regular assistant text message
+      messages.push({
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: Array(15).fill(words).flat().join(' ') }] }, // ~60 tokens
+        id: `message-${i * 2 + 1}`,
+        threadId,
+        resourceId,
+        createdAt: new Date(startTime + i * 2000 + 1000), // 1 second after user message
+      });
+      counts.messages++;
     }
   }
 
-  // Add missing method implementations
-  async getWorkingMemory({
-    threadId: _threadId,
-    resourceId: _resourceId,
-    memoryConfig: _memoryConfig,
-  }: {
-    threadId: string;
-    resourceId?: string;
-    memoryConfig?: MemoryConfig;
-  }): Promise<string | null> {
-    return null;
+  const latestMessage = messages.at(-1)!;
+  if (latestMessage.role === `assistant` && latestMessage.content.parts.at(-1)?.type === `tool-invocation`) {
+    const userContent = Array(25).fill(words).flat().join(' '); // ~100 tokens
+    messages.push({
+      role: 'user',
+      content: { format: 2, parts: [{ type: 'text', text: userContent }] },
+      id: `message-${messages.length + 1 * 2}`,
+      threadId,
+      resourceId,
+      createdAt: new Date(startTime + messages.length + 1 * 2000), // Each pair 2 seconds apart
+    });
+    counts.messages++;
   }
 
-  async getWorkingMemoryTemplate({
-    memoryConfig: _memoryConfig,
-  }: {
-    memoryConfig?: MemoryConfig;
-  } = {}): Promise<any | null> {
-    return null;
-  }
-
-  getMergedThreadConfig(config?: MemoryConfig) {
-    return config || {};
-  }
-
-  async updateWorkingMemory({
-    threadId: _threadId,
-    resourceId: _resourceId,
-    workingMemory: _workingMemory,
-    memoryConfig: _memoryConfig,
-  }: {
-    threadId: string;
-    resourceId?: string;
-    workingMemory: string;
-    memoryConfig?: MemoryConfig;
-  }) {
-    // Mock implementation - just return void
-    return;
-  }
-
-  async __experimental_updateWorkingMemoryVNext({
-    threadId: _threadId,
-    resourceId: _resourceId,
-    workingMemory: _workingMemory,
-    searchString: _searchString,
-    memoryConfig: _memoryConfig,
-  }: {
-    threadId: string;
-    resourceId?: string;
-    workingMemory: string;
-    searchString?: string;
-    memoryConfig?: MemoryConfig;
-  }) {
-    // Mock implementation for abstract method
-    return { success: true, reason: 'Mock implementation' };
-  }
+  const list = new MessageList().add(messages, 'memory');
+  return {
+    fakeCore: list.get.all.v1() as CoreMessage[],
+    messages: list.get.all.v1(),
+    messagesV2: list.get.all.db(),
+    counts,
+  };
 }
 
 export function assertNoDuplicateParts(parts: any[]) {

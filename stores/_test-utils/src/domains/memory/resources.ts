@@ -1,7 +1,7 @@
 import type { MastraStorage } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 import { createSampleResource } from './data';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 
 export function createResourcesTest({ storage }: { storage: MastraStorage }) {
   describe('Resources', () => {
@@ -10,7 +10,13 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
 
       // Save resource
       const savedResource = await storage.saveResource({ resource });
-      expect(savedResource).toEqual(resource);
+      expect(savedResource).toEqual(
+        expect.objectContaining({
+          id: resource.id,
+          workingMemory: resource.workingMemory,
+          metadata: resource.metadata,
+        }),
+      );
 
       // Retrieve resource
       const retrievedResource = await storage.getResourceById({ resourceId: resource.id });

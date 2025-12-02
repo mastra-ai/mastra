@@ -1,5 +1,5 @@
 ---
-title: "Reference: Step Class | Workflows | Mastra Docs"
+title: "Reference: Step Class | Workflows"
 description: Documentation for the Step class in Mastra, which defines individual units of work within a workflow.
 ---
 
@@ -10,7 +10,7 @@ It can take either a tool or an agent as a parameter to automatically create a s
 
 ## Usage example
 
-```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -18,17 +18,17 @@ const step1 = createStep({
   id: "step-1",
   description: "passes value from input to output",
   inputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   outputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   execute: async ({ inputData }) => {
     const { value } = inputData;
     return {
-      value
+      value,
     };
-  }
+  },
 });
 ```
 
@@ -73,11 +73,18 @@ const step1 = createStep({
       required: false,
     },
     {
+      name: "stateSchema",
+      type: "z.ZodObject<any>",
+      description:
+        "Optional Zod schema for the step state. Automatically injected when using Mastra's state system. The stateSchema must be a subset of the workflow's stateSchema. If not specified, type is 'any'.",
+      required: false,
+    },
+    {
       name: "execute",
       type: "(params: ExecuteParams) => Promise<any>",
       description: "Async function containing step logic",
       required: true,
-    }
+    },
   ]}
 />
 
@@ -97,13 +104,19 @@ const step1 = createStep({
         "The resume data matching the resumeSchema, when resuming the step from a suspended state. Only exists if the step is being resumed.",
     },
     {
+      name: "suspendData",
+      type: "z.infer<TSuspendSchema>",
+      description:
+        "The suspend data that was originally passed to suspend() when the step was suspended. Only exists if the step is being resumed and was previously suspended with data.",
+    },
+    {
       name: "mastra",
       type: "Mastra",
       description: "Access to Mastra services (agents, tools, etc.)",
     },
     {
       name: "getStepResult",
-      type: "(stepId: string) => any",
+      type: "(step: Step | string) => any",
       description: "Function to access results from other steps",
     },
     {
@@ -114,8 +127,20 @@ const step1 = createStep({
     },
     {
       name: "suspend",
-      type: "() => Promise<void>",
+      type: "(suspendPayload: any, suspendOptions?: { resumeLabel?: string }) => Promise<void>",
       description: "Function to pause workflow execution",
+    },
+    {
+      name: "state",
+      type: "z.infer<TState>",
+      description:
+        "The current workflow state. Contains shared values that persist across all steps and suspend/resume cycles. The structure is defined by the step's stateSchema.",
+    },
+    {
+      name: "setState",
+      type: "(state: z.infer<TState>) => void",
+      description:
+        "Function to set the state of the workflow. Inject via reducer-like pattern, such as 'setState({ ...state, ...newState })'",
     },
     {
       name: "runId",
@@ -123,22 +148,24 @@ const step1 = createStep({
       description: "Current run id",
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
     {
       name: "runCount",
       type: "number",
-      description: "The run count for this specific step, it automatically increases each time the step runs",
+      description:
+        "The run count for this specific step, it automatically increases each time the step runs",
       isOptional: true,
-    }
+    },
   ]}
 />
 
 ## Related
 
-- [Control flow](../../docs/workflows/control-flow.mdx)
-- [Using agents and tools](../../docs/workflows/using-with-agents-and-tools.mdx)
+- [Workflow state](/docs/v1/workflows/workflow-state)
+- [Control flow](/docs/v1/workflows/control-flow)
+- [Using agents and tools](/docs/v1/workflows/agents-and-tools)

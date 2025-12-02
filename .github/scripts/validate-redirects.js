@@ -1,21 +1,45 @@
 import path from 'path';
-import { pathToFileURL } from 'url';
+import { readFileSync, existsSync } from 'fs';
 import process from 'process';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const baseUrl = process.env.MASTRA_DEPLOYMENT_URL || 'https://mastra.ai'; //'localhost:3000';
+
+// Strip locale pattern from URL for validation
+const stripLocalePattern = url => {
+  // Strip /:path(ja)? or /:locale(ja)? pattern from the beginning
+  return url.replace(/^\/:[^/]+\([^)]+\)\?/, '');
+};
+
+// Check if a file exists locally for a given URL path
+const checkLocalFile = urlPath => {
+  // Remove anchor links and leading slash
+  const cleanPath = urlPath
+    .replace(/#.*$/, '')
+    .replace(/^\//, '')
+    .replace(/\/(v\d+|v\d+\.\d+)\//g, '/');
+
+  // Try different possible file locations
+  const possiblePaths = [
+    path.resolve(__dirname, '../../docs/src/content/en', cleanPath + '.mdx'),
+    path.resolve(__dirname, '../../docs/src/content/en', cleanPath + '/index.mdx'),
+    path.resolve(__dirname, '../../docs/src/content/en', cleanPath, 'index.mdx'),
+  ];
+
+  return possiblePaths.some(filePath => existsSync(filePath));
+};
 
 const loadRedirects = async () => {
   process.chdir('docs');
 
-  const configPath = path.resolve('next.config.mjs');
-  const configUrl = pathToFileURL(configPath).href;
-  const configModule = await import(configUrl);
+  const vercelJsonPath = path.resolve('vercel.json');
+  const vercelJson = JSON.parse(readFileSync(vercelJsonPath, 'utf-8'));
 
-  const resolvedConfig =
-    typeof configModule.default === 'function' ? await configModule.default() : configModule.default;
-
-  const redirectsFn = resolvedConfig?.redirects;
-  const redirects = typeof redirectsFn === 'function' ? await redirectsFn() : redirectsFn;
+  const redirects = vercelJson.redirects || [];
 
   return redirects;
 };
@@ -58,15 +82,14 @@ const checkRedirects = async () => {
       continue;
     }
 
-    const destinationUrl = `${baseUrl}${destination}`;
-    let destinationOk = false;
+    const cleanDestination = stripLocalePattern(destination);
 
-    try {
-      const destRes = await fetch(destinationUrl, { redirect: 'follow' });
-      destinationOk = destRes.status !== 404;
-    } catch {
-      destinationOk = false;
-    }
+    // Check if destination is already an absolute URL
+    const isAbsoluteUrl = /^https?:\/\//.test(cleanDestination);
+    const destinationUrl = isAbsoluteUrl ? cleanDestination : `${baseUrl}${cleanDestination}`;
+
+    // Check if the destination file exists locally (skip for external URLs)
+    const destinationOk = isAbsoluteUrl ? true : checkLocalFile(cleanDestination);
 
     if (destinationOk) {
       console.log('├──OK──', destinationUrl);

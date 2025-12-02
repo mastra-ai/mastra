@@ -90,6 +90,7 @@ const weatherResources: MCPServerResources = {
 };
 
 export const myMcpServer = new MCPServer({
+  id: 'my-calculation-and-data-mcp-server',
   name: 'My Calculation & Data MCP Server',
   version: '1.0.0',
   tools: {
@@ -101,8 +102,8 @@ export const myMcpServer = new MCPServer({
         num2: z.number().describe('The second number.'),
         operation: z.enum(['add', 'subtract']).describe('The operation to perform.'),
       }),
-      execute: async ({ context }) => {
-        const { num1, num2, operation } = context;
+      execute: async input => {
+        const { num1, num2, operation } = input;
         if (operation === 'add') {
           return num1 + num2;
         }
@@ -118,8 +119,8 @@ export const myMcpServer = new MCPServer({
       inputSchema: z.object({
         city: z.string().describe('The city to get weather for, e.g., London, Paris.'),
       }),
-      execute: async ({ context }) => {
-        const { city } = context;
+      execute: async input => {
+        const { city } = input;
         const temperatures = {
           london: '15°C',
           paris: '18°C',
@@ -134,6 +135,7 @@ export const myMcpServer = new MCPServer({
 
 export const myMcpServerTwo = new MCPServer({
   name: 'My Utility MCP Server',
+  id: 'my-utility-mcp-server',
   version: '1.0.0',
   agents: { chefAgent },
   workflows: { myWorkflow },
@@ -146,8 +148,8 @@ export const myMcpServerTwo = new MCPServer({
         text: z.string().describe('The input string.'),
         action: z.enum(['uppercase', 'reverse']).describe('The string action to perform.'),
       }),
-      execute: async ({ context }) => {
-        const { text, action } = context;
+      execute: async input => {
+        const { text, action } = inputData;
         if (action === 'uppercase') {
           return text.toUpperCase();
         }
@@ -163,8 +165,8 @@ export const myMcpServerTwo = new MCPServer({
       inputSchema: z.object({
         name: z.string().describe('The name of the person to greet.'),
       }),
-      execute: async ({ context }) => {
-        return `Hello, ${context.name}! Welcome to the MCP server.`;
+      execute: async input => {
+        return `Hello, ${inputData.name}! Welcome to the MCP server.`;
       },
     }),
     collectContactInfo: createTool({
@@ -173,12 +175,12 @@ export const myMcpServerTwo = new MCPServer({
       inputSchema: z.object({
         reason: z.string().optional().describe('Optional reason for collecting contact info'),
       }),
-      execute: async ({ context }, options) => {
-        const { reason } = context;
+      execute: async (inputData, context) => {
+        const { reason } = inputData;
 
         try {
           // Use the session-aware elicitation functionality
-          const result = await options.elicitation.sendRequest({
+          const result = await context.mcp.elicitation.sendRequest({
             message: reason
               ? `Please provide your contact information. ${reason}`
               : 'Please provide your contact information',

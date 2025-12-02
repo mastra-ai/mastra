@@ -9,6 +9,7 @@ export class MastraAgentRelevanceScorer implements RelevanceScoreProvider {
 
   constructor(name: string, model: MastraLanguageModel) {
     this.agent = new Agent({
+      id: `relevance-scorer-${name}`,
       name: `Relevance Scorer ${name}`,
       instructions: `You are a specialized agent for evaluating the relevance of text to queries.
 Your task is to rate how well a text passage answers a given query.
@@ -26,7 +27,16 @@ Always return just the number, no explanation.`,
 
   async getRelevanceScore(query: string, text: string): Promise<number> {
     const prompt = createSimilarityPrompt(query, text);
-    const response = await this.agent.generate(prompt);
+
+    const model = await this.agent.getModel();
+    let response;
+
+    if (model.specificationVersion === 'v2') {
+      response = await this.agent.generate(prompt);
+    } else {
+      response = await this.agent.generateLegacy(prompt);
+    }
+
     return parseFloat(response.text);
   }
 }

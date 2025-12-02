@@ -327,7 +327,7 @@ export class StoreOperationsLance extends StoreOperations {
           processedRecord[key] = JSON.stringify(processedRecord[key]);
         }
       }
-      console.log(await table.schema());
+      console.info(await table.schema());
 
       await table.mergeInsert(primaryId).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([processedRecord]);
     } catch (error: any) {
@@ -391,8 +391,6 @@ export class StoreOperationsLance extends StoreOperations {
 
         return processedRecord;
       });
-
-      console.log(processedRecords);
 
       await table.mergeInsert(primaryId).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute(processedRecords);
     } catch (error: any) {

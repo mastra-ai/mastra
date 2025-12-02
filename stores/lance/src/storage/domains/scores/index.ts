@@ -1,7 +1,8 @@
 import type { Connection } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
-import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import { saveScorePayloadSchema } from '@mastra/core/evals';
+import { ScoresStorage, TABLE_SCORERS, calculatePagination, normalizePerPage } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import { getTableSchema, processResultWithTypeConversion } from '../utils';
 
@@ -13,6 +14,20 @@ export class StoreScoresLance extends ScoresStorage {
   }
 
   async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+    let validatedScore: ValidatedSaveScorePayload;
+    try {
+      validatedScore = saveScorePayloadSchema.parse(score);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LANCE_STORAGE_SAVE_SCORE_FAILED',
+          text: 'Failed to save score in LanceStorage',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
     try {
       const id = crypto.randomUUID();
       const table = await this.client.openTable(TABLE_SCORERS);
@@ -21,7 +36,7 @@ export class StoreScoresLance extends ScoresStorage {
       const allowedFields = new Set(schema.fields.map((f: any) => f.name));
       // Filter out fields not in schema
       const filteredScore: Record<string, any> = {};
-      (Object.keys(score) as (keyof ScoreRowData)[]).forEach(key => {
+      (Object.keys(validatedScore) as (keyof ScoreRowData)[]).forEach(key => {
         if (allowedFields.has(key)) {
           filteredScore[key] = score[key];
         }
@@ -36,6 +51,9 @@ export class StoreScoresLance extends ScoresStorage {
           filteredScore[key] = JSON.stringify(filteredScore[key]);
         }
       }
+
+      filteredScore.createdAt = new Date();
+      filteredScore.updatedAt = new Date();
 
       filteredScore.id = id;
       await table.add([filteredScore], { mode: 'append' });
@@ -63,8 +81,7 @@ export class StoreScoresLance extends ScoresStorage {
       const records = await query.toArray();
 
       if (records.length === 0) return null;
-      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
-      return processResultWithTypeConversion(records[0], schema) as ScoreRowData;
+      return await this.transformScoreRow(records[0]);
     } catch (error: any) {
       throw new MastraError(
         {
@@ -79,7 +96,24 @@ export class StoreScoresLance extends ScoresStorage {
     }
   }
 
-  async getScoresByScorerId({
+  /**
+   * LanceDB-specific score row transformation.
+   *
+   * Note: This implementation does NOT use coreTransformScoreRow because:
+   * 1. LanceDB stores schema information in the table itself (requires async fetch)
+   * 2. Uses processResultWithTypeConversion utility for LanceDB-specific type handling
+   */
+  private async transformScoreRow(row: Record<string, any>): Promise<ScoreRowData> {
+    const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
+    const transformed = processResultWithTypeConversion(row, schema) as ScoreRowData;
+    return {
+      ...transformed,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }
+
+  async listScoresByScorerId({
     scorerId,
     pagination,
     entityId,
@@ -93,10 +127,11 @@ export class StoreScoresLance extends ScoresStorage {
     source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const table = await this.client.openTable(TABLE_SCORERS);
-      // Use zero-based pagination (default page = 0)
-      const { page = 0, perPage = 10 } = pagination || {};
-      const offset = page * perPage;
 
       let query = table.query().where(`\`scorerId\` = '${scorerId}'`);
 
@@ -111,25 +146,37 @@ export class StoreScoresLance extends ScoresStorage {
         query = query.where(`\`entityType\` = '${entityType}'`);
       }
 
-      query = query.limit(perPage);
-      if (offset > 0) query.offset(offset);
-      const records = await query.toArray();
-      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
-      const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
-
+      // Get total count first
       let totalQuery = table.query().where(`\`scorerId\` = '${scorerId}'`);
       if (source) {
         totalQuery = totalQuery.where(`\`source\` = '${source}'`);
       }
+      if (entityId) {
+        totalQuery = totalQuery.where(`\`entityId\` = '${entityId}'`);
+      }
+      if (entityType) {
+        totalQuery = totalQuery.where(`\`entityType\` = '${entityType}'`);
+      }
       const allRecords = await totalQuery.toArray();
       const total = allRecords.length;
+
+      const end = perPageInput === false ? total : start + perPage;
+
+      // For perPage: false, don't use limit/offset, just get all records
+      if (perPageInput !== false) {
+        query = query.limit(perPage);
+        if (start > 0) query = query.offset(start);
+      }
+
+      const records = await query.toArray();
+      const scores = await Promise.all(records.map(async record => await this.transformScoreRow(record)));
 
       return {
         pagination: {
           page,
-          perPage,
+          perPage: perPageForResponse,
           total,
-          hasMore: offset + scores.length < total,
+          hasMore: end < total,
         },
         scores,
       };
@@ -147,7 +194,7 @@ export class StoreScoresLance extends ScoresStorage {
     }
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -155,24 +202,36 @@ export class StoreScoresLance extends ScoresStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const table = await this.client.openTable(TABLE_SCORERS);
-      const { page = 0, perPage = 10 } = pagination || {};
-      const offset = page * perPage;
-      // Query for scores with the given runId
-      const query = table.query().where(`\`runId\` = '${runId}'`).limit(perPage);
-      if (offset > 0) query.offset(offset);
-      const records = await query.toArray();
-      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
-      const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
+
       // Get total count for pagination
       const allRecords = await table.query().where(`\`runId\` = '${runId}'`).toArray();
       const total = allRecords.length;
+
+      const end = perPageInput === false ? total : start + perPage;
+
+      // Query for scores with the given runId
+      let query = table.query().where(`\`runId\` = '${runId}'`);
+
+      // For perPage: false, don't use limit/offset
+      if (perPageInput !== false) {
+        query = query.limit(perPage);
+        if (start > 0) query = query.offset(start);
+      }
+
+      const records = await query.toArray();
+      const scores = await Promise.all(records.map(async record => await this.transformScoreRow(record)));
+
       return {
         pagination: {
           page,
-          perPage,
+          perPage: perPageForResponse,
           total,
-          hasMore: offset + scores.length < total,
+          hasMore: end < total,
         },
         scores,
       };
@@ -190,7 +249,7 @@ export class StoreScoresLance extends ScoresStorage {
     }
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -200,30 +259,39 @@ export class StoreScoresLance extends ScoresStorage {
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const table = await this.client.openTable(TABLE_SCORERS);
-      const { page = 0, perPage = 10 } = pagination || {};
-      const offset = page * perPage;
-      // Query for scores with the given entityId and entityType
-      const query = table
-        .query()
-        .where(`\`entityId\` = '${entityId}' AND \`entityType\` = '${entityType}'`)
-        .limit(perPage);
-      if (offset > 0) query.offset(offset);
-      const records = await query.toArray();
-      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
-      const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
+
       // Get total count for pagination
       const allRecords = await table
         .query()
         .where(`\`entityId\` = '${entityId}' AND \`entityType\` = '${entityType}'`)
         .toArray();
       const total = allRecords.length;
+
+      const end = perPageInput === false ? total : start + perPage;
+
+      // Query for scores with the given entityId and entityType
+      let query = table.query().where(`\`entityId\` = '${entityId}' AND \`entityType\` = '${entityType}'`);
+
+      // For perPage: false, don't use limit/offset
+      if (perPageInput !== false) {
+        query = query.limit(perPage);
+        if (start > 0) query = query.offset(start);
+      }
+
+      const records = await query.toArray();
+      const scores = await Promise.all(records.map(async record => await this.transformScoreRow(record)));
+
       return {
         pagination: {
           page,
-          perPage,
+          perPage: perPageForResponse,
           total,
-          hasMore: offset + scores.length < total,
+          hasMore: end < total,
         },
         scores,
       };
@@ -232,6 +300,63 @@ export class StoreScoresLance extends ScoresStorage {
         {
           id: 'LANCE_STORAGE_GET_SCORES_BY_ENTITY_ID_FAILED',
           text: 'Failed to get scores by entityId and entityType in LanceStorage',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { error: error?.message },
+        },
+        error,
+      );
+    }
+  }
+
+  async listScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      const table = await this.client.openTable(TABLE_SCORERS);
+
+      // Get total count for pagination
+      const allRecords = await table.query().where(`\`traceId\` = '${traceId}' AND \`spanId\` = '${spanId}'`).toArray();
+      const total = allRecords.length;
+
+      const end = perPageInput === false ? total : start + perPage;
+
+      // Query for scores with the given traceId and spanId
+      let query = table.query().where(`\`traceId\` = '${traceId}' AND \`spanId\` = '${spanId}'`);
+
+      // For perPage: false, don't use limit/offset
+      if (perPageInput !== false) {
+        query = query.limit(perPage);
+        if (start > 0) query = query.offset(start);
+      }
+
+      const records = await query.toArray();
+      const scores = await Promise.all(records.map(async record => await this.transformScoreRow(record)));
+
+      return {
+        pagination: {
+          page,
+          perPage: perPageForResponse,
+          total,
+          hasMore: end < total,
+        },
+        scores,
+      };
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'LANCE_STORAGE_GET_SCORES_BY_SPAN_FAILED',
+          text: 'Failed to get scores by traceId and spanId in LanceStorage',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { error: error?.message },

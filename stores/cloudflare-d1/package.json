@@ -1,10 +1,11 @@
 {
   "name": "@mastra/cloudflare-d1",
-  "version": "0.12.10",
+  "version": "1.0.0-beta.1",
   "description": "D1 provider for Mastra - includes db storage capabilities",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -31,21 +32,35 @@
     "cloudflare": "^4.5.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250823.0",
+    "@cloudflare/workers-types": "^4.20251111.0",
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
-    "@types/node": "^20.19.0",
+    "@types/node": "22.13.17",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
     "dotenv": "^17.0.0",
-    "eslint": "^9.30.1",
-    "miniflare": "^4.20250816.1",
+    "eslint": "^9.37.0",
+    "miniflare": "^4.20251109.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4",
-    "@internal/types-builder": "workspace:*"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.13.0-0 <0.16.0-0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "stores/cloudflare-d1"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

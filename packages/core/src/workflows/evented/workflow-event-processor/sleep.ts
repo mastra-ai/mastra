@@ -1,6 +1,6 @@
-import EventEmitter from 'events';
+import EventEmitter from 'node:events';
 import type { StepFlowEntry, WorkflowRunState } from '../..';
-import { RuntimeContext } from '../../../di';
+import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
 import type { StepExecutor } from '../step-executor';
 import { getStep } from './utils';
@@ -42,7 +42,7 @@ export async function processWorkflowWaitForEvent(
       stepResults: currentState?.context,
       prevResult,
       activeSteps: [],
-      runtimeContext: currentState?.runtimeContext,
+      requestContext: currentState?.requestContext,
     },
   });
 }
@@ -55,10 +55,11 @@ export async function processWorkflowSleep(
     stepResults,
     activeSteps,
     resumeSteps,
+    timeTravel,
     prevResult,
     resumeData,
     parentWorkflow,
-    runtimeContext,
+    requestContext,
   }: ProcessorArgs,
   {
     pubsub,
@@ -75,7 +76,7 @@ export async function processWorkflowSleep(
     type: 'watch',
     runId,
     data: {
-      type: 'step-waiting',
+      type: 'workflow-step-waiting',
       payload: {
         id: step.id,
         status: 'waiting',
@@ -91,7 +92,7 @@ export async function processWorkflowSleep(
     runId,
     stepResults,
     emitter: new EventEmitter() as any, // TODO
-    runtimeContext: new RuntimeContext(), // TODO
+    requestContext: new RequestContext(), // TODO
     input: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
   });
@@ -102,7 +103,7 @@ export async function processWorkflowSleep(
         type: 'watch',
         runId,
         data: {
-          type: 'step-result',
+          type: 'workflow-step-result',
           payload: {
             id: step.id,
             status: 'success',
@@ -118,7 +119,7 @@ export async function processWorkflowSleep(
         type: 'watch',
         runId,
         data: {
-          type: 'step-finish',
+          type: 'workflow-step-finish',
           payload: {
             id: step.id,
             metadata: {},
@@ -134,12 +135,13 @@ export async function processWorkflowSleep(
           runId,
           executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
           resumeSteps,
+          timeTravel,
           stepResults,
           prevResult,
           resumeData,
           parentWorkflow,
           activeSteps,
-          runtimeContext,
+          requestContext,
         },
       });
     },
@@ -155,10 +157,11 @@ export async function processWorkflowSleepUntil(
     stepResults,
     activeSteps,
     resumeSteps,
+    timeTravel,
     prevResult,
     resumeData,
     parentWorkflow,
-    runtimeContext,
+    requestContext,
   }: ProcessorArgs,
   {
     pubsub,
@@ -177,7 +180,7 @@ export async function processWorkflowSleepUntil(
     runId,
     stepResults,
     emitter: new EventEmitter() as any, // TODO
-    runtimeContext: new RuntimeContext(), // TODO
+    requestContext: new RequestContext(), // TODO
     input: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
   });
@@ -186,7 +189,7 @@ export async function processWorkflowSleepUntil(
     type: 'watch',
     runId,
     data: {
-      type: 'step-waiting',
+      type: 'workflow-step-waiting',
       payload: {
         id: step.id,
         status: 'waiting',
@@ -202,7 +205,7 @@ export async function processWorkflowSleepUntil(
         type: 'watch',
         runId,
         data: {
-          type: 'step-result',
+          type: 'workflow-step-result',
           payload: {
             id: step.id,
             status: 'success',
@@ -218,7 +221,7 @@ export async function processWorkflowSleepUntil(
         type: 'watch',
         runId,
         data: {
-          type: 'step-finish',
+          type: 'workflow-step-finish',
           payload: {
             id: step.id,
             metadata: {},
@@ -234,12 +237,13 @@ export async function processWorkflowSleepUntil(
           runId,
           executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
           resumeSteps,
+          timeTravel,
           stepResults,
           prevResult,
           resumeData,
           parentWorkflow,
           activeSteps,
-          runtimeContext,
+          requestContext,
         },
       });
     },

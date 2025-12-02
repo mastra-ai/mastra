@@ -1,7 +1,8 @@
-import { useMastraClient } from '@/contexts/mastra-client-context';
+import { useMastraClient } from '@mastra/react';
 import { Agent } from '@mastra/core/agent';
 import { useEffect, useRef, useState } from 'react';
 import { recordMicrophoneToFile } from '../utils/record-mic-to-file';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export interface SpeechRecognitionState {
   isListening: boolean;
@@ -27,6 +28,7 @@ export const useSpeechRecognition = ({
 }: UseSpeechRecognitionArgs): BrowserSpeechRecognition => {
   const client = useMastraClient();
   const [agent, setAgent] = useState<Agent | null>(null);
+  const { requestContext } = usePlaygroundStore();
 
   useEffect(() => {
     if (!agentId) return;
@@ -35,8 +37,12 @@ export const useSpeechRecognition = ({
 
     const check = async () => {
       try {
-        await agent.voice.getSpeakers();
-        setAgent(agent as unknown as Agent);
+        const speakers = await agent.voice.getSpeakers(requestContext);
+        if (speakers.length > 0) {
+          setAgent(agent as unknown as Agent);
+        } else {
+          setAgent(null);
+        }
       } catch (error) {
         setAgent(null);
       }

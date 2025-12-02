@@ -1,0 +1,125 @@
+name: Regenerate Providers & Docs
+
+permissions:
+  contents: write
+
+on:
+  # Run every 6 hours to keep provider registry and documentation up-to-date
+  schedule:
+    - cron: '0 */6 * * *' # Every 6 hours
+  # Allow manual triggering for testing
+  workflow_dispatch:
+
+concurrency:
+  group: regenerate-providers-docs
+  cancel-in-progress: false
+
+jobs:
+  regenerate:
+    # Only run on the main repository, not on forks
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: ubuntu-latest
+    env:
+      HUSKY: 0
+
+    steps:
+      - name: Initial checkout
+        uses: actions/checkout@v5
+        with:
+          # Use default GITHUB_TOKEN for initial checkout
+          # This is needed to access the .github/actions/app-auth action
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Dane App Auth
+        id: app-auth
+        uses: ./.github/actions/app-auth
+        with:
+          app-id: ${{ vars.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
+      - name: Re-checkout with app token
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          token: ${{ steps.app-auth.outputs.token }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Generate provider registry
+        run: pnpm --filter @mastra/core generate:providers
+
+      - name: Generate model documentation
+        run: pnpx tsx packages/core/scripts/generate-model-docs.ts
+
+      - name: Generate llms.txt files
+        run: pnpx tsx docs/scripts/build-llms-text-files.ts docs
+
+      - name: Format generated files with Prettier
+        run: |
+          pnpm prettier --write packages/core/src/llm/model/provider-registry.json
+          pnpm prettier --write packages/core/src/llm/model/provider-types.generated.d.ts
+          pnpm prettier --write docs/src/content/en/models/**/*.{mdx,ts,js}
+      - name: Check for changes
+        id: git-check
+        run: |
+          git diff --exit-code packages/core/src/llm/model/provider-registry.json packages/core/src/llm/model/provider-types.generated.d.ts docs/src/content/en/models/ docs/public/llms.txt docs/public/llms-full.txt || echo "changed=true" >> $GITHUB_OUTPUT
+
+      - name: Create changeset
+        if: steps.git-check.outputs.changed == 'true'
+        run: |
+          # Check if an automated provider registry changeset already exists
+          if [ -d .changeset ]; then
+            EXISTING_CHANGESET=$(ls .changeset/automated-provider-registry-*.md 2>/dev/null | head -n 1)
+          else
+            EXISTING_CHANGESET=""
+          fi
+
+          if [ -n "$EXISTING_CHANGESET" ]; then
+            echo "Automated changeset already exists: ${EXISTING_CHANGESET}"
+            echo "Skipping changeset creation to avoid spam"
+            echo "CHANGESET_FILE=" >> $GITHUB_ENV
+          else
+            # Generate a unique changeset filename with timestamp
+            CHANGESET_ID="automated-provider-registry-$(date +%Y%m%d-%H%M%S)"
+            CHANGESET_FILE=".changeset/${CHANGESET_ID}.md"
+
+            # Create changeset for @mastra/core with patch bump
+            cat > "${CHANGESET_FILE}" << 'EOF'
+          ---
+          '@mastra/core': patch
+          ---
+
+          Update provider registry and model documentation with latest models and providers
+          EOF
+
+            echo "Created changeset: ${CHANGESET_FILE}"
+            echo "CHANGESET_FILE=${CHANGESET_FILE}" >> $GITHUB_ENV
+          fi
+
+      - name: Commit and push changes
+        if: steps.git-check.outputs.changed == 'true'
+        run: |
+          git add packages/core/src/llm/model/provider-registry.json
+          git add packages/core/src/llm/model/provider-types.generated.d.ts
+          git add docs/src/content/en/models/
+          git add docs/public/llms.txt
+          git add docs/public/llms-full.txt
+          if [ -n "${CHANGESET_FILE}" ]; then
+            git add "${CHANGESET_FILE}"
+          fi
+          git commit -m "chore: regenerate providers and docs [skip ci]"
+          git pull --rebase
+          git push
+
+      - name: Log summary
+        if: steps.git-check.outputs.changed == 'true'
+        run: echo "✅ Providers and documentation updated with changeset and committed to main"
+
+      - name: Log no changes
+        if: steps.git-check.outputs.changed != 'true'
+        run: echo "ℹ️ No changes detected in providers or documentation"

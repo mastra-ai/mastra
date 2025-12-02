@@ -1,4 +1,4 @@
-# @mastra/pg
+# @mastra/libsql
 
 SQLite implementation for Mastra, providing both vector similarity search and general storage capabilities with connection pooling and transaction support.
 
@@ -47,34 +47,41 @@ const results = await vectorStore.query({
 ### Storage
 
 ```typescript
-import { LibSQLStore } from '@mastra/pg';
+import { LibSQLStore } from '@mastra/libsql';
 
 const store = new LibSQLStore({
+  id: 'libsql-storage',
   url: 'file:./my-db.db',
 });
 
 // Create a thread
 await store.saveThread({
-  id: 'thread-123',
-  resourceId: 'resource-456',
-  title: 'My Thread',
-  metadata: { key: 'value' },
+  thread: {
+    id: 'thread-123',
+    resourceId: 'resource-456',
+    title: 'My Thread',
+    metadata: { key: 'value' },
+    createdAt: new Date(),
+  },
 });
 
 // Add messages to thread
-await store.saveMessages([
-  {
-    id: 'msg-789',
-    threadId: 'thread-123',
-    role: 'user',
-    type: 'text',
-    content: [{ type: 'text', text: 'Hello' }],
-  },
-]);
+await store.saveMessages({
+  messages: [
+    {
+      id: 'msg-789',
+      threadId: 'thread-123',
+      role: 'user',
+      content: { content: 'Hello' },
+      resourceId: 'resource-456',
+      createdAt: new Date(),
+    },
+  ],
+});
 
 // Query threads and messages
-const savedThread = await store.getThread('thread-123');
-const messages = await store.getMessages('thread-123');
+const savedThread = await store.getThreadById({ threadId: 'thread-123' });
+const messages = await store.listMessages({ threadId: 'thread-123' });
 ```
 
 ## Configuration
@@ -124,6 +131,9 @@ Example filter:
 - `createIndex({indexName, dimension, metric?, indexConfig?, defineIndex?})`: Create a new table with vector support
 - `upsert({indexName, vectors, metadata?, ids?})`: Add or update vectors
 - `query({indexName, queryVector, topK?, filter?, includeVector?, minScore?})`: Search for similar vectors
+- `updateVector({ indexName, id?, filter?, update })`: Update a single vector by ID or metadata filter
+- `deleteVector({ indexName, id })`: Delete a single vector by ID
+- `deleteVectors({ indexName, ids?, filter? })`: Delete multiple vectors by IDs or metadata filter
 - `defineIndex({indexName, metric?, indexConfig?})`: Define an index
 - `listIndexes()`: List all vector-enabled tables
 - `describeIndex(indexName)`: Get table statistics
@@ -132,11 +142,11 @@ Example filter:
 
 ## Storage Methods
 
-- `saveThread(thread)`: Create or update a thread
-- `getThread(threadId)`: Get a thread by ID
-- `deleteThread(threadId)`: Delete a thread and its messages
-- `saveMessages(messages)`: Save multiple messages in a transaction
-- `getMessages(threadId)`: Get all messages for a thread
+- `saveThread({ thread })`: Create or update a thread
+- `getThreadById({ threadId })`: Get a thread by ID
+- `deleteThread({ threadId })`: Delete a thread and its messages
+- `saveMessages({ messages })`: Save multiple messages in a transaction
+- `listMessages({ threadId, perPage?, page? })`: Get messages for a thread with pagination
 - `deleteMessages(messageIds)`: Delete specific messages
 
 ## Related Links

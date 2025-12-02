@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "test": "pnpm compile:worker && pnpm test:pg && pnpm test:upstash && pnpm test:libsql && pnpm test:streaming && pnpm test:working-memory && pnpm test:agent-memory && pnpm test:processors",
+    "test": "pnpm compile:worker && pnpm test:pg && pnpm test:upstash && pnpm test:libsql && pnpm test:streaming && pnpm test:working-memory && pnpm test:agent-memory",
     "pretest:pg": "docker compose up -d postgres && (for i in $(seq 1 30); do docker compose exec -T postgres pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
     "test:pg": "vitest run ./src/with-pg-storage.test.ts",
     "posttest:pg": "docker compose down --volumes",
@@ -14,8 +14,8 @@
     "test:libsql": "vitest run ./src/with-libsql-storage.test.ts",
     "test:streaming": "vitest run ./src/streaming-memory.test.ts",
     "test:working-memory": "vitest run ./src/working-memory.test.ts",
-    "test:processors": "vitest run ./src/processors.test.ts",
     "pretest:pg:perf": "docker compose up -d postgres && (for i in $(seq 1 30); do docker compose exec -T postgres pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
+    "test:processors": "echo 'processors have moved into core. we can delete this command after the pr it came in on is merged.'",
     "test:pg:perf": "vitest run ./src/performance-testing/with-pg-storage.test.ts",
     "posttest:pg:perf": "docker compose down --volumes",
     "pretest:upstash:perf": "docker compose up -d redis serverless-redis-http",
@@ -32,31 +32,39 @@
     "@ai-sdk/google": "^1.2.19",
     "@ai-sdk/openai": "^1.3.0",
     "@ai-sdk/react": "^1.2.1",
-    "@mastra/fastembed": "workspace:*",
-    "@mastra/libsql": "workspace:*",
-    "@mastra/memory": "workspace:*",
-    "@mastra/pg": "workspace:*",
-    "@mastra/upstash": "workspace:*",
+    "@mastra/fastembed": "*",
+    "@mastra/libsql": "*",
+    "@mastra/memory": "*",
+    "@mastra/pg": "*",
+    "@mastra/upstash": "*",
     "dotenv": "^16.4.7",
     "json-schema": "^0.4.0",
-    "zod": "^3.24.3"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@faker-js/faker": "^9.6.0",
-    "@mastra/core": "workspace:*",
-    "@testing-library/react": "^16.2.0",
+    "@faker-js/faker": "^9.9.0",
+    "@mastra/core": "*",
+    "@testing-library/react": "^16.3.0",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "^20.17.27",
+    "@types/node": "22.13.17",
     "ai": "^4.2.2",
-    "jsdom": "^26.0.0",
-    "mastra": "workspace:*",
-    "next": "^15.2.4",
+    "jsdom": "^26.1.0",
+    "mastra": "*",
+    "next": "^15.5.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "typescript": "^5.8.2",
     "vitest": "^3.2.4"
   },
-  "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.16.0-0"
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../core",
+      "@mastra/memory": "link:../../memory",
+      "@mastra/fastembed": "link:../../fastembed",
+      "@mastra/libsql": "link:../../../stores/libsql",
+      "@mastra/pg": "link:../../../stores/pg",
+      "@mastra/upstash": "link:../../../stores/upstash",
+      "mastra": "link:../../cli"
+    }
   }
 }

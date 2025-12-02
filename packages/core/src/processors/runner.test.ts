@@ -1,4 +1,4 @@
-import type { TextPart } from 'ai';
+import type { TextPart } from '@internal/ai-sdk-v4';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
@@ -28,8 +28,8 @@ const mockLogger: IMastraLogger = {
   error: vi.fn(),
   trackException: vi.fn(),
   getTransports: vi.fn(() => []),
-  getLogs: vi.fn(() => []),
-  getLogsByRunId: vi.fn(() => []),
+  listLogs: vi.fn(() => []),
+  listLogsByRunId: vi.fn(() => []),
 } as any;
 
 describe('ProcessorRunner', () => {
@@ -51,7 +51,8 @@ describe('ProcessorRunner', () => {
       const executionOrder: string[] = [];
       const inputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processInput: async ({ messages }) => {
             executionOrder.push('processor1');
             messages.push(createMessage('processed by 1', 'user'));
@@ -59,7 +60,8 @@ describe('ProcessorRunner', () => {
           },
         },
         {
-          name: 'processor2',
+          id: 'processor2',
+          name: 'Processor 2',
           processInput: async ({ messages }) => {
             executionOrder.push('processor2');
             messages.push(createMessage('processed by 2', 'user'));
@@ -90,7 +92,8 @@ describe('ProcessorRunner', () => {
       const executionOrder: string[] = [];
       const inputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processInput: async ({ messages }) => {
             executionOrder.push('processor1-start');
             await new Promise(resolve => setTimeout(resolve, 10));
@@ -99,7 +102,8 @@ describe('ProcessorRunner', () => {
           },
         },
         {
-          name: 'processor2',
+          id: 'processor2',
+          name: 'Processor 2',
           processInput: async ({ messages }) => {
             executionOrder.push('processor2-start');
             await new Promise(resolve => setTimeout(resolve, 10));
@@ -125,7 +129,8 @@ describe('ProcessorRunner', () => {
     it('should abort if tripwire is triggered in input processor', async () => {
       const inputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processInput: async ({ messages, abort }) => {
             messages.push(createMessage('before abort', 'user'));
             abort('Test abort reason');
@@ -133,7 +138,8 @@ describe('ProcessorRunner', () => {
           },
         },
         {
-          name: 'processor2',
+          id: 'processor2',
+          name: 'Processor 2',
           processInput: async ({ messages }) => {
             messages.push(createMessage('should not run', 'user'));
             return messages;
@@ -157,7 +163,8 @@ describe('ProcessorRunner', () => {
     it('should abort with default message when no reason provided', async () => {
       const inputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processInput: async ({ messages: _messages, abort }) => {
             abort();
             return _messages;
@@ -182,7 +189,8 @@ describe('ProcessorRunner', () => {
       const executionOrder: string[] = [];
       const inputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processInput: async ({ messages, abort }) => {
             executionOrder.push('processor1');
             abort('Abort after processor1');
@@ -191,7 +199,8 @@ describe('ProcessorRunner', () => {
           },
         },
         {
-          name: 'processor2',
+          id: 'processor2',
+          name: 'Processor 2',
           processInput: async ({ messages }) => {
             executionOrder.push('processor2');
             return messages;
@@ -216,7 +225,8 @@ describe('ProcessorRunner', () => {
       const executionOrder: string[] = [];
       const inputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processInput: async ({ messages }) => {
             executionOrder.push('processor1');
             messages.push(createMessage('from processor 1', 'user'));
@@ -224,11 +234,13 @@ describe('ProcessorRunner', () => {
           },
         },
         {
-          name: 'processor2',
+          id: 'processor2',
+          name: 'Processor 2',
           // No processInput method - should be skipped
         },
         {
-          name: 'processor3',
+          id: 'processor3',
+          name: 'Processor 3',
           processInput: async ({ messages }) => {
             executionOrder.push('processor3');
             messages.push(createMessage('from processor 3', 'user'));
@@ -255,19 +267,38 @@ describe('ProcessorRunner', () => {
       expect((messages[2].content[0] as TextPart).text).toBe('from processor 3');
     });
 
-    describe('telemetry integration', () => {
-      it('should use telemetry.traceMethod for individual processors when telemetry is provided', async () => {
-        const mockTelemetry = {
-          traceMethod: vi.fn(fn => {
-            return () => fn({ messageList });
-          }),
-        };
+    /**
+     * Regression test for GitHub Issue #9969
+     * @see https://github.com/mastra-ai/mastra/issues/9969
+     *
+     * Users want to process system messages (including semantic recall, working memory,
+     * and user-provided system prompts) using InputProcessors. Currently, InputProcessors
+     * only receive user messages via the `messages` parameter.
+     *
+     * Use cases:
+     * - Manipulate system prompts for smaller models (trim markdown, reduce length)
+     * - Modify semantic recall to prevent context overflow ("prompt too long" errors)
+     */
+    describe('Issue #9969: System messages in InputProcessor', () => {
+      it('should provide systemMessages parameter to processInput for accessing system messages', async () => {
+        // Add system messages to the MessageList
+        messageList.addSystem('You are a helpful assistant.'); // untagged system message
+        messageList.addSystem('Remember the user prefers formal language.', 'user-provided'); // tagged system message
+        messageList.addSystem('Relevant context from previous conversations.', 'memory'); // memory tag (like semantic recall)
+
+        // Add a user message
+        messageList.add([createMessage('Hello, how are you?', 'user')], 'input');
+
+        let receivedMessages: any[] = [];
+        let receivedSystemMessages: any[] | undefined;
 
         const inputProcessors: Processor[] = [
           {
-            name: 'processor1',
-            processInput: async ({ messages }) => {
-              messages.push(createMessage('processed', 'user'));
+            id: 'system-message-processor',
+            name: 'System Message Processor',
+            processInput: async ({ messages, systemMessages }) => {
+              receivedMessages = messages;
+              receivedSystemMessages = systemMessages;
               return messages;
             },
           },
@@ -280,26 +311,99 @@ describe('ProcessorRunner', () => {
           agentName: 'test-agent',
         });
 
-        messageList.add([createMessage('original', 'user')], 'user');
-        await runner.runInputProcessors(messageList, mockTelemetry);
+        await runner.runInputProcessors(messageList);
 
-        expect(mockTelemetry.traceMethod).toHaveBeenCalledWith(expect.any(Function), {
-          spanName: 'agent.inputProcessor.processor1',
-          attributes: {
-            'processor.name': 'processor1',
-            'processor.index': '0',
-            'processor.total': '1',
+        // The messages parameter should only contain user messages (current behavior)
+        expect(receivedMessages).toHaveLength(1);
+        expect(receivedMessages[0].role).toBe('user');
+
+        // NEW: systemMessages parameter should be provided and contain all system messages
+        expect(receivedSystemMessages).toBeDefined();
+        expect(receivedSystemMessages).toHaveLength(3);
+
+        // Verify system messages content
+        const systemTexts = receivedSystemMessages!.map((m: any) => {
+          if (typeof m.content === 'string') return m.content;
+          // Handle structured content format with parts array
+          if (m.content?.parts?.[0]?.text) return m.content.parts[0].text;
+          return m.content;
+        });
+        expect(systemTexts).toContain('You are a helpful assistant.');
+        expect(systemTexts).toContain('Remember the user prefers formal language.');
+        expect(systemTexts).toContain('Relevant context from previous conversations.');
+      });
+
+      it('should allow InputProcessor to modify system messages via return value', async () => {
+        // Add system messages
+        messageList.addSystem('Original system prompt with verbose instructions.');
+        messageList.addSystem('Memory context that is too long and needs trimming.', 'memory');
+
+        // Add a user message
+        messageList.add([createMessage('Hello', 'user')], 'input');
+
+        const inputProcessors: Processor[] = [
+          {
+            id: 'system-trimmer',
+            name: 'System Trimmer',
+            processInput: async ({ messages, systemMessages }) => {
+              // Modify system messages - trim them for smaller models
+              if (systemMessages) {
+                const modifiedSystemMessages = systemMessages.map((msg: any) => ({
+                  ...msg,
+                  content: typeof msg.content === 'string' ? msg.content.substring(0, 20) + '...' : msg.content,
+                }));
+                // Return modified system messages somehow (this is what the fix should enable)
+                return { messages, systemMessages: modifiedSystemMessages };
+              }
+              return messages;
+            },
           },
+        ];
+
+        runner = new ProcessorRunner({
+          inputProcessors,
+          outputProcessors: [],
+          logger: mockLogger,
+          agentName: 'test-agent',
+        });
+
+        const result = await runner.runInputProcessors(messageList);
+
+        // After processing, the system messages should be modified
+        const allMessages = await result.get.all.aiV5.prompt();
+        const systemMessages = allMessages.filter((m: any) => m.role === 'system');
+
+        // Verify system messages were trimmed
+        expect(systemMessages).toHaveLength(2);
+        systemMessages.forEach((msg: any) => {
+          const content = typeof msg.content === 'string' ? msg.content : msg.content[0]?.text;
+          expect(content.length).toBeLessThanOrEqual(24); // 20 chars + '...'
         });
       });
 
-      it('should work without telemetry when not provided', async () => {
+      it('should continue to allow adding new system messages via return array (existing behavior)', async () => {
+        // This test verifies existing behavior that MUST NOT break
+        // Processors can currently add system messages by including them in the return array
+
+        messageList.add([createMessage('Hello', 'user')], 'input');
+
         const inputProcessors: Processor[] = [
           {
-            name: 'processor1',
+            id: 'system-adder',
+            name: 'System Adder',
             processInput: async ({ messages }) => {
-              messages.push(createMessage('processed', 'user'));
-              return messages;
+              // Add a new system message by including it in the return array
+              const newSystemMessage = {
+                id: `msg-${Math.random()}`,
+                role: 'system' as const,
+                content: {
+                  format: 2 as const,
+                  parts: [{ type: 'text' as const, text: 'New system instruction added by processor.' }],
+                },
+                createdAt: new Date(),
+                threadId: 'test-thread',
+              };
+              return [...messages, newSystemMessage];
             },
           },
         ];
@@ -311,13 +415,18 @@ describe('ProcessorRunner', () => {
           agentName: 'test-agent',
         });
 
-        messageList.add([createMessage('original', 'user')], 'user');
         const result = await runner.runInputProcessors(messageList);
 
-        const messages = await result.get.all.prompt();
-        expect(messages).toHaveLength(2);
-        expect((messages[0].content[0] as TextPart).text).toBe('original');
-        expect((messages[1].content[0] as TextPart).text).toBe('processed');
+        // Verify the system message was added
+        const allMessages = await result.get.all.aiV5.prompt();
+        const systemMessages = allMessages.filter((m: any) => m.role === 'system');
+
+        expect(systemMessages).toHaveLength(1);
+        const content =
+          typeof systemMessages[0].content === 'string'
+            ? systemMessages[0].content
+            : (systemMessages[0].content[0] as { text?: string })?.text;
+        expect(content).toBe('New system instruction added by processor.');
       });
     });
   });
@@ -326,14 +435,16 @@ describe('ProcessorRunner', () => {
     it('should run output processors in order', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processOutputResult: async ({ messages }) => {
             messages.push(createMessage('extra message A', 'assistant'));
             return messages;
           },
         },
         {
-          name: 'processor2',
+          id: 'processor2',
+          name: 'Processor 2',
           processOutputResult: async ({ messages }) => {
             messages.push(createMessage('extra message B', 'assistant'));
             return messages;
@@ -367,7 +478,8 @@ describe('ProcessorRunner', () => {
     it('should abort if tripwire is triggered in output processor', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processOutputResult: async ({ messages, abort }) => {
             messages.push(createMessage('before abort', 'assistant'));
             abort('Output processor abort');
@@ -392,18 +504,21 @@ describe('ProcessorRunner', () => {
     it('should skip processors that do not implement processOutputResult', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processOutputResult: async ({ messages }) => {
             messages.push(createMessage('message from processor 1', 'assistant'));
             return messages;
           },
         },
         {
-          name: 'processor2',
+          id: 'processor2',
+          name: 'Processor 2',
           // No processOutputResult method - should be skipped
         },
         {
-          name: 'processor3',
+          id: 'processor3',
+          name: 'Processor 3',
           processOutputResult: async ({ messages }) => {
             messages.push(createMessage('message from processor 3', 'assistant'));
             return messages;
@@ -433,52 +548,14 @@ describe('ProcessorRunner', () => {
       expect((assistantMessage!.content[1] as TextPart).text).toBe('message from processor 1');
       expect((assistantMessage!.content[2] as TextPart).text).toBe('message from processor 3');
     });
-
-    describe('telemetry integration', () => {
-      it('should use telemetry.traceMethod for individual processors when telemetry is provided', async () => {
-        const mockTelemetry = {
-          traceMethod: vi.fn(fn => {
-            return () => fn({ messageList });
-          }),
-        };
-
-        const outputProcessors: Processor[] = [
-          {
-            name: 'processor1',
-            processOutputResult: async ({ messages }) => {
-              messages.push(createMessage('processed', 'assistant'));
-              return messages;
-            },
-          },
-        ];
-
-        runner = new ProcessorRunner({
-          inputProcessors: [],
-          outputProcessors,
-          logger: mockLogger,
-          agentName: 'test-agent',
-        });
-
-        messageList.add([createMessage('original', 'assistant')], 'response');
-        await runner.runOutputProcessors(messageList, mockTelemetry);
-
-        expect(mockTelemetry.traceMethod).toHaveBeenCalledWith(expect.any(Function), {
-          spanName: 'agent.outputProcessor.processor1',
-          attributes: {
-            'processor.name': 'processor1',
-            'processor.index': '0',
-            'processor.total': '1',
-          },
-        });
-      });
-    });
   });
 
   describe('Stream Processing', () => {
     it('should process text chunks through output processors', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processOutputStream: async ({ part }) => {
             // Only process text-delta chunks
             if (part.type === 'text-delta') {
@@ -512,7 +589,8 @@ describe('ProcessorRunner', () => {
     it('should abort stream when processor calls abort', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processOutputStream: async ({ part, abort }) => {
             if (part.type === 'text-delta' && part.payload.text?.includes('blocked')) {
               abort('Content blocked');
@@ -542,7 +620,8 @@ describe('ProcessorRunner', () => {
     it('should handle processor errors gracefully', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processOutputStream: async () => {
             throw new Error('Processor error');
           },
@@ -568,7 +647,8 @@ describe('ProcessorRunner', () => {
     it('should skip processors that do not implement processOutputStream', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processOutputStream: async ({ part }) => {
             // Only process text-delta chunks
             if (part.type === 'text-delta') {
@@ -583,11 +663,13 @@ describe('ProcessorRunner', () => {
           },
         },
         {
-          name: 'processor2',
+          id: 'processor2',
+          name: 'Processor 2',
           // No processOutputStream method - should be skipped
         },
         {
-          name: 'processor3',
+          id: 'processor3',
+          name: 'Processor 3',
           processOutputStream: async ({ part }) => {
             // Only process text-delta chunks
             if (part.type === 'text-delta') {
@@ -641,7 +723,8 @@ describe('ProcessorRunner', () => {
     it('should process chunks with state management', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'statefulProcessor',
+          id: 'statefulProcessor',
+          name: 'Stateful Processor',
           processOutputStream: async ({ part, streamParts }) => {
             // Only emit when we have a complete sentence (ends with period)
             const shouldEmit = part.type === 'text-delta' && part.payload.text?.includes('.');
@@ -685,7 +768,8 @@ describe('ProcessorRunner', () => {
     it('should accumulate chunks for moderation decisions', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'moderationProcessor',
+          id: 'moderationProcessor',
+          name: 'Moderation Processor',
           processOutputStream: async ({ part, abort, streamParts }) => {
             // Check for violence in accumulated text
             const accumulatedText = streamParts.map(c => (c.type === 'text-delta' ? c.payload.text : '')).join('');
@@ -734,7 +818,8 @@ describe('ProcessorRunner', () => {
     it('should handle custom state management', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'customStateProcessor',
+          id: 'customStateProcessor',
+          name: 'Custom State Processor',
           processOutputStream: async ({ part, state }) => {
             // Track word count in custom state
             const wordCount = state.wordCount || 0;
@@ -783,7 +868,8 @@ describe('ProcessorRunner', () => {
     it('should handle stream end detection', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'streamEndProcessor',
+          id: 'streamEndProcessor',
+          name: 'Stream End Processor',
           processOutputStream: async ({ part, streamParts }) => {
             if (part.type === 'text-delta' && part.payload.text === '') {
               // Emit accumulated text at stream end
@@ -838,7 +924,8 @@ describe('ProcessorRunner', () => {
     it('should create a readable stream that processes text chunks', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'filterProcessor',
+          id: 'filterProcessor',
+          name: 'Filter Processor',
           processOutputStream: async ({ part }) => {
             // Only process text-delta chunks
             if (part.type === 'text-delta' && part.payload.text?.includes('blocked')) {
@@ -889,7 +976,8 @@ describe('ProcessorRunner', () => {
     it('should emit tripwire when processor aborts stream', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'abortProcessor',
+          id: 'abortProcessor',
+          name: 'Abort Processor',
           processOutputStream: async ({ part, abort }) => {
             // Only process text-delta chunks
             if (part.type === 'text-delta' && part.payload.text?.includes('abort')) {
@@ -935,7 +1023,8 @@ describe('ProcessorRunner', () => {
     it('should pass through non-text chunks unchanged', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'textProcessor',
+          id: 'textProcessor',
+          name: 'Text Processor',
           processOutputStream: async ({ part }) => {
             // Only process text-delta chunks
             if (part.type === 'text-delta') {
@@ -983,6 +1072,166 @@ describe('ProcessorRunner', () => {
       expect(chunks[0]).toEqual({ type: 'text-delta', payload: { text: 'HELLO' } });
       expect(chunks[1]).toEqual({ type: 'tool-call', toolCallId: '123' });
       expect(chunks[2]).toEqual({ type: 'finish' });
+    });
+  });
+
+  /**
+   * Regression test for GitHub Issue #7933
+   * @see https://github.com/mastra-ai/mastra/issues/7933
+   *
+   * Users want access to remembered messages in OutputProcessor.processOutputStream,
+   * similar to how Scorers have access to them. This enables use cases like:
+   * - Checking if output is grounded on tool executions from previous messages
+   * - Using OutputProcessor as guardrails that need conversation context
+   */
+  describe('Issue #7933: Remembered messages in OutputProcessor', () => {
+    it('should provide messageList to processOutputStream for accessing remembered messages', async () => {
+      // Create a MessageList with some remembered messages (from memory)
+      const testMessageList = new MessageList({ threadId: 'test-thread' });
+
+      // Add input message (from user)
+      testMessageList.add([createMessage('current user message', 'user')], 'input');
+
+      // Add remembered messages (from memory - simulating conversation history)
+      const rememberedMsg1 = createMessage('previous user question', 'user');
+      const rememberedMsg2 = createMessage('previous assistant answer with tool call', 'assistant');
+      testMessageList.add([rememberedMsg1, rememberedMsg2], 'memory');
+
+      let receivedMessageList: MessageList | undefined;
+      let rememberedMessagesCount: number | undefined;
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'grounding-check-processor',
+          name: 'Grounding Check Processor',
+          processOutputStream: async ({ part, messageList }) => {
+            // Store the messageList received for assertion
+            receivedMessageList = messageList;
+
+            // Try to access remembered messages (this is what Issue #7933 requests)
+            if (messageList) {
+              const rememberedMessages = messageList.get.remembered.db();
+              rememberedMessagesCount = rememberedMessages.length;
+            }
+
+            return part;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+
+      // Process a stream chunk - this should pass the messageList
+      await runner.processPart(
+        {
+          type: 'text-delta',
+          payload: { text: 'test response', id: '1' },
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+        },
+        processorStates,
+        undefined, // tracingContext
+        undefined, // requestContext
+        testMessageList, // messageList - this parameter needs to be added to processPart
+      );
+
+      // Assert that messageList was passed to processOutputStream
+      expect(receivedMessageList).toBeDefined();
+      expect(receivedMessageList).toBe(testMessageList);
+
+      // Assert that remembered messages are accessible
+      expect(rememberedMessagesCount).toBe(2);
+    });
+
+    it('should allow processOutputStream to check if output is grounded on previous tool calls', async () => {
+      // This simulates the use case described in Issue #7933:
+      // "checking if the content of the answer is grounded on tool executions
+      // made on previous answers by the assistant"
+
+      const testMessageList = new MessageList({ threadId: 'test-thread' });
+
+      // Add a previous assistant message with tool call (remembered from memory)
+      const previousAssistantMessage = {
+        id: `msg-${Math.random()}`,
+        role: 'assistant' as const,
+        content: {
+          format: 2 as const,
+          parts: [{ type: 'text' as const, text: 'Let me search for that information.' }],
+          toolInvocations: [
+            {
+              state: 'result' as const,
+              toolCallId: 'tool-call-1',
+              toolName: 'search_documents',
+              args: { query: 'product pricing' },
+              result: { documents: [{ title: 'Pricing Guide', content: 'Product costs $99' }] },
+            },
+          ],
+        },
+        createdAt: new Date(),
+        threadId: 'test-thread',
+      };
+      testMessageList.add([previousAssistantMessage], 'memory');
+
+      // Add current user input
+      testMessageList.add([createMessage('What is the price?', 'user')], 'input');
+
+      let groundingCheckPassed = false;
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'grounding-validator',
+          name: 'Grounding Validator',
+          processOutputStream: async ({ part, messageList, abort }) => {
+            if (!messageList) {
+              abort('messageList not available - cannot verify grounding');
+            }
+
+            // Get remembered messages to find previous tool calls
+            const rememberedMessages = messageList!.get.remembered.db();
+            const previousToolCalls = rememberedMessages
+              .filter(m => m.role === 'assistant')
+              .flatMap(m => m.content.toolInvocations || []);
+
+            // Check if there are previous tool calls to ground the response
+            if (previousToolCalls.length > 0) {
+              groundingCheckPassed = true;
+            }
+
+            return part;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+
+      await runner.processPart(
+        {
+          type: 'text-delta',
+          payload: { text: 'The product costs $99', id: '1' },
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+        },
+        processorStates,
+        undefined,
+        undefined,
+        testMessageList,
+      );
+
+      expect(groundingCheckPassed).toBe(true);
     });
   });
 });

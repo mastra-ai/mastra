@@ -1,17 +1,7 @@
 import type * as http from 'node:http';
 import type { Context } from 'hono';
 import type { ToolsInput, Agent } from '../agent';
-import type { InternalCoreTool } from '../tools';
 import type { Workflow } from '../workflows';
-
-export type ConvertedTool = {
-  name: string;
-  description?: string;
-  parameters: InternalCoreTool['parameters'];
-  execute: InternalCoreTool['execute'];
-  toolType?: MCPToolType;
-  outputSchema?: InternalCoreTool['parameters'];
-};
 
 interface MCPServerSSEOptionsBase {
   /**
@@ -201,7 +191,7 @@ export interface RemoteInfo {
 
 // +++ Authoritative MCPServerConfig +++
 /** Configuration options for creating an MCPServer instance. */
-export interface MCPServerConfig {
+export interface MCPServerConfig<TId extends string = string> {
   /** The display name of the MCP server. */
   name: string;
   /** The semantic version of the MCP server. */
@@ -223,7 +213,7 @@ export interface MCPServerConfig {
    * If not provided, a UUID will be generated.
    * If provided, this ID is considered final and cannot be changed by Mastra.
    */
-  id?: string;
+  id?: TId;
   /** Optional description of the MCP server. */
   description?: string;
   /** Optional repository information for the server's source code. */
@@ -273,10 +263,3 @@ export interface ServerDetailInfo extends ServerInfo {
   /** Information about remote access points for this server. */
   remotes?: RemoteInfo[];
 }
-
-/**
- * The type of tool registered with the MCP server.
- * This is used to categorize tools in the MCP Server playground.
- * If not specified, it defaults to a regular tool.
- */
-export type MCPToolType = 'agent' | 'workflow';

@@ -1,9 +1,9 @@
 ---
-title: "Example: A Complete Graph RAG System | RAG | Mastra Docs"
+title: "Example: Graph RAG | RAG"
 description: Example of implementing a Graph RAG system in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
 
-import { GithubLink } from "@/components/github-link";
+import GithubLink from "@site/src/components/GithubLink";
 
 # Graph RAG
 
@@ -13,7 +13,7 @@ This example demonstrates how to implement a Retrieval-Augmented Generation (RAG
 
 The system implements Graph RAG using Mastra and OpenAI. Here's what it does:
 
-1. Sets up a Mastra agent with gpt-4o-mini for response generation
+1. Sets up a Mastra agent with gpt-5.1 for response generation
 2. Creates a GraphRAG tool to manage vector store interactions and knowledge graph creation/traversal
 3. Chunks text documents into smaller segments
 4. Creates embeddings for these chunks
@@ -29,7 +29,7 @@ The system implements Graph RAG using Mastra and OpenAI. Here's what it does:
 
 Make sure to set up your environment variables:
 
-```bash filename=".env"
+```bash title=".env"
 OPENAI_API_KEY=your_openai_api_key_here
 POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
@@ -38,10 +38,10 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 
 Then, import the necessary dependencies:
 
-```typescript copy showLineNumbers filename="index.ts"
-import { openai } from "@ai-sdk/openai";
+```typescript copy showLineNumbers title="index.ts"
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { PgVector } from "@mastra/pg";
 import { MDocument, createGraphRAGTool } from "@mastra/rag";
 import { embedMany } from "ai";
@@ -51,11 +51,11 @@ import { embedMany } from "ai";
 
 Using createGraphRAGTool imported from @mastra/rag, you can create a tool that queries the vector database and converts the results into a knowledge graph:
 
-```typescript copy showLineNumbers{8} filename="index.ts"
+```typescript copy showLineNumbers{8} title="index.ts"
 const graphRagTool = createGraphRAGTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   graphOptions: {
     dimension: 1536,
     threshold: 0.7,
@@ -67,8 +67,9 @@ const graphRagTool = createGraphRAGTool({
 
 Set up the Mastra agent that will handle the responses:
 
-```typescript copy showLineNumbers{19} filename="index.ts"
+```typescript copy showLineNumbers{19} title="index.ts"
 const ragAgent = new Agent({
+  id: "rag-agent",
   name: "GraphRAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context. Format your answers as follows:
 
@@ -78,9 +79,9 @@ const ragAgent = new Agent({
 
 Keep each section brief and focus on the most important points.
 
-Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
+Important: When asked to answer a question, please base your answer only on the context provided in the tool.
 If the context doesn't contain enough information to fully answer the question, please state that explicitly.`,
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-5.1",
   tools: {
     graphRagTool,
   },
@@ -91,8 +92,9 @@ If the context doesn't contain enough information to fully answer the question, 
 
 Instantiate PgVector and Mastra with the components:
 
-```typescript copy showLineNumbers{36} filename="index.ts"
+```typescript copy showLineNumbers{36} title="index.ts"
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
@@ -107,7 +109,7 @@ const agent = mastra.getAgent("ragAgent");
 
 Create a document and process it into chunks:
 
-```typescript copy showLineNumbers{45} filename="index.ts"
+```typescript copy showLineNumbers{45} title="index.ts"
 const doc = MDocument.fromText(`
 # Riverdale Heights: Community Development Study
 // ... text content ...
@@ -125,9 +127,9 @@ const chunks = await doc.chunk({
 
 Generate embeddings for the chunks and store them in the vector database:
 
-```typescript copy showLineNumbers{56} filename="index.ts"
+```typescript copy showLineNumbers{56} title="index.ts"
 const { embeddings } = await embedMany({
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   values: chunks.map((chunk) => chunk.text),
 });
 
@@ -147,7 +149,7 @@ await vectorStore.upsert({
 
 Try different queries to explore relationships in the data:
 
-```typescript copy showLineNumbers{82} filename="index.ts"
+```typescript copy showLineNumbers{82} title="index.ts"
 const queryOne =
   "What are the direct and indirect effects of early railway decisions on Riverdale Heights' current state?";
 const answerOne = await ragAgent.generate(queryOne);
@@ -179,7 +181,7 @@ console.log("Response:", answerFour.text);
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/graph-rag"
   }
 />

@@ -34,8 +34,8 @@ export interface AgentBuilderConfig {
  * Options for generating agents with AgentBuilder
  */
 export interface GenerateAgentOptions {
-  /** Runtime context for the generation */
-  runtimeContext?: any;
+  /** Request Context for the generation */
+  requestContext?: any;
   /** Output format preference */
   outputFormat?: 'code' | 'explanation' | 'both';
 }
@@ -105,6 +105,7 @@ export const AgentBuilderInputSchema = z.object({
   ref: z.string().optional().describe('Tag/branch/commit to checkout (defaults to main/master)'),
   slug: z.string().optional().describe('Slug for branch/scripts; defaults to inferred from repo'),
   targetPath: z.string().optional().describe('Project path to merge into; defaults to current directory'),
+  variables: z.record(z.string()).optional().describe('Environment variables to set in .env file'),
 });
 
 export const MergePlanSchema = z.object({
@@ -140,6 +141,7 @@ export const FileCopyInputSchema = z.object({
   commitSha: z.string(),
   slug: z.string(),
   targetPath: z.string().optional(),
+  variables: z.record(z.string()).optional(),
 });
 
 export const FileCopyResultSchema = z.object({
@@ -183,6 +185,7 @@ export const ValidationResultsSchema = z.object({
   valid: z.boolean(),
   errorsFixed: z.number(),
   remainingErrors: z.number(),
+  errors: z.array(z.any()).optional(), // Include specific validation errors
 });
 
 export const ValidationFixInputSchema = z.object({
@@ -238,6 +241,7 @@ export const CloneTemplateResultSchema = z.object({
   slug: z.string(),
   success: z.boolean().optional(),
   error: z.string().optional(),
+  targetPath: z.string().optional(),
 });
 
 // Package analysis schemas and types

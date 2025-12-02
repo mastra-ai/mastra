@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { weatherAgent } from './agents/weather';
 import { myMcpServer } from './mcp';
 import { workflows } from './workflows';
@@ -10,8 +10,5 @@ export const mastra = new Mastra({
   workflows,
   mcpServers: {
     myMcpServer,
-  },
-  server: {
-    port: 4199,
   },
 });

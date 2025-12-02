@@ -12,6 +12,7 @@ import type {
   QueryVectorParams,
   UpdateVectorParams,
   UpsertVectorParams,
+  DeleteVectorsParams,
 } from '@mastra/core/vector';
 
 import { MastraVector } from '@mastra/core/vector';
@@ -64,8 +65,8 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
    * const store = await LanceVectorStore.create('s3://bucket/db', { storageOptions: { timeout: '60s' } });
    * ```
    */
-  public static async create(uri: string, options?: ConnectionOptions): Promise<LanceVectorStore> {
-    const instance = new LanceVectorStore();
+  public static async create(uri: string, options?: ConnectionOptions & { id: string }): Promise<LanceVectorStore> {
+    const instance = new LanceVectorStore(options?.id || crypto.randomUUID());
     try {
       instance.lanceClient = await connect(uri, options);
       return instance;
@@ -86,8 +87,8 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
    * @internal
    * Private constructor to enforce using the create factory method
    */
-  private constructor() {
-    super();
+  private constructor(id: string) {
+    super({ id });
   }
 
   close() {
@@ -718,7 +719,50 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
     }
   }
 
-  async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+  async updateVector(params: UpdateVectorParams<LanceVectorFilter>): Promise<void> {
+    const { indexName, update } = params;
+
+    // Validate mutually exclusive parameters
+    if ('id' in params && 'filter' in params && params.id && params.filter) {
+      throw new MastraError({
+        id: 'STORAGE_LANCE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'id and filter are mutually exclusive',
+        details: { indexName },
+      });
+    }
+
+    if (!('id' in params || 'filter' in params) || (!params.id && !params.filter)) {
+      throw new MastraError({
+        id: 'STORAGE_LANCE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Either id or filter must be provided',
+        details: { indexName },
+      });
+    }
+
+    if ('filter' in params && params.filter && Object.keys(params.filter).length === 0) {
+      throw new MastraError({
+        id: 'STORAGE_LANCE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Cannot update with empty filter',
+        details: { indexName },
+      });
+    }
+
+    if (!update.vector && !update.metadata) {
+      throw new MastraError({
+        id: 'STORAGE_LANCE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'No updates provided',
+        details: { indexName },
+      });
+    }
+
     try {
       if (!this.lanceClient) {
         throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
@@ -728,22 +772,6 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         throw new Error('indexName is required');
       }
 
-      if (!id) {
-        throw new Error('id is required');
-      }
-    } catch (err) {
-      throw new MastraError(
-        {
-          id: 'STORAGE_LANCE_VECTOR_UPDATE_VECTOR_FAILED_INVALID_ARGS',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { indexName, id },
-        },
-        err,
-      );
-    }
-
-    try {
       // In LanceDB, the indexName is actually a column name in a table
       // We need to find which table has this column as an index
       const tables = await this.lanceClient.tableNames();
@@ -759,61 +787,90 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           if (hasColumn) {
             this.logger.debug(`Found column ${indexName} in table ${tableName}`);
 
-            // First, query the existing record to preserve values that aren't being updated
-            const existingRecord = await table
+            let whereClause: string;
+            if ('id' in params && params.id) {
+              whereClause = `id = '${params.id}'`;
+            } else if ('filter' in params && params.filter) {
+              // Use filter translator to build SQL WHERE clause
+              const translator = new LanceFilterTranslator();
+              const processFilterKeys = (filter: Record<string, any>): Record<string, any> => {
+                const processedFilter: Record<string, any> = {};
+                Object.entries(filter).forEach(([key, value]) => {
+                  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                    Object.entries(value).forEach(([nestedKey, nestedValue]) => {
+                      processedFilter[`metadata_${key}_${nestedKey}`] = nestedValue;
+                    });
+                  } else {
+                    processedFilter[`metadata_${key}`] = value;
+                  }
+                });
+                return processedFilter;
+              };
+
+              const prefixedFilter = processFilterKeys(params.filter as Record<string, any>);
+              whereClause = translator.translate(prefixedFilter) || '';
+
+              if (!whereClause) {
+                throw new Error('Failed to translate filter to SQL');
+              }
+            } else {
+              throw new Error('Either id or filter must be provided');
+            }
+
+            // Query for existing records that match
+            const existingRecords = await table
               .query()
-              .where(`id = '${id}'`)
+              .where(whereClause)
               .select(schema.fields.map(field => field.name))
-              .limit(1)
               .toArray();
 
-            if (existingRecord.length === 0) {
-              throw new Error(`Record with id '${id}' not found in table ${tableName}`);
+            if (existingRecords.length === 0) {
+              this.logger.info(`No records found matching criteria in table ${tableName}`);
+              return;
             }
 
-            // Create a clean data object for update
-            const rowData: Record<string, any> = {
-              id,
-            };
+            // Update each matching record
+            const updatedRecords = existingRecords.map(record => {
+              const rowData: Record<string, any> = {};
 
-            // Copy all existing field values except special fields
-            Object.entries(existingRecord[0]).forEach(([key, value]) => {
-              // Skip special fields
-              if (key !== 'id' && key !== '_distance') {
-                // Handle vector field specially to avoid nested properties
-                if (key === indexName) {
-                  // If we're about to update this vector anyway, skip copying
-                  if (!update.vector) {
-                    // Ensure vector is a plain array
-                    if (Array.isArray(value)) {
-                      rowData[key] = [...value];
-                    } else if (typeof value === 'object' && value !== null) {
-                      // Handle vector objects by converting to array if needed
-                      rowData[key] = Array.from(value as any[]);
+              // Copy all existing field values except special fields
+              Object.entries(record).forEach(([key, value]) => {
+                // Skip special fields
+                if (key !== '_distance') {
+                  // Handle vector field specially to avoid nested properties
+                  if (key === indexName) {
+                    // If we're about to update this vector anyway, use the new value
+                    if (update.vector) {
+                      rowData[key] = update.vector;
                     } else {
-                      rowData[key] = value;
+                      // Ensure vector is a plain array
+                      if (Array.isArray(value)) {
+                        rowData[key] = [...value];
+                      } else if (typeof value === 'object' && value !== null) {
+                        // Handle vector objects by converting to array if needed
+                        rowData[key] = Array.from(value as any[]);
+                      } else {
+                        rowData[key] = value;
+                      }
                     }
+                  } else {
+                    rowData[key] = value;
                   }
-                } else {
-                  rowData[key] = value;
                 }
+              });
+
+              // Apply metadata updates if provided
+              if (update.metadata) {
+                Object.entries(update.metadata).forEach(([key, value]) => {
+                  rowData[`metadata_${key}`] = value;
+                });
               }
+
+              return rowData;
             });
 
-            // Apply the vector update if provided
-            if (update.vector) {
-              rowData[indexName] = update.vector;
-            }
-
-            // Apply metadata updates if provided
-            if (update.metadata) {
-              Object.entries(update.metadata).forEach(([key, value]) => {
-                rowData[`metadata_${key}`] = value;
-              });
-            }
-
-            // Update the record
-            await table.add([rowData], { mode: 'overwrite' });
+            // Update all records
+            await table.add(updatedRecords, { mode: 'overwrite' });
             return;
           }
         } catch (err) {
@@ -825,12 +882,19 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
       throw new Error(`No table found with column/index '${indexName}'`);
     } catch (error: any) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: 'STORAGE_LANCE_VECTOR_UPDATE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id, hasVector: !!update.vector, hasMetadata: !!update.metadata },
+          details: {
+            indexName,
+            ...('id' in params && params.id && { id: params.id }),
+            ...('filter' in params && params.filter && { filter: JSON.stringify(params.filter) }),
+            hasVector: !!update.vector,
+            hasMetadata: !!update.metadata,
+          },
         },
         error,
       );
@@ -856,7 +920,10 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           id: 'STORAGE_LANCE_VECTOR_DELETE_VECTOR_FAILED_INVALID_ARGS',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
         },
         err,
       );
@@ -895,7 +962,10 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           id: 'STORAGE_LANCE_VECTOR_DELETE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
         },
         error,
       );
@@ -937,5 +1007,131 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
     });
 
     return result;
+  }
+
+  async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams<LanceVectorFilter>): Promise<void> {
+    // Validate mutually exclusive parameters
+    if (ids && filter) {
+      throw new MastraError({
+        id: 'STORAGE_LANCE_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'ids and filter are mutually exclusive',
+        details: { indexName },
+      });
+    }
+
+    if (!ids && !filter) {
+      throw new MastraError({
+        id: 'STORAGE_LANCE_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Either filter or ids must be provided',
+        details: { indexName },
+      });
+    }
+
+    // Validate non-empty arrays and objects
+    if (ids && ids.length === 0) {
+      throw new MastraError({
+        id: 'STORAGE_LANCE_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Cannot delete with empty ids array',
+        details: { indexName },
+      });
+    }
+
+    if (filter && Object.keys(filter).length === 0) {
+      throw new MastraError({
+        id: 'STORAGE_LANCE_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Cannot delete with empty filter',
+        details: { indexName },
+      });
+    }
+
+    try {
+      if (!this.lanceClient) {
+        throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
+      }
+
+      if (!indexName) {
+        throw new Error('indexName is required');
+      }
+
+      // In LanceDB, the indexName is actually a column name in a table
+      // We need to find which table has this column as an index
+      const tables = await this.lanceClient.tableNames();
+
+      for (const tableName of tables) {
+        this.logger.debug('Checking table:' + tableName);
+        const table = await this.lanceClient.openTable(tableName);
+
+        try {
+          const schema = await table.schema();
+          const hasColumn = schema.fields.some(field => field.name === indexName);
+
+          if (hasColumn) {
+            this.logger.debug(`Found column ${indexName} in table ${tableName}`);
+
+            if (ids) {
+              // Delete by IDs
+              const idsConditions = ids.map(id => `id = '${id}'`).join(' OR ');
+              await table.delete(idsConditions);
+            } else if (filter) {
+              // Delete by filter using SQL WHERE clause
+              const translator = new LanceFilterTranslator();
+              const processFilterKeys = (filter: Record<string, any>): Record<string, any> => {
+                const processedFilter: Record<string, any> = {};
+                Object.entries(filter).forEach(([key, value]) => {
+                  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                    Object.entries(value).forEach(([nestedKey, nestedValue]) => {
+                      processedFilter[`metadata_${key}_${nestedKey}`] = nestedValue;
+                    });
+                  } else {
+                    processedFilter[`metadata_${key}`] = value;
+                  }
+                });
+                return processedFilter;
+              };
+
+              const prefixedFilter = processFilterKeys(filter as Record<string, any>);
+              const whereClause = translator.translate(prefixedFilter);
+
+              if (!whereClause) {
+                throw new Error('Failed to translate filter to SQL');
+              }
+
+              await table.delete(whereClause);
+            }
+
+            return;
+          }
+        } catch (err) {
+          this.logger.error(`Error checking schema for table ${tableName}:` + err);
+          // Continue to the next table if there's an error
+          continue;
+        }
+      }
+
+      throw new Error(`No table found with column/index '${indexName}'`);
+    } catch (error: any) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_DELETE_VECTORS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            ...(filter && { filter: JSON.stringify(filter) }),
+            ...(ids && { idsCount: ids.length }),
+          },
+        },
+        error,
+      );
+    }
   }
 }

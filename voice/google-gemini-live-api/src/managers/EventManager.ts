@@ -1,4 +1,4 @@
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'node:events';
 // Make the event manager generic over an event map
 export type EventMap = Record<string, unknown>;
 
@@ -141,7 +141,7 @@ export class EventManager<TEvents extends EventMap = Record<string, unknown>> {
    */
   private log(message: string, ...args: unknown[]): void {
     if (this.debug) {
-      console.log(`[EventManager] ${message}`, ...args);
+      console.info(`[EventManager] ${message}`, ...args);
     }
   }
 }

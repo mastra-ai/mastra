@@ -1,9 +1,9 @@
 ---
-title: Turn Taking
+title: "Example: AI Debate with Turn Taking | Voice"
 description: Example of using Mastra to create a multi-agent debate with turn-taking conversation flow.
 ---
 
-import { GithubLink } from "@/components/github-link";
+import GithubLink from "@site/src/components/GithubLink";
 
 # AI Debate with Turn Taking
 
@@ -13,26 +13,27 @@ The following code snippets demonstrate how to implement a multi-agent conversat
 
 First, we need to create two agents with distinct personalities and voice capabilities:
 
-```typescript filename="src/mastra/agents/index.ts"
-import { openai } from "@ai-sdk/openai";
+```typescript title="src/mastra/agents/index.ts"
 import { Agent } from "@mastra/core/agent";
 import { OpenAIVoice } from "@mastra/voice-openai";
 
 export const optimistAgent = new Agent({
+  id: "optimist-agent",
   name: "Optimist",
   instructions:
     "You are an optimistic debater who sees the positive side of every topic. Keep your responses concise and engaging, about 2-3 sentences.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new OpenAIVoice({
     speaker: "alloy",
   }),
 });
 
 export const skepticAgent = new Agent({
+  id: "skeptic-agent",
   name: "Skeptic",
   instructions:
     "You are a RUDE skeptical debater who questions assumptions and points out potential issues. Keep your responses concise and engaging, about 2-3 sentences.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new OpenAIVoice({
     speaker: "echo",
   }),
@@ -43,9 +44,9 @@ export const skepticAgent = new Agent({
 
 Next, register both agents with your Mastra instance:
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 import { PinoLogger } from "@mastra/loggers";
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { optimistAgent, skepticAgent } from "./agents";
 
 export const mastra = new Mastra({
@@ -64,7 +65,7 @@ export const mastra = new Mastra({
 
 This example demonstrates how to manage the turn-taking flow between agents, ensuring each agent responds to the previous agent's statements:
 
-```typescript filename="src/debate/turn-taking.ts"
+```typescript title="src/debate/turn-taking.ts"
 import { mastra } from "../../mastra";
 import { playAudio, Recorder } from "@mastra/node-audio";
 import * as p from "@clack/prompts";
@@ -209,7 +210,7 @@ export async function runDebate(topic: string, turns: number = 3) {
 
 Here's a simple script to run the debate from the command line:
 
-```typescript filename="src/index.ts"
+```typescript title="src/index.ts"
 import { runDebate } from "./debate/turn-taking";
 import * as p from "@clack/prompts";
 
@@ -265,7 +266,7 @@ main().catch((error) => {
 
 For web applications, you can create a simple Next.js component that allows users to start a debate and listen to the agents' responses:
 
-```tsx filename="app/components/DebateInterface.tsx"
+```tsx title="app/components/DebateInterface.tsx"
 "use client";
 
 import { useState, useRef } from "react";
@@ -388,7 +389,7 @@ export default function DebateInterface() {
 
   return (
     <div className="max-w-4xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">AI Debate with Turn Taking</h1>
+      <h1 className="text-2xl font-semibold mb-4">AI Debate with Turn Taking</h1>
 
       <div className="mb-6">
         <label className="block mb-2">Debate Topic:</label>
@@ -436,7 +437,7 @@ export default function DebateInterface() {
                 }`}
               >
                 <div className="flex justify-between items-center">
-                  <div className="font-bold">{response.agent}:</div>
+                  <div className="font-semibold">{response.agent}:</div>
                   <button
                     onClick={() => playAudio(response.text, response.agent)}
                     disabled={isPlaying}
@@ -466,7 +467,7 @@ You can view the complete implementation of the AI Debate with Turn Taking on ou
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech/turn-taking"
   }
 />

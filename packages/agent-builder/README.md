@@ -1,5 +1,7 @@
 # @mastra/agent-builder
 
+This package is currently experimental and only meant to be used internally to Mastra at the moment, the APIs are subject to change in this period.
+
 A specialized AI agent for building production-ready Mastra applications, agents, tools, and workflows from natural language requirements.
 
 ## Installation
@@ -39,9 +41,7 @@ const builder = new AgentBuilder({
 });
 
 // Generate an agent from natural language
-const result = await builder.generateAgent(
-  'Create a weather agent that can get current weather and suggest activities',
-);
+const result = await builder.generate({ ... })
 ```
 
 ## Configuration
@@ -90,7 +90,3 @@ The AgentBuilder includes specialized memory processors:
 2. **Use Project Context**: Let the agent explore your existing codebase structure
 3. **Validate Output**: Always run the validation tools after code generation
 4. **Iterative Development**: Start with simple agents and add complexity incrementally
-
-## License
-
-Apache-2.0

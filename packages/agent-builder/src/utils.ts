@@ -1,13 +1,13 @@
-import { exec as execNodejs, execFile as execFileNodejs, spawn as nodeSpawn } from 'child_process';
-import type { SpawnOptions } from 'child_process';
-import { existsSync, readFileSync } from 'fs';
-import { copyFile } from 'fs/promises';
-import { createRequire } from 'module';
-import { dirname, basename, extname, resolve } from 'path';
-import { promisify } from 'util';
-import { openai as openai_v5 } from '@ai-sdk/openai_v5';
+import { exec as execNodejs, execFile as execFileNodejs, spawn as nodeSpawn } from 'node:child_process';
+import type { SpawnOptions } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { copyFile, readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { dirname, basename, extname, resolve, join } from 'node:path';
+import { promisify } from 'node:util';
 import type { MastraLanguageModel } from '@mastra/core/agent';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import { ModelRouterLanguageModel } from '@mastra/core/llm';
+import type { RequestContext } from '@mastra/core/request-context';
 import { UNIT_KINDS } from './types';
 import type { UnitKind } from './types';
 
@@ -37,7 +37,7 @@ function isInWorkspaceSubfolder(cwd: string): boolean {
         continue;
       }
 
-      console.log(`Checking for workspace indicators in: ${currentDir}`);
+      console.info(`Checking for workspace indicators in: ${currentDir}`);
 
       // Check for pnpm workspace
       if (existsSync(resolve(currentDir, 'pnpm-workspace.yaml'))) {
@@ -65,7 +65,7 @@ function isInWorkspaceSubfolder(cwd: string): boolean {
 
     return false;
   } catch (error) {
-    console.log(`Error in workspace detection: ${error}`);
+    console.warn(`Error in workspace detection: ${error}`);
     return false; // Default to false on any error
   }
 }
@@ -148,12 +148,12 @@ export function spawnWithOutput(
 export async function spawnSWPM(cwd: string, command: string, packageNames: string[]) {
   // 1) Try local swpm module resolution/execution
   try {
-    console.log('Running install command with swpm');
+    console.info('Running install command with swpm');
     const swpmPath = createRequire(import.meta.filename).resolve('swpm');
     await spawn(swpmPath, [command, ...packageNames], { cwd });
     return;
   } catch (e) {
-    console.log('Failed to run install command with swpm', e);
+    console.warn('Failed to run install command with swpm', e);
     // ignore and try fallbacks
   }
 
@@ -195,11 +195,11 @@ export async function spawnSWPM(cwd: string, command: string, packageNames: stri
     }
     args.push(...packageNames);
 
-    console.log(`Falling back to ${packageManager} ${args.join(' ')}`);
+    console.info(`Falling back to ${packageManager} ${args.join(' ')}`);
     await spawn(packageManager, args, { cwd });
     return;
   } catch (e) {
-    console.log(`Failed to run install command with native package manager: ${e}`);
+    console.warn(`Failed to run install command with native package manager: ${e}`);
   }
 
   throw new Error(`Failed to run install command with swpm and native package managers`);
@@ -261,10 +261,10 @@ export async function logGitState(targetPath: string, label: string): Promise<vo
     const gitLogResult = await git(targetPath, 'log', '--oneline', '-3');
     const gitCountResult = await git(targetPath, 'rev-list', '--count', 'HEAD');
 
-    console.log(`📊 Git state ${label}:`);
-    console.log('Status:', gitStatusResult.stdout.trim() || 'Clean working directory');
-    console.log('Recent commits:', gitLogResult.stdout.trim());
-    console.log('Total commits:', gitCountResult.stdout.trim());
+    console.info(`📊 Git state ${label}:`);
+    console.info('Status:', gitStatusResult.stdout.trim() || 'Clean working directory');
+    console.info('Recent commits:', gitLogResult.stdout.trim());
+    console.info('Total commits:', gitCountResult.stdout.trim());
   } catch (gitError) {
     console.warn(`Could not get git state ${label}:`, gitError);
   }
@@ -358,7 +358,7 @@ export async function gitCheckoutBranch(branchName: string, targetPath: string) 
     if (!(await isInsideGitRepo(targetPath))) return;
     // Try to create new branch using centralized git runner
     await git(targetPath, 'checkout', '-b', branchName);
-    console.log(`Created new branch: ${branchName}`);
+    console.info(`Created new branch: ${branchName}`);
   } catch (error) {
     // If branch exists, check if we can switch to it or create a unique name
     const errorStr = error instanceof Error ? error.message : String(error);
@@ -366,13 +366,13 @@ export async function gitCheckoutBranch(branchName: string, targetPath: string) 
       try {
         // Try to switch to existing branch
         await git(targetPath, 'checkout', branchName);
-        console.log(`Switched to existing branch: ${branchName}`);
+        console.info(`Switched to existing branch: ${branchName}`);
       } catch {
         // If can't switch, create a unique branch name
         const timestamp = Date.now().toString().slice(-6);
         const uniqueBranchName = `${branchName}-${timestamp}`;
         await git(targetPath, 'checkout', '-b', uniqueBranchName);
-        console.log(`Created unique branch: ${uniqueBranchName}`);
+        console.info(`Created unique branch: ${uniqueBranchName}`);
       }
     } else {
       throw error; // Re-throw if it's a different error
@@ -385,11 +385,11 @@ export async function backupAndReplaceFile(sourceFile: string, targetFile: strin
   // Create backup of existing file
   const backupFile = `${targetFile}.backup-${Date.now()}`;
   await copyFile(targetFile, backupFile);
-  console.log(`📦 Created backup: ${basename(backupFile)}`);
+  console.info(`📦 Created backup: ${basename(backupFile)}`);
 
   // Replace with template file
   await copyFile(sourceFile, targetFile);
-  console.log(`🔄 Replaced file with template version (backup created)`);
+  console.info(`🔄 Replaced file with template version (backup created)`);
 }
 
 export async function renameAndCopyFile(sourceFile: string, targetFile: string): Promise<string> {
@@ -407,15 +407,275 @@ export async function renameAndCopyFile(sourceFile: string, targetFile: string):
   }
 
   await copyFile(sourceFile, uniqueTargetFile);
-  console.log(`📝 Copied with unique name: ${basename(uniqueTargetFile)}`);
+  console.info(`📝 Copied with unique name: ${basename(uniqueTargetFile)}`);
   return uniqueTargetFile;
 }
 
-// Helper function to resolve the model to use
-export const resolveModel = (runtimeContext: RuntimeContext): MastraLanguageModel => {
-  const modelFromContext = runtimeContext.get('model');
+// Type guard to check if object is a valid MastraLanguageModel
+export const isValidMastraLanguageModel = (model: any): model is MastraLanguageModel => {
+  return model && typeof model === 'object' && typeof model.modelId === 'string';
+};
+
+// Helper function to resolve target path with smart defaults
+export const resolveTargetPath = (inputData: any, requestContext: any): string => {
+  // If explicitly provided, use it
+  if (inputData.targetPath) {
+    return inputData.targetPath;
+  }
+
+  // Check request context
+  const contextPath = requestContext.get('targetPath');
+  if (contextPath) {
+    return contextPath;
+  }
+
+  // Smart resolution logic from prepareAgentBuilderWorkflowInstallation
+  const envRoot = process.env.MASTRA_PROJECT_ROOT?.trim();
+  if (envRoot) {
+    return envRoot;
+  }
+
+  const cwd = process.cwd();
+  const parent = dirname(cwd);
+  const grand = dirname(parent);
+
+  // Detect when running under `<project>/.mastra/output` and resolve back to project root
+  if (basename(cwd) === 'output' && basename(parent) === '.mastra') {
+    return grand;
+  }
+
+  return cwd;
+};
+
+// Helper function to merge .gitignore files intelligently
+export const mergeGitignoreFiles = (targetContent: string, templateContent: string, templateSlug: string): string => {
+  // Normalize line endings and split into lines
+  const targetLines = targetContent.replace(/\r\n/g, '\n').split('\n');
+  const templateLines = templateContent.replace(/\r\n/g, '\n').split('\n');
+
+  // Parse existing target entries (normalize for comparison)
+  const existingEntries = new Set<string>();
+
+  for (const line of targetLines) {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      // Normalize path for comparison (remove leading ./, handle different separators)
+      const normalized = trimmed.replace(/^\.\//, '').replace(/\\/g, '/');
+      existingEntries.add(normalized);
+    }
+  }
+
+  // Extract new entries from template that don't already exist
+  const newEntries: string[] = [];
+  for (const line of templateLines) {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      const normalized = trimmed.replace(/^\.\//, '').replace(/\\/g, '/');
+      if (!existingEntries.has(normalized)) {
+        // Check for conflicts (e.g., !file vs file)
+        const isNegation = normalized.startsWith('!');
+        const basePath = isNegation ? normalized.slice(1) : normalized;
+        const hasConflict = isNegation ? existingEntries.has(basePath) : existingEntries.has('!' + basePath);
+
+        if (!hasConflict) {
+          newEntries.push(trimmed);
+        } else {
+          console.info(`⚠ Skipping conflicting .gitignore rule: ${trimmed} (conflicts with existing rule)`);
+        }
+      }
+    }
+  }
+
+  // If no new entries, return original content
+  if (newEntries.length === 0) {
+    return targetContent;
+  }
+
+  // Build merged content
+  const result: string[] = [...targetLines];
+
+  // Add a blank line if the file doesn't end with one
+  const lastLine = result[result.length - 1];
+  if (result.length > 0 && lastLine && lastLine.trim() !== '') {
+    result.push('');
+  }
+
+  // Add template section header
+  result.push(`# Added by template: ${templateSlug}`);
+  result.push(...newEntries);
+
+  return result.join('\n');
+};
+
+// Helper function to merge .env files intelligently
+export const mergeEnvFiles = (
+  targetContent: string,
+  templateVariables: Record<string, string>,
+  templateSlug: string,
+): string => {
+  // Parse existing target .env file
+  const targetLines = targetContent.replace(/\r\n/g, '\n').split('\n');
+  const existingVars = new Set<string>();
+
+  // Extract existing variable names (handle comments and empty lines)
+  for (const line of targetLines) {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      const equalIndex = trimmed.indexOf('=');
+      if (equalIndex > 0) {
+        const varName = trimmed.substring(0, equalIndex).trim();
+        existingVars.add(varName);
+      }
+    }
+  }
+
+  // Filter out variables that already exist
+  const newVars: Array<{ key: string; value: string }> = [];
+  for (const [key, value] of Object.entries(templateVariables)) {
+    if (!existingVars.has(key)) {
+      newVars.push({ key, value });
+    } else {
+      console.info(`⚠ Skipping existing environment variable: ${key} (already exists in .env)`);
+    }
+  }
+
+  // If no new variables, return original content
+  if (newVars.length === 0) {
+    return targetContent;
+  }
+
+  // Build merged content
+  const result: string[] = [...targetLines];
+
+  // Add a blank line if the file doesn't end with one
+  const lastLine = result[result.length - 1];
+  if (result.length > 0 && lastLine && lastLine.trim() !== '') {
+    result.push('');
+  }
+
+  // Add template section header
+  result.push(`# Added by template: ${templateSlug}`);
+
+  // Add new environment variables
+  for (const { key, value } of newVars) {
+    result.push(`${key}=${value}`);
+  }
+
+  return result.join('\n');
+};
+
+// Helper function to detect AI SDK version from package.json
+export const detectAISDKVersion = async (projectPath: string): Promise<'v1' | 'v2'> => {
+  try {
+    const packageJsonPath = join(projectPath, 'package.json');
+
+    if (!existsSync(packageJsonPath)) {
+      console.info('No package.json found, defaulting to v2');
+      return 'v2';
+    }
+
+    const packageContent = await readFile(packageJsonPath, 'utf-8');
+    const packageJson = JSON.parse(packageContent);
+
+    const allDeps = {
+      ...packageJson.dependencies,
+      ...packageJson.devDependencies,
+      ...packageJson.peerDependencies,
+    };
+
+    // Check individual provider packages for version hints
+    const providerPackages = ['@ai-sdk/openai', '@ai-sdk/anthropic', '@ai-sdk/google', '@ai-sdk/groq', '@ai-sdk/xai'];
+    for (const pkg of providerPackages) {
+      const version = allDeps[pkg];
+      if (version) {
+        const versionMatch = version.match(/(\d+)/);
+        if (versionMatch) {
+          const majorVersion = parseInt(versionMatch[1]);
+          if (majorVersion >= 2) {
+            console.info(`Detected ${pkg} v${majorVersion} -> using v2 specification`);
+            return 'v2';
+          } else {
+            console.info(`Detected ${pkg} v${majorVersion} -> using v1 specification`);
+            return 'v1';
+          }
+        }
+      }
+    }
+
+    console.info('No AI SDK version detected, defaulting to v2');
+    return 'v2';
+  } catch (error) {
+    console.warn(`Failed to detect AI SDK version: ${error instanceof Error ? error.message : String(error)}`);
+    return 'v2';
+  }
+};
+
+// Helper function to create model instance based on provider and version
+export const createModelInstance = async (
+  provider: string,
+  modelId: string,
+  version: 'v1' | 'v2' = 'v2',
+): Promise<MastraLanguageModel | null> => {
+  try {
+    // Dynamic imports to avoid issues if packages aren't available
+    const providerMap = {
+      v1: {
+        openai: async () => {
+          const { openai } = await import('@ai-sdk/openai');
+          return openai(modelId);
+        },
+        anthropic: async () => {
+          const { anthropic } = await import('@ai-sdk/anthropic');
+          return anthropic(modelId);
+        },
+        groq: async () => {
+          const { groq } = await import('@ai-sdk/groq');
+          return groq(modelId);
+        },
+        xai: async () => {
+          const { xai } = await import('@ai-sdk/xai');
+          return xai(modelId);
+        },
+        google: async () => {
+          const { google } = await import('@ai-sdk/google');
+          return google(modelId);
+        },
+      },
+    };
+
+    const providerFn =
+      version === `v1`
+        ? providerMap[version][provider as keyof (typeof providerMap)[typeof version]]
+        : () => new ModelRouterLanguageModel(`${provider}/${modelId}`);
+
+    if (!providerFn) {
+      console.error(`Unsupported provider: ${provider}`);
+      return null;
+    }
+
+    const modelInstance = await providerFn();
+    console.info(`Created ${provider} model instance (${version}): ${modelId}`);
+    return modelInstance;
+  } catch (error) {
+    console.error(`Failed to create model instance: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+};
+
+// Helper function to resolve model from request context with AI SDK version detection
+export const resolveModel = async ({
+  requestContext,
+  defaultModel = 'openai/gpt-4.1',
+  projectPath,
+}: {
+  requestContext: RequestContext;
+  defaultModel?: MastraLanguageModel | string;
+  projectPath?: string;
+}): Promise<MastraLanguageModel> => {
+  // First try to get model from request context
+  const modelFromContext = requestContext.get('model');
   if (modelFromContext) {
-    console.log(`Using model: ${modelFromContext}`);
+    console.info('Using model from request context');
     // Type check to ensure it's a MastraLanguageModel
     if (isValidMastraLanguageModel(modelFromContext)) {
       return modelFromContext;
@@ -424,12 +684,24 @@ export const resolveModel = (runtimeContext: RuntimeContext): MastraLanguageMode
       'Invalid model provided. Model must be a MastraLanguageModel instance (e.g., openai("gpt-4"), anthropic("claude-3-5-sonnet"), etc.)',
     );
   }
-  return openai_v5('gpt-4.1'); // Default model
-};
 
-// Type guard to check if object is a valid MastraLanguageModel
-export const isValidMastraLanguageModel = (model: any): model is MastraLanguageModel => {
-  return (
-    model && typeof model === 'object' && typeof model.modelId === 'string' && typeof model.generate === 'function'
-  );
+  // Check for selected model info in request context
+  const selectedModel = requestContext.get('selectedModel') as { provider: string; modelId: string } | undefined;
+  if (selectedModel?.provider && selectedModel?.modelId && projectPath) {
+    console.info(`Resolving selected model: ${selectedModel.provider}/${selectedModel.modelId}`);
+
+    // Detect AI SDK version from project
+    const version = await detectAISDKVersion(projectPath);
+
+    // Create model instance with detected version
+    const modelInstance = await createModelInstance(selectedModel.provider, selectedModel.modelId, version);
+    if (modelInstance) {
+      // Store resolved model back in context for other steps to use
+      requestContext.set('model', modelInstance);
+      return modelInstance;
+    }
+  }
+
+  console.info('Using default model');
+  return typeof defaultModel === `string` ? new ModelRouterLanguageModel(defaultModel) : defaultModel;
 };

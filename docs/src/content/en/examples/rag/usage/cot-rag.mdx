@@ -1,9 +1,9 @@
 ---
-title: "Example: Chain of Thought Prompting | RAG | Mastra Docs"
+title: "Example: Chain of Thought Prompting | RAG"
 description: Example of implementing a RAG system in Mastra with chain-of-thought reasoning using OpenAI and PGVector.
 ---
 
-import { GithubLink } from "@/components/github-link";
+import GithubLink from "@site/src/components/GithubLink";
 
 # Chain of Thought Prompting
 
@@ -13,7 +13,7 @@ This example demonstrates how to implement a Retrieval-Augmented Generation (RAG
 
 The system implements RAG using Mastra and OpenAI with chain-of-thought prompting. Here's what it does:
 
-1. Sets up a Mastra agent with gpt-4o-mini for response generation
+1. Sets up a Mastra agent with gpt-5.1 for response generation
 2. Creates a vector query tool to manage vector store interactions
 3. Chunks text documents into smaller segments
 4. Creates embeddings for these chunks
@@ -27,7 +27,7 @@ The system implements RAG using Mastra and OpenAI with chain-of-thought promptin
 
 Make sure to set up your environment variables:
 
-```bash filename=".env"
+```bash title=".env"
 OPENAI_API_KEY=your_openai_api_key_here
 POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
@@ -36,10 +36,10 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 
 Then, import the necessary dependencies:
 
-```typescript copy showLineNumbers filename="index.ts"
-import { openai } from "@ai-sdk/openai";
+```typescript copy showLineNumbers title="index.ts"
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { PgVector } from "@mastra/pg";
 import { createVectorQueryTool, MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
@@ -49,11 +49,11 @@ import { embedMany } from "ai";
 
 Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database.
 
-```typescript copy showLineNumbers{8} filename="index.ts"
+```typescript copy showLineNumbers{8} title="index.ts"
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
 });
 ```
 
@@ -61,8 +61,9 @@ const vectorQueryTool = createVectorQueryTool({
 
 Set up the Mastra agent with chain-of-thought prompting instructions:
 
-```typescript copy showLineNumbers{14} filename="index.ts"
+```typescript copy showLineNumbers{14} title="index.ts"
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context.
 Follow these steps for each response:
@@ -82,11 +83,11 @@ THOUGHT PROCESS:
 FINAL ANSWER:
 [Your concise answer based on the retrieved context]
 
-Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
+Important: When asked to answer a question, please base your answer only on the context provided in the tool.
 If the context doesn't contain enough information to fully answer the question, please state that explicitly.
 Remember: Explain how you're using the retrieved information to reach your conclusions.
 `,
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-5.1",
   tools: { vectorQueryTool },
 });
 ```
@@ -95,8 +96,9 @@ Remember: Explain how you're using the retrieved information to reach your concl
 
 Instantiate PgVector and Mastra with all components:
 
-```typescript copy showLineNumbers{36} filename="index.ts"
+```typescript copy showLineNumbers{36} title="index.ts"
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
@@ -111,7 +113,7 @@ const agent = mastra.getAgent("ragAgent");
 
 Create a document and process it into chunks:
 
-```typescript copy showLineNumbers{44} filename="index.ts"
+```typescript copy showLineNumbers{44} title="index.ts"
 const doc = MDocument.fromText(
   `The Impact of Climate Change on Global Agriculture...`,
 );
@@ -128,10 +130,10 @@ const chunks = await doc.chunk({
 
 Generate embeddings for the chunks and store them in the vector database:
 
-```typescript copy showLineNumbers{55} filename="index.ts"
+```typescript copy showLineNumbers{55} title="index.ts"
 const { embeddings } = await embedMany({
   values: chunks.map((chunk) => chunk.text),
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
 });
 
 const vectorStore = mastra.getVector("pgVector");
@@ -150,7 +152,7 @@ await vectorStore.upsert({
 
 Try different queries to see how the agent breaks down its reasoning:
 
-```typescript copy showLineNumbers{83} filename="index.ts"
+```typescript copy showLineNumbers{83} title="index.ts"
 const answerOne = await agent.generate(
   "What are the main adaptation strategies for farmers?",
 );
@@ -179,7 +181,7 @@ console.log("Response:", answerThree.text);
 <br />
 <br />
 <GithubLink
-  link={
+  href={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/cot-rag"
   }
 />

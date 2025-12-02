@@ -19,18 +19,19 @@ export default function Page() {
 
         <h3 className="text-lg font-semibold mb-2">1. Assemble Agent</h3>
         <p className="mb-2">
-          The agent is is defined with a name, a set of instructions, and a
-          model. This agent is not provided any tools and is just responsible
-          for making calls to the LLM.
+          The agent is defined with a name, a set of instructions, and a model.
+          This agent is not provided any tools and is just responsible for
+          making calls to the LLM.
         </p>
         <CodeBlock
           fileName="src/mastra/agents/index.ts"
           language="typescript"
-          code={`import { Agent } from '@mastra/core';
+          code={`import { Agent } from '@mastra/core/agent';
 import { anthropic } from '@ai-sdk/anthropic';
 
 export const travelAnalyzer = new Agent({
-  name: 'travel-analyzer',
+  id: 'travel-analyzer',
+  name: 'Travel Analyzer',
   instructions:
     'You are an expert travel agent responsible for finding a flight, hotel, and three attractions for a user. You will be given a set of user preferences along with some data to find the best options for them.',
   model: anthropic('claude-3-5-sonnet-20240620'),

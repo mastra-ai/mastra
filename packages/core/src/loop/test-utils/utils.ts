@@ -1,10 +1,14 @@
 import type {
-  LanguageModelV2,
   LanguageModelV2CallWarning,
   LanguageModelV2StreamPart,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream, mockId } from 'ai-v5/test';
+import { convertArrayToReadableStream, mockId } from 'ai-v5/test';
+import type { ModelManagerModelConfig } from '../../stream/types';
+import { MessageList } from '../../agent/message-list';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
+
+export const mockDate = new Date('2024-01-01T00:00:00Z');
 
 export const defaultSettings = () =>
   ({
@@ -14,6 +18,7 @@ export const defaultSettings = () =>
       generateId: mockId({ prefix: 'id' }),
       currentDate: () => new Date(0),
     },
+    agentId: 'agent-id',
     onError: () => {},
   }) as const;
 
@@ -33,7 +38,7 @@ export const testUsage2 = {
   cachedInputTokens: 3,
 };
 
-export function createTestModel({
+export function createTestModels({
   warnings = [],
   stream = convertArrayToReadableStream([
     {
@@ -67,10 +72,30 @@ export function createTestModel({
   request?: { body: string };
   response?: { headers: Record<string, string> };
   warnings?: LanguageModelV2CallWarning[];
-} = {}): LanguageModelV2 {
-  return new MockLanguageModelV2({
+} = {}): ModelManagerModelConfig[] {
+  const model = new MockLanguageModelV2({
     doStream: async () => ({ stream, request, response, warnings }),
+    doGenerate: async () => ({
+      content: [{ type: 'text' as const, text: 'Hello, world!' }],
+      finishReason: 'stop',
+      usage: testUsage,
+      warnings,
+      request,
+      response: {
+        id: 'id-0',
+        modelId: 'mock-model-id',
+        timestamp: new Date(0),
+        ...response,
+      },
+    }),
   });
+  return [
+    {
+      model,
+      maxRetries: 0,
+      id: 'test-model',
+    },
+  ];
 }
 
 export const modelWithSources = new MockLanguageModelV2({
@@ -101,6 +126,30 @@ export const modelWithSources = new MockLanguageModelV2({
         usage: testUsage,
       },
     ]),
+  }),
+  doGenerate: async () => ({
+    content: [
+      {
+        type: 'source' as const,
+        sourceType: 'url' as const,
+        id: '123',
+        url: 'https://example.com',
+        title: 'Example',
+        providerMetadata: { provider: { custom: 'value' } },
+      },
+      { type: 'text' as const, text: 'Hello!' },
+      {
+        type: 'source' as const,
+        sourceType: 'url' as const,
+        id: '456',
+        url: 'https://example.com/2',
+        title: 'Example 2',
+        providerMetadata: { provider: { custom: 'value2' } },
+      },
+    ],
+    finishReason: 'stop',
+    usage: testUsage,
+    warnings: [],
   }),
 });
 
@@ -134,6 +183,31 @@ export const modelWithDocumentSources = new MockLanguageModelV2({
       },
     ]),
   }),
+  doGenerate: async () => ({
+    content: [
+      {
+        type: 'source' as const,
+        sourceType: 'document' as const,
+        id: 'doc-123',
+        mediaType: 'application/pdf',
+        title: 'Document Example',
+        filename: 'example.pdf',
+        providerMetadata: { provider: { custom: 'doc-value' } },
+      },
+      { type: 'text' as const, text: 'Hello from document!' },
+      {
+        type: 'source' as const,
+        sourceType: 'document' as const,
+        id: 'doc-456',
+        mediaType: 'text/plain',
+        title: 'Text Document',
+        providerMetadata: { provider: { custom: 'doc-value2' } },
+      },
+    ],
+    finishReason: 'stop',
+    usage: testUsage,
+    warnings: [],
+  }),
 });
 
 export const modelWithFiles = new MockLanguageModelV2({
@@ -158,6 +232,24 @@ export const modelWithFiles = new MockLanguageModelV2({
         usage: testUsage,
       },
     ]),
+  }),
+  doGenerate: async () => ({
+    content: [
+      {
+        type: 'file' as const,
+        data: 'Hello World',
+        mediaType: 'text/plain',
+      },
+      { type: 'text' as const, text: 'Hello!' },
+      {
+        type: 'file' as const,
+        data: 'QkFVRw==',
+        mediaType: 'image/jpeg',
+      },
+    ],
+    finishReason: 'stop',
+    usage: testUsage,
+    warnings: [],
   }),
 });
 
@@ -280,4 +372,33 @@ export const modelWithReasoning = new MockLanguageModelV2({
       },
     ]),
   }),
+  doGenerate: async () => ({
+    content: [
+      {
+        type: 'reasoning' as const,
+        text: 'I will open the conversation with witty banter. Once the user has relaxed, I will pry for valuable information. I need to think about this problem carefully. The best solution requires careful consideration of all factors.',
+      },
+      { type: 'text' as const, text: 'Hi there!' },
+    ],
+    finishReason: 'stop',
+    usage: testUsage,
+    warnings: [],
+    response: {
+      id: 'id-0',
+      modelId: 'mock-model-id',
+      timestamp: new Date(0),
+    },
+  }),
 });
+
+export const createMessageListWithUserMessage = () => {
+  const messageList = new MessageList();
+  messageList.add(
+    {
+      role: 'user',
+      content: [{ type: 'text', text: 'test-input' }],
+    },
+    'input',
+  );
+  return messageList;
+};

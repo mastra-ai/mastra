@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { serve } from '@hono/node-server';
 import { MCPClient } from '@mastra/mcp';
 import { Hono } from 'hono';
@@ -62,7 +62,7 @@ export const mcp = new MCPClient({
 });
 
 export async function callTool(tool: any, args: any) {
-  const response = await tool.execute({ context: args });
+  const response = await tool.execute(args, { suspend: async () => {} });
 
   // Handle string responses
   if (typeof response === 'string') {

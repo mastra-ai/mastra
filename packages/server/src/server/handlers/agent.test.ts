@@ -1,39 +1,26 @@
 import { openai } from '@ai-sdk/openai';
+import { openai as openaiV5 } from '@ai-sdk/openai-v5';
 import type { AgentConfig } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
-import { RuntimeContext } from '@mastra/core/di';
+import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
-import type { EvalRow, MastraStorage } from '@mastra/core/storage';
+import { UnicodeNormalizer, TokenLimiterProcessor } from '@mastra/core/processors';
+import type { MastraStorage } from '@mastra/core/storage';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import {
-  getAgentsHandler,
-  getAgentByIdHandler,
-  getEvalsByAgentIdHandler,
-  getLiveEvalsByAgentIdHandler,
-  generateHandler,
-  streamGenerateHandler,
-  updateAgentModelHandler,
+  LIST_AGENTS_ROUTE,
+  GET_AGENT_BY_ID_ROUTE,
+  GENERATE_AGENT_ROUTE,
+  UPDATE_AGENT_MODEL_ROUTE,
+  REORDER_AGENT_MODEL_LIST_ROUTE,
+  UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE,
+  STREAM_GENERATE_LEGACY_ROUTE,
+  STREAM_GENERATE_ROUTE,
 } from './agents';
-
-const mockEvals = [
-  {
-    runId: '1',
-    input: 'test',
-    output: 'test',
-    result: {
-      score: 1,
-      info: {},
-    },
-    agentName: 'test-agent',
-    createdAt: new Date().toISOString(),
-    metricName: 'test',
-    instructions: 'test',
-    globalRunId: 'test',
-  },
-] as EvalRow[];
+import { createTestRuntimeContext } from './test-utils';
 class MockAgent extends Agent {
   constructor(config: AgentConfig) {
     super(config);
@@ -59,6 +46,7 @@ class MockAgent extends Agent {
 const makeMockAgent = (config?: Partial<AgentConfig>) =>
   new MockAgent({
     name: 'test-agent',
+    description: 'A test agent for unit testing',
     instructions: 'test instructions',
     model: openai('gpt-4o'),
     ...(config || {}),
@@ -70,7 +58,6 @@ const makeMastraMock = ({ agents }: { agents: Record<string, ReturnType<typeof m
     agents,
     storage: {
       init: vi.fn(),
-      __setTelemetry: vi.fn(),
       __setLogger: vi.fn(),
       getEvalsByAgentName: vi.fn(),
       getStorage: () => {
@@ -84,35 +71,129 @@ const makeMastraMock = ({ agents }: { agents: Record<string, ReturnType<typeof m
 describe('Agent Handlers', () => {
   let mockMastra: Mastra;
   let mockAgent: Agent;
-
-  const runtimeContext = new RuntimeContext();
+  let mockMultiModelAgent: Agent;
+  const requestContext = new RequestContext();
 
   beforeEach(() => {
     mockAgent = makeMockAgent();
 
+    mockMultiModelAgent = makeMockAgent({
+      name: 'test-multi-model-agent',
+      description: 'A test agent with multiple model configurations',
+      model: [{ model: openaiV5('gpt-4o-mini') }, { model: openaiV5('gpt-4o') }, { model: openaiV5('gpt-4.1') }],
+    });
+
     mockMastra = makeMastraMock({
       agents: {
         'test-agent': mockAgent,
+        'test-multi-model-agent': mockMultiModelAgent,
       },
     });
   });
 
-  describe('getAgentsHandler', () => {
+  describe('listAgentsHandler', () => {
     it('should return serialized agents', async () => {
-      const result = await getAgentsHandler({ mastra: mockMastra, runtimeContext });
+      const result = await LIST_AGENTS_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
+        requestContext,
+      });
 
       expect(result).toEqual({
         'test-agent': {
+          id: 'test-agent',
           name: 'test-agent',
+          description: 'A test agent for unit testing',
           instructions: 'test instructions',
           tools: {},
+          agents: {},
           workflows: {},
+          inputProcessors: [],
+          outputProcessors: [],
           provider: 'openai.chat',
           modelId: 'gpt-4o',
           modelVersion: 'v1',
-          defaultGenerateOptions: {},
-          defaultStreamOptions: {},
+          defaultOptions: {},
+          defaultGenerateOptionsLegacy: {},
+          defaultStreamOptionsLegacy: {},
+          modelList: undefined,
         },
+        'test-multi-model-agent': {
+          id: 'test-multi-model-agent',
+          name: 'test-multi-model-agent',
+          description: 'A test agent with multiple model configurations',
+          instructions: 'test instructions',
+          tools: {},
+          agents: {},
+          workflows: {},
+          inputProcessors: [],
+          outputProcessors: [],
+          provider: 'openai.responses',
+          modelId: 'gpt-4o-mini',
+          modelVersion: 'v2',
+          defaultOptions: {},
+          defaultGenerateOptionsLegacy: {},
+          defaultStreamOptionsLegacy: {},
+          modelList: [
+            {
+              id: expect.any(String),
+              enabled: true,
+              maxRetries: 0,
+              model: { modelId: 'gpt-4o-mini', provider: 'openai.responses', modelVersion: 'v2' },
+            },
+            {
+              id: expect.any(String),
+              enabled: true,
+              maxRetries: 0,
+              model: { modelId: 'gpt-4o', provider: 'openai.responses', modelVersion: 'v2' },
+            },
+            {
+              id: expect.any(String),
+              enabled: true,
+              maxRetries: 0,
+              model: { modelId: 'gpt-4.1', provider: 'openai.responses', modelVersion: 'v2' },
+            },
+          ],
+        },
+      });
+    });
+
+    it('should return agents with serialized processors', async () => {
+      const unicodeNormalizer = new UnicodeNormalizer();
+      const tokenLimiter = new TokenLimiterProcessor({ limit: 1000 });
+
+      const agentWithCoreProcessors = makeMockAgent({
+        name: 'agent-with-core-processors',
+        description: 'A test agent with input and output processors',
+        inputProcessors: [unicodeNormalizer],
+        outputProcessors: [tokenLimiter],
+      });
+
+      const mastraWithCoreProcessors = makeMastraMock({
+        agents: {
+          'agent-with-core-processors': agentWithCoreProcessors,
+        },
+      });
+
+      const result = await LIST_AGENTS_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mastraWithCoreProcessors }),
+        requestContext,
+      });
+
+      expect(result['agent-with-core-processors']).toMatchObject({
+        name: 'agent-with-core-processors',
+        description: 'A test agent with input and output processors',
+        inputProcessors: [
+          {
+            id: 'unicode-normalizer',
+            name: 'Unicode Normalizer',
+          },
+        ],
+        outputProcessors: [
+          {
+            id: 'token-limiter',
+            name: 'Token Limiter',
+          },
+        ],
       });
     });
   });
@@ -122,9 +203,13 @@ describe('Agent Handlers', () => {
       const firstStep = createStep({
         id: 'first',
         description: 'First step',
-        inputSchema: z.object({ name: z.string() }),
-        outputSchema: z.object({}),
-        execute: async () => ({}),
+        inputSchema: z.object({
+          name: z.string(),
+        }),
+        outputSchema: z.object({ name: z.string() }),
+        execute: async ({ inputData }) => ({
+          name: inputData.name,
+        }),
       });
 
       const secondStep = createStep({
@@ -149,12 +234,17 @@ describe('Agent Handlers', () => {
       workflow.then(firstStep).then(secondStep);
       mockAgent = makeMockAgent({ workflows: { hello: workflow } });
       mockMastra = makeMastraMock({ agents: { 'test-agent': mockAgent } });
-      const result = await getAgentByIdHandler({ mastra: mockMastra, agentId: 'test-agent', runtimeContext });
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
+        agentId: 'test-agent',
+      });
 
       expect(result).toEqual({
         name: 'test-agent',
+        description: 'A test agent for unit testing',
         instructions: 'test instructions',
         tools: {},
+        agents: {},
         workflows: {
           hello: {
             name: 'hello-world',
@@ -170,53 +260,57 @@ describe('Agent Handlers', () => {
             },
           },
         },
+        inputProcessors: [],
+        outputProcessors: [],
         provider: 'openai.chat',
         modelId: 'gpt-4o',
         modelVersion: 'v1',
-        defaultGenerateOptions: {},
-        defaultStreamOptions: {},
+        defaultOptions: {},
+        defaultGenerateOptionsLegacy: {},
+        defaultStreamOptionsLegacy: {},
+        modelList: undefined,
       });
+    });
+
+    it('should return serialized agent with model list', async () => {
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
+        agentId: 'test-multi-model-agent',
+        requestContext,
+      });
+      if (!result) {
+        expect.fail('Result should be defined');
+      }
+      expect(result.modelList).toMatchObject([
+        {
+          id: expect.any(String),
+          enabled: true,
+          maxRetries: 0,
+          model: { modelId: 'gpt-4o-mini', provider: 'openai.responses', modelVersion: 'v2' },
+        },
+        {
+          id: expect.any(String),
+          enabled: true,
+          maxRetries: 0,
+          model: { modelId: 'gpt-4o', provider: 'openai.responses', modelVersion: 'v2' },
+        },
+        {
+          id: expect.any(String),
+          enabled: true,
+          maxRetries: 0,
+          model: { modelId: 'gpt-4.1', provider: 'openai.responses', modelVersion: 'v2' },
+        },
+      ]);
     });
 
     it('should throw 404 when agent not found', async () => {
       await expect(
-        getAgentByIdHandler({ mastra: mockMastra, runtimeContext, agentId: 'non-existing' }),
+        GET_AGENT_BY_ID_ROUTE.handler({ ...createTestRuntimeContext({ mastra: mockMastra }), agentId: 'non-existing' }),
       ).rejects.toThrow(
         new HTTPException(404, {
-          message: 'Agent with name non-existing not found',
+          message: 'Agent with id non-existing not found',
         }),
       );
-    });
-  });
-
-  describe('getEvalsByAgentIdHandler', () => {
-    it('should return agent evals', async () => {
-      const storage = mockMastra.getStorage();
-      vi.spyOn(storage!, 'getEvalsByAgentName').mockResolvedValue(mockEvals);
-
-      const result = await getEvalsByAgentIdHandler({ mastra: mockMastra, agentId: 'test-agent', runtimeContext });
-
-      expect(result).toEqual({
-        id: 'test-agent',
-        name: 'test-agent',
-        instructions: 'test instructions',
-        evals: mockEvals,
-      });
-    });
-  });
-
-  describe('getLiveEvalsByAgentIdHandler', () => {
-    it('should return live agent evals', async () => {
-      vi.spyOn(mockMastra.getStorage()!, 'getEvalsByAgentName').mockResolvedValue(mockEvals);
-
-      const result = await getLiveEvalsByAgentIdHandler({ mastra: mockMastra, agentId: 'test-agent', runtimeContext });
-
-      expect(result).toEqual({
-        id: 'test-agent',
-        name: 'test-agent',
-        instructions: 'test instructions',
-        evals: mockEvals,
-      });
     });
   });
 
@@ -225,22 +319,13 @@ describe('Agent Handlers', () => {
       const mockResult = { response: 'test' };
       (mockAgent.generate as any).mockResolvedValue(mockResult);
 
-      const result = await generateHandler({
-        mastra: mockMastra,
+      const result = await GENERATE_AGENT_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
         agentId: 'test-agent',
-        body: {
-          messages: ['test message'],
-          resourceId: 'test-resource',
-          threadId: 'test-thread',
-          experimental_output: undefined,
-          // @ts-expect-error
-          runtimeContext: {
-            user: {
-              name: 'test-user',
-            },
-          },
-        },
-        runtimeContext: new RuntimeContext(),
+        messages: ['test message'],
+        resourceId: 'test-resource',
+        threadId: 'test-thread',
+        experimental_output: undefined,
       });
 
       expect(result).toEqual(mockResult);
@@ -248,24 +333,15 @@ describe('Agent Handlers', () => {
 
     it('should throw 404 when agent not found', async () => {
       await expect(
-        generateHandler({
-          mastra: mockMastra,
+        GENERATE_AGENT_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra: mockMastra }),
           agentId: 'non-existing',
-          body: {
-            messages: ['test message'],
-            resourceId: 'test-resource',
-            threadId: 'test-thread',
-            experimental_output: undefined,
-            // @ts-expect-error
-            runtimeContext: {
-              user: {
-                name: 'test-user',
-              },
-            },
-          },
-          runtimeContext: new RuntimeContext(),
+          messages: ['test message'],
+          resourceId: 'test-resource',
+          threadId: 'test-thread',
+          experimental_output: undefined,
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Agent with name non-existing not found' }));
+      ).rejects.toThrow(new HTTPException(404, { message: 'Agent with id non-existing not found' }));
     });
   });
 
@@ -277,22 +353,13 @@ describe('Agent Handlers', () => {
       };
       (mockAgent.stream as any).mockResolvedValue(mockStreamResult);
 
-      const result = await streamGenerateHandler({
-        mastra: mockMastra,
+      const result = await STREAM_GENERATE_LEGACY_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
         agentId: 'test-agent',
-        body: {
-          messages: ['test message'],
-          resourceId: 'test-resource',
-          threadId: 'test-thread',
-          experimental_output: undefined,
-          // @ts-expect-error
-          runtimeContext: {
-            user: {
-              name: 'test-user',
-            },
-          },
-        },
-        runtimeContext: new RuntimeContext(),
+        messages: ['test message'],
+        resourceId: 'test-resource',
+        threadId: 'test-thread',
+        experimental_output: undefined,
       });
 
       expect(result).toBeInstanceOf(Response);
@@ -300,69 +367,101 @@ describe('Agent Handlers', () => {
 
     it('should throw 404 when agent not found', async () => {
       await expect(
-        streamGenerateHandler({
-          mastra: mockMastra,
+        STREAM_GENERATE_LEGACY_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra: mockMastra }),
           agentId: 'non-existing',
-          body: {
-            messages: ['test message'],
-            resourceId: 'test-resource',
-            threadId: 'test-thread',
-            experimental_output: undefined,
-            // @ts-expect-error
-            runtimeContext: {
-              user: {
-                name: 'test-user',
-              },
-            },
-          },
-          runtimeContext: new RuntimeContext(),
+          messages: ['test message'],
+          resourceId: 'test-resource',
+          threadId: 'test-thread',
+          experimental_output: undefined,
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Agent with name non-existing not found' }));
+      ).rejects.toThrow(new HTTPException(404, { message: 'Agent with id non-existing not found' }));
     });
   });
 
   describe('updateAgentModelHandler', () => {
     it('should update agent model', async () => {
+      const mockFullStream = new ReadableStream();
       const mockStreamResult = {
         toTextStreamResponse: vi.fn().mockReturnValue(new Response()),
         toDataStreamResponse: vi.fn().mockReturnValue(new Response()),
+        fullStream: mockFullStream,
       };
       (mockAgent.stream as any).mockResolvedValue(mockStreamResult);
-      const updateResult = updateAgentModelHandler({
-        mastra: mockMastra,
+      const updateResult = await UPDATE_AGENT_MODEL_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
         agentId: 'test-agent',
-        body: {
-          modelId: 'gpt-4o-mini',
-          provider: 'openai',
-        },
+        modelId: 'gpt-4o-mini',
+        provider: 'openai',
       });
 
-      const agent = mockMastra.getAgent('test-agent');
+      const agent = mockMastra.getAgentById('test-agent');
       const llm = await agent.getLLM();
       const modelId = llm.getModelId();
       expect(updateResult).toEqual({ message: 'Agent model updated' });
       expect(modelId).toEqual('gpt-4o-mini');
       //confirm that stream works fine after the model update
 
-      const result = await streamGenerateHandler({
-        mastra: mockMastra,
+      const result = await STREAM_GENERATE_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
         agentId: 'test-agent',
-        body: {
-          messages: ['test message'],
-          resourceId: 'test-resource',
-          threadId: 'test-thread',
-          experimental_output: undefined,
-          // @ts-expect-error
-          runtimeContext: {
-            user: {
-              name: 'test-user',
-            },
-          },
-        },
-        runtimeContext: new RuntimeContext(),
+        messages: ['test message'],
+        resourceId: 'test-resource',
+        threadId: 'test-thread',
+        experimental_output: undefined,
       });
 
-      expect(result).toBeInstanceOf(Response);
+      expect(result).toBeDefined();
+    });
+  });
+
+  describe('reorderAgentModelListHandler', () => {
+    it('should reorder list of models for agent', async () => {
+      const agent = mockMastra.getAgentById('test-multi-model-agent');
+      const modelList = await agent.getModelList();
+
+      if (!modelList) {
+        expect.fail('Model list should be defined');
+      }
+
+      const modelListIds = modelList.map(m => m.id);
+      const reversedModelListIds = modelListIds.reverse();
+
+      await REORDER_AGENT_MODEL_LIST_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
+        agentId: 'test-multi-model-agent',
+        reorderedModelIds: reversedModelListIds,
+      });
+
+      const reorderedModelList = await agent.getModelList();
+      expect(reorderedModelList?.length).toBe(3);
+      expect(reorderedModelList?.[0].model.modelId).toBe('gpt-4.1');
+      expect(reorderedModelList?.[1].model.modelId).toBe('gpt-4o');
+      expect(reorderedModelList?.[2].model.modelId).toBe('gpt-4o-mini');
+    });
+  });
+
+  describe('updateAgentModelInModelListHandler', () => {
+    it('should update a model in the model list', async () => {
+      const agent = mockMastra.getAgentById('test-multi-model-agent');
+      const modelList = await agent.getModelList();
+      expect(modelList?.length).toBe(3);
+      const model1Id = modelList?.[1].id!;
+      await UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
+        agentId: 'test-multi-model-agent',
+        modelConfigId: model1Id,
+        model: {
+          modelId: 'gpt-5',
+          provider: 'openai',
+        },
+        maxRetries: 4,
+      });
+      const updatedModelList = await agent.getModelList();
+      expect(updatedModelList?.[0].model.modelId).toBe('gpt-4o-mini');
+      expect(updatedModelList?.[1].model.modelId).toBe('gpt-5');
+      expect(updatedModelList?.[1].maxRetries).toBe(4);
+      expect(updatedModelList?.[2].model.modelId).toBe('gpt-4.1');
     });
   });
 });

@@ -41,7 +41,9 @@ export { deployer };
 `;
 
 exports[`getDeployer > should be able to extract the deployer from ./plugins/__fixtures__/empty-mastra.js 1`] = `
-"
+"const deployer = {};
+
+export { deployer };
 "
 `;
 

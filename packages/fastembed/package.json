@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastembed",
-  "version": "0.10.4",
+  "version": "1.0.0-beta.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -19,23 +19,40 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/fastembed"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run"
   },
   "dependencies": {
-    "ai": "^4.3.19",
+    "@ai-sdk/provider": "^2.0.0",
+    "ai": "^5.0.76",
+    "ai-v4": "npm:ai@4.3.19",
     "fastembed": "^1.14.4"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@types/node": "^20.19.0",
+    "@internal/types-builder": "workspace:*",
+    "@types/node": "22.13.17",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4",
-    "@internal/types-builder": "workspace:*"
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

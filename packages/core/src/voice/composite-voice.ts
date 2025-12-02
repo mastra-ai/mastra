@@ -1,7 +1,21 @@
+import type { TranscriptionModel, SpeechModel } from 'ai-v5';
+
 import type { ToolsInput } from '../agent';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+
+import { AISDKSpeech } from './aisdk/speech';
+import { AISDKTranscription } from './aisdk/transcription';
 import { MastraVoice } from './voice';
 import type { VoiceEventType, VoiceEventMap } from '.';
+
+// Helper to check if something is an AI SDK model
+function isTranscriptionModel(obj: any): obj is TranscriptionModel {
+  return obj && typeof obj === 'object' && obj.modelId && obj.specificationVersion === 'v2';
+}
+
+function isSpeechModel(obj: any): obj is SpeechModel {
+  return obj && typeof obj === 'object' && obj.modelId && obj.specificationVersion === 'v2';
+}
 
 export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, ToolsInput, VoiceEventMap> {
   protected speakProvider?: MastraVoice;
@@ -12,25 +26,23 @@ export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, Tools
     input,
     output,
     realtime,
-    speakProvider,
-    listenProvider,
-    realtimeProvider,
   }: {
-    /** @deprecated use output instead */
-    speakProvider?: MastraVoice;
-    /** @deprecated use input instead */
-    listenProvider?: MastraVoice;
-    /** @deprecated use realtime instead */
-    realtimeProvider?: MastraVoice;
-
-    input?: MastraVoice;
-    output?: MastraVoice;
+    input?: MastraVoice | TranscriptionModel;
+    output?: MastraVoice | SpeechModel;
     realtime?: MastraVoice;
   }) {
     super();
-    this.speakProvider = output || speakProvider;
-    this.listenProvider = input || listenProvider;
-    this.realtimeProvider = realtime || realtimeProvider;
+
+    // Auto-wrap AI SDK models
+    if (input) {
+      this.listenProvider = isTranscriptionModel(input) ? new AISDKTranscription(input) : input;
+    }
+
+    if (output) {
+      this.speakProvider = isSpeechModel(output) ? new AISDKSpeech(output) : output;
+    }
+
+    this.realtimeProvider = realtime;
   }
 
   /**

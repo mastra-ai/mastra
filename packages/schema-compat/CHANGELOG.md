@@ -1,5 +1,112 @@
 # @mastra/schema-compat
 
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- Fixed OpenAI schema compatibility when using `agent.generate()` or `agent.stream()` with `structuredOutput`. ([#10366](https://github.com/mastra-ai/mastra/pull/10366))
+
+  ## Changes
+  - **Automatic transformation**: Zod schemas are now automatically transformed for OpenAI strict mode compatibility when using OpenAI models (including reasoning models like o1, o3, o4)
+  - **Optional field handling**: `.optional()` fields are converted to `.nullable()` with a transform that converts `null` → `undefined`, preserving optional semantics while satisfying OpenAI's strict mode requirements
+  - **Preserves nullable fields**: Intentionally `.nullable()` fields remain unchanged
+  - **Deep transformation**: Handles `.optional()` fields at any nesting level (objects, arrays, unions, etc.)
+  - **JSON Schema objects**: Not transformed, only Zod schemas
+
+  ## Example
+
+  ```typescript
+  const agent = new Agent({
+    name: 'data-extractor',
+    model: { provider: 'openai', modelId: 'gpt-4o' },
+    instructions: 'Extract user information',
+  });
+
+  const schema = z.object({
+    name: z.string(),
+    age: z.number().optional(),
+    deletedAt: z.date().nullable(),
+  });
+
+  // Schema is automatically transformed for OpenAI compatibility
+  const result = await agent.generate('Extract: John, deleted yesterday', {
+    structuredOutput: { schema },
+  });
+
+  // Result: { name: 'John', age: undefined, deletedAt: null }
+  ```
+
+## 1.0.0-beta.0
+
+### Major Changes
+
+- Bump minimum required Node.js version to 22.13.0 ([#9706](https://github.com/mastra-ai/mastra/pull/9706))
+
+- Mark as stable ([`83d5942`](https://github.com/mastra-ai/mastra/commit/83d5942669ce7bba4a6ca4fd4da697a10eb5ebdc))
+
+### Patch Changes
+
+- Fix Zod v4 toJSONSchema bug with z.record() single-argument form ([#9265](https://github.com/mastra-ai/mastra/pull/9265))
+
+  Zod v4 has a bug in the single-argument form of `z.record(valueSchema)` where it incorrectly assigns the value schema to `keyType` instead of `valueType`, leaving `valueType` undefined. This causes `toJSONSchema()` to throw "Cannot read properties of undefined (reading '\_zod')" when processing schemas containing `z.record()` fields.
+
+  This fix patches affected schemas before conversion by detecting records with missing `valueType` and correctly assigning the schema to `valueType` while setting `keyType` to `z.string()` (the default). The patch recursively handles nested schemas including those wrapped in `.optional()`, `.nullable()`, arrays, unions, and objects.
+
+- Improved reliability of string field types in tool schema compatibility ([#9266](https://github.com/mastra-ai/mastra/pull/9266))
+
+## 0.11.4
+
+### Patch Changes
+
+- Fixes an issue when the OpenAI reasoning schema compatibility layer was calling defaultValue() as a function, which works in Zod v3 but fails in Zod v4 where defaultValue is stored directly as a value. ([#8090](https://github.com/mastra-ai/mastra/pull/8090))
+
+## 0.11.4-alpha.0
+
+### Patch Changes
+
+- Fixes an issue when the OpenAI reasoning schema compatibility layer was calling defaultValue() as a function, which works in Zod v3 but fails in Zod v4 where defaultValue is stored directly as a value. ([#8090](https://github.com/mastra-ai/mastra/pull/8090))
+
+## 0.11.3
+
+### Patch Changes
+
+- Change SchemaCompat zodToJsonSchema ref strategy from none to relative, leading to less schema warnings and smaller converted schema sizes ([#7697](https://github.com/mastra-ai/mastra/pull/7697))
+
+## 0.11.3-alpha.0
+
+### Patch Changes
+
+- Change SchemaCompat zodToJsonSchema ref strategy from none to relative, leading to less schema warnings and smaller converted schema sizes ([#7697](https://github.com/mastra-ai/mastra/pull/7697))
+
+## 0.11.2
+
+### Patch Changes
+
+- ab48c97: dependencies updates:
+  - Updated dependency [`zod-to-json-schema@^3.24.6` ↗︎](https://www.npmjs.com/package/zod-to-json-schema/v/3.24.6) (from `^3.24.5`, in `dependencies`)
+- 637f323: Fix issue with some compilers and calling zod v4's toJSONSchema function
+- de3cbc6: Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+- 45e4d39: Try fixing the `Attempted import error: 'z'.'toJSONSchema' is not exported from 'zod'` error by tricking the compiler
+
+## 0.11.2-alpha.3
+
+### Patch Changes
+
+- [#7350](https://github.com/mastra-ai/mastra/pull/7350) [`45e4d39`](https://github.com/mastra-ai/mastra/commit/45e4d391a2a09fc70c48e4d60f505586ada1ba0e) Thanks [@LekoArts](https://github.com/LekoArts)! - Try fixing the `Attempted import error: 'z'.'toJSONSchema' is not exported from 'zod'` error by tricking the compiler
+
+## 0.11.2-alpha.2
+
+### Patch Changes
+
+- [#7343](https://github.com/mastra-ai/mastra/pull/7343) [`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e) Thanks [@LekoArts](https://github.com/LekoArts)! - Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+
+## 0.11.2-alpha.1
+
+### Patch Changes
+
+- [#5816](https://github.com/mastra-ai/mastra/pull/5816) [`ab48c97`](https://github.com/mastra-ai/mastra/commit/ab48c979098ea571faf998a55d3a00e7acd7a715) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`zod-to-json-schema@^3.24.6` ↗︎](https://www.npmjs.com/package/zod-to-json-schema/v/3.24.6) (from `^3.24.5`, in `dependencies`)
+
 ## 0.11.2-alpha.0
 
 ### Patch Changes

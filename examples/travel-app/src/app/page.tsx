@@ -24,17 +24,18 @@ export default function Page() {
             1. Assemble Agent
           </h3>
           <p className="mb-2">
-            The agent is is defined with a name, a set of instructions, a model,
+            The agent is defined with a name, a set of instructions, a model,
             and a collection of enabled tools:
           </p>
           <CodeBlock
             fileName="src/mastra/agents/index.ts"
             language="typescript"
-            code={`import { Agent } from '@mastra/core';
+            code={`import { Agent } from '@mastra/core/agent';
 import { anthropic } from '@ai-sdk/anthropic';
 
 export const travelAgent = new Agent({
-  name: 'travelAgent',
+  id: 'travel-agent',
+  name: 'Travel Agent',
   instructions:
     'You are an expert travel agent responsible for finding a flight, hotel,
     and three attractions for a user. You will be given a set of user

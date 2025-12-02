@@ -1,18 +1,23 @@
 packages:
-  - "packages/*"
-  - "deployers/*"
-  - "stores/*"
-  - "voice/*"
-  - "workflows/*"
-  - "pubsub/*"
-  - "client-sdks/*"
-  - "!packages/cli/admin"
-  - "integrations/*"
-  - "examples/dane"
-  - "packages/cli/src/playground"
-  - "packages/*/integration-tests"
-  - "packages/*/integration-tests-v5"
-  - "packages/cloud"
-  - "auth/*"
-  - "observability/*"
-  - "explorations/longmemeval"
+  - packages/*
+  - deployers/*
+  - stores/*
+  - voice/*
+  - workflows/*
+  - server-adapters/*
+  - pubsub/*
+  - client-sdks/*
+  - integrations/*
+  - examples/dane
+  - auth/*
+  - observability/*
+  - explorations/longmemeval
+  - explorations/agent-builder-gh-repro
+
+catalog:
+  '@vitest/coverage-v8': 4.0.12
+  '@vitest/ui': 4.0.12
+  vitest: 4.0.12
+
+patchedDependencies:
+  '@changesets/get-dependents-graph': patches/@changesets__get-dependents-graph.patch

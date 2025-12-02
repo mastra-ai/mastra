@@ -1,9 +1,9 @@
 ---
-title: Speech to Speech
+title: "Example: Call Analysis with Mastra | Voice"
 description: Example of using Mastra to create a speech to speech application.
 ---
 
-import { GithubLink } from "@/components/github-link";
+import GithubLink from "@site/src/components/GithubLink";
 
 # Call Analysis with Mastra
 
@@ -25,7 +25,7 @@ The system creates a voice conversation with a Mastra agent, records the entire 
 
 Create a `.env` file based on the sample provided:
 
-```bash filename="speech-to-speech/call-analysis/sample.env" copy
+```bash title="speech-to-speech/call-analysis/sample.env" copy
 OPENAI_API_KEY=
 CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
@@ -47,8 +47,7 @@ npm install
 
 First, we define our agent with voice capabilities:
 
-```ts filename="speech-to-speech/call-analysis/src/mastra/agents/index.ts" copy
-import { openai } from "@ai-sdk/openai";
+```ts title="speech-to-speech/call-analysis/src/mastra/agents/index.ts" copy
 import { Agent } from "@mastra/core/agent";
 import { createTool } from "@mastra/core/tools";
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
@@ -56,18 +55,19 @@ import { z } from "zod";
 
 // Have the agent do something
 export const speechToSpeechServer = new Agent({
+  id: "speech-to-speech-agent",
   name: "mastra",
   instructions: "You are a helpful assistant.",
   voice: new OpenAIRealtimeVoice(),
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   tools: {
     salutationTool: createTool({
       id: "salutationTool",
       description: "Read the result of the tool",
       inputSchema: z.object({ name: z.string() }),
       outputSchema: z.object({ message: z.string() }),
-      execute: async ({ context }) => {
-        return { message: `Hello ${context.name}!` };
+      execute: async (inputData) => {
+        return { message: `Hello ${inputData.name}!` };
       },
     }),
   },
@@ -78,7 +78,7 @@ export const speechToSpeechServer = new Agent({
 
 Register the agent with Mastra:
 
-```ts filename="speech-to-speech/call-analysis/src/mastra/index.ts" copy
+```ts title="speech-to-speech/call-analysis/src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { speechToSpeechServer } from "./agents";
 
@@ -93,7 +93,7 @@ export const mastra = new Mastra({
 
 Set up Cloudinary for storing the recorded audio files:
 
-```ts filename="speech-to-speech/call-analysis/src/upload.ts" copy
+```ts title="speech-to-speech/call-analysis/src/upload.ts" copy
 import { v2 as cloudinary } from "cloudinary";
 
 cloudinary.config({
@@ -115,7 +115,7 @@ export async function uploadToCloudinary(path: string) {
 
 The main application orchestrates the conversation flow, recording, and analytics integration:
 
-```ts filename="speech-to-speech/call-analysis/src/base.ts" copy
+```ts title="speech-to-speech/call-analysis/src/base.ts" copy
 import { Roark } from "@roarkanalytics/sdk";
 import chalk from "chalk";
 
@@ -229,4 +229,4 @@ To view the full example code, see the [Github repository](https://github.com/ma
 <br />
 <br />
 
-<GithubLink link="https://github.com/mastra-ai/voice-examples/tree/main/speech-to-speech/call-analysis" />
+<GithubLink href="https://github.com/mastra-ai/voice-examples/tree/main/speech-to-speech/call-analysis" />

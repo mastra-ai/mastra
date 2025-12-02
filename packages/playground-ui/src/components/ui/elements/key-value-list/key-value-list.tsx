@@ -3,6 +3,7 @@ import * as HoverCard from '@radix-ui/react-hover-card';
 import { cn } from '@/lib/utils';
 import { useLinkComponent } from '@/lib/framework';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { ChevronRightIcon } from 'lucide-react';
 
 export type KeyValueListItemValue = {
   id: string;
@@ -44,10 +45,9 @@ export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, 
         const isValueItemArray = Array.isArray(value);
 
         return (
-          <>
+          <React.Fragment key={label + index}>
             <dt
               className={cn('text-icon3 text-[0.875rem] flex items-center gap-[2rem] justify-between min-h-[2.25rem] ')}
-              key={label + index}
             >
               <span
                 className={cn(
@@ -71,6 +71,7 @@ export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, 
                 'flex flex-wrap gap-[.5rem] py-[0.25rem] min-h-[2.25rem] text-[0.875rem] items-center text-icon5 text-wrap',
                 '[&>a]:text-icon5 [&>a]:max-w-full [&>a]:w-auto truncate [&>a]:bg-[#222] [&>a]:transition-colors [&>a]:flex [&>a]:items-center [&>a]:gap-[0.5rem] [&>a]:pt-[0.15rem] [&>a]:pb-[0.2rem] [&>a]:px-[.5rem] [&>a]:rounded-md [&>a]:text-[0.875rem] [&>a]:min-h-[1.75rem] [&>a]:leading-0 ',
                 '[&>a:hover]:text-icon6 [&>a:hover]:bg-surface6',
+                '[&>a>svg]:w-[1em] [&>a>svg]:h-[1em] [&>a>svg]:text-icon3 [&>a>svg]:ml-[-0.5em]',
               )}
             >
               {isLoading ? (
@@ -80,25 +81,23 @@ export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, 
                 >
                   &nbsp;
                 </span>
-              ) : (
-                <>
-                  {isValueItemArray ? (
-                    value?.map(item => {
-                      return item.path ? (
-                        <RelationWrapper description={item.description} key={item.id}>
-                          <Link href={item.path}>{item?.name}</Link>
-                        </RelationWrapper>
-                      ) : (
-                        <span key={item.id}>{item?.name}</span>
-                      );
-                    })
+              ) : isValueItemArray ? (
+                value?.map(item => {
+                  return item.path ? (
+                    <RelationWrapper description={item.description} key={item.id}>
+                      <Link href={item.path}>
+                        {item?.name} <ChevronRightIcon />
+                      </Link>
+                    </RelationWrapper>
                   ) : (
-                    <>{value ? value : <span className="text-icon3 text-[0.75rem]">n/a</span>}</>
-                  )}
-                </>
+                    <span key={item.id}>{item?.name}</span>
+                  );
+                })
+              ) : (
+                <>{value ? value : <span className="text-icon3 text-[0.75rem]">n/a</span>}</>
               )}
             </dd>
-          </>
+          </React.Fragment>
         );
       })}
     </dl>

@@ -1,4 +1,4 @@
-import EventEmitter from 'events';
+import EventEmitter from 'node:events';
 import { PubSub } from './pubsub';
 import type { Event } from './types';
 

@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 
 export abstract class EnvService {
   abstract getEnvValue(key: string): Promise<string | null>;
@@ -49,7 +49,7 @@ export class FileEnvService extends EnvService {
       data += `\n${key}=${value}`;
     }
     await this.writeFile({ filePath, data });
-    console.log(`${key} set to ${value} in ENV file.`);
+    console.info(`${key} set to ${value} in ENV file.`);
     return data;
   }
 

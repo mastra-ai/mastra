@@ -4,7 +4,7 @@ import { MastraA2AError } from '@mastra/core/a2a';
 import type { AgentConfig } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
 import type { MastraStorage } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryTaskStore } from '../a2a/store';
@@ -44,7 +44,6 @@ function createMockMastra(agents: Record<string, Agent>) {
     agents: agents,
     storage: {
       init: vi.fn(),
-      __setTelemetry: vi.fn(),
       __setLogger: vi.fn(),
       getEvalsByAgentName: vi.fn(),
       getStorage: () => {
@@ -75,7 +74,7 @@ describe('A2A Handler', () => {
     it('should return the agent card', async () => {
       const agentCard = await getAgentCardByIdHandler({
         mastra: mockMastra,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
         agentId: 'test-agent',
       });
       expect(agentCard).toMatchInlineSnapshot(`
@@ -108,7 +107,7 @@ describe('A2A Handler', () => {
       const customUrl = '/custom/execution/url';
       const agentCard = await getAgentCardByIdHandler({
         mastra: mockMastra,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
         agentId: 'test-agent',
         executionUrl: customUrl,
       });
@@ -122,7 +121,7 @@ describe('A2A Handler', () => {
       };
       const agentCard = await getAgentCardByIdHandler({
         mastra: mockMastra,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
         agentId: 'test-agent',
         provider: customProvider,
       });
@@ -133,7 +132,7 @@ describe('A2A Handler', () => {
       const customVersion = '2.0';
       const agentCard = await getAgentCardByIdHandler({
         mastra: mockMastra,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
         agentId: 'test-agent',
         version: customVersion,
       });
@@ -175,19 +174,19 @@ describe('A2A Handler', () => {
         message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
       };
 
-      const mockAgent = mockMastra.getAgent(agentId);
+      const mockAgent = mockMastra.getAgentById(agentId);
       // @ts-expect-error - mockResolvedValue is not available on the Agent class
       mockAgent.generate.mockResolvedValue({ text: agentResponseText });
 
       vi.setSystemTime(new Date('2025-05-08T11:47:38.458Z'));
-      const runtimeContext = new RuntimeContext();
+      const requestContext = new RequestContext();
       const result = await handleMessageSend({
         requestId,
         params,
         taskStore: mockTaskStore,
         agent: mockAgent,
         agentId,
-        runtimeContext,
+        requestContext,
       });
 
       expect(result).toEqual({
@@ -242,7 +241,7 @@ describe('A2A Handler', () => {
         message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
       };
 
-      const mockAgent = mockMastra.getAgent(agentId);
+      const mockAgent = mockMastra.getAgentById(agentId);
       // @ts-expect-error - mockRejectedValue is not available on the Agent class
       mockAgent.generate.mockRejectedValue(new Error(errorMessage));
       vi.setSystemTime(new Date('2025-05-08T11:47:38.458Z'));
@@ -253,7 +252,7 @@ describe('A2A Handler', () => {
         taskStore: mockTaskStore,
         agent: mockAgent,
         agentId,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       });
 
       // Because the a2a spec requires the server to create the the taskId, we don't know the id
@@ -278,6 +277,322 @@ describe('A2A Handler', () => {
           "jsonrpc": "2.0",
         }
       `);
+    });
+
+    it('should pass contextId as threadId and agentId as resourceId to agent.generate for memory', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const contextId = 'test-context-id';
+      const userMessage = 'Hello, agent!';
+      const agentResponseText = 'Hello, user!';
+
+      const params: MessageSendParams = {
+        message: {
+          messageId,
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'text', text: userMessage }],
+          contextId, // Include contextId to test memory integration
+        },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: agentResponseText });
+
+      const requestContext = new RequestContext();
+      await handleMessageSend({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        requestContext,
+      });
+
+      // Verify that agent.generate was called with threadId and resourceId (defaults to agentId)
+      expect(mockAgent.generate).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({
+          threadId: contextId,
+          resourceId: agentId,
+        }),
+      );
+    });
+
+    it('should allow user to pass resourceId via params metadata', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const contextId = 'test-context-id';
+      const customResourceId = 'custom-user-resource';
+      const userMessage = 'Hello, agent!';
+      const agentResponseText = 'Hello, user!';
+
+      const params: MessageSendParams = {
+        message: {
+          messageId,
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'text', text: userMessage }],
+          contextId,
+        },
+        metadata: {
+          resourceId: customResourceId, // User-provided resourceId
+        },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: agentResponseText });
+
+      const requestContext = new RequestContext();
+      await handleMessageSend({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        requestContext,
+      });
+
+      // Verify that agent.generate was called with user-provided resourceId
+      expect(mockAgent.generate).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({
+          threadId: contextId,
+          resourceId: customResourceId,
+        }),
+      );
+    });
+
+    it('should allow user to pass resourceId via message metadata', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const contextId = 'test-context-id';
+      const customResourceId = 'custom-message-resource';
+      const userMessage = 'Hello, agent!';
+      const agentResponseText = 'Hello, user!';
+
+      const params: MessageSendParams = {
+        message: {
+          messageId,
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'text', text: userMessage }],
+          contextId,
+          metadata: {
+            resourceId: customResourceId, // User-provided resourceId in message
+          },
+        },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: agentResponseText });
+
+      const requestContext = new RequestContext();
+      await handleMessageSend({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        requestContext,
+      });
+
+      // Verify that agent.generate was called with user-provided resourceId from message
+      expect(mockAgent.generate).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({
+          threadId: contextId,
+          resourceId: customResourceId,
+        }),
+      );
+    });
+
+    it('should prefer params metadata resourceId over message metadata resourceId', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const contextId = 'test-context-id';
+      const paramsResourceId = 'params-resource';
+      const messageResourceId = 'message-resource';
+      const userMessage = 'Hello, agent!';
+      const agentResponseText = 'Hello, user!';
+
+      const params: MessageSendParams = {
+        message: {
+          messageId,
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'text', text: userMessage }],
+          contextId,
+          metadata: {
+            resourceId: messageResourceId,
+          },
+        },
+        metadata: {
+          resourceId: paramsResourceId, // Should take precedence
+        },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: agentResponseText });
+
+      const requestContext = new RequestContext();
+      await handleMessageSend({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        requestContext,
+      });
+
+      // Verify that params metadata resourceId takes precedence
+      expect(mockAgent.generate).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({
+          threadId: contextId,
+          resourceId: paramsResourceId,
+        }),
+      );
+    });
+
+    it('should allow user to pass custom resourceId via params metadata', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const contextId = 'test-context-id';
+      const customResourceId = 'custom-user-resource-id';
+      const userMessage = 'Hello, agent!';
+      const agentResponseText = 'Hello, user!';
+
+      const params: MessageSendParams = {
+        message: {
+          messageId,
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'text', text: userMessage }],
+          contextId,
+        },
+        metadata: {
+          resourceId: customResourceId, // User-provided resourceId
+        },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: agentResponseText });
+
+      const requestContext = new RequestContext();
+      await handleMessageSend({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        requestContext,
+      });
+
+      // Verify that agent.generate was called with the custom resourceId
+      expect(mockAgent.generate).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({
+          threadId: contextId,
+          resourceId: customResourceId,
+        }),
+      );
+    });
+
+    it('should allow user to pass custom resourceId via message metadata', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const contextId = 'test-context-id';
+      const customResourceId = 'message-level-resource-id';
+      const userMessage = 'Hello, agent!';
+      const agentResponseText = 'Hello, user!';
+
+      const params: MessageSendParams = {
+        message: {
+          messageId,
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'text', text: userMessage }],
+          contextId,
+          metadata: {
+            resourceId: customResourceId, // User-provided resourceId at message level
+          },
+        },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: agentResponseText });
+
+      const requestContext = new RequestContext();
+      await handleMessageSend({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        requestContext,
+      });
+
+      // Verify that agent.generate was called with the custom resourceId
+      expect(mockAgent.generate).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({
+          threadId: contextId,
+          resourceId: customResourceId,
+        }),
+      );
+    });
+
+    it('should not pass threadId/resourceId when contextId is not provided', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const userMessage = 'Hello, agent!';
+      const agentResponseText = 'Hello, user!';
+
+      const params: MessageSendParams = {
+        message: {
+          messageId,
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'text', text: userMessage }],
+          // No contextId
+        },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: agentResponseText });
+
+      const requestContext = new RequestContext();
+      await handleMessageSend({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        requestContext,
+      });
+
+      // Verify that agent.generate was NOT called with threadId/resourceId
+      expect(mockAgent.generate).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.not.objectContaining({
+          threadId: expect.any(String),
+        }),
+      );
     });
 
     it('should update an existing task and append new message/history', async () => {
@@ -327,7 +642,7 @@ describe('A2A Handler', () => {
       // Use real InMemoryTaskStore
       await mockTaskStore.save({ agentId, data: existingTask });
 
-      const mockAgent = mockMastra.getAgent(agentId);
+      const mockAgent = mockMastra.getAgentById(agentId);
       // @ts-expect-error - mockResolvedValue is not available on the Agent class
       mockAgent.generate.mockResolvedValue({ text: agentResponseText });
       vi.setSystemTime(new Date('2025-05-08T12:00:00.000Z'));
@@ -338,7 +653,7 @@ describe('A2A Handler', () => {
         taskStore: mockTaskStore,
         agentId,
         agent: mockAgent,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       });
 
       const task = await mockTaskStore.load({ agentId, taskId });
@@ -416,7 +731,7 @@ describe('A2A Handler', () => {
         message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
       };
 
-      const mockAgent = mockMastra.getAgent(agentId);
+      const mockAgent = mockMastra.getAgentById(agentId);
       // @ts-expect-error - mockResolvedValue is not available on the Agent class
       mockAgent.generate.mockResolvedValue({ text: agentResponseText });
 
@@ -428,7 +743,7 @@ describe('A2A Handler', () => {
         taskStore: mockTaskStore,
         agentId,
         agent: mockAgent,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       });
 
       const first = await gen.next();
@@ -504,7 +819,7 @@ describe('A2A Handler', () => {
         message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
       };
 
-      const mockAgent = mockMastra.getAgent(agentId);
+      const mockAgent = mockMastra.getAgentById(agentId);
       // @ts-expect-error - mockRejectedValue is not available on the Agent class
       mockAgent.generate.mockRejectedValue(new Error(errorMessage));
 
@@ -516,7 +831,7 @@ describe('A2A Handler', () => {
         taskStore: mockTaskStore,
         agentId,
         agent: mockAgent,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       });
 
       const first = await gen.next();

@@ -14,25 +14,24 @@
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=22.13.0"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^1.2.12",
-    "@composio/core": "^0.1.47",
-    "@composio/mastra": "^0.1.48",
-    "@mastra/core": "^0.13.2",
-    "@mastra/fastembed": "^0.10.3",
-    "@mastra/libsql": "^0.13.4",
-    "@mastra/loggers": "^0.10.7",
-    "@mastra/mcp": "^0.10.12",
-    "@mastra/memory": "^0.12.2",
-    "@openrouter/ai-sdk-provider": "^0.7.5",
-    "hono": "^4.9.4",
+    "@composio/core": "^0.1.55",
+    "@composio/mastra": "^0.1.56",
+    "@mastra/core": "beta",
+    "@mastra/fastembed": "beta",
+    "@mastra/libsql": "beta",
+    "@mastra/loggers": "beta",
+    "@mastra/mcp": "beta",
+    "@mastra/memory": "beta",
+    "@mastra/observability": "beta",
+    "hono": "^4.10.5",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
-    "mastra": "^0.10.21",
+    "mastra": "beta",
     "prettier": "^3.6.2",
     "typescript": "^5.9.2"
   }

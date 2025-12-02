@@ -1,5 +1,5 @@
 import { MessageList } from '@mastra/core/agent';
-import type { MastraMessageV2 } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { MastraMessageV1 } from '@mastra/core/memory';
 
@@ -36,7 +36,7 @@ export function generateConversationHistory({
   toolNames?: (keyof typeof toolArgs)[];
 }): {
   messages: MastraMessageV1[];
-  messagesV2: MastraMessageV2[];
+  messagesV2: MastraDBMessage[];
   fakeCore: CoreMessage[];
   counts: { messages: number; toolCalls: number; toolResults: number };
 } {
@@ -45,7 +45,7 @@ export function generateConversationHistory({
   const words = ['apple', 'banana', 'orange', 'grape'];
   // Arguments for different tools
 
-  const messages: MastraMessageV2[] = [];
+  const messages: MastraDBMessage[] = [];
   const startTime = Date.now();
 
   // Generate message pairs (user message followed by assistant response)
@@ -71,7 +71,8 @@ export function generateConversationHistory({
 
     // Create assistant message
     if (includeTool) {
-      // Assistant message with tool call
+      // Assistant message with tool call that transitions to result
+      // Note: In reality, there's only ONE tool invocation that mutates from 'call' to 'result' state
       messages.push({
         role: 'assistant',
         content: {
@@ -81,7 +82,7 @@ export function generateConversationHistory({
             {
               type: 'tool-invocation',
               toolInvocation: {
-                state: 'result',
+                state: 'result', // Final state after execution
                 toolCallId: `tool-${i}`,
                 toolName,
                 args: toolArgs[toolName as keyof typeof toolArgs] || {},
@@ -130,7 +131,7 @@ export function generateConversationHistory({
   return {
     fakeCore: list.get.all.v1() as CoreMessage[],
     messages: list.get.all.v1(),
-    messagesV2: list.get.all.v2(),
+    messagesV2: list.get.all.db(),
     counts,
   };
 }
@@ -143,5 +144,27 @@ export function filterToolCallsByName(messages: CoreMessage[], name: string) {
 export function filterToolResultsByName(messages: CoreMessage[], name: string) {
   return messages.filter(
     m => Array.isArray(m.content) && m.content.some(part => part.type === 'tool-result' && part.toolName === name),
+  );
+}
+
+// Helpers for MastraDBMessage format (with tool-invocation parts)
+export function filterMastraToolCallsByName(messages: MastraDBMessage[], name: string) {
+  return messages.filter(m =>
+    m.content.parts?.some(
+      part =>
+        part.type === 'tool-invocation' &&
+        part.toolInvocation.state === 'call' &&
+        part.toolInvocation.toolName === name,
+    ),
+  );
+}
+export function filterMastraToolResultsByName(messages: MastraDBMessage[], name: string) {
+  return messages.filter(m =>
+    m.content.parts?.some(
+      part =>
+        part.type === 'tool-invocation' &&
+        part.toolInvocation.state === 'result' &&
+        part.toolInvocation.toolName === name,
+    ),
   );
 }

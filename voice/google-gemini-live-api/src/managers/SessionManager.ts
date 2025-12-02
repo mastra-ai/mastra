@@ -1,4 +1,4 @@
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'node:events';
 
 export interface SessionConfig {
   debug: boolean;
@@ -210,7 +210,7 @@ export class SessionManager {
    */
   private log(message: string, ...args: unknown[]): void {
     if (this.debug) {
-      console.log(`[SessionManager] ${message}`, ...args);
+      console.info(`[SessionManager] ${message}`, ...args);
     }
   }
 }

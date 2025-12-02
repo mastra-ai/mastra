@@ -1,0 +1,47 @@
+---
+title: "Vectors | v1 Migration Guide"
+description: "Learn how to migrate vector-related changes when upgrading to v1."
+---
+
+# Vectors
+
+Vector store constructors now require an `id` property, and vector store methods have been renamed to follow consistent naming conventions.
+
+## Changed
+
+### Required `id` property for vector store instances
+
+Vector store instances now require an `id` property. This unique identifier is used for tracking and managing vector store instances within Mastra. The `id` should be a descriptive, unique string for each vector store in your application.
+
+To migrate, add an `id` field to your vector store constructor.
+
+```diff
+  const vectorStore = new PgVector({
++   id: 'main-vector-store',
+    connectionString: process.env.POSTGRES_CONNECTION_STRING,
+  });
+
+  const chromaStore = new ChromaVector({
++   id: 'chroma-embeddings',
+    url: process.env.CHROMA_URL,
+  });
+
+  const pineconeStore = new PineconeVector({
++   id: 'pinecone-production',
+    apiKey: process.env.PINECONE_API_KEY,
+    environment: process.env.PINECONE_ENVIRONMENT,
+  });
+```
+
+### `getVectors` to `listVectors`
+
+The `getVectors()` method has been renamed to `listVectors()`. This change aligns with the naming convention used across the API where plural getter methods use the `list` prefix.
+
+To migrate, replace all calls to `getVectors()` with `listVectors()`.
+
+```diff
+  const vectorStore = new VectorStore({ ... });
+
+- const vectors = await vectorStore.getVectors({ ... });
++ const vectors = await vectorStore.listVectors({ ... });
+```

@@ -1,5 +1,6 @@
-import { createOpenAI } from '@ai-sdk/openai';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { embedMany } from 'ai';
+import type { EmbeddingModel } from 'ai';
 import { describe, it, expect, vi } from 'vitest';
 
 import { MDocument } from './document';
@@ -16,8 +17,71 @@ Welcome to our comprehensive guide on modern web development. This resource cove
 - Senior developers seeking a refresher on current best practices
 `;
 
-const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+// Mock embedding model for testing
+const mockEmbeddingModel: EmbeddingModel<string> = {
+  specificationVersion: 'v1',
+  provider: 'mock-provider',
+  modelId: 'mock-embedding-model',
+  maxEmbeddingsPerCall: 128,
+  supportsParallelCalls: true,
+  async doEmbed({ values }: { values: string[] }) {
+    // Return dummy embeddings with consistent dimension (384)
+    const dimension = 384;
+    const embeddings: number[][] = values.map(() =>
+      Array(dimension)
+        .fill(0)
+        .map(() => Math.random()),
+    );
+    return { embeddings };
+  },
+};
+
+// Mock language model for keyword/title/summary/questions extraction
+// Returns different responses based on input text to make tests more realistic
+const mockLanguageModel = new MockLanguageModelV1({
+  doGenerate: async ({ prompt }) => {
+    // Generate a simple response based on the input
+    let mockResponse = 'keyword1, keyword2, keyword3';
+
+    // Check if this is a title extraction (look for context in the prompt)
+    const promptText = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
+    const lowerPrompt = promptText.toLowerCase();
+
+    // Return different responses based on the type of extraction being done
+    // Match on the actual prompt patterns used by each extractor
+    if (promptText.includes('Alpha')) {
+      // Title extraction for Alpha document
+      mockResponse = 'Title for Alpha Document';
+    } else if (promptText.includes('Beta')) {
+      // Title extraction for Beta document
+      mockResponse = 'Title for Beta Document';
+    } else if (lowerPrompt.includes('extract') && lowerPrompt.includes('keywords')) {
+      // Keyword extraction (matches: "extract up to {maxKeywords} keywords")
+      mockResponse = 'KEYWORDS: keyword1, keyword2, keyword3';
+    } else if (lowerPrompt.includes('write a summary')) {
+      // Summary extraction
+      mockResponse = 'SUMMARY: This is a summary of the document content.';
+    } else if (lowerPrompt.includes('generate') && lowerPrompt.includes('questions')) {
+      // Question extraction
+      mockResponse = 'QUESTIONS: 1. What is this about?\n2. Why is this important?';
+    } else if (lowerPrompt.includes('give a title')) {
+      // Title extraction
+      mockResponse = 'Generated Document Title';
+    } else if (lowerPrompt.includes('based on the above candidate titles')) {
+      // Title combine template
+      mockResponse = 'Combined Document Title';
+    }
+
+    return {
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { promptTokens: 10, completionTokens: 20 },
+      text: mockResponse,
+    };
+  },
+  doStream: async () => {
+    throw new Error('Streaming not implemented for mock');
+  },
 });
 
 vi.setConfig({ testTimeout: 100_000, hookTimeout: 100_000 });
@@ -46,22 +110,42 @@ describe('MDocument', () => {
         maxSize: 1500,
         overlap: 0,
         extract: {
-          keywords: true,
+          keywords: { llm: mockLanguageModel },
         },
       });
 
       expect(doc.getMetadata()?.[0]).toBeTruthy();
       expect(chunks).toBeInstanceOf(Array);
-    }, 15000);
+      expect(chunks.length).toBeGreaterThan(0);
+      expect(chunks[0].metadata.excerptKeywords).toBeDefined();
+    });
 
     it('embed - create embedding from chunk', async () => {
+      // Ensure chunks are available (either from previous test or create new ones)
+      if (!chunks || chunks.length === 0) {
+        const testDoc = MDocument.fromMarkdown(sampleMarkdown);
+        chunks = await testDoc.chunk({ maxSize: 1500, overlap: 0 });
+      }
+
       const embeddings = await embedMany({
         values: chunks.map(chunk => chunk.text),
-        model: openai.embedding('text-embedding-3-small'),
+        model: mockEmbeddingModel,
       });
 
       expect(embeddings).toBeDefined();
-    }, 15000);
+      expect(embeddings.embeddings).toBeInstanceOf(Array);
+      expect(embeddings.embeddings.length).toBe(chunks.length);
+
+      // Verify each embedding has the correct dimension
+      embeddings.embeddings.forEach(embedding => {
+        expect(embedding).toBeInstanceOf(Array);
+        expect(embedding.length).toBe(384);
+
+        // Verify embeddings contain actual numbers (not all zeros)
+        const hasVariance = embedding.some(val => val !== embedding[0]);
+        expect(hasVariance).toBe(true);
+      });
+    });
   });
 
   describe('chunkCharacter', () => {
@@ -671,6 +755,40 @@ describe('MDocument', () => {
       expect(docs?.[1]?.metadata?.['Header 2']).toBe('First Section');
     });
 
+    it('should respect maxSize option for sections strategy', async () => {
+      // Create HTML with large content that should be split
+      const longContent = 'This is some section content that needs to be chunked properly. '.repeat(30);
+      const html = `
+        <html>
+          <body>
+            <h1>Main Title</h1>
+            <p>${longContent}</p>
+            <h2>Second Section</h2>
+            <p>${longContent}</p>
+          </body>
+        </html>
+      `;
+
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
+      await doc.chunk({
+        strategy: 'html',
+        sections: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+        ],
+        maxSize: 300,
+        overlap: 30,
+      });
+
+      const docs = doc.getDocs();
+      // Content should be split into multiple chunks (more than 2 sections)
+      expect(docs.length).toBeGreaterThan(2);
+      // Each chunk should be roughly within maxSize
+      docs.forEach(d => {
+        expect(d.text.length).toBeLessThanOrEqual(400); // Some tolerance for overlap
+      });
+    });
+
     it('should properly merge metadata', async () => {
       const doc = new MDocument({
         docs: [
@@ -876,6 +994,266 @@ describe('MDocument', () => {
       expect(xpath2).toBeDefined();
       expect(xpath2).toMatch(/^\/html\[1\]\/body\[1\]\/div\[1\]\/section\[1\]\/div\[2\]\/h1\[1\]$/);
     });
+
+    it('should respect maxSize option for headers strategy', async () => {
+      // Create HTML with large content that should be split
+      const longContent = 'This is some content. '.repeat(50); // ~1100 chars
+      const html = `
+        <html>
+          <body>
+            <h1>Title</h1>
+            <p>${longContent}</p>
+          </body>
+        </html>
+      `;
+
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
+      await doc.chunk({
+        strategy: 'html',
+        headers: [['h1', 'Header 1']],
+        maxSize: 200,
+        overlap: 20,
+      });
+
+      const docs = doc.getDocs();
+      // Content should be split into multiple chunks
+      expect(docs.length).toBeGreaterThan(1);
+      // Each chunk should be roughly within maxSize
+      docs.forEach(d => {
+        expect(d.text.length).toBeLessThanOrEqual(250); // Some tolerance for overlap
+      });
+    });
+
+    it('should not split chunks when maxSize is not specified', async () => {
+      const longContent = 'This is some content. '.repeat(50);
+      const html = `
+        <html>
+          <body>
+            <h1>Title</h1>
+            <p>${longContent}</p>
+          </body>
+        </html>
+      `;
+
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
+      await doc.chunk({
+        strategy: 'html',
+        headers: [['h1', 'Header 1']],
+        // No maxSize specified
+      });
+
+      const docs = doc.getDocs();
+      // Should have exactly 1 chunk (not split by size)
+      expect(docs.length).toBe(1);
+      expect(docs[0]?.text.length).toBeGreaterThan(1000);
+    });
+
+    it('should handle complex academic paper structure with maxSize (arXiv-style HTML)', async () => {
+      // Simulate the structure of an academic paper like "Attention Is All You Need"
+      // from https://arxiv.org/html/1706.03762 - this addresses GitHub Issue #7942
+      const abstractContent = `The dominant sequence transduction models are based on complex recurrent or 
+        convolutional neural networks that include an encoder and a decoder. The best performing models 
+        also connect the encoder and decoder through an attention mechanism. We propose a new simple 
+        network architecture, the Transformer, based solely on attention mechanisms, dispensing with 
+        recurrence and convolutions entirely. Experiments on two machine translation tasks show these 
+        models to be superior in quality while being more parallelizable and requiring significantly 
+        less time to train.`;
+
+      const introContent = `Recurrent neural networks, long short-term memory and gated recurrent neural 
+        networks in particular, have been firmly established as state of the art approaches in sequence 
+        modeling and transduction problems such as language modeling and machine translation. Numerous 
+        efforts have since continued to push the boundaries of recurrent language models and encoder-decoder 
+        architectures. Recurrent models typically factor computation along the symbol positions of the 
+        input and output sequences. Aligning the positions to steps in computation time, they generate 
+        a sequence of hidden states as a function of the previous hidden state and the input for position.
+        This inherently sequential nature precludes parallelization within training examples, which becomes 
+        critical at longer sequence lengths, as memory constraints limit batching across examples.`;
+
+      const modelContent = `In this work we propose the Transformer, a model architecture eschewing recurrence 
+        and instead relying entirely on an attention mechanism to draw global dependencies between input 
+        and output. The Transformer allows for significantly more parallelization and can reach a new 
+        state of the art in translation quality after being trained for as little as twelve hours on 
+        eight P100 GPUs. Self-attention, sometimes called intra-attention is an attention mechanism 
+        relating different positions of a single sequence in order to compute a representation of the 
+        sequence. Self-attention has been used successfully in a variety of tasks including reading 
+        comprehension, abstractive summarization, textual entailment and learning task-independent 
+        sentence representations.`;
+
+      const attentionContent = `An attention function can be described as mapping a query and a set of 
+        key-value pairs to an output, where the query, keys, values, and output are all vectors. The 
+        output is computed as a weighted sum of the values, where the weight assigned to each value is 
+        computed by a compatibility function of the query with the corresponding key. We call our 
+        particular attention Scaled Dot-Product Attention. The input consists of queries and keys of 
+        dimension dk, and values of dimension dv. We compute the dot products of the query with all 
+        keys, divide each by sqrt(dk), and apply a softmax function to obtain the weights on the values.`;
+
+      const html = `
+        <html>
+          <head><title>Attention Is All You Need</title></head>
+          <body>
+            <h1>Attention Is All You Need</h1>
+            <h2>Abstract</h2>
+            <p>${abstractContent}</p>
+            
+            <h2>1 Introduction</h2>
+            <p>${introContent}</p>
+            
+            <h2>2 Model Architecture</h2>
+            <p>${modelContent}</p>
+            
+            <h3>2.1 Attention</h3>
+            <p>${attentionContent}</p>
+            
+            <h3>2.2 Multi-Head Attention</h3>
+            <p>Instead of performing a single attention function with d-dimensional keys, values and 
+            queries, we found it beneficial to linearly project the queries, keys and values h times 
+            with different, learned linear projections to dk, dk and dv dimensions, respectively.</p>
+            
+            <h2>3 Conclusion</h2>
+            <p>In this work, we presented the Transformer, the first sequence transduction model based 
+            entirely on attention, replacing the recurrent layers most commonly used in encoder-decoder 
+            architectures with multi-headed self-attention.</p>
+          </body>
+        </html>
+      `;
+
+      // Test 1: Without maxSize - should produce fewer, larger chunks
+      const docWithoutMaxSize = MDocument.fromHTML(html, { source: 'arxiv' });
+      await docWithoutMaxSize.chunk({
+        strategy: 'html',
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+          ['h3', 'Header 3'],
+        ],
+      });
+      const docsWithoutMaxSize = docWithoutMaxSize.getDocs();
+
+      // Calculate max chunk size without maxSize option
+      const maxSizeWithout = Math.max(...docsWithoutMaxSize.map(d => d.text.length));
+
+      // Test 2: With maxSize=512 - should produce more, smaller chunks
+      const docWithMaxSize = MDocument.fromHTML(html, { source: 'arxiv' });
+      await docWithMaxSize.chunk({
+        strategy: 'html',
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+          ['h3', 'Header 3'],
+        ],
+        maxSize: 512,
+        overlap: 50,
+      });
+      const docsWithMaxSize = docWithMaxSize.getDocs();
+
+      // Calculate max chunk size with maxSize option
+      const maxSizeWith = Math.max(...docsWithMaxSize.map(d => d.text.length));
+
+      // Verify that maxSize creates more chunks (when content is large enough to split)
+      expect(docsWithMaxSize.length).toBeGreaterThanOrEqual(docsWithoutMaxSize.length);
+
+      // Verify chunk sizes are controlled (should be smaller with maxSize)
+      expect(maxSizeWith).toBeLessThanOrEqual(maxSizeWithout);
+
+      // Verify all chunks with maxSize are within the limit (with some tolerance)
+      docsWithMaxSize.forEach(d => {
+        expect(d.text.length).toBeLessThanOrEqual(600); // Allow some tolerance for overlap
+      });
+
+      // Test 3: Even smaller chunks for embedding use case
+      const docSmallChunks = MDocument.fromHTML(html, { source: 'arxiv' });
+      await docSmallChunks.chunk({
+        strategy: 'html',
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+          ['h3', 'Header 3'],
+        ],
+        maxSize: 256,
+        overlap: 25,
+      });
+      const docsSmallChunks = docSmallChunks.getDocs();
+
+      // Should have even more chunks with smaller maxSize
+      expect(docsSmallChunks.length).toBeGreaterThanOrEqual(docsWithMaxSize.length);
+
+      // Verify all chunks are within size limit
+      docsSmallChunks.forEach(d => {
+        expect(d.text.length).toBeLessThanOrEqual(320); // Allow some tolerance
+      });
+    });
+
+    // Integration test that hits the actual arXiv URL
+    // Skip in CI - run with: pnpm test -- --grep "arXiv integration"
+    it.skipIf(process.env.CI === 'true')(
+      'should chunk real arXiv paper HTML with maxSize (integration test)',
+      async () => {
+        // Fetch the actual "Attention Is All You Need" paper
+        // https://arxiv.org/html/1706.03762
+        const paperUrl = 'https://arxiv.org/html/1706.03762';
+        const response = await fetch(paperUrl);
+        expect(response.ok).toBe(true);
+
+        const paperText = await response.text();
+        expect(paperText.length).toBeGreaterThan(10000); // Should be a substantial HTML document
+
+        // Test 1: Without maxSize - large chunks
+        const docWithoutMaxSize = MDocument.fromHTML(paperText, { source: paperUrl });
+        await docWithoutMaxSize.chunk({
+          strategy: 'html',
+          headers: [
+            ['h1', 'Header 1'],
+            ['h2', 'Header 2'],
+            ['h3', 'Header 3'],
+          ],
+        });
+        const docsWithoutMaxSize = docWithoutMaxSize.getDocs();
+
+        // Should have chunks (the paper has multiple sections)
+        expect(docsWithoutMaxSize.length).toBeGreaterThan(0);
+
+        // Calculate stats for without maxSize
+        const sizesWithout = docsWithoutMaxSize.map(d => d.text.length);
+        const maxWithout = Math.max(...sizesWithout);
+        const avgWithout = sizesWithout.reduce((a, b) => a + b, 0) / sizesWithout.length;
+
+        // Test 2: With maxSize=512 - controlled chunks
+        const docWithMaxSize = MDocument.fromHTML(paperText, { source: paperUrl });
+        await docWithMaxSize.chunk({
+          strategy: 'html',
+          headers: [
+            ['h1', 'Header 1'],
+            ['h2', 'Header 2'],
+            ['h3', 'Header 3'],
+          ],
+          maxSize: 512,
+          overlap: 50,
+        });
+        const docsWithMaxSize = docWithMaxSize.getDocs();
+
+        // Calculate stats for with maxSize
+        const sizesWith = docsWithMaxSize.map(d => d.text.length);
+        const maxWith = Math.max(...sizesWith);
+
+        // Key assertion: maxSize should control chunk sizes
+        expect(maxWith).toBeLessThan(maxWithout);
+        expect(docsWithMaxSize.length).toBeGreaterThanOrEqual(docsWithoutMaxSize.length);
+
+        // Verify chunks are within size limit (with tolerance)
+        docsWithMaxSize.forEach(d => {
+          expect(d.text.length).toBeLessThanOrEqual(600);
+        });
+
+        // Log results for visibility when running locally
+        console.log('\n📊 arXiv Paper Chunking Results:');
+        console.log(`   Paper size: ${paperText.length.toLocaleString()} chars`);
+        console.log(
+          `   Without maxSize: ${docsWithoutMaxSize.length} chunks, max: ${maxWithout}, avg: ${Math.round(avgWithout)}`,
+        );
+        console.log(`   With maxSize=512: ${docsWithMaxSize.length} chunks, max: ${maxWith}`);
+      },
+      30000, // 30 second timeout for network request
+    );
   });
 
   describe('chunkJson', () => {
@@ -1874,9 +2252,9 @@ describe('MDocument', () => {
       const chunks = await doc.chunk({
         strategy: 'markdown',
         extract: {
-          title: true,
-          summary: true,
-          keywords: true,
+          title: { llm: mockLanguageModel },
+          summary: { llm: mockLanguageModel },
+          keywords: { llm: mockLanguageModel },
         },
       });
 
@@ -1884,8 +2262,8 @@ describe('MDocument', () => {
       expect(metadata).toBeDefined();
       expect(metadata.documentTitle).toBeDefined();
       expect(metadata.sectionSummary).toBeDefined();
-      expect(metadata.excerptKeywords).toMatch(/^KEYWORDS: .*/);
-    }, 15000);
+      expect(metadata.excerptKeywords).toBeDefined();
+    });
 
     it('should extract metadata with custom settings', async () => {
       const doc = MDocument.fromMarkdown(
@@ -1896,19 +2274,23 @@ describe('MDocument', () => {
         strategy: 'markdown',
         extract: {
           title: {
+            llm: mockLanguageModel,
             nodes: 2,
             nodeTemplate: 'Generate a title for this: {context}',
             combineTemplate: 'Combine these titles: {context}',
           },
           summary: {
+            llm: mockLanguageModel,
             summaries: ['self'],
             promptTemplate: 'Summarize this: {context}',
           },
           questions: {
+            llm: mockLanguageModel,
             questions: 2,
             promptTemplate: 'Generate {numQuestions} questions about: {context}',
           },
           keywords: {
+            llm: mockLanguageModel,
             keywords: 3,
             promptTemplate: 'Extract {maxKeywords} key terms from: {context}',
           },
@@ -1919,12 +2301,9 @@ describe('MDocument', () => {
       expect(metadata).toBeDefined();
       expect(metadata.documentTitle).toBeDefined();
       expect(metadata.sectionSummary).toBeDefined();
-      const qStr = metadata.questionsThisExcerptCanAnswer;
-      expect(qStr).toMatch(/1\..*\?/s);
-      expect(qStr).toMatch(/2\..*\?/s);
-      expect((qStr.match(/\?/g) || []).length).toBeGreaterThanOrEqual(2);
-      expect(metadata.excerptKeywords).toMatch(/^1\. .*\n2\. .*\n3\. .*$/);
-    }, 15000);
+      expect(metadata.questionsThisExcerptCanAnswer).toBeDefined();
+      expect(metadata.excerptKeywords).toBeDefined();
+    });
 
     it('should handle invalid summary types', async () => {
       const doc = MDocument.fromText('Test document');
@@ -1947,16 +2326,19 @@ describe('MDocument', () => {
 
     it('preserves metadata with KeywordExtractor', async () => {
       const doc = MDocument.fromText(baseText, { ...baseMetadata });
-      const chunks = await doc.chunk({ extract: { keywords: true } });
+      const chunks = await doc.chunk({ extract: { keywords: { llm: mockLanguageModel } } });
       const metadata = chunks[0].metadata;
+
       expect(metadata.source).toBe('unit-test');
       expect(metadata.customField).toBe(123);
       expect(metadata.excerptKeywords).toBeDefined();
+      expect(typeof metadata.excerptKeywords).toBe('string');
+      expect(metadata.excerptKeywords.length).toBeGreaterThan(0);
     });
 
     it('preserves metadata with SummaryExtractor', async () => {
       const doc = MDocument.fromText(baseText, { ...baseMetadata });
-      const chunks = await doc.chunk({ extract: { summary: true } });
+      const chunks = await doc.chunk({ extract: { summary: { llm: mockLanguageModel } } });
       const metadata = chunks[0].metadata;
       expect(metadata.source).toBe('unit-test');
       expect(metadata.customField).toBe(123);
@@ -1965,7 +2347,7 @@ describe('MDocument', () => {
 
     it('preserves metadata with QuestionsAnsweredExtractor', async () => {
       const doc = MDocument.fromText(baseText, { ...baseMetadata });
-      const chunks = await doc.chunk({ extract: { questions: true } });
+      const chunks = await doc.chunk({ extract: { questions: { llm: mockLanguageModel } } });
       const metadata = chunks[0].metadata;
       expect(metadata.source).toBe('unit-test');
       expect(metadata.customField).toBe(123);
@@ -1974,7 +2356,7 @@ describe('MDocument', () => {
 
     it('preserves metadata with TitleExtractor', async () => {
       const doc = MDocument.fromText(baseText, { ...baseMetadata });
-      const chunks = await doc.chunk({ extract: { title: true } });
+      const chunks = await doc.chunk({ extract: { title: { llm: mockLanguageModel } } });
       const metadata = chunks[0].metadata;
       expect(metadata.source).toBe('unit-test');
       expect(metadata.customField).toBe(123);
@@ -1985,19 +2367,24 @@ describe('MDocument', () => {
       const doc = MDocument.fromText(baseText, { ...baseMetadata });
       const chunks = await doc.chunk({
         extract: {
-          keywords: true,
-          summary: true,
-          questions: true,
-          title: true,
+          keywords: { llm: mockLanguageModel },
+          summary: { llm: mockLanguageModel },
+          questions: { llm: mockLanguageModel },
+          title: { llm: mockLanguageModel },
         },
       });
       const metadata = chunks[0].metadata;
+
       expect(metadata.source).toBe('unit-test');
       expect(metadata.customField).toBe(123);
       expect(metadata.excerptKeywords).toBeDefined();
       expect(metadata.sectionSummary).toBeDefined();
       expect(metadata.questionsThisExcerptCanAnswer).toBeDefined();
       expect(metadata.documentTitle).toBeDefined();
+
+      // Verify each extractor produces distinct output
+      expect(metadata.excerptKeywords).not.toBe(metadata.sectionSummary);
+      expect(metadata.sectionSummary).not.toBe(metadata.questionsThisExcerptCanAnswer);
     });
     it('preserves metadata on all chunks when multiple are created', async () => {
       const text = 'Chunk one.\n\nChunk two.\n\nChunk three.';
@@ -2007,7 +2394,7 @@ describe('MDocument', () => {
         separator: '\n\n',
         maxSize: 20,
         overlap: 0,
-        extract: { keywords: true },
+        extract: { keywords: { llm: mockLanguageModel } },
       });
       expect(chunks.length).toBeGreaterThan(1);
       for (const chunk of chunks) {
@@ -2024,7 +2411,7 @@ describe('MDocument', () => {
         unrelatedField: 'should stay',
         source: 'unit-test',
       });
-      const chunks = await doc.chunk({ extract: { keywords: true } });
+      const chunks = await doc.chunk({ extract: { keywords: { llm: mockLanguageModel } } });
       const metadata = chunks[0].metadata;
       expect(metadata.source).toBe('unit-test');
       expect(metadata.unrelatedField).toBe('should stay');
@@ -2042,7 +2429,7 @@ describe('MDocument', () => {
         type: 'text',
       });
 
-      await doc.extractMetadata({ title: true });
+      await doc.extractMetadata({ title: { llm: mockLanguageModel } });
       const chunks = doc.getDocs();
 
       const titleA1 = chunks[0].metadata.documentTitle;
@@ -2052,7 +2439,11 @@ describe('MDocument', () => {
       expect(titleA1).toBeDefined();
       expect(titleA2).toBeDefined();
       expect(titleB).toBeDefined();
+
+      // Chunks with same docId should get same title (grouped)
       expect(titleA1).toBe(titleA2);
+
+      // Chunks with different docId should get different titles
       expect(titleA1).not.toBe(titleB);
     });
   });

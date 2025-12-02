@@ -1,7 +1,15 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
-import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
+import { saveScorePayloadSchema } from '@mastra/core/evals';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import {
+  ScoresStorage,
+  SCORERS_SCHEMA,
+  TABLE_SCORERS,
+  calculatePagination,
+  normalizePerPage,
+  transformScoreRow as coreTransformScoreRow,
+} from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsClickhouse } from '../operations';
 
@@ -14,31 +22,15 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     this.operations = operations;
   }
 
+  /**
+   * ClickHouse-specific score row transformation.
+   * Converts timestamps to Date objects and filters out '_null_' values.
+   */
   private transformScoreRow(row: any): ScoreRowData {
-    const scorer = safelyParseJSON(row.scorer);
-    const preprocessStepResult = safelyParseJSON(row.preprocessStepResult);
-    const analyzeStepResult = safelyParseJSON(row.analyzeStepResult);
-    const metadata = safelyParseJSON(row.metadata);
-    const input = safelyParseJSON(row.input);
-    const output = safelyParseJSON(row.output);
-    const additionalContext = safelyParseJSON(row.additionalContext);
-    const runtimeContext = safelyParseJSON(row.runtimeContext);
-    const entity = safelyParseJSON(row.entity);
-
-    return {
-      ...row,
-      scorer,
-      preprocessStepResult,
-      analyzeStepResult,
-      metadata,
-      input,
-      output,
-      additionalContext,
-      runtimeContext,
-      entity,
-      createdAt: new Date(row.createdAt),
-      updatedAt: new Date(row.updatedAt),
-    };
+    return coreTransformScoreRow(row, {
+      convertTimestamps: true,
+      nullValuePattern: '_null_',
+    });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
@@ -77,10 +69,33 @@ export class ScoresStorageClickhouse extends ScoresStorage {
   }
 
   async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+    let parsedScore: ValidatedSaveScorePayload;
     try {
-      const record = {
-        ...score,
-      };
+      parsedScore = saveScorePayloadSchema.parse(score);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_SAVE_SCORE_FAILED_INVALID_SCORE_PAYLOAD',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { scoreId: score.id },
+        },
+        error,
+      );
+    }
+
+    try {
+      // Build record from schema columns, converting undefined to null for ClickHouse
+      const record: Record<string, unknown> = {};
+      for (const key of Object.keys(SCORERS_SCHEMA)) {
+        const value = parsedScore[key as keyof typeof parsedScore];
+        if (key === 'createdAt' || key === 'updatedAt') {
+          record[key] = new Date().toISOString();
+          continue;
+        }
+        record[key] = value === undefined || value === null ? '_null_' : value;
+      }
+
       await this.client.insert({
         table: TABLE_SCORERS,
         values: [record],
@@ -105,7 +120,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     }
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -125,25 +140,33 @@ export class ScoresStorageClickhouse extends ScoresStorage {
         const countObj = countRows[0] as { count: string | number };
         total = Number(countObj.count);
       }
+
+      const { page, perPage: perPageInput } = pagination;
+
       if (!total) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageInput,
             hasMore: false,
           },
           scores: [],
         };
       }
+
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
+
       // Get paginated results
-      const offset = pagination.page * pagination.perPage;
       const result = await this.client.query({
         query: `SELECT * FROM ${TABLE_SCORERS} WHERE runId = {var_runId:String} ORDER BY createdAt DESC LIMIT {var_limit:Int64} OFFSET {var_offset:Int64}`,
         query_params: {
           var_runId: runId,
-          var_limit: pagination.perPage,
-          var_offset: offset,
+          var_limit: limitValue,
+          var_offset: start,
         },
         format: 'JSONEachRow',
         clickhouse_settings: {
@@ -158,9 +181,9 @@ export class ScoresStorageClickhouse extends ScoresStorage {
       return {
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: total > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
         scores,
       };
@@ -177,7 +200,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     }
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     entityId,
     entityType,
@@ -219,25 +242,33 @@ export class ScoresStorageClickhouse extends ScoresStorage {
         const countObj = countRows[0] as { count: string | number };
         total = Number(countObj.count);
       }
+
+      const { page, perPage: perPageInput } = pagination;
+
       if (!total) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageInput,
             hasMore: false,
           },
           scores: [],
         };
       }
+
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
+
       // Get paginated results
-      const offset = pagination.page * pagination.perPage;
       const result = await this.client.query({
         query: `SELECT * FROM ${TABLE_SCORERS} WHERE ${whereClause} ORDER BY createdAt DESC LIMIT {var_limit:Int64} OFFSET {var_offset:Int64}`,
         query_params: {
           var_scorerId: scorerId,
-          var_limit: pagination.perPage,
-          var_offset: offset,
+          var_limit: limitValue,
+          var_offset: start,
           var_entityId: entityId,
           var_entityType: entityType,
           var_source: source,
@@ -255,9 +286,9 @@ export class ScoresStorageClickhouse extends ScoresStorage {
       return {
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: total > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
         scores,
       };
@@ -274,7 +305,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     }
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -296,26 +327,34 @@ export class ScoresStorageClickhouse extends ScoresStorage {
         const countObj = countRows[0] as { count: string | number };
         total = Number(countObj.count);
       }
+
+      const { page, perPage: perPageInput } = pagination;
+
       if (!total) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageInput,
             hasMore: false,
           },
           scores: [],
         };
       }
+
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
+
       // Get paginated results
-      const offset = pagination.page * pagination.perPage;
       const result = await this.client.query({
         query: `SELECT * FROM ${TABLE_SCORERS} WHERE entityId = {var_entityId:String} AND entityType = {var_entityType:String} ORDER BY createdAt DESC LIMIT {var_limit:Int64} OFFSET {var_offset:Int64}`,
         query_params: {
           var_entityId: entityId,
           var_entityType: entityType,
-          var_limit: pagination.perPage,
-          var_offset: offset,
+          var_limit: limitValue,
+          var_offset: start,
         },
         format: 'JSONEachRow',
         clickhouse_settings: {
@@ -330,9 +369,9 @@ export class ScoresStorageClickhouse extends ScoresStorage {
       return {
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: total > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
         scores,
       };
@@ -343,6 +382,92 @@ export class ScoresStorageClickhouse extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { entityId, entityType },
+        },
+        error,
+      );
+    }
+  }
+
+  async listScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    try {
+      const countResult = await this.client.query({
+        query: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE traceId = {var_traceId:String} AND spanId = {var_spanId:String}`,
+        query_params: {
+          var_traceId: traceId,
+          var_spanId: spanId,
+        },
+        format: 'JSONEachRow',
+      });
+      const countRows = await countResult.json();
+      let total = 0;
+      if (Array.isArray(countRows) && countRows.length > 0 && countRows[0]) {
+        const countObj = countRows[0] as { count: string | number };
+        total = Number(countObj.count);
+      }
+
+      const { page, perPage: perPageInput } = pagination;
+
+      if (!total) {
+        return {
+          pagination: {
+            total: 0,
+            page,
+            perPage: perPageInput,
+            hasMore: false,
+          },
+          scores: [],
+        };
+      }
+
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
+
+      const result = await this.client.query({
+        query: `SELECT * FROM ${TABLE_SCORERS} WHERE traceId = {var_traceId:String} AND spanId = {var_spanId:String} ORDER BY createdAt DESC LIMIT {var_limit:Int64} OFFSET {var_offset:Int64}`,
+        query_params: {
+          var_traceId: traceId,
+          var_spanId: spanId,
+          var_limit: limitValue,
+          var_offset: start,
+        },
+        format: 'JSONEachRow',
+        clickhouse_settings: {
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+
+      const rows = await result.json();
+      const scores = Array.isArray(rows) ? rows.map(row => this.transformScoreRow(row)) : [];
+
+      return {
+        pagination: {
+          total,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
+        },
+        scores,
+      };
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_GET_SCORES_BY_SPAN_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { traceId, spanId },
         },
         error,
       );

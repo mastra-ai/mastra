@@ -1,0 +1,263 @@
+---
+title: "Reference: Agent.network() | Agents"
+description: "Documentation for the `Agent.network()` method in Mastra agents, which enables multi-agent collaboration and routing."
+---
+
+import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsProperties";
+
+# Agent.network()
+
+:::caution Experimental Feature
+This is an experimental API that may change in future versions. The `network()` method enables multi-agent collaboration and workflow orchestration. Use with caution in production environments.
+:::
+
+The `.network()` method enables multi-agent collaboration and routing. This method accepts messages and optional execution options.
+
+## Usage example
+
+```typescript copy
+import { Agent } from "@mastra/core/agent";
+import { agent1, agent2 } from "./agents";
+import { workflow1 } from "./workflows";
+import { tool1, tool2 } from "./tools";
+
+const agent = new Agent({
+  id: "network-agent",
+  name: "Network Agent",
+  instructions:
+    "You are a network agent that can help users with a variety of tasks.",
+  model: "openai/gpt-5.1",
+  agents: {
+    agent1,
+    agent2,
+  },
+  workflows: {
+    workflow1,
+  },
+  tools: {
+    tool1,
+    tool2,
+  },
+});
+
+await agent.network(`
+  Find me the weather in Tokyo.
+  Based on the weather, plan an activity for me.
+`);
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]",
+      description:
+        "The messages to send to the agent. Can be a single string, array of strings, or structured message objects.",
+    },
+    {
+      name: "options",
+      type: "MultiPrimitiveExecutionOptions",
+      isOptional: true,
+      description: "Optional configuration for the network process.",
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "maxSteps",
+      type: "number",
+      isOptional: true,
+      description: "Maximum number of steps to run during execution.",
+    },
+    {
+      name: "memory",
+      type: "object",
+      isOptional: true,
+      description:
+        "Configuration for memory. This is the preferred way to manage memory.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "thread",
+              type: "string | { id: string; metadata?: Record<string, any>, title?: string }",
+              isOptional: false,
+              description:
+                "The conversation thread, as a string ID or an object with an `id` and optional `metadata`.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "resource",
+              type: "string",
+              isOptional: false,
+              description:
+                "Identifier for the user or resource associated with the thread.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "options",
+              type: "MemoryConfig",
+              isOptional: true,
+              description:
+                "Configuration for memory behavior, like message history and semantic recall.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      isOptional: true,
+      description:
+        "Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "currentSpan",
+              type: "Span",
+              isOptional: true,
+              description:
+                "Current span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "Options for Tracing configuration.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description:
+                "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "telemetry",
+      type: "TelemetrySettings",
+      isOptional: true,
+      description:
+        "Settings for OTLP telemetry collection during streaming (not Tracing).",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "isEnabled",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "Enable or disable telemetry. Disabled by default while experimental.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "recordInputs",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "Enable or disable input recording. Enabled by default. You might want to disable input recording to avoid recording sensitive information.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "recordOutputs",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "Enable or disable output recording. Enabled by default. You might want to disable output recording to avoid recording sensitive information.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "functionId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Identifier for this function. Used to group telemetry data by function.",
+            },
+          ],
+        },
+      ],
+    },
+    MODEL_SETTINGS_OBJECT,
+    {
+      name: "runId",
+      type: "string",
+      isOptional: true,
+      description:
+        "Unique ID for this generation run. Useful for tracking and debugging purposes.",
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      description:
+        "Request Context for dependency injection and contextual information.",
+    },
+    {
+      name: "traceId",
+      type: "string",
+      isOptional: true,
+      description:
+        "The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "stream",
+      type: "MastraAgentNetworkStream<NetworkChunkType>",
+      description:
+        "A custom stream that extends ReadableStream<NetworkChunkType> with additional network-specific properties",
+    },
+    {
+      name: "status",
+      type: "Promise<RunStatus>",
+      description: "A promise that resolves to the current workflow run status",
+    },
+    {
+      name: "result",
+      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+      description: "A promise that resolves to the final workflow result",
+    },
+    {
+      name: "usage",
+      type: "Promise<{ promptTokens: number; completionTokens: number; totalTokens: number }>",
+      description: "A promise that resolves to token usage statistics",
+    },
+  ]}
+/>

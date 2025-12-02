@@ -2,7 +2,7 @@ import {
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
-  ToolCallContentPartComponent,
+  ToolCallMessagePartComponent,
   useComposerRuntime,
 } from '@assistant-ui/react';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
@@ -13,27 +13,27 @@ import { Button } from '@/components/ui/button';
 
 import { AssistantMessage } from './messages/assistant-message';
 import { UserMessage } from './messages/user-messages';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
-import { Txt } from '@/ds/components/Txt';
-import { Icon, InfoIcon } from '@/ds/icons';
+
 import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
 import { ComposerAttachments } from './attachments/attachment';
+import { AttachFileDialog } from './attachments/attach-file-dialog';
+import { useThreadInput } from '@/domains/conversation';
 
 export interface ThreadProps {
-  ToolFallback?: ToolCallContentPartComponent;
   agentName?: string;
   agentId?: string;
   hasMemory?: boolean;
-  onInputChange?: (value: string) => void;
+  hasModelList?: boolean;
 }
 
-export const Thread = ({ ToolFallback, agentName, agentId, hasMemory, onInputChange }: ThreadProps) => {
+export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
   const WrappedAssistantMessage = (props: MessagePrimitive.Root.Props) => {
-    return <AssistantMessage {...props} ToolFallback={ToolFallback} />;
+    return <AssistantMessage {...props} hasModelList={hasModelList} />;
   };
 
   return (
@@ -56,14 +56,16 @@ export const Thread = ({ ToolFallback, agentName, agentId, hasMemory, onInputCha
         </ThreadPrimitive.If>
       </ThreadPrimitive.Viewport>
 
-      <Composer hasMemory={hasMemory} onInputChange={onInputChange} agentId={agentId} />
+      <Composer hasMemory={hasMemory} agentId={agentId} />
     </ThreadWrapper>
   );
 };
 
 const ThreadWrapper = ({ children }: { children: React.ReactNode }) => {
   return (
-    <ThreadPrimitive.Root className="grid grid-rows-[1fr_auto] h-full overflow-y-auto">{children}</ThreadPrimitive.Root>
+    <ThreadPrimitive.Root className="grid grid-rows-[1fr_auto] h-full overflow-y-auto" data-testid="thread-wrapper">
+      {children}
+    </ThreadPrimitive.Root>
   );
 };
 
@@ -99,11 +101,11 @@ const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
 
 interface ComposerProps {
   hasMemory?: boolean;
-  onInputChange?: (value: string) => void;
   agentId?: string;
 }
 
-const Composer = ({ hasMemory, onInputChange, agentId }: ComposerProps) => {
+const Composer = ({ hasMemory, agentId }: ComposerProps) => {
+  const { setThreadInput } = useThreadInput();
   return (
     <div className="mx-4">
       <ComposerPrimitive.Root>
@@ -115,11 +117,11 @@ const Composer = ({ hasMemory, onInputChange, agentId }: ComposerProps) => {
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
               className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent focus:outline-none resize-none outline-none"
-              autoFocus
+              autoFocus={document.activeElement === document.body}
               placeholder="Enter your message..."
               name=""
               id=""
-              onChange={e => onInputChange?.(e.target.value)}
+              onChange={e => setThreadInput?.(e.target.value)}
             ></textarea>
           </ComposerPrimitive.Input>
           <div className="flex justify-end gap-2">
@@ -128,15 +130,6 @@ const Composer = ({ hasMemory, onInputChange, agentId }: ComposerProps) => {
           </div>
         </div>
       </ComposerPrimitive.Root>
-
-      {!hasMemory && (
-        <Txt variant="ui-sm" className="text-icon3 flex gap-2 pt-1 max-w-[568px] w-full mx-auto border-t items-start">
-          <Icon className="transform translate-y-[0.1rem]">
-            <InfoIcon />
-          </Icon>
-          Memory is not enabled. The conversation will not be persisted.
-        </Txt>
-      )}
     </div>
   );
 };
@@ -165,13 +158,21 @@ const SpeechInput = ({ agentId }: { agentId?: string }) => {
 };
 
 const ComposerAction = () => {
+  const [isAddAttachmentDialogOpen, setIsAddAttachmentDialogOpen] = useState(false);
+
   return (
     <>
-      <ComposerPrimitive.AddAttachment asChild>
-        <TooltipIconButton tooltip="Add attachment" variant="ghost" className="rounded-full">
-          <PlusIcon className="h-6 w-6 text-[#898989] hover:text-[#fff]" />
-        </TooltipIconButton>
-      </ComposerPrimitive.AddAttachment>
+      <TooltipIconButton
+        type="button"
+        tooltip="Add attachment"
+        variant="ghost"
+        className="rounded-full"
+        onClick={() => setIsAddAttachmentDialogOpen(true)}
+      >
+        <PlusIcon className="h-6 w-6 text-[#898989] hover:text-[#fff]" />
+      </TooltipIconButton>
+
+      <AttachFileDialog open={isAddAttachmentDialogOpen} onOpenChange={setIsAddAttachmentDialogOpen} />
 
       <ThreadPrimitive.If running={false}>
         <ComposerPrimitive.Send asChild>
