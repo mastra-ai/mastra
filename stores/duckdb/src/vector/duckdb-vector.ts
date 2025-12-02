@@ -207,13 +207,14 @@ export class DuckDBVector extends MastraVector {
    */
   private async execute(conn: duckdb.Connection, sql: string, params: any[] = []): Promise<any[]> {
     return new Promise((resolve, reject) => {
-      // DuckDB expects parameters as separate arguments, not an array
       const callback = (err: Error | null, result: any[]) => {
         if (err) reject(err);
         else resolve(result || []);
       };
 
-      // Spread the params array as individual arguments
+      // DuckDB (v1.4.0) expects parameters as separate arguments, not an array
+      // conn.all(sql, param1, param2, ..., callback)
+      // This is the documented behavior for the duckdb npm package v1.4.0
       conn.all(sql, ...params, callback);
     });
   }
