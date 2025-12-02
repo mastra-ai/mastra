@@ -42,13 +42,17 @@ function isRelativePath(specifier: string): boolean {
  */
 async function getParentPath(specifier: string, url: string): Promise<string | null> {
   if (!cache.size) {
+    let moduleResolveMapLocation = process.env.MODULE_MAP;
+    if (!moduleResolveMapLocation) {
+      moduleResolveMapLocation = join(process.cwd(), 'module-resolve-map.json');
+    }
     const moduleResolveMap = JSON.parse(
       // cwd refers to the output/build directory
-      await readFile(join(process.cwd(), 'module-resolve-map.json'), 'utf-8'),
+      await readFile(moduleResolveMapLocation, 'utf-8'),
     ) as Record<string, Record<string, string>>;
 
     for (const [id, rest] of Object.entries(moduleResolveMap)) {
-      cache.set(pathToFileURL(id).toString(), rest);
+      cache.set(id, rest);
     }
   }
 
@@ -61,9 +65,8 @@ async function getParentPath(specifier: string, url: string): Promise<string | n
   if (!matchedPackage) {
     return null;
   }
-
   const specifierParent = importers[matchedPackage]!;
-  return pathToFileURL(specifierParent).toString();
+  return specifierParent;
 }
 
 export async function resolve(
