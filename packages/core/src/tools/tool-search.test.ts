@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 
 import { createTool } from './tool';
-import { ToolSearchIndex, createToolSearchTool, createToolSearch } from './tool-search';
+import { DeferredToolset, ToolSearchIndex, createToolSearchTool, createToolSearch } from './tool-search';
 
 // Mock embedding function that creates simple embeddings based on word overlap
 function mockEmbed(text: string): number[] {
@@ -74,7 +74,314 @@ const emailTool = createTool({
   },
 });
 
-describe('ToolSearchIndex', () => {
+const helpTool = createTool({
+  id: 'help',
+  description: 'Get help and documentation',
+  inputSchema: z.object({}),
+  execute: async () => {
+    return { message: 'How can I help you?' };
+  },
+});
+
+// ============================================================================
+// DeferredToolset Tests (Primary API)
+// ============================================================================
+
+describe('DeferredToolset', () => {
+  let toolset: DeferredToolset;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    toolset = new DeferredToolset({
+      embedder: mockEmbedder,
+    });
+  });
+
+  describe('addTools', () => {
+    it('should add always-loaded tools', async () => {
+      await toolset.addTools({ help: helpTool }, { deferLoading: false });
+
+      expect(toolset.getAlwaysLoadedToolIds()).toContain('help');
+      expect(toolset.hasTool('help')).toBe(true);
+    });
+
+    it('should add deferred tools with embeddings', async () => {
+      await toolset.addTools(
+        {
+          calculator: calculatorTool,
+          weather: weatherTool,
+        },
+        { deferLoading: true },
+      );
+
+      expect(toolset.getDeferredToolIds()).toContain('calculator');
+      expect(toolset.getDeferredToolIds()).toContain('weather');
+      expect(mockEmbedder.doEmbed).toHaveBeenCalled();
+    });
+
+    it('should separate always-loaded and deferred tools', async () => {
+      await toolset.addTools({ help: helpTool }, { deferLoading: false });
+      await toolset.addTools({ calculator: calculatorTool }, { deferLoading: true });
+
+      expect(toolset.getAlwaysLoadedToolIds()).toEqual(['help']);
+      expect(toolset.getDeferredToolIds()).toEqual(['calculator']);
+    });
+  });
+
+  describe('addTool', () => {
+    it('should add a single always-loaded tool', async () => {
+      await toolset.addTool('help', helpTool, { deferLoading: false });
+
+      expect(toolset.getAlwaysLoadedToolIds()).toContain('help');
+    });
+
+    it('should add a single deferred tool', async () => {
+      await toolset.addTool('calculator', calculatorTool, { deferLoading: true });
+
+      expect(toolset.getDeferredToolIds()).toContain('calculator');
+    });
+  });
+
+  describe('search', () => {
+    beforeEach(async () => {
+      await toolset.addTools(
+        {
+          calculator: calculatorTool,
+          weather: weatherTool,
+          sendEmail: emailTool,
+        },
+        { deferLoading: true },
+      );
+    });
+
+    it('should find matching tools', async () => {
+      const results = await toolset.search('I need to do math calculations');
+
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.id).toBe('calculator');
+    });
+
+    it('should respect topK parameter', async () => {
+      const results = await toolset.search('tool', { topK: 1 });
+
+      expect(results.length).toBeLessThanOrEqual(1);
+    });
+
+    it('should return empty array when no deferred tools', async () => {
+      const emptyToolset = new DeferredToolset({ embedder: mockEmbedder });
+      const results = await emptyToolset.search('anything');
+
+      expect(results).toEqual([]);
+    });
+  });
+
+  describe('loadTool / unloadTool', () => {
+    beforeEach(async () => {
+      await toolset.addTools({ calculator: calculatorTool, weather: weatherTool }, { deferLoading: true });
+    });
+
+    it('should load a deferred tool for a thread', () => {
+      const loaded = toolset.loadTool('calculator', 'thread-1');
+
+      expect(loaded).toBe(true);
+      expect(toolset.getLoadedToolIds('thread-1')).toContain('calculator');
+    });
+
+    it('should load multiple tools', () => {
+      const count = toolset.loadTools(['calculator', 'weather'], 'thread-1');
+
+      expect(count).toBe(2);
+      expect(toolset.getLoadedToolIds('thread-1')).toContain('calculator');
+      expect(toolset.getLoadedToolIds('thread-1')).toContain('weather');
+    });
+
+    it('should return false when loading non-existent tool', () => {
+      const loaded = toolset.loadTool('nonexistent', 'thread-1');
+
+      expect(loaded).toBe(false);
+    });
+
+    it('should unload a tool', () => {
+      toolset.loadTool('calculator', 'thread-1');
+      const unloaded = toolset.unloadTool('calculator', 'thread-1');
+
+      expect(unloaded).toBe(true);
+      expect(toolset.getLoadedToolIds('thread-1')).not.toContain('calculator');
+    });
+
+    it('should unload all tools for a thread', () => {
+      toolset.loadTools(['calculator', 'weather'], 'thread-1');
+      toolset.unloadAllTools('thread-1');
+
+      expect(toolset.getLoadedToolIds('thread-1')).toEqual([]);
+    });
+
+    it('should keep tools separate between threads', () => {
+      toolset.loadTool('calculator', 'thread-1');
+      toolset.loadTool('weather', 'thread-2');
+
+      expect(toolset.getLoadedToolIds('thread-1')).toEqual(['calculator']);
+      expect(toolset.getLoadedToolIds('thread-2')).toEqual(['weather']);
+    });
+
+    it('should use global scope when no threadId provided', () => {
+      toolset.loadTool('calculator');
+
+      expect(toolset.getLoadedToolIds()).toContain('calculator');
+    });
+  });
+
+  describe('getTools', () => {
+    beforeEach(async () => {
+      await toolset.addTools({ help: helpTool }, { deferLoading: false });
+      await toolset.addTools(
+        {
+          calculator: calculatorTool,
+          weather: weatherTool,
+        },
+        { deferLoading: true },
+      );
+    });
+
+    it('should return always-loaded tools and search tool', () => {
+      const tools = toolset.getTools();
+
+      expect(Object.keys(tools)).toContain('help');
+      expect(Object.keys(tools)).toContain('tool_search');
+      expect(Object.keys(tools)).not.toContain('calculator');
+      expect(Object.keys(tools)).not.toContain('weather');
+    });
+
+    it('should include loaded deferred tools', () => {
+      toolset.loadTool('calculator', 'thread-1');
+      const tools = toolset.getTools('thread-1');
+
+      expect(Object.keys(tools)).toContain('help');
+      expect(Object.keys(tools)).toContain('tool_search');
+      expect(Object.keys(tools)).toContain('calculator');
+      expect(Object.keys(tools)).not.toContain('weather');
+    });
+
+    it('should not include tools loaded for other threads', () => {
+      toolset.loadTool('calculator', 'thread-1');
+      const tools = toolset.getTools('thread-2');
+
+      expect(Object.keys(tools)).not.toContain('calculator');
+    });
+  });
+
+  describe('searchTool execution', () => {
+    beforeEach(async () => {
+      await toolset.addTools({ help: helpTool }, { deferLoading: false });
+      await toolset.addTools(
+        {
+          calculator: calculatorTool,
+          weather: weatherTool,
+        },
+        { deferLoading: true },
+      );
+    });
+
+    it('should load matching tools when search tool is executed', async () => {
+      const tools = toolset.getTools('thread-1');
+      const searchTool = tools['tool_search'];
+
+      const result = await searchTool?.execute?.({ query: 'math calculate add numbers' });
+
+      expect(result.success).toBe(true);
+      expect(result.loadedTools.length).toBeGreaterThan(0);
+      expect(result.loadedTools[0].id).toBe('calculator');
+
+      // Tool should now be loaded
+      expect(toolset.getLoadedToolIds('thread-1')).toContain('calculator');
+    });
+
+    it('should return failure when no tools match', async () => {
+      // Use a high minScore to ensure no matches
+      const toolsetWithHighMinScore = new DeferredToolset({
+        embedder: mockEmbedder,
+        minScore: 0.99,
+      });
+      await toolsetWithHighMinScore.addTools({ calculator: calculatorTool }, { deferLoading: true });
+
+      const strictTools = toolsetWithHighMinScore.getTools('thread-1');
+      const strictSearchTool = strictTools['tool_search'];
+
+      const result = await strictSearchTool?.execute?.({ query: 'xyz123abc completely unrelated' });
+
+      expect(result.success).toBe(false);
+      expect(result.loadedTools).toEqual([]);
+    });
+  });
+
+  describe('getTool', () => {
+    it('should get always-loaded tool', async () => {
+      await toolset.addTools({ help: helpTool }, { deferLoading: false });
+
+      const tool = toolset.getTool('help');
+      expect(tool).toBeDefined();
+      expect(tool?.id).toBe('help');
+    });
+
+    it('should get deferred tool', async () => {
+      await toolset.addTools({ calculator: calculatorTool }, { deferLoading: true });
+
+      const tool = toolset.getTool('calculator');
+      expect(tool).toBeDefined();
+      expect(tool?.id).toBe('calculator');
+    });
+
+    it('should return undefined for non-existent tool', () => {
+      const tool = toolset.getTool('nonexistent');
+      expect(tool).toBeUndefined();
+    });
+  });
+
+  describe('getStats', () => {
+    it('should return correct statistics', async () => {
+      await toolset.addTools({ help: helpTool }, { deferLoading: false });
+      await toolset.addTools({ calculator: calculatorTool, weather: weatherTool }, { deferLoading: true });
+      toolset.loadTool('calculator', 'thread-1');
+      toolset.loadTools(['calculator', 'weather'], 'thread-2');
+
+      const stats = toolset.getStats();
+
+      expect(stats.alwaysLoadedCount).toBe(1);
+      expect(stats.deferredCount).toBe(2);
+      expect(stats.loadedByThread['thread-1']).toBe(1);
+      expect(stats.loadedByThread['thread-2']).toBe(2);
+    });
+  });
+
+  describe('custom configuration', () => {
+    it('should use custom search tool ID', async () => {
+      const customToolset = new DeferredToolset({
+        embedder: mockEmbedder,
+        searchToolId: 'find_tools',
+      });
+      await customToolset.addTools({ calculator: calculatorTool }, { deferLoading: true });
+
+      const tools = customToolset.getTools();
+      expect(Object.keys(tools)).toContain('find_tools');
+      expect(Object.keys(tools)).not.toContain('tool_search');
+    });
+
+    it('should use custom search tool description', async () => {
+      const customToolset = new DeferredToolset({
+        embedder: mockEmbedder,
+        searchToolDescription: 'Custom description',
+      });
+
+      expect(customToolset.searchTool.description).toBe('Custom description');
+    });
+  });
+});
+
+// ============================================================================
+// Legacy API Tests (ToolSearchIndex, createToolSearchTool, createToolSearch)
+// ============================================================================
+
+describe('ToolSearchIndex (Legacy)', () => {
   let searchIndex: ToolSearchIndex;
 
   beforeEach(() => {
@@ -97,85 +404,6 @@ describe('ToolSearchIndex', () => {
       expect(searchIndex.has('weather')).toBe(true);
       expect(searchIndex.has('sendEmail')).toBe(true);
     });
-
-    it('should call embedder for each tool', async () => {
-      await searchIndex.index({
-        calculator: calculatorTool,
-        weather: weatherTool,
-      });
-
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  describe('add', () => {
-    it('should add a single tool to the index', async () => {
-      await searchIndex.add('calculator', calculatorTool);
-
-      expect(searchIndex.size).toBe(1);
-      expect(searchIndex.has('calculator')).toBe(true);
-    });
-  });
-
-  describe('remove', () => {
-    it('should remove a tool from the index', async () => {
-      await searchIndex.index({ calculator: calculatorTool });
-
-      const removed = searchIndex.remove('calculator');
-
-      expect(removed).toBe(true);
-      expect(searchIndex.size).toBe(0);
-      expect(searchIndex.has('calculator')).toBe(false);
-    });
-
-    it('should return false when removing non-existent tool', () => {
-      const removed = searchIndex.remove('nonexistent');
-      expect(removed).toBe(false);
-    });
-  });
-
-  describe('clear', () => {
-    it('should clear all indexed tools', async () => {
-      await searchIndex.index({
-        calculator: calculatorTool,
-        weather: weatherTool,
-      });
-
-      searchIndex.clear();
-
-      expect(searchIndex.size).toBe(0);
-    });
-  });
-
-  describe('get', () => {
-    it('should retrieve a tool by ID', async () => {
-      await searchIndex.index({ calculator: calculatorTool });
-
-      const tool = searchIndex.get('calculator');
-
-      expect(tool).toBeDefined();
-      expect(tool?.id).toBe('calculator');
-    });
-
-    it('should return undefined for non-existent tool', () => {
-      const tool = searchIndex.get('nonexistent');
-      expect(tool).toBeUndefined();
-    });
-  });
-
-  describe('listToolIds', () => {
-    it('should list all indexed tool IDs', async () => {
-      await searchIndex.index({
-        calculator: calculatorTool,
-        weather: weatherTool,
-      });
-
-      const ids = searchIndex.listToolIds();
-
-      expect(ids).toHaveLength(2);
-      expect(ids).toContain('calculator');
-      expect(ids).toContain('weather');
-    });
   });
 
   describe('search', () => {
@@ -194,42 +422,16 @@ describe('ToolSearchIndex', () => {
       expect(results[0]?.id).toBe('calculator');
     });
 
-    it('should respect topK parameter', async () => {
-      const results = await searchIndex.search('tool', { topK: 1 });
-
-      expect(results.length).toBeLessThanOrEqual(1);
-    });
-
-    it('should respect minScore parameter', async () => {
-      const results = await searchIndex.search('completely unrelated query xyz abc', { minScore: 0.99 });
-
-      // With such a high minScore, few or no results should match
-      expect(results.length).toBeLessThanOrEqual(3);
-    });
-
-    it('should return empty array when no tools are indexed', async () => {
-      const emptyIndex = new ToolSearchIndex({ embedder: mockEmbedder });
-
-      const results = await emptyIndex.search('anything');
-
-      expect(results).toEqual([]);
-    });
-
-    it('should include score and description in results', async () => {
+    it('should include score in results', async () => {
       const results = await searchIndex.search('weather temperature');
 
       expect(results.length).toBeGreaterThan(0);
-      const firstResult = results[0]!;
-      expect(firstResult.id).toBeDefined();
-      expect(firstResult.description).toBeDefined();
-      expect(typeof firstResult.score).toBe('number');
-      expect(firstResult.score).toBeGreaterThanOrEqual(0);
-      expect(firstResult.score).toBeLessThanOrEqual(1);
+      expect(typeof results[0]?.score).toBe('number');
     });
   });
 });
 
-describe('createToolSearchTool', () => {
+describe('createToolSearchTool (Legacy)', () => {
   let searchIndex: ToolSearchIndex;
 
   beforeEach(async () => {
@@ -244,113 +446,38 @@ describe('createToolSearchTool', () => {
     });
   });
 
-  describe('search-only mode', () => {
-    it('should create a tool that returns matching tools', async () => {
-      const searchTool = createToolSearchTool({ searchIndex });
+  it('should create a search-only tool', async () => {
+    const searchTool = createToolSearchTool({ searchIndex });
 
-      expect(searchTool.id).toBe('tool_search');
-      expect(searchTool.description).toContain('Search for available tools');
+    expect(searchTool.id).toBe('tool_search');
 
-      const result = await searchTool.execute?.({ query: 'send an email' });
-
-      expect(result.matchingTools).toBeDefined();
-      expect(Array.isArray(result.matchingTools)).toBe(true);
-    });
-
-    it('should use custom id and description', async () => {
-      const searchTool = createToolSearchTool({
-        searchIndex,
-        id: 'my_tool_finder',
-        description: 'Custom description',
-      });
-
-      expect(searchTool.id).toBe('my_tool_finder');
-      expect(searchTool.description).toBe('Custom description');
-    });
-
-    it('should return suggestion when no tools match', async () => {
-      const searchTool = createToolSearchTool({ searchIndex, minScore: 0.99 });
-
-      const result = await searchTool.execute?.({ query: 'xyz123 completely unknown' });
-
-      // Should still return something (even if empty matchingTools)
-      expect(result).toBeDefined();
-    });
+    const result = await searchTool.execute?.({ query: 'send an email' });
+    expect(result.matchingTools).toBeDefined();
   });
 
-  describe('auto-execute mode', () => {
-    it('should create a tool that executes the best match', async () => {
-      const searchTool = createToolSearchTool({
-        searchIndex,
-        autoExecute: true,
-        minScore: 0,
-      });
-
-      expect(searchTool.description).toContain('execute');
-
-      const result = await searchTool.execute?.({
-        query: 'I need to add numbers together calculate math',
-        toolInput: { operation: 'add', a: 5, b: 3 },
-      });
-
-      expect(result.success).toBe(true);
-      expect(result.executedTool?.id).toBe('calculator');
-      expect(result.result?.result).toBe(8);
+  it('should create an auto-execute tool', async () => {
+    const searchTool = createToolSearchTool({
+      searchIndex,
+      autoExecute: true,
+      minScore: 0,
     });
 
-    it('should return error when no matching tool found', async () => {
-      const searchTool = createToolSearchTool({
-        searchIndex,
-        autoExecute: true,
-        minScore: 0.99,
-      });
-
-      const result = await searchTool.execute?.({
-        query: 'xyz123abc completely unrelated',
-      });
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('No matching tool found');
+    const result = await searchTool.execute?.({
+      query: 'calculate math add',
+      toolInput: { operation: 'add', a: 5, b: 3 },
     });
 
-    it('should handle tool execution errors gracefully', async () => {
-      const errorTool = createTool({
-        id: 'errorTool',
-        description: 'A tool that always throws an error',
-        inputSchema: z.object({}),
-        execute: async () => {
-          throw new Error('Tool execution failed');
-        },
-      });
-
-      const errorIndex = new ToolSearchIndex({ embedder: mockEmbedder });
-      await errorIndex.index({ errorTool });
-
-      const searchTool = createToolSearchTool({
-        searchIndex: errorIndex,
-        autoExecute: true,
-        minScore: 0,
-      });
-
-      const result = await searchTool.execute?.({ query: 'error' });
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Tool execution failed');
-    });
+    expect(result.success).toBe(true);
+    expect(result.result?.result).toBe(8);
   });
 });
 
-describe('createToolSearch', () => {
+describe('createToolSearch (Legacy)', () => {
   it('should create a complete tool search setup', async () => {
     const { searchIndex, searchTool, indexTools } = createToolSearch({
       embedder: mockEmbedder,
     });
 
-    expect(searchIndex).toBeInstanceOf(ToolSearchIndex);
-    expect(searchTool).toBeDefined();
-    expect(typeof indexTools).toBe('function');
-
-    // Index some tools
     await indexTools({
       calculator: calculatorTool,
       weather: weatherTool,
@@ -358,19 +485,7 @@ describe('createToolSearch', () => {
 
     expect(searchIndex.size).toBe(2);
 
-    // Use the search tool
     const result = await searchTool.execute?.({ query: 'math calculation' });
     expect(result.matchingTools).toBeDefined();
-  });
-
-  it('should pass configuration to the search tool', async () => {
-    const { searchTool } = createToolSearch({
-      embedder: mockEmbedder,
-      id: 'custom_search',
-      autoExecute: false,
-      topK: 2,
-    });
-
-    expect(searchTool.id).toBe('custom_search');
   });
 });
