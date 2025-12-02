@@ -167,8 +167,8 @@ export interface GetToolResponse {
 export interface ListWorkflowRunsParams {
   fromDate?: Date;
   toDate?: Date;
-  perPage?: number | false;
-  page?: number;
+  limit?: number | false;
+  offset?: number;
   resourceId?: string;
 }
 
