@@ -12,6 +12,8 @@ import { WorkflowRunDetail } from '../runs/workflow-run-details';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
 import { toast } from '@/lib/toast';
 import { WorkflowRunContext } from '../context/workflow-run-context';
+import { PlaygroundTabs, TabList, Tab, TabContent } from '@/components/ui/playground-tabs';
+import { WorkflowRunOptions } from './workflow-run-options';
 
 export interface WorkflowInformationProps {
   workflowId: string;
@@ -33,6 +35,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
     isCancellingWorkflowRun,
   } = useContext(WorkflowRunContext);
 
+  const [tab, setTab] = useState<string>('current-run');
   const [runId, setRunId] = useState<string>('');
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
 
@@ -76,40 +79,52 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
         </div>
       </EntityHeader>
 
-      <div className="overflow-y-auto border-t-sm border-border1">
-        {workflowId ? (
-          initialRunId ? (
-            <WorkflowRunDetail
-              workflowId={workflowId}
-              runId={initialRunId}
-              setRunId={setRunId}
-              workflow={workflow ?? undefined}
-              isLoading={isLoading}
-              createWorkflowRun={createWorkflowRun}
-              streamWorkflow={streamWorkflow}
-              resumeWorkflow={resumeWorkflow}
-              streamResult={streamResult}
-              isStreamingWorkflow={isStreamingWorkflow}
-              isCancellingWorkflowRun={isCancellingWorkflowRun}
-              cancelWorkflowRun={cancelWorkflowRun}
-              observeWorkflowStream={observeWorkflowStream}
-            />
-          ) : (
-            <WorkflowTrigger
-              workflowId={workflowId}
-              setRunId={setRunId}
-              workflow={workflow ?? undefined}
-              isLoading={isLoading}
-              createWorkflowRun={createWorkflowRun}
-              streamWorkflow={streamWorkflow}
-              resumeWorkflow={resumeWorkflow}
-              streamResult={streamResult}
-              isStreamingWorkflow={isStreamingWorkflow}
-              isCancellingWorkflowRun={isCancellingWorkflowRun}
-              cancelWorkflowRun={cancelWorkflowRun}
-            />
-          )
-        ) : null}
+      <div className="flex-1 overflow-hidden border-t-sm border-border1 flex flex-col">
+        <PlaygroundTabs defaultTab="current-run" value={tab} onValueChange={setTab}>
+          <TabList>
+            <Tab value="current-run">Current Run</Tab>
+            <Tab value="run-options">Run options</Tab>
+          </TabList>
+
+          <TabContent value="current-run">
+            {workflowId ? (
+              initialRunId ? (
+                <WorkflowRunDetail
+                  workflowId={workflowId}
+                  runId={initialRunId}
+                  setRunId={setRunId}
+                  workflow={workflow ?? undefined}
+                  isLoading={isLoading}
+                  createWorkflowRun={createWorkflowRun}
+                  streamWorkflow={streamWorkflow}
+                  resumeWorkflow={resumeWorkflow}
+                  streamResult={streamResult}
+                  isStreamingWorkflow={isStreamingWorkflow}
+                  isCancellingWorkflowRun={isCancellingWorkflowRun}
+                  cancelWorkflowRun={cancelWorkflowRun}
+                  observeWorkflowStream={observeWorkflowStream}
+                />
+              ) : (
+                <WorkflowTrigger
+                  workflowId={workflowId}
+                  setRunId={setRunId}
+                  workflow={workflow ?? undefined}
+                  isLoading={isLoading}
+                  createWorkflowRun={createWorkflowRun}
+                  streamWorkflow={streamWorkflow}
+                  resumeWorkflow={resumeWorkflow}
+                  streamResult={streamResult}
+                  isStreamingWorkflow={isStreamingWorkflow}
+                  isCancellingWorkflowRun={isCancellingWorkflowRun}
+                  cancelWorkflowRun={cancelWorkflowRun}
+                />
+              )
+            ) : null}
+          </TabContent>
+          <TabContent value="run-options">
+            <WorkflowRunOptions />
+          </TabContent>
+        </PlaygroundTabs>
       </div>
     </div>
   );
