@@ -15,7 +15,9 @@ export const TracingRunOptions = () => {
 
     try {
       const parsed = JSON.parse(value);
-      setSettings({ ...settings, tracingOptions: parsed });
+      if (typeof parsed === 'object' && parsed !== null) {
+        setSettings({ ...settings, tracingOptions: parsed });
+      }
     } catch {
       // silent fail on invalid JSON parsing. We don't want to store invalid JSON in the settings.
     }
