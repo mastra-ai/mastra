@@ -240,22 +240,6 @@ export interface ToolAction<
   mastra?: Mastra;
   requireApproval?: boolean;
   /**
-   * Whether this tool should be deferred (not loaded into context initially).
-   * When true, the tool will only be loaded after being discovered via tool search.
-   * This is similar to Anthropic's `defer_loading` option.
-   *
-   * @example
-   * ```typescript
-   * const myTool = createTool({
-   *   id: 'my-tool',
-   *   description: 'A tool that is loaded on-demand',
-   *   deferred: true,
-   *   execute: async () => { ... }
-   * });
-   * ```
-   */
-  deferred?: boolean;
-  /**
    * Provider-specific options passed to the model when this tool is used.
    * Keys are provider names (e.g., 'anthropic', 'openai'), values are provider-specific configs.
    * @example
