@@ -12,12 +12,10 @@ type ValidationArgs = {
 export class ValidationError extends Error {
   public readonly type: string;
   public readonly stack: string;
-  public readonly info: Record<string, unknown>;
   constructor(args: ValidationArgs) {
     super(args.message);
     this.type = args.type;
     this.stack = args.stack;
-    this.info = args.info;
   }
 }
 
