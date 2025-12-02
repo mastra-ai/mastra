@@ -4,42 +4,26 @@ import { describe, expect, it } from 'vitest';
 import { MastraServer } from '../index';
 
 /**
- * These tests verify that the HonoServerAdapter properly supports
- * setApp() and getApp() methods inherited from MastraServerAdapterBase.
+ * These tests verify that MastraServer (Hono adapter) properly supports
+ * getApp() method inherited from MastraServerAdapterBase.
  *
  * This enables the use case from issue #8031: accessing the Hono app
  * via mastra.getServerApp() to call routes directly.
  */
-describe('HonoServerAdapter - Server App Access', () => {
-  describe('setApp() and getApp()', () => {
-    it('should have setApp method', () => {
-      const mastra = new Mastra({ logger: false });
-      const adapter = new MastraServer({ mastra });
-
-      expect(typeof adapter.setApp).toBe('function');
-    });
-
+describe('MastraServer (Hono) - Server App Access', () => {
+  describe('getApp()', () => {
     it('should have getApp method', () => {
       const mastra = new Mastra({ logger: false });
-      const adapter = new MastraServer({ mastra });
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra });
 
       expect(typeof adapter.getApp).toBe('function');
     });
 
-    it('should return undefined when no app is set', () => {
+    it('should return the app passed to constructor', () => {
       const mastra = new Mastra({ logger: false });
-      const adapter = new MastraServer({ mastra });
-
-      const app = adapter.getApp();
-      expect(app).toBeUndefined();
-    });
-
-    it('should store and retrieve a Hono app', () => {
-      const mastra = new Mastra({ logger: false });
-      const adapter = new MastraServer({ mastra });
-
       const app = new Hono();
-      adapter.setApp(app);
+      const adapter = new MastraServer({ app, mastra });
 
       const retrievedApp = adapter.getApp();
       expect(retrievedApp).toBe(app);
@@ -47,27 +31,23 @@ describe('HonoServerAdapter - Server App Access', () => {
 
     it('should support generic type parameter for getApp', () => {
       const mastra = new Mastra({ logger: false });
-      const adapter = new MastraServer({ mastra });
-
       const app = new Hono();
       app.get('/test', c => c.json({ message: 'test' }));
-      adapter.setApp(app);
+      const adapter = new MastraServer({ app, mastra });
 
       // Get with specific type
       const typedApp = adapter.getApp<Hono>();
       expect(typedApp).toBe(app);
-      expect(typeof typedApp?.fetch).toBe('function');
+      expect(typeof typedApp.fetch).toBe('function');
     });
   });
 
   describe('Integration with Mastra instance', () => {
     it('should work when registered with Mastra via setServerAdapter', () => {
       const mastra = new Mastra({ logger: false });
-      const adapter = new MastraServer({ mastra });
-
       const app = new Hono();
       app.get('/health', c => c.json({ status: 'ok' }));
-      adapter.setApp(app);
+      const adapter = new MastraServer({ app, mastra });
 
       // Register adapter with Mastra
       mastra.setServerAdapter(adapter);
@@ -79,10 +59,9 @@ describe('HonoServerAdapter - Server App Access', () => {
 
     it('should allow calling routes directly via app.fetch() after setup', async () => {
       const mastra = new Mastra({ logger: false });
-      const adapter = new MastraServer({ mastra });
+      const app = new Hono();
 
       // Create a Hono app with a test route
-      const app = new Hono();
       app.get('/api/test', c =>
         c.json({
           message: 'Hello from Hono!',
@@ -91,7 +70,7 @@ describe('HonoServerAdapter - Server App Access', () => {
       );
 
       // Wire up the adapter
-      adapter.setApp(app);
+      const adapter = new MastraServer({ app, mastra });
       mastra.setServerAdapter(adapter);
 
       // Access the app and call the route directly
@@ -108,11 +87,9 @@ describe('HonoServerAdapter - Server App Access', () => {
 
     it('should support the Inngest use case - forwarding requests internally', async () => {
       const mastra = new Mastra({ logger: false });
-      const adapter = new MastraServer({ mastra });
-
-      // Create a Hono app simulating Mastra's API
       const app = new Hono();
 
+      // Create a Hono app simulating Mastra's API
       app.get('/api/agents', c =>
         c.json({
           testAgent: { name: 'Test Agent' },
@@ -127,7 +104,7 @@ describe('HonoServerAdapter - Server App Access', () => {
       });
 
       // Wire up
-      adapter.setApp(app);
+      const adapter = new MastraServer({ app, mastra });
       mastra.setServerAdapter(adapter);
 
       // Simulate Inngest function forwarding a request
@@ -157,14 +134,14 @@ describe('HonoServerAdapter - Server App Access', () => {
   describe('Adapter with registered routes', () => {
     it('should expose the app after registering routes', async () => {
       const mastra = new Mastra({ logger: false });
-      const adapter = new MastraServer({ mastra });
-
       const app = new Hono();
 
-      // Simulate the pattern used in createHonoServer
-      adapter.registerContextMiddleware(app);
-      adapter.setApp(app);
+      // Create adapter with app passed in constructor
+      const adapter = new MastraServer({ app, mastra });
       mastra.setServerAdapter(adapter);
+
+      // Register context middleware (uses this.app internally)
+      adapter.registerContextMiddleware();
 
       // Add a custom route
       app.get('/custom', c => c.json({ custom: true }));

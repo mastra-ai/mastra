@@ -95,9 +95,8 @@ export async function createHonoServer(
     customRouteAuthConfig,
   });
 
-  // Store the app on the adapter and register the adapter with Mastra
+  // Register the adapter with Mastra
   // This allows users to access the app via mastra.getServerApp()
-  honoServerAdapter.setApp(app);
   mastra.setServerAdapter(honoServerAdapter);
 
   // Register context middleware FIRST - this sets mastra, requestContext, tools, taskStore in context

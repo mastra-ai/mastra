@@ -35,7 +35,6 @@ describe('Server App Access via createHonoServer', () => {
 
     expect(adapter).toBeDefined();
     expect(typeof adapter?.getApp).toBe('function');
-    expect(typeof adapter?.setApp).toBe('function');
   });
 
   it('should allow calling routes directly via app.fetch() - the primary use case', async () => {

@@ -1860,12 +1860,12 @@ export class Mastra<
    * This is typically called by `createHonoServer` or similar factory functions during
    * server initialization.
    *
-   * @param adapter - The server adapter instance (e.g., HonoServerAdapter, ExpressServerAdapter)
+   * @param adapter - The server adapter instance (e.g., MastraServer from @mastra/hono or @mastra/express)
    *
    * @example
    * ```typescript
-   * const adapter = new HonoServerAdapter({ mastra });
-   * adapter.setApp(app);
+   * const app = new Hono();
+   * const adapter = new MastraServer({ app, mastra });
    * mastra.setServerAdapter(adapter);
    * ```
    */
