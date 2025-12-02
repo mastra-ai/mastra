@@ -79,6 +79,7 @@ type WithoutMethods<T> = {
 
 export type NetworkStreamParams = {
   messages: MessageListInput;
+  tracingOptions?: TracingOptions;
 } & MultiPrimitiveExecutionOptions;
 
 export interface GetAgentResponse {
@@ -131,6 +132,7 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
 
 export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
   messages: MessageListInput;
+  tracingOptions?: TracingOptions;
   structuredOutput?: SerializableStructuredOutputOptions<OUTPUT>;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
@@ -167,8 +169,8 @@ export interface GetToolResponse {
 export interface ListWorkflowRunsParams {
   fromDate?: Date;
   toDate?: Date;
-  perPage?: number | false;
-  page?: number;
+  limit?: number | false;
+  offset?: number;
   resourceId?: string;
 }
 

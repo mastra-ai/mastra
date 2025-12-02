@@ -550,6 +550,11 @@ const sidebars = {
                   id: "observability/tracing/exporters/otel",
                   label: "OtelExporter",
                 },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/posthog",
+                  label: "PostHogExporter",
+                },
               ],
             },
             {
