@@ -30,6 +30,7 @@ export default async function setup(project: TestProject) {
     [
       '--filter="mastra^..."',
       '--filter="mastra"',
+      '--filter="@mastra/deployer"',
       '--filter="@mastra/deployer-cloudflare"',
       '--filter="@mastra/deployer-vercel"',
       '--filter="@mastra/deployer-netlify"',
