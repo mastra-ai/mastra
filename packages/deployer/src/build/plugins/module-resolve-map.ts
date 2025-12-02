@@ -25,8 +25,7 @@ export function moduleResolveMap(externals: string[], projectRoot: string): Plug
     async generateBundle(options, bundle) {
       const resolveMap = new Map<string, Map<string, string>>();
 
-      // const binaryMapByChunk = new Map<string, Set<string>>();
-      // // Iterate through all output chunks
+      // Iterate through all output chunks
       for (const [fileName, chunk] of Object.entries(bundle)) {
         // Only chunks have modules, assets don't
         if (chunk.type === 'chunk') {
@@ -42,16 +41,14 @@ export function moduleResolveMap(externals: string[], projectRoot: string): Plug
       }
 
       // store all binaries used by a module to show in the error message
+      const resolveMapJson = Object.fromEntries(
+        Array.from(resolveMap.entries()).map(([key, value]) => [key, Object.fromEntries(value.entries())]),
+      );
+
       this.emitFile({
         type: 'asset',
         name: 'module-resolve-map.json',
-        source: JSON.stringify(
-          Object.fromEntries(
-            Array.from(resolveMap.entries()).map(([key, value]) => [key, Object.fromEntries(value.entries())]),
-          ),
-          null,
-          2,
-        ),
+        source: `${JSON.stringify(resolveMapJson, null, 2)}`,
       });
     },
   } satisfies Plugin;

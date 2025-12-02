@@ -45,15 +45,15 @@ export function nodeGypDetector(): Plugin {
         }
       }
 
+      const binaryMapJson = Object.fromEntries(
+        Array.from(binaryMapByChunk.entries()).map(([key, value]) => [key, Array.from(value)]),
+      );
+
       // store all binaries used by a module to show in the error message
       this.emitFile({
         type: 'asset',
         name: 'binary-map.json',
-        source: JSON.stringify(
-          Object.fromEntries(Array.from(binaryMapByChunk.entries()).map(([key, value]) => [key, Array.from(value)])),
-          null,
-          2,
-        ),
+        source: `${JSON.stringify(binaryMapJson, null, 2)}`,
       });
     },
   } satisfies Plugin;
