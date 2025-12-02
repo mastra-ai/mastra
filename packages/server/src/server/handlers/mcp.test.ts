@@ -145,9 +145,9 @@ describe('MCP Registry Handlers', () => {
 
       expect(result.servers).toHaveLength(1);
       expect(result.total_count).toBe(2);
-      // Next URL uses page/perPage format
-      expect(result.next).toContain('perPage=1');
-      expect(result.next).toContain('page=1');
+      // Next URL mirrors request format (legacy limit/offset)
+      expect(result.next).toContain('limit=1');
+      expect(result.next).toContain('offset=1');
       expect(result.servers[0]).toEqual(server1Info);
     });
 

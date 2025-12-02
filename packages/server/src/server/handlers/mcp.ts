@@ -50,6 +50,10 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
     const totalCount = serverList.length;
 
     // Support both page/perPage and limit/offset for backwards compatibility
+    // Detect which format user is using - prefer page/perPage if both provided
+    const useLegacyFormat =
+      (limit !== undefined || offset !== undefined) && page === undefined && perPage === undefined;
+
     // If perPage provided, use it; otherwise fall back to limit
     const finalPerPage = perPage ?? limit;
     // If page provided, use it; otherwise convert from offset
@@ -71,7 +75,13 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
       // Calculate next URL if there are more results
       if (actualOffset + finalPerPage < totalCount) {
         const nextPage = (finalPage ?? 0) + 1;
-        nextUrl = `/api/mcp/v0/servers?perPage=${finalPerPage}&page=${nextPage}`;
+        // Return next URL in same format as request (legacy limit/offset or page/perPage)
+        if (useLegacyFormat) {
+          const nextOffset = actualOffset + finalPerPage;
+          nextUrl = `/api/mcp/v0/servers?limit=${finalPerPage}&offset=${nextOffset}`;
+        } else {
+          nextUrl = `/api/mcp/v0/servers?perPage=${finalPerPage}&page=${nextPage}`;
+        }
       }
     }
 
