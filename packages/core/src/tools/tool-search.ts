@@ -42,7 +42,7 @@ export type ToolSearchMethod = 'regex' | 'bm25' | 'embedding';
  * Configuration for createToolSearch
  */
 export interface ToolSearchConfig {
-  /** Tools to register. Tools with `deferred: true` are loaded on-demand. */
+  /** Tools to make searchable. All tools passed here are deferred (loaded on-demand). */
   tools: Record<string, ToolAction<any, any, any>>;
   /** Search method: 'regex', 'bm25', or 'embedding' (default: 'bm25') */
   method?: ToolSearchMethod;
@@ -206,7 +206,7 @@ function cosineSimilarity(a: number[], b: number[]): number {
 }
 
 /**
- * Default function to generate search text from a tool
+ * Generate search text from a tool
  */
 function getSearchText(tool: ToolAction<any, any, any>, id: string): string {
   const parts = [id, tool.description];
@@ -237,21 +237,19 @@ const toolSearchInputSchema = z.object({
 });
 
 /**
- * ToolSearch manages tools with deferred loading, similar to Anthropic's Tool Search Tool.
+ * ToolSearch manages searchable tools with on-demand loading.
  *
- * Tools marked with `deferred: true` are not loaded into the agent's context initially.
- * Instead, the agent gets a search tool that can discover and load relevant tools on-demand.
- * Once loaded, tools remain available for subsequent calls within the same thread/session.
+ * All tools passed to createToolSearch are searchable - they're not loaded into
+ * the agent's context initially. Instead, the agent gets a search tool that discovers
+ * and loads relevant tools on-demand. Once loaded, tools remain available for
+ * subsequent calls within the same thread/session.
  */
 export class ToolSearch {
   private method: ToolSearchMethod;
   private embedder?: MastraEmbeddingModel<string>;
 
-  /** Always-loaded tools (deferred: false or undefined) */
-  private alwaysLoadedTools: Map<string, ToolAction<any, any, any>> = new Map();
-
-  /** Deferred tools with their search data */
-  private deferredTools: Map<string, IndexedTool> = new Map();
+  /** Searchable tools with their search data */
+  private tools: Map<string, IndexedTool> = new Map();
 
   /** Loaded tool IDs per thread */
   private loadedToolsByThread: Map<string, Set<string>> = new Map();
@@ -303,63 +301,43 @@ export class ToolSearch {
   }
 
   /**
-   * Indexes tools, separating deferred from always-loaded based on tool.deferred property
+   * Indexes tools for searching
    */
   async indexTools(tools: Record<string, ToolAction<any, any, any>>): Promise<void> {
     const entries = Object.entries(tools);
 
-    // Separate deferred and always-loaded tools
-    const deferredEntries: [string, ToolAction<any, any, any>][] = [];
-    const alwaysLoadedEntries: [string, ToolAction<any, any, any>][] = [];
-
-    for (const [id, tool] of entries) {
-      if (tool.deferred) {
-        deferredEntries.push([id, tool]);
-      } else {
-        alwaysLoadedEntries.push([id, tool]);
-      }
-    }
-
-    // Add always-loaded tools
-    for (const [id, tool] of alwaysLoadedEntries) {
-      this.alwaysLoadedTools.set(id, tool);
-    }
-
-    // Index deferred tools
-    if (deferredEntries.length > 0) {
-      if (this.method === 'embedding') {
-        // Create embeddings in parallel
-        const embeddings = await Promise.all(
-          deferredEntries.map(async ([id, tool]) => {
-            const searchText = getSearchText(tool, id);
-            const embedding = await this.embed(searchText);
-            return { id, searchText, embedding };
-          }),
-        );
-
-        for (let i = 0; i < deferredEntries.length; i++) {
-          const [id, tool] = deferredEntries[i]!;
-          const { searchText, embedding } = embeddings[i]!;
-
-          this.deferredTools.set(id, {
-            id,
-            description: tool.description,
-            searchText,
-            embedding,
-            tool,
-          });
-        }
-      } else {
-        // For regex/BM25, just store search text
-        for (const [id, tool] of deferredEntries) {
+    if (this.method === 'embedding') {
+      // Create embeddings in parallel
+      const embeddings = await Promise.all(
+        entries.map(async ([id, tool]) => {
           const searchText = getSearchText(tool, id);
-          this.deferredTools.set(id, {
-            id,
-            description: tool.description,
-            searchText,
-            tool,
-          });
-        }
+          const embedding = await this.embed(searchText);
+          return { id, searchText, embedding };
+        }),
+      );
+
+      for (let i = 0; i < entries.length; i++) {
+        const [id, tool] = entries[i]!;
+        const { searchText, embedding } = embeddings[i]!;
+
+        this.tools.set(id, {
+          id,
+          description: tool.description,
+          searchText,
+          embedding,
+          tool,
+        });
+      }
+    } else {
+      // For regex/BM25, just store search text
+      for (const [id, tool] of entries) {
+        const searchText = getSearchText(tool, id);
+        this.tools.set(id, {
+          id,
+          description: tool.description,
+          searchText,
+          tool,
+        });
       }
     }
   }
@@ -368,7 +346,7 @@ export class ToolSearch {
    * Searches for tools matching the query
    */
   async search(query: string): Promise<ToolSearchResult[]> {
-    if (this.deferredTools.size === 0) {
+    if (this.tools.size === 0) {
       return [];
     }
 
@@ -376,16 +354,16 @@ export class ToolSearch {
 
     switch (this.method) {
       case 'regex':
-        results = regexSearch(query, this.deferredTools, this.topK);
+        results = regexSearch(query, this.tools, this.topK);
         break;
       case 'bm25':
-        results = bm25Search(query, this.deferredTools, this.topK);
+        results = bm25Search(query, this.tools, this.topK);
         break;
       case 'embedding': {
         const queryEmbedding = await this.embed(query);
         results = [];
 
-        for (const indexed of this.deferredTools.values()) {
+        for (const indexed of this.tools.values()) {
           if (indexed.embedding) {
             const score = cosineSimilarity(queryEmbedding, indexed.embedding);
             if (score >= this.minScore) {
@@ -414,10 +392,10 @@ export class ToolSearch {
   }
 
   /**
-   * Loads a deferred tool for a specific thread
+   * Loads a tool for a specific thread
    */
   loadTool(toolId: string, threadId?: string): boolean {
-    if (!this.deferredTools.has(toolId)) {
+    if (!this.tools.has(toolId)) {
       return false;
     }
 
@@ -434,7 +412,7 @@ export class ToolSearch {
   }
 
   /**
-   * Loads multiple deferred tools
+   * Loads multiple tools
    */
   loadTools(toolIds: string[], threadId?: string): number {
     let count = 0;
@@ -473,17 +451,10 @@ export class ToolSearch {
   }
 
   /**
-   * Gets all deferred tool IDs
+   * Gets all searchable tool IDs
    */
-  getDeferredToolIds(): string[] {
-    return Array.from(this.deferredTools.keys());
-  }
-
-  /**
-   * Gets all always-loaded tool IDs
-   */
-  getAlwaysLoadedToolIds(): string[] {
-    return Array.from(this.alwaysLoadedTools.keys());
+  getToolIds(): string[] {
+    return Array.from(this.tools.keys());
   }
 
   /**
@@ -506,7 +477,7 @@ export class ToolSearch {
             success: false,
             loadedTools: [],
             message: 'No matching tools found for your query.',
-            availableTools: toolSearch.getDeferredToolIds(),
+            availableTools: toolSearch.getToolIds(),
             query,
           };
         }
@@ -531,26 +502,21 @@ export class ToolSearch {
   }
 
   /**
-   * Gets tools for an agent, including search tool and loaded deferred tools
+   * Gets tools for an agent: search tool + any loaded tools for this thread
    */
   getTools(threadId?: string): Record<string, ToolAction<any, any, any>> {
     const tools: Record<string, ToolAction<any, any, any>> = {};
 
-    // Add always-loaded tools
-    for (const [id, tool] of this.alwaysLoadedTools) {
-      tools[id] = tool;
-    }
-
     // Add search tool
     tools[this.searchToolId] = this.createSearchTool(threadId);
 
-    // Add loaded deferred tools
+    // Add loaded tools for this thread
     const key = threadId ?? GLOBAL_THREAD_KEY;
     const loadedIds = this.loadedToolsByThread.get(key);
 
     if (loadedIds) {
       for (const toolId of loadedIds) {
-        const indexed = this.deferredTools.get(toolId);
+        const indexed = this.tools.get(toolId);
         if (indexed) {
           tools[toolId] = indexed.tool;
         }
@@ -562,59 +528,55 @@ export class ToolSearch {
 }
 
 /**
- * Creates a tool search instance with deferred loading support.
+ * Creates a tool search instance for on-demand tool loading.
  *
- * Tools marked with `deferred: true` are not loaded into the agent's context initially.
- * Instead, the agent gets a search tool that can discover and load relevant tools on-demand.
+ * All tools passed here are searchable - they're not loaded into the agent's context
+ * initially. The agent gets a search tool to discover and load relevant tools on-demand.
  *
  * @example
  * ```typescript
  * import { createToolSearch, createTool } from '@mastra/core/tools';
  *
- * // Define tools - mark some as deferred
- * const helpTool = createTool({
- *   id: 'help',
- *   description: 'Get help',
- *   execute: async () => ({ message: 'How can I help?' }),
- * });
- *
+ * // Define your tools
  * const createPRTool = createTool({
  *   id: 'github.createPR',
  *   description: 'Create a GitHub pull request',
- *   deferred: true, // Loaded on-demand
  *   execute: async () => { ... },
  * });
  *
  * const sendMessageTool = createTool({
  *   id: 'slack.sendMessage',
  *   description: 'Send a Slack message',
- *   deferred: true, // Loaded on-demand
  *   execute: async () => { ... },
  * });
  *
  * // Create with BM25 search (default, no embedder needed)
  * const toolSearch = await createToolSearch({
- *   tools: { helpTool, createPRTool, sendMessageTool },
+ *   tools: { createPRTool, sendMessageTool },
  *   method: 'bm25',
  * });
  *
  * // Or with regex search
  * const toolSearch = await createToolSearch({
- *   tools: { helpTool, createPRTool, sendMessageTool },
+ *   tools: { createPRTool, sendMessageTool },
  *   method: 'regex',
  * });
  *
  * // Or with embedding search
  * const toolSearch = await createToolSearch({
- *   tools: { helpTool, createPRTool, sendMessageTool },
+ *   tools: { createPRTool, sendMessageTool },
  *   method: 'embedding',
  *   embedder: openai.embedding('text-embedding-3-small'),
  * });
  *
- * // Use with an agent
+ * // Use with an agent - combine with always-loaded tools
+ * const agent = new Agent({
+ *   tools: { helpTool }, // Always loaded
+ * });
+ *
  * const response = await agent.generate('Create a GitHub PR', {
  *   toolsets: {
- *     myTools: toolSearch.getTools(threadId),
+ *     searchable: toolSearch.getTools(threadId), // Searchable tools
  *   },
  * });
  * ```
