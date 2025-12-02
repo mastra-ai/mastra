@@ -7,19 +7,39 @@ import {
   MainContentLayout,
   MainContentContent,
   useWorkflow,
-  useWorkflowRuns,
   WorkflowRunList,
+  WorkflowInformation,
+  useWorkflowRunExecutionResult,
+  Txt,
 } from '@mastra/playground-ui';
 
-import { Skeleton } from '@/components/ui/skeleton';
-
 import { WorkflowHeader } from './workflow-header';
-import { WorkflowInformation } from './workflow-information';
+import { WorkflowRunState } from '@mastra/core/workflows';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();
-  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId!);
-  const { data: runs } = useWorkflowRuns(workflowId!);
+  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId);
+  const { data: runExecutionResult } = useWorkflowRunExecutionResult(workflowId ?? '', runId ?? '');
+
+  if (!workflowId) {
+    return (
+      <MainContentLayout>
+        <Header>
+          <HeaderTitle>
+            <Skeleton className="h-6 w-[200px]" />
+          </HeaderTitle>
+        </Header>
+        <MainContentContent isCentered={true}>
+          <div className="flex flex-col items-center justify-center h-full">
+            <Txt variant="ui-md" className="text-icon6 text-center">
+              No workflow ID provided
+            </Txt>
+          </div>
+        </MainContentContent>
+      </MainContentLayout>
+    );
+  }
 
   if (isWorkflowLoading) {
     return (
@@ -33,18 +53,31 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  const run = runs?.runs.find(run => run.runId === runId);
+  const snapshot =
+    runExecutionResult && runId
+      ? ({
+          context: {
+            input: runExecutionResult?.payload,
+            ...runExecutionResult?.steps,
+          } as any,
+          status: runExecutionResult?.status,
+          result: runExecutionResult?.result,
+          error: runExecutionResult?.error,
+          runId,
+          serializedStepGraph: runExecutionResult?.serializedStepGraph,
+        } as WorkflowRunState)
+      : undefined;
 
   return (
-    <WorkflowRunProvider snapshot={typeof run?.snapshot === 'object' ? run.snapshot : undefined}>
+    <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId}>
       <MainContentLayout>
-        <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId!} runId={runId} />
+        <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} runId={runId} />
         <MainContentContent isDivided={true} hasLeftServiceColumn={true}>
-          <WorkflowRunList workflowId={workflowId!} runId={runId} />
+          <WorkflowRunList workflowId={workflowId} runId={runId} />
 
           {children}
 
-          <WorkflowInformation workflowId={workflowId!} />
+          <WorkflowInformation workflowId={workflowId} initialRunId={runId} />
         </MainContentContent>
       </MainContentLayout>
     </WorkflowRunProvider>

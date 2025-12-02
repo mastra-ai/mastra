@@ -97,6 +97,7 @@ export function WorkflowNestedNode({
           event={step?.status === 'waiting' ? event : undefined}
           runId={runId}
           status={step?.status}
+          stepKey={fullLabel}
         />
       </div>
       {!withoutBottomHandle && <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden' }} />}

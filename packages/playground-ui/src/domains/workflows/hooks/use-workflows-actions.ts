@@ -1,4 +1,4 @@
-import { StreamVNextChunkType, WorkflowWatchResult } from '@mastra/client-js';
+import { StreamVNextChunkType, TimeTravelParams, WorkflowWatchResult } from '@mastra/client-js';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { WorkflowStreamResult as CoreWorkflowStreamResult } from '@mastra/core/workflows';
 import { useMutation } from '@tanstack/react-query';
@@ -141,6 +141,7 @@ export const useStreamWorkflow = () => {
   const readerRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);
   const observerRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);
   const resumeStreamRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);
+  const timeTravelStreamRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);
   const isMountedRef = useRef(true);
 
   // Cleanup on unmount
@@ -172,6 +173,14 @@ export const useStreamWorkflow = () => {
         }
         resumeStreamRef.current = null;
       }
+      if (timeTravelStreamRef.current) {
+        try {
+          timeTravelStreamRef.current.releaseLock();
+        } catch (error) {
+          // Reader might already be released, ignore the error
+        }
+        timeTravelStreamRef.current = null;
+      }
     };
   }, []);
 
@@ -180,6 +189,7 @@ export const useStreamWorkflow = () => {
     if (err instanceof TypeError) {
       return;
     }
+    console.log('err in handleStreamError===', err);
     const errorMessage = err instanceof Error ? err.message : defaultMessage;
     toast.error(errorMessage);
     setIsStreaming?.(false);
@@ -426,6 +436,79 @@ export const useStreamWorkflow = () => {
     },
   });
 
+  const timeTravelWorkflowStream = useMutation({
+    mutationFn: async ({
+      workflowId,
+      runtimeContext: playgroundRuntimeContext,
+      ...params
+    }: {
+      workflowId: string;
+      runtimeContext: Record<string, unknown>;
+    } & Omit<TimeTravelParams, 'runtimeContext'>) => {
+      // Clean up any existing reader before starting new stream
+      if (timeTravelStreamRef.current) {
+        timeTravelStreamRef.current.releaseLock();
+      }
+
+      if (!isMountedRef.current) return;
+
+      setIsStreaming(true);
+      const workflow = client.getWorkflow(workflowId);
+      const runtimeContext = new RuntimeContext();
+      Object.entries(playgroundRuntimeContext).forEach(([key, value]) => {
+        runtimeContext.set(key as keyof RuntimeContext, value);
+      });
+      const stream = await workflow.timeTravelStream({ ...params, runtimeContext });
+
+      if (!stream) {
+        return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
+      }
+
+      // Get a reader from the ReadableStream and store it in ref
+      const reader = stream.getReader();
+      timeTravelStreamRef.current = reader;
+
+      try {
+        while (true) {
+          if (!isMountedRef.current) break;
+
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          // Only update state if component is still mounted
+          if (isMountedRef.current) {
+            setStreamResult(prev => {
+              const newResult = mapWorkflowStreamChunkToWatchResult(prev, value);
+              return newResult;
+            });
+
+            if (value.type === 'workflow-step-start') {
+              setIsStreaming(true);
+            }
+
+            if (value.type === 'workflow-step-suspended') {
+              setIsStreaming(false);
+            }
+
+            if (value.type === 'workflow-finish') {
+              handleWorkflowFinish(value);
+            }
+          }
+        }
+      } catch (err) {
+        handleStreamError(err, 'Error time traveling workflow stream');
+      } finally {
+        if (isMountedRef.current) {
+          setIsStreaming(false);
+        }
+        if (timeTravelStreamRef.current) {
+          timeTravelStreamRef.current.releaseLock();
+          timeTravelStreamRef.current = null;
+        }
+      }
+    },
+  });
+
   const closeStreamsAndReset = () => {
     setIsStreaming(false);
     setStreamResult({} as WorkflowStreamResult);
@@ -453,6 +536,14 @@ export const useStreamWorkflow = () => {
       }
       resumeStreamRef.current = null;
     }
+    if (timeTravelStreamRef.current) {
+      try {
+        timeTravelStreamRef.current.releaseLock();
+      } catch (error) {
+        // Reader might already be released, ignore the error
+      }
+      timeTravelStreamRef.current = null;
+    }
   };
 
   return {
@@ -462,6 +553,7 @@ export const useStreamWorkflow = () => {
     observeWorkflowStream,
     closeStreamsAndReset,
     resumeWorkflowStream,
+    timeTravelWorkflowStream,
   };
 };
 

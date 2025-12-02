@@ -1,4 +1,4 @@
-import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
+import type { WorkflowRunState, StepResult, TimeTravelContext } from '@mastra/core/workflows';
 
 import { WorkflowWatchResult } from '@mastra/client-js';
 import { StreamChunk } from '@/types';
