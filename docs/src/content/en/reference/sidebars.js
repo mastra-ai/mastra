@@ -263,6 +263,11 @@ const sidebars = {
               id: "workflows/run-methods/cancel",
               label: ".cancel()",
             },
+            {
+              type: "doc",
+              id: "workflows/run-methods/restart",
+              label: ".restart()",
+            },
           ],
         },
       ],

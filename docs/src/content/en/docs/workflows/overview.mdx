@@ -270,6 +270,49 @@ The workflow output includes the full execution lifecycle, showing the input and
 }
 ```
 
+## Restarting active workflow runs
+
+When a workflow run loses connection to the server, it can be restarted from the last active step. This is useful for long-running workflows that might still be running when the server loses connection. Restarting a workflow run will resume execution from the last active step, and the workflow will continue from there.
+
+### Restarting all active workflow runs of a workflow with `restartAllActiveWorkflowRuns()`
+
+Use `restartAllActiveWorkflowRuns()` to restart all active workflow runs of a workflow. This helps restart all active workflow runs of a workflow, without having to manually loop through each run and restart.
+
+```typescript showLineNumbers copy
+workflow.restartAllActiveWorkflowRuns();
+```
+
+### Restarting an active workflow run with `restart()`
+
+Use `restart()` to restart an active workflow run from the last active step. This will resume execution from the last active step, and the workflow will continue from there.
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+
+const result = await run.start({ inputData: { value: "initial data" } });
+
+//.. server connection lost,
+
+const restartedResult = await run.restart();
+```
+
+### Identifying active workflow runs
+
+When a workflow run is active, it will have a `status` of `running` or `waiting`. You can check the workflow's `status` to confirm it's active, and use `active` to identify the active workflow run.
+
+```typescript showLineNumbers copy
+const activeRuns = await workflow.getActiveWorkflowRuns();
+if (activeRuns.runs.length > 0) {
+  console.log(activeRuns.runs);
+}
+```
+
+:::Note
+
+When running the local mastra server, all active workflow runs will be restarted automatically when the server starts.
+
+:::
+
 ## Using `RuntimeContext`
 
 Use [RuntimeContext](/docs/server-db/runtime-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
