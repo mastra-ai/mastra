@@ -6,9 +6,6 @@ import { MastraServer } from '../index';
 /**
  * These tests verify that MastraServer (Hono adapter) properly supports
  * getApp() method inherited from MastraServerAdapterBase.
- *
- * This enables the use case from issue #8031: accessing the Hono app
- * via mastra.getServerApp() to call routes directly.
  */
 describe('MastraServer (Hono) - Server App Access', () => {
   describe('getApp()', () => {

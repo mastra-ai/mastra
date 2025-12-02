@@ -179,7 +179,6 @@ describe('Server App Access', () => {
   });
 
   /**
-   * These tests simulate the exact use case from GitHub issue #8031:
    * Using mastra.getServerApp() in an Inngest function to forward requests
    * internally without making HTTP requests to localhost.
    *
@@ -197,7 +196,7 @@ describe('Server App Access', () => {
    * const response = await app.fetch(new Request('/api/agents'));
    * ```
    */
-  describe('Inngest-like use case (Issue #8031)', () => {
+  describe('Inngest-like use case', () => {
     // Mock app that simulates a full API with multiple routes
     function createMockApiApp() {
       return {
@@ -406,8 +405,6 @@ describe('Server App Access', () => {
 
       mastra.setServerAdapter(mockAdapter as any);
 
-      // This simulates the exact pattern from issue #8031
-      // where the Inngest function creates a Request from event data
       async function handleInngestEvent(event: {
         data: {
           path: string;
@@ -421,7 +418,6 @@ describe('Server App Access', () => {
           throw new Error('Server app not available');
         }
 
-        // Create Request from event data - exactly like issue #8031 example
         const request = new Request(`http://localhost${event.data.path}`, {
           method: event.data.method,
           headers: event.data.headers,
