@@ -260,6 +260,27 @@ await store.upsert({
 ```
 
   </TabItem>
+
+  <TabItem value="elasticsearch" label="ElasticSearch">
+
+```ts title="vector-store.ts" showLineNumbers copy
+import { ElasticSearchVector } from "@mastra/elasticsearch";
+
+const store = new ElasticSearchVector({ url: process.env.ELASTICSEARCH_URL });
+
+await store.createIndex({
+  indexName: "my-collection",
+  dimension: 1536,
+});
+
+await store.upsert({
+  indexName: "my-collection",
+  vectors: embeddings,
+  metadata: chunks.map((chunk) => ({ text: chunk.text })),
+});
+```
+
+  </TabItem>
   <TabItem value="couchbase" label="Couchbase">
 
 ```ts title="vector-store.ts" showLineNumbers copy
@@ -453,6 +474,16 @@ Each vector database enforces specific naming conventions for indexes and collec
     Index names must:
     - Use only lowercase letters
     - Not begin with underscores or hyphens
+    - Not contain spaces, commas
+    - Not contain special characters (e.g. `:`, `"`, `*`, `+`, `/`, `\`, `|`, `?`, `#`, `>`, `<`)
+    - Example: `my-index-123` is valid
+    - Example: `My_Index` is not valid (contains uppercase letters)
+    - Example: `_myindex` is not valid (begins with underscore)
+  </TabItem>
+  <TabItem value="elasticsearch" label="ElasticSearch">
+    Index names must:
+    - Use only lowercase letters
+    - Not begin with underscores, hyphens, or plus signs
     - Not contain spaces, commas
     - Not contain special characters (e.g. `:`, `"`, `*`, `+`, `/`, `\`, `|`, `?`, `#`, `>`, `<`)
     - Example: `my-index-123` is valid
