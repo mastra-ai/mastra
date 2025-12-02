@@ -177,22 +177,6 @@ To migrate, update any code that consumes branch outputs to handle optional valu
 
 If your code depends on non-optional types, add runtime checks or provide default values when accessing branch outputs.
 
-### New `resumeStream()` method
-
-A new `resumeStream()` method is now available for resuming suspended workflows with streaming support. This method was previously only available as the experimental `resumeStreamVNext()`.
-
-```typescript showLineNumbers copy
-const stream = await run.stream({ inputData });
-const result = await stream.result;
-
-if (result.status === 'suspended') {
-  const resumedStream = await run.resumeStream({
-    resumeData: { value: 'resume data' },
-  });
-  const finalResult = await resumedStream.result;
-}
-```
-
 See [Run.resumeStream()](/reference/v1/streaming/workflows/resumeStream) for details.
 
 ## Removed
@@ -203,22 +187,7 @@ The experimental `streamVNext()`, `resumeStreamVNext()`, and `observeStreamVNext
 
 To migrate, use the standard `stream()`, `resumeStream()`, and `observeStream()` methods. Update event type checks to use workflow-prefixed names and access stream properties directly.
 
-```diff
-- const { stream, getWorkflowState } = await run.streamVNext({ inputData });
-+ const stream = await run.stream({ inputData });
-
-  for await (const chunk of stream) {
--   if (chunk.type === 'step-start') {
-+   if (chunk.type === 'workflow-step-start') {
-      console.log('Step started');
-    }
-  }
-
-- const result = await getWorkflowState();
-+ const result = await stream.result;
-```
-
-See [Run.stream()](/reference/v1/streaming/workflows/stream), [Run.resumeStream()](/reference/v1/streaming/workflows/resumeStream), and [Run.observeStream()](/reference/v1/streaming/workflows/observeStream) for details.
+See [`Run.stream()`](/reference/v1/streaming/workflows/stream), [`Run.resumeStream()`](/reference/v1/streaming/workflows/resumeStream), and [`Run.observeStream()`](/reference/v1/streaming/workflows/observeStream) for details.
 
 ### Legacy workflows export
 
