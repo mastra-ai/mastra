@@ -12,7 +12,13 @@ import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory, MemoryConfig } from '../memory';
 import type { IModelSpanTracker } from '../observability';
-import type { InputProcessor, OutputProcessor, ProcessorState } from '../processors';
+import type {
+  InputProcessor,
+  OutputProcessor,
+  ProcessInputStepArgs,
+  ProcessInputStepResult,
+  ProcessorState,
+} from '../processors';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream/base/schema';
 import type {
@@ -42,13 +48,17 @@ export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
   messages?: Array<MessageInput>;
 };
 
-export type PrepareStepFunction<TOOLS extends ToolSet = ToolSet> = (options: {
-  steps: Array<StepResult<TOOLS>>;
-  stepNumber: number;
-  model: MastraLanguageModelV2;
-  messages: Array<MastraDBMessage>;
-  messageList: MessageList;
-}) => PromiseLike<PrepareStepResult<TOOLS> | undefined> | PrepareStepResult<TOOLS> | undefined;
+export type PrepareStepFunction<TOOLS extends ToolSet = ToolSet> = (
+  args: ProcessInputStepArgs<TOOLS>,
+) => Promise<ProcessInputStepResult<TOOLS>> | ProcessInputStepResult<TOOLS>;
+
+// export type PrepareStepFunction<TOOLS extends ToolSet = ToolSet> = (options: {
+//   steps: Array<StepResult<TOOLS>>;
+//   stepNumber: number;
+//   model: MastraLanguageModelV2;
+//   messages: Array<MastraDBMessage>;
+//   messageList: MessageList;
+// }) => PromiseLike<PrepareStepResult<TOOLS> | undefined> | PrepareStepResult<TOOLS> | undefined;
 
 export type LoopConfig<OUTPUT extends OutputSchema = undefined> = {
   onChunk?: (chunk: ChunkType<OUTPUT>) => Promise<void> | void;

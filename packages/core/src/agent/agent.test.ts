@@ -6126,6 +6126,80 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 }
 
 describe('Agent Tests', () => {
+  describe('prepareStep', () => {
+    it.only('should use mastra model config openai compatible object when set in prepareStep', async () => {
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: 'openai/gpt-4o',
+      });
+
+      const result = await agent.generate('Hello', {
+        prepareStep: ({ model, stepNumber }) => {
+          if (stepNumber === 0) {
+            expect(model.provider).toBe('openai');
+            expect(model.modelId).toBe('gpt-4o');
+
+            console.log('prepareStep', {
+              provider: model.provider,
+              modelId: model.modelId,
+              specificationVersion: model.specificationVersion,
+              stepNumber,
+            });
+
+            return {
+              model: {
+                providerId: 'openai',
+                modelId: 'gpt-4o-mini',
+              },
+            };
+          }
+        },
+      });
+      // const result = await output.getFullOutput();
+      console.log('result', result);
+      expect((result?.request?.body as any)?.model).toBe('gpt-4o-mini');
+      expect(result?.response?.modelMetadata).toMatchObject({
+        modelId: 'gpt-4o-mini',
+        modelProvider: 'openai',
+        modelVersion: 'v2',
+      });
+    });
+
+    it('should use model router magic string when set in prepareStep', async () => {
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: 'openai/gpt-4o',
+      });
+
+      const output = await agent.stream('Hello', {
+        prepareStep: ({ model, stepNumber }) => {
+          if (stepNumber === 0) {
+            expect(model.provider).toBe('openai');
+            expect(model.modelId).toBe('gpt-4o');
+
+            console.log('prepareStep', {
+              provider: model.provider,
+              modelId: model.modelId,
+              specificationVersion: model.specificationVersion,
+              stepNumber,
+            });
+
+            return {
+              model: 'openai/gpt-4o-mini',
+            };
+          }
+        },
+      });
+      const result = await output.getFullOutput();
+      console.log('result', result);
+      expect((result?.request?.body as any)?.model).toBe('gpt-4o-mini');
+    });
+  });
+
   it('should preserve empty assistant messages after tool use', () => {
     const messageList = new MessageList();
 

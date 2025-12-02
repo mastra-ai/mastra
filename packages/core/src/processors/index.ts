@@ -1,9 +1,15 @@
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 
-import type { MessageList, MastraDBMessage } from '../agent/message-list';
+import type { MessageList, MastraDBMessage, MessageInput } from '../agent/message-list';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { ChunkType } from '../stream';
+import type { ChunkType, OutputSchema } from '../stream';
+import type { AgentExecutionOptions } from '../agent/agent.types';
+import type { AgentConfig } from '../agent/types';
+import type { StepResult, ToolChoice, ToolSet } from 'ai-v5';
+import type { MastraLanguageModelV2, OpenAICompatibleConfig } from '../llm/model/shared.types';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { ModelRouterModelId } from '../llm/model';
 
 /**
  * Base context shared by all processor methods
@@ -63,12 +69,23 @@ export interface ProcessOutputResultArgs extends ProcessorMessageContext {}
 /**
  * Arguments for processInputStep method
  */
-export interface ProcessInputStepArgs extends ProcessorMessageContext {
+export interface ProcessInputStepArgs<TOOLS extends ToolSet = ToolSet> extends ProcessorMessageContext {
   /** The current step number (0-indexed) */
   stepNumber: number;
   /** All system messages (agent instructions, user-provided, memory) for read/modify access */
   systemMessages: CoreMessageV4[];
+  model: MastraLanguageModelV2;
+  steps: Array<StepResult<TOOLS>>;
+  toolChoice?: ToolChoice<TOOLS>;
 }
+
+export type ProcessInputStepResult<TOOLS extends ToolSet = ToolSet> = {
+  model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModelV2;
+  toolChoice?: ToolChoice<TOOLS>;
+  activeTools?: Array<keyof TOOLS>;
+  messages?: MastraDBMessage[];
+  messageList?: MessageList;
+};
 
 /**
  * Arguments for processOutputStream method
@@ -122,7 +139,9 @@ export interface Processor<TId extends string = string> {
    *  - MessageList: The same messageList instance passed in (indicates you've mutated it)
    *  - MastraDBMessage[]: Transformed messages array (for simple transformations)
    */
-  processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
+  processInputStep?<TOOLS extends ToolSet = ToolSet>(
+    args: ProcessInputStepArgs<TOOLS>,
+  ): Promise<ProcessInputStepResult<TOOLS>> | ProcessInputStepResult<TOOLS> | ProcessorMessageResult;
 }
 
 type WithRequired<T, K extends keyof T> = T & { [P in K]-?: NonNullable<T[P]> };

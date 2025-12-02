@@ -4,6 +4,7 @@ import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import type { ToolSet } from 'ai-v5';
 import { MessageList, type MastraDBMessage } from '../../../agent/message-list';
 import { getErrorFromUnknown } from '../../../error/utils.js';
+import { resolveModelConfig } from '../../../llm';
 import type { MastraLanguageModelV2 } from '../../../llm/model/shared.types';
 import { ConsoleLogger } from '../../../logger';
 import { executeWithContextSync } from '../../../observability';
@@ -24,10 +25,9 @@ import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { isControllerOpen } from '../stream';
-import { resolveModelConfig } from '../../../llm';
+import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 
 type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
-  model: MastraLanguageModelV2;
   tools?: ToolSet;
   messageId: string;
   includeRawChunks?: boolean;
@@ -486,102 +486,78 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
         runState: AgenticRunState;
         callBail?: boolean;
       }>(models)(async (model, isLastModel) => {
+        let stepModel = model;
+
+        const messageListPromptArgs = {
+          downloadRetries,
+          downloadConcurrency,
+          supportedUrls: model?.supportedUrls as Record<string, RegExp[]>,
+        };
+        let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+        // Call processInputStep for processors (runs BEFORE prepareStep)
+        // This allows processors to modify messages at each step of the agentic loop
+
+        let stepToolChoice = toolChoice;
+        let stepTools = tools;
+
+        const inputStepProcessors = [
+          ...(inputProcessors || []),
+          // ...(options?.prepareStep ? [new PrepareStepProcessor({ prepareStep: options.prepareStep })] : []),
+        ];
+        // Run processInputStep for all processors that implement it
+        if (inputProcessors && inputProcessors.length > 0) {
+          const processorRunner = new ProcessorRunner({
+            inputProcessors: inputStepProcessors,
+            outputProcessors: [],
+            logger: logger || new ConsoleLogger({ level: 'error' }),
+            agentName: agentId || 'unknown',
+          });
+
+          try {
+            // processInputStep modifies messages in place via messageList (same as processInput)
+            const processInputStepResult = await processorRunner.runProcessInputStep({
+              messages: messageList.get.all.db(),
+              messageList,
+              stepNumber: inputData.output?.steps?.length || 0,
+              tracingContext,
+              requestContext,
+              model,
+              steps: inputData.output?.steps || [],
+              toolChoice: stepToolChoice,
+            });
+
+            if (processInputStepResult.model) {
+              const resolvedStepModel = await resolveModelConfig(processInputStepResult.model);
+              if (resolvedStepModel.specificationVersion === 'v1') {
+                throw new Error('v1 language models are not supported in processInputStep');
+              }
+              stepModel = resolvedStepModel;
+            }
+            if (processInputStepResult.toolChoice) {
+              stepToolChoice = processInputStepResult.toolChoice;
+            }
+            if (processInputStepResult.activeTools && stepTools) {
+              const activeToolsSet = new Set(processInputStepResult.activeTools);
+              stepTools = Object.fromEntries(
+                Object.entries(stepTools).filter(([toolName]) => activeToolsSet.has(toolName)),
+              ) as typeof tools;
+            }
+
+            // Re-fetch messages after processors have modified them
+            inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+          } catch (error) {
+            console.error('Error in processInputStep processors:', error);
+            throw error;
+          }
+        }
+
         const runState = new AgenticRunState({
           _internal: _internal!,
-          model,
+          model: stepModel,
         });
 
-        switch (model.specificationVersion) {
+        switch (stepModel.specificationVersion) {
           case 'v2': {
-            const messageListPromptArgs = {
-              downloadRetries,
-              downloadConcurrency,
-              supportedUrls: model?.supportedUrls as Record<string, RegExp[]>,
-            };
-            let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
-
-            // Call processInputStep for processors (runs BEFORE prepareStep)
-            // This allows processors to modify messages at each step of the agentic loop
-            let stepModel = model;
-            let stepToolChoice = toolChoice;
-            let stepTools = tools;
-
-            // Run processInputStep for all processors that implement it
-            if (inputProcessors && inputProcessors.length > 0) {
-              const processorRunner = new ProcessorRunner({
-                inputProcessors,
-                outputProcessors: [],
-                logger: logger || new ConsoleLogger({ level: 'error' }),
-                agentName: agentId || 'unknown',
-              });
-
-              try {
-                // processInputStep modifies messages in place via messageList (same as processInput)
-                await processorRunner.runProcessInputStep({
-                  messages: messageList.get.all.db(),
-                  messageList,
-                  stepNumber: inputData.output?.steps?.length || 0,
-                  tracingContext,
-                  requestContext,
-                });
-
-                // Re-fetch messages after processors have modified them
-                inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
-              } catch (error) {
-                console.error('Error in processInputStep processors:', error);
-                throw error;
-              }
-            }
-
-            // Call prepareStep callback if provided (runs AFTER processInputStep)
-            if (options?.prepareStep) {
-              try {
-                const prepareStepResult = await options.prepareStep({
-                  stepNumber: inputData.output?.steps?.length || 0,
-                  steps: inputData.output?.steps || [],
-                  model,
-                  messages: messageList.get.all.db(),
-                  messageList,
-                });
-
-                if (prepareStepResult) {
-                  if (prepareStepResult.model) {
-                    const resolvedStepModel = await resolveModelConfig(prepareStepResult.model);
-                    if (resolvedStepModel.specificationVersion === 'v1') {
-                      throw new Error('v1 language models are not supported in prepareStep');
-                    }
-                    stepModel = resolvedStepModel;
-                  }
-
-                  if (prepareStepResult.toolChoice) {
-                    stepToolChoice = prepareStepResult.toolChoice;
-                  }
-
-                  if (prepareStepResult.activeTools && stepTools) {
-                    const activeToolsSet = new Set(prepareStepResult.activeTools);
-                    stepTools = Object.fromEntries(
-                      Object.entries(stepTools).filter(([toolName]) => activeToolsSet.has(toolName)),
-                    ) as typeof tools;
-                  }
-                  if (prepareStepResult.messages) {
-                    for (const message of prepareStepResult.messages) {
-                      if (message.role === 'assistant' || message.role === 'tool') {
-                        messageList.add(message, 'response');
-                      } else {
-                        messageList.add(message, 'input');
-                      }
-                    }
-                  }
-
-                  // Re-fetch inputMessages from messageList after any modifications
-                  // (either from prepareStepResult.messages or direct messageList mutations)
-                  inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
-                }
-              } catch (error) {
-                console.error('Error in prepareStep callback:', error);
-              }
-            }
-
             modelResult = executeWithContextSync({
               span: modelSpanTracker?.getTracingContext()?.currentSpan,
               fn: () =>
@@ -636,9 +612,9 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
 
         const outputStream = new MastraModelOutput({
           model: {
-            modelId: model.modelId,
-            provider: model.provider,
-            version: model.specificationVersion,
+            modelId: stepModel.modelId,
+            provider: stepModel.provider,
+            version: stepModel.specificationVersion,
           },
           stream: modelResult as ReadableStream<ChunkType>,
           messageList,
@@ -660,7 +636,6 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
           await processOutputStream({
             outputStream,
             includeRawChunks,
-            model,
             tools,
             messageId,
             messageList,
