@@ -185,8 +185,10 @@ function buildOperatorCondition(field: string, operators: Record<string, unknown
           conditions.push(`${fieldPath} LIKE '%${escapeString(value)}%'`);
         } else if (Array.isArray(value)) {
           // Check if array contains all specified elements
+          // Use TRY_CAST to handle type mismatches gracefully (returns NULL if not an array)
+          const jsonPath = `json_extract(metadata, '$.${escapeString(field)}')`;
           const arrayConditions = value.map(v => {
-            return `list_contains(json_extract(metadata, '$.${escapeString(field)}')::VARCHAR[], ${toSqlLiteral(v)})`;
+            return `list_contains(TRY_CAST(${jsonPath} AS VARCHAR[]), ${toSqlLiteral(v)})`;
           });
           conditions.push(`(${arrayConditions.join(' AND ')})`);
         } else {

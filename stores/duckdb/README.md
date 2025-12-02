@@ -31,14 +31,20 @@ await vectorStore.createIndex({
 // Add vectors with metadata
 const ids = await vectorStore.upsert({
   indexName: 'my_vectors',
-  vectors: [[0.1, 0.2, ...], [0.3, 0.4, ...]],
-  metadata: [{ text: 'doc1', category: 'A' }, { text: 'doc2', category: 'B' }],
+  vectors: [
+    [0.1, 0.2, 0.3],
+    [0.3, 0.4, 0.5],
+  ], // truncated - use actual 1536-dim vectors
+  metadata: [
+    { text: 'doc1', category: 'A' },
+    { text: 'doc2', category: 'B' },
+  ],
 });
 
 // Query similar vectors
 const results = await vectorStore.query({
   indexName: 'my_vectors',
-  queryVector: [0.1, 0.2, ...],
+  queryVector: [0.1, 0.2, 0.3], // truncated - use actual 1536-dim vector
   topK: 10,
   filter: { category: 'A' },
   includeVector: false,
@@ -51,8 +57,8 @@ await vectorStore.close();
 ### With RAG Pipeline
 
 ```typescript
+import { Mastra } from '@mastra/core';
 import { DuckDBVector } from '@mastra/duckdb';
-import { MDocument } from '@mastra/rag';
 
 const vectorStore = new DuckDBVector({
   id: 'rag-store',
@@ -139,40 +145,37 @@ The following filter operators are supported for metadata queries:
 // Simple equality
 const results = await vectorStore.query({
   indexName: 'docs',
-  queryVector: [...],
+  queryVector: [0.1, 0.2, 0.3], // truncated - use actual embedding vector
   filter: { category: 'technology' },
 });
 
 // Comparison operators
 const results = await vectorStore.query({
   indexName: 'docs',
-  queryVector: [...],
+  queryVector: [0.1, 0.2, 0.3], // truncated - use actual embedding vector
   filter: { price: { $gt: 100, $lte: 500 } },
 });
 
 // Logical operators
 const results = await vectorStore.query({
   indexName: 'docs',
-  queryVector: [...],
+  queryVector: [0.1, 0.2, 0.3], // truncated - use actual embedding vector
   filter: {
-    $and: [
-      { category: 'electronics' },
-      { $or: [{ brand: 'Apple' }, { brand: 'Samsung' }] },
-    ],
+    $and: [{ category: 'electronics' }, { $or: [{ brand: 'Apple' }, { brand: 'Samsung' }] }],
   },
 });
 
 // Array operators
 const results = await vectorStore.query({
   indexName: 'docs',
-  queryVector: [...],
+  queryVector: [0.1, 0.2, 0.3], // truncated - use actual embedding vector
   filter: { tags: { $in: ['featured', 'sale'] } },
 });
 
 // Nested field access
 const results = await vectorStore.query({
   indexName: 'docs',
-  queryVector: [...],
+  queryVector: [0.1, 0.2, 0.3], // truncated - use actual embedding vector
   filter: { 'user.profile.tier': 'premium' },
 });
 ```

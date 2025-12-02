@@ -1,3 +1,6 @@
-import { base } from '@internal/lint';
+import { createConfig } from '@internal/lint/eslint';
 
-export default [...base];
+const config = await createConfig();
+
+/** @type {import("eslint").Linter.Config[]} */
+export default [...config];

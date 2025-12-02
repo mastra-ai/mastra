@@ -1,4 +1,5 @@
 import { DuckDBInstance } from '@duckdb/node-api';
+import type { DuckDBValue } from '@duckdb/node-api';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   IndexStats,
@@ -12,8 +13,8 @@ import type {
   UpdateVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
-import type { DuckDBVectorConfig, DuckDBVectorFilter } from './types.js';
 import { buildFilterClause } from './filter-builder.js';
+import type { DuckDBVectorConfig, DuckDBVectorFilter } from './types.js';
 
 /**
  * DuckDB vector store implementation for Mastra.
@@ -47,29 +48,48 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
    * Initialize the database connection and load required extensions.
    */
   private async initialize(): Promise<void> {
-    if (this.initialized) return;
-    if (this.initPromise) return this.initPromise;
+    if (this.initialized && this.instance) return;
+
+    // If there's an existing initPromise, wait for it, but verify instance exists
+    if (this.initPromise) {
+      await this.initPromise;
+      // If instance was closed while initializing, reset and retry
+      if (!this.instance) {
+        this.initPromise = null;
+        this.initialized = false;
+      } else {
+        return;
+      }
+    }
 
     this.initPromise = (async () => {
-      // Create DuckDB instance
-      this.instance = await DuckDBInstance.create(this.config.path!);
-      const connection = await this.instance.connect();
-
       try {
-        // Install and load the VSS extension for vector operations
-        await connection.run('INSTALL vss;');
-        await connection.run('LOAD vss;');
-      } catch (err) {
-        // VSS might already be installed, try just loading it
+        // Create DuckDB instance
+        this.instance = await DuckDBInstance.create(this.config.path!);
+        const connection = await this.instance.connect();
+
         try {
+          // Install and load the VSS extension for vector operations
+          await connection.run('INSTALL vss;');
           await connection.run('LOAD vss;');
         } catch {
-          // Continue without VSS - will use basic array operations
-          this.logger.warn('VSS extension not available, using basic array operations');
+          // VSS might already be installed, try just loading it
+          try {
+            await connection.run('LOAD vss;');
+          } catch {
+            // Continue without VSS - will use basic array operations
+            this.logger.warn('VSS extension not available, using basic array operations');
+          }
         }
-      }
 
-      this.initialized = true;
+        this.initialized = true;
+      } catch (error) {
+        // Reset state on error to allow retry
+        this.instance = null;
+        this.initialized = false;
+        this.initPromise = null;
+        throw error;
+      }
     })();
 
     return this.initPromise;
@@ -97,10 +117,10 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
       const preparedSql = sql.replace(/\?/g, () => `$${++paramIndex}`);
 
       const stmt = await connection.prepare(preparedSql);
-      stmt.bindAll(params);
+      // Bind parameters as array - DuckDB Node API bind() accepts array
+      stmt.bind(params as DuckDBValue[]);
       const result = await stmt.run();
       const rows = await result.getRows();
-      stmt.close();
 
       // Convert rows to objects
       const columns = result.columnNames();
@@ -130,9 +150,9 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
         const preparedSql = sql.replace(/\?/g, () => `$${++paramIndex}`);
 
         const stmt = await connection.prepare(preparedSql);
-        stmt.bindAll(params);
+        // Bind parameters as array - DuckDB Node API bind() accepts array
+        stmt.bind(params as DuckDBValue[]);
         await stmt.run();
-        stmt.close();
       }
     } finally {
       // Connection cleanup is automatic
@@ -178,9 +198,7 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
     const vectorLiteral = `[${queryVector.join(', ')}]::FLOAT[${queryVector.length}]`;
 
     // Build filter clause
-    const { clause: filterClause, params: filterParams } = filter
-      ? buildFilterClause(filter)
-      : { clause: '', params: [] };
+    const { clause: filterClause } = filter ? buildFilterClause(filter) : { clause: '' };
 
     // Build query
     const selectCols = includeVector ? 'id, vector, metadata, distance' : 'id, metadata, distance';
@@ -246,9 +264,7 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
     // Generate IDs if not provided
     const vectorIds = ids || vectors.map(() => crypto.randomUUID());
 
-    const connection = await this.getConnection();
-
-    // Insert each vector
+    // Insert each vector using parameterized queries for IDs
     for (let i = 0; i < vectors.length; i++) {
       const id = vectorIds[i]!;
       const vector = vectors[i]!;
@@ -257,13 +273,13 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
       const vectorLiteral = `[${vector.join(', ')}]::FLOAT[${vector.length}]`;
       const metadataJson = JSON.stringify(meta);
 
-      // Use INSERT OR REPLACE for upsert behavior
+      // Use INSERT OR REPLACE for upsert behavior with parameterized ID
       const sql = `
         INSERT OR REPLACE INTO ${tableName} (id, vector, metadata)
-        VALUES ('${id}', ${vectorLiteral}, '${metadataJson.replace(/'/g, "''")}')
+        VALUES (?, ${vectorLiteral}, '${metadataJson.replace(/'/g, "''")}')
       `;
 
-      await connection.run(sql);
+      await this.runStatement(sql, [id]);
     }
 
     return vectorIds;
@@ -404,11 +420,10 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
       updates.push(`metadata = '${metadataJson}'`);
     }
 
-    const connection = await this.getConnection();
-
     if (hasId) {
-      // Update by ID
-      await connection.run(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = '${params.id}'`);
+      // Update by ID with parameterized query
+      const sql = `UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = ?`;
+      await this.runStatement(sql, [params.id]);
     } else if (hasFilter) {
       // Update by filter - check for empty filter
       const filter = params.filter!;
@@ -418,7 +433,7 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
 
       const { clause } = buildFilterClause(filter);
       // Update ALL matching vectors, not just the first one
-      await connection.run(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE ${clause}`);
+      await this.runStatement(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE ${clause}`);
     }
   }
 
@@ -428,8 +443,9 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
     const { indexName, id } = params;
     const tableName = this.escapeIdentifier(indexName);
 
-    const connection = await this.getConnection();
-    await connection.run(`DELETE FROM ${tableName} WHERE id = '${id}'`);
+    // Use parameterized query for ID
+    const sql = `DELETE FROM ${tableName} WHERE id = ?`;
+    await this.runStatement(sql, [id]);
   }
 
   async deleteVectors(params: DeleteVectorsParams<DuckDBVectorFilter>): Promise<void> {
@@ -446,16 +462,16 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
       throw new Error('ids and filter are mutually exclusive - provide only one');
     }
 
-    const connection = await this.getConnection();
-
     if (ids) {
-      // Delete by IDs
+      // Delete by IDs with parameterized query
       if (ids.length === 0) {
         throw new Error('Cannot delete with empty ids array');
       }
 
-      const idList = ids.map(id => `'${id}'`).join(', ');
-      await connection.run(`DELETE FROM ${tableName} WHERE id IN (${idList})`);
+      // Create placeholders for each ID
+      const placeholders = ids.map(() => '?').join(', ');
+      const sql = `DELETE FROM ${tableName} WHERE id IN (${placeholders})`;
+      await this.runStatement(sql, ids);
     } else if (filter) {
       // Delete by filter - check for empty filter
       if (Object.keys(filter).length === 0) {
@@ -463,18 +479,21 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
       }
 
       const { clause } = buildFilterClause(filter);
-      await connection.run(`DELETE FROM ${tableName} WHERE ${clause}`);
+      await this.runStatement(`DELETE FROM ${tableName} WHERE ${clause}`);
     }
   }
 
   /**
    * Close the database connection.
+   * After closing, the vector store can be reused by calling methods that require initialization.
    */
   async close(): Promise<void> {
     if (this.instance) {
-      await this.instance.close();
+      // DuckDBInstance doesn't have a close method - just reset the reference
+      // The garbage collector will handle cleanup
       this.instance = null;
       this.initialized = false;
+      this.initPromise = null; // Reset initPromise to allow re-initialization
     }
   }
 }

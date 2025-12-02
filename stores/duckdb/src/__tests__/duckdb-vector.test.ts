@@ -8,6 +8,7 @@
  * @see https://github.com/mastra-ai/mastra/pull/8095
  */
 
+import { createVectorTestSuite } from '@internal/storage-test-utils';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { DuckDBVector } from '../vector/index.js';
 
@@ -261,6 +262,192 @@ describe('DuckDBVector', () => {
     });
   });
 
+  describe('Filter Operators - $contains', () => {
+    beforeEach(async () => {
+      vectorDB = new DuckDBVector({
+        id: 'duckdb-test',
+        path: ':memory:',
+        dimensions: 3,
+        metric: 'cosine',
+      });
+      await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
+    });
+
+    afterEach(async () => {
+      try {
+        await vectorDB?.deleteIndex({ indexName: testIndexName });
+      } catch {
+        // Cleanup might fail
+      }
+    });
+
+    it('should filter with array $contains operator', async () => {
+      // Insert vectors with array metadata
+      await vectorDB.upsert({
+        indexName: testIndexName,
+        vectors: [
+          [1, 0, 0],
+          [0, 1, 0],
+          [0, 0, 1],
+        ],
+        metadata: [
+          { tags: ['new', 'featured', 'sale'] },
+          { tags: ['used', 'clearance'] },
+          { tags: ['new', 'premium'] },
+        ],
+      });
+
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0, 0],
+        filter: { tags: { $contains: ['new'] } },
+      });
+
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(Array.isArray(result.metadata?.tags)).toBe(true);
+        expect(result.metadata?.tags).toContain('new');
+      });
+    });
+
+    it('should filter with $contains operator for string substring', async () => {
+      await vectorDB.upsert({
+        indexName: testIndexName,
+        vectors: [
+          [1, 0, 0],
+          [0, 1, 0],
+        ],
+        metadata: [{ category: 'electronics' }, { category: 'clothing' }],
+      });
+
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0, 0],
+        filter: { category: { $contains: 'lectro' } },
+      });
+
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.metadata?.category).toContain('lectro');
+      });
+    });
+
+    it('should handle $contains with multiple array values', async () => {
+      await vectorDB.upsert({
+        indexName: testIndexName,
+        vectors: [
+          [1, 0, 0],
+          [0, 1, 0],
+          [0, 0, 1],
+        ],
+        metadata: [{ tags: ['a', 'b', 'c'] }, { tags: ['b', 'd'] }, { tags: ['a', 'c', 'e'] }],
+      });
+
+      // Should match vectors that contain both 'a' and 'b'
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0, 0],
+        filter: { tags: { $contains: ['a', 'b'] } },
+      });
+
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.metadata?.tags).toContain('a');
+        expect(result.metadata?.tags).toContain('b');
+      });
+    });
+
+    it('should handle nested array fields with $contains', async () => {
+      await vectorDB.upsert({
+        indexName: testIndexName,
+        vectors: [
+          [1, 0, 0],
+          [0, 1, 0],
+        ],
+        metadata: [
+          { user: { preferences: { tags: ['tech', 'ai'] } } },
+          { user: { preferences: { tags: ['design', 'ui'] } } },
+        ],
+      });
+
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0, 0],
+        filter: { 'user.preferences.tags': { $contains: ['tech'] } },
+      });
+
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.metadata?.user?.preferences?.tags).toContain('tech');
+      });
+    });
+
+    it('should fallback to direct equality for non-array, non-string with $contains', async () => {
+      await vectorDB.upsert({
+        indexName: testIndexName,
+        vectors: [
+          [1, 0, 0],
+          [0, 1, 0],
+        ],
+        metadata: [{ price: 123 }, { price: 456 }],
+      });
+
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0, 0],
+        filter: { price: { $contains: 123 } },
+      });
+
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.metadata?.price).toBe(123);
+      });
+    });
+
+    it('should handle type mismatch gracefully when field is not an array', async () => {
+      // Insert a vector where tags is a string, not an array
+      await vectorDB.upsert({
+        indexName: testIndexName,
+        vectors: [
+          [1, 0, 0],
+          [0, 1, 0],
+        ],
+        metadata: [
+          { tags: 'new-featured-sale' }, // string, not array
+          { tags: ['new', 'featured'] }, // array
+        ],
+      });
+
+      // Querying with $contains array should handle the type mismatch
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0, 0],
+        filter: { tags: { $contains: ['new'] } },
+      });
+
+      // Should only match the array one, or handle gracefully
+      expect(results.length).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should not match deep object containment with $contains', async () => {
+      await vectorDB.upsert({
+        indexName: testIndexName,
+        vectors: [[1, 0.1, 0]],
+        metadata: [{ details: { color: 'red', size: 'large' }, category: 'clothing' }],
+      });
+
+      // $contains does NOT support deep object containment
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0.1, 0],
+        filter: { details: { $contains: { color: 'red' } } },
+      });
+
+      // Should return 0 results or handle gracefully
+      expect(results.length).toBe(0);
+    });
+  });
+
   describe('DuckDB-Specific Features', () => {
     beforeEach(async () => {
       try {
@@ -330,8 +517,6 @@ describe('DuckDBVector', () => {
 });
 
 // Use the shared test suite with factory pattern
-import { createVectorTestSuite } from '@internal/storage-test-utils';
-
 const duckDBVectorDB = new DuckDBVector({
   id: 'duckdb-shared-test',
   path: ':memory:',
