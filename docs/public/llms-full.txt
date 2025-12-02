@@ -1599,9 +1599,9 @@ const response = await testAgent.generate(
 console.log(response.object);
 ```
 
-### With Tool Calling
+### Structuring sub agent
 
-Use the `model` property to ensure that your agent can execute multi-step LLM calls with tool calling.
+Use the `model` property to have a separate agent generate the structured output for you.
 
 ```typescript showLineNumbers copy
 import { z } from "zod";
@@ -1663,6 +1663,21 @@ const response = await testAgentThatDoesntSupportStructuredOutput.generate(
 
 console.log(response.object);
 ```
+
+:::info[Gemini 2.5 with tools]
+
+Gemini 2.5 models do not support combining `response_format` (structured output) with function calling (tools) in the same API call. If your agent has tools and you're using `structuredOutput` with a Gemini 2.5 model, you must set `jsonPromptInjection: true` to avoid the error `Function calling with a response mime type: 'application/json' is unsupported`.
+
+```typescript
+const response = await agentWithTools.generate("Your prompt", {
+  structuredOutput: {
+    schema: yourSchema,
+    jsonPromptInjection: true, // Required for Gemini 2.5 when tools are present
+  },
+});
+```
+
+:::
 
 ## Analyzing images
 
@@ -19421,6 +19436,50 @@ const midnight = new Date();
 midnight.setUTCHours(24, 0, 0, 0);
 setTimeout(handleResume, midnight.getTime() - Date.now());
 ```
+
+## Accessing suspend data with `suspendData`
+When a step is suspended, you may want to access the data that was provided to `suspend()` when the step is later resumed. Use the `suspendData` parameter in your step's execute function to access this data.
+
+```typescript {22-25,29-30} title="src/mastra/workflows/user-approval.ts" showLineNumbers copy
+const approvalStep = createStep({
+  id: "user-approval",
+  inputSchema: z.object({
+    requestId: z.string()
+  }),
+  resumeSchema: z.object({
+    approved: z.boolean()
+  }),
+  suspendSchema: z.object({
+    reason: z.string(),
+    requestDetails: z.string()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  }),
+  execute: async ({ inputData, resumeData, suspend, suspendData }) => {
+    const { requestId } = inputData;
+    const { approved } = resumeData ?? {};
+    
+    // On first execution, suspend with context
+    if (!approved) {
+      return await suspend({
+        reason: "User approval required",
+        requestDetails: `Request ${requestId} pending review`
+      });
+    }
+    
+    // On resume, access the original suspend data
+    const suspendReason = suspendData?.reason || "Unknown";
+    const details = suspendData?.requestDetails || "No details";
+    
+    return {
+      result: `${details} - ${suspendReason} - Decision: ${approved ? 'Approved' : 'Rejected'}`
+    };
+  }
+});
+```
+
+The `suspendData` parameter is automatically populated when a step is resumed and contains the exact data that was passed to the `suspend()` function during the original suspension. This allows you to maintain context about why the workflow was suspended and use that information during the resume process.
 
 ## Identifying suspended executions
 
@@ -93976,6 +94035,12 @@ const step1 = createStep({
       type: "z.infer<TResumeSchema>",
       description:
         "The resume data matching the resumeSchema, when resuming the step from a suspended state. Only exists if the step is being resumed.",
+    },
+    {
+      name: "suspendData",
+      type: "z.infer<TSuspendSchema>",
+      description:
+        "The suspend data that was originally passed to suspend() when the step was suspended. Only exists if the step is being resumed and was previously suspended with data.",
     },
     {
       name: "mastra",

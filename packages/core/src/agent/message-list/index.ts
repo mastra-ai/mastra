@@ -1518,8 +1518,18 @@ export class MessageList {
 
     if (MessageList.isAIV5CoreMessage(message)) {
       const dbMsg = MessageList.aiV5ModelMessageToMastraDBMessage(message, messageSource);
+      // Only use the original createdAt from input message metadata, not the generated one from the static method
+      // This fixes issue #10683 where messages without createdAt would get shuffled
+      const rawCreatedAt =
+        'metadata' in message &&
+        message.metadata &&
+        typeof message.metadata === 'object' &&
+        'createdAt' in message.metadata
+          ? message.metadata.createdAt
+          : undefined;
       const result = {
         ...dbMsg,
+        createdAt: this.generateCreatedAt(messageSource, rawCreatedAt),
         threadId: this.memoryInfo?.threadId,
         resourceId: this.memoryInfo?.resourceId,
       };
@@ -1527,8 +1537,12 @@ export class MessageList {
     }
     if (MessageList.isAIV5UIMessage(message)) {
       const dbMsg = MessageList.aiV5UIMessageToMastraDBMessage(message);
+      // Only use the original createdAt from input message, not the generated one from the static method
+      // This fixes issue #10683 where messages without createdAt would get shuffled
+      const rawCreatedAt = 'createdAt' in message ? message.createdAt : undefined;
       return {
         ...dbMsg,
+        createdAt: this.generateCreatedAt(messageSource, rawCreatedAt),
         threadId: this.memoryInfo?.threadId,
         resourceId: this.memoryInfo?.resourceId,
       };
@@ -1539,21 +1553,28 @@ export class MessageList {
 
   private lastCreatedAt?: number;
   // this makes sure messages added in order will always have a date atleast 1ms apart.
-  private generateCreatedAt(messageSource: MessageSource, start?: Date | number): Date {
-    start = start instanceof Date ? start : start ? new Date(start) : undefined;
+  private generateCreatedAt(messageSource: MessageSource, start?: unknown): Date {
+    // Normalize timestamp
+    const startDate: Date | undefined =
+      start instanceof Date
+        ? start
+        : typeof start === 'string' || typeof start === 'number'
+          ? new Date(start)
+          : undefined;
 
-    if (start && !this.lastCreatedAt) {
-      this.lastCreatedAt = start.getTime();
-      return start;
+    if (startDate && !this.lastCreatedAt) {
+      this.lastCreatedAt = startDate.getTime();
+      return startDate;
     }
 
-    if (start && messageSource === `memory`) {
-      // we don't want to modify start time if the message came from memory or we may accidentally re-order old messages
-      return start;
+    if (startDate && messageSource === `memory`) {
+      // Preserve user-provided timestamps for memory messages to avoid re-ordering
+      // Messages without timestamps will fall through to get generated incrementing timestamps
+      return startDate;
     }
 
     const now = new Date();
-    const nowTime = start?.getTime() || now.getTime();
+    const nowTime = startDate?.getTime() || now.getTime();
     // find the latest createdAt in all stored messages
     const lastTime = this.messages.reduce((p, m) => {
       if (m.createdAt.getTime() > p) return m.createdAt.getTime();
@@ -1910,10 +1931,20 @@ export class MessageList {
       content.metadata = coreMessage.metadata as Record<string, unknown>;
     }
 
+    // Extract createdAt from metadata if provided
+    // This fixes issue #10683 where messages without createdAt would get shuffled
+    const rawCreatedAt =
+      'metadata' in coreMessage &&
+      coreMessage.metadata &&
+      typeof coreMessage.metadata === 'object' &&
+      'createdAt' in coreMessage.metadata
+        ? coreMessage.metadata.createdAt
+        : undefined;
+
     return {
       id,
       role: MessageList.getRole(coreMessage),
-      createdAt: this.generateCreatedAt(messageSource),
+      createdAt: this.generateCreatedAt(messageSource, rawCreatedAt),
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
       content,

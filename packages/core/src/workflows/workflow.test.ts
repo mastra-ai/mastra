@@ -17144,4 +17144,132 @@ describe('Workflow', () => {
       expect(typedStep).toBeDefined();
     });
   });
+
+  describe('Suspend Data Access', () => {
+    it('should provide access to suspendData in workflow step on resume', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+      });
+
+      const suspendDataAccess = createStep({
+        id: 'suspend-data-access-test',
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        resumeSchema: z.object({
+          confirm: z.boolean(),
+        }),
+        suspendSchema: z.object({
+          reason: z.string(),
+          originalValue: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+          wasResumed: z.boolean(),
+          suspendReason: z.string().optional(),
+        }),
+        execute: async ({ inputData, resumeData, suspend, suspendData }) => {
+          const { value } = inputData;
+          const { confirm } = resumeData ?? {};
+
+          // On first execution, suspend with context
+          if (!confirm) {
+            return await suspend({
+              reason: 'User confirmation required',
+              originalValue: value,
+            });
+          }
+
+          // On resume, we can now access the suspend data!
+          const suspendReason = suspendData?.reason || 'Unknown';
+          const originalValue = suspendData?.originalValue || 'Unknown';
+
+          return {
+            result: `Processed ${originalValue} after ${suspendReason}`,
+            wasResumed: true,
+            suspendReason,
+          };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'suspend-data-test-workflow',
+        mastra,
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+          wasResumed: z.boolean(),
+          suspendReason: z.string().optional(),
+        }),
+      });
+
+      workflow.then(suspendDataAccess).commit();
+
+      const run = await workflow.createRun();
+
+      // Start the workflow - should suspend
+      const initialResult = await run.start({
+        inputData: { value: 'test-value' },
+      });
+
+      expect(initialResult.status).toBe('suspended');
+
+      // Resume the workflow with confirmation
+      const resumedResult = await run.resume({
+        step: suspendDataAccess,
+        resumeData: { confirm: true },
+      });
+
+      expect(resumedResult.status).toBe('success');
+      expect(resumedResult.result.suspendReason).toBe('User confirmation required');
+      expect(resumedResult.result.result).toBe('Processed test-value after User confirmation required');
+    });
+
+    it('should handle missing suspendData gracefully', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+      });
+
+      const stepWithoutSuspend = createStep({
+        id: 'no-suspend-step',
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        execute: async ({ inputData, suspendData }) => {
+          // Should handle missing suspendData gracefully
+          const message = suspendData ? 'Had suspend data' : 'No suspend data';
+          return { result: `${inputData.value}: ${message}` };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'no-suspend-workflow',
+        mastra,
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      });
+
+      workflow.then(stepWithoutSuspend).commit();
+
+      const run = await workflow.createRun();
+
+      const result = await run.start({
+        inputData: { value: 'test' },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.result.result).toBe('test: No suspend data');
+    });
+  });
 });
