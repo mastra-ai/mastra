@@ -7,7 +7,6 @@ type ValidationArgs = {
   message: string;
   type: string;
   stack: string;
-  info: Record<string, unknown>;
 };
 
 export class ValidationError extends Error {

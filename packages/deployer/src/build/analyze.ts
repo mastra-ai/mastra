@@ -132,7 +132,7 @@ function validateError(
         // importFile: moduleName,
         packageName: moduleName,
       },
-      text: `We found an error in the ${moduleName} workspace package. Pleaes find the offending package and fix the error.
+      text: `We found an error in the ${moduleName} workspace package. Please find the offending package and fix the error.
   Error: ${err.stack}`,
     });
   }
