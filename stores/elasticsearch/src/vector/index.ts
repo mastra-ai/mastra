@@ -1,3 +1,4 @@
+import { Client as ElasticSearchClient } from '@elastic/elasticsearch';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type {
   CreateIndexParams,
@@ -12,7 +13,6 @@ import type {
   DeleteVectorsParams,
 } from '@mastra/core/vector';
 import { MastraVector } from '@mastra/core/vector';
-import { Client as ElasticSearchClient } from '@elastic/elasticsearch';
 import { ElasticSearchFilterTranslator } from './filter';
 import type { ElasticSearchVectorFilter } from './filter';
 
@@ -107,7 +107,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
       const response = await this.client.cat.indices({ format: 'json' });
       const indexes = response
         .map((record: { index?: string }) => record.index)
-        .filter((index: string | undefined) => index !== undefined && !index.startsWith('.'));
+        .filter((index: string | undefined): index is string => index !== undefined && !index.startsWith('.'));
 
       return indexes;
     } catch (error) {
@@ -119,6 +119,56 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
         },
         error,
       );
+    }
+  }
+
+  /**
+   * Validates that an existing index matches the requested dimension and metric.
+   * Throws an error if there's a mismatch, otherwise allows idempotent creation.
+   */
+  protected async validateExistingIndex(indexName: string, dimension: number, metric: string): Promise<void> {
+    let info: IndexStats;
+    try {
+      info = await this.describeIndex({ indexName });
+    } catch (infoError) {
+      const mastraError = new MastraError(
+        {
+          id: 'STORAGE_ELASTICSEARCH_VECTOR_VALIDATE_INDEX_FETCH_FAILED',
+          text: `Index "${indexName}" already exists, but failed to fetch index info for dimension check.`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.SYSTEM,
+          details: { indexName },
+        },
+        infoError,
+      );
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
+      throw mastraError;
+    }
+
+    const existingDim = info?.dimension;
+    const existingMetric = info?.metric;
+
+    if (existingDim === dimension) {
+      this.logger?.info(
+        `Index "${indexName}" already exists with ${existingDim} dimensions and metric ${existingMetric}, skipping creation.`,
+      );
+      if (existingMetric !== metric) {
+        this.logger?.warn(
+          `Attempted to create index with metric "${metric}", but index already exists with metric "${existingMetric}". To use a different metric, delete and recreate the index.`,
+        );
+      }
+    } else if (info) {
+      const mastraError = new MastraError({
+        id: 'STORAGE_ELASTICSEARCH_VECTOR_VALIDATE_INDEX_DIMENSION_MISMATCH',
+        text: `Index "${indexName}" already exists with ${existingDim} dimensions, but ${dimension} dimensions were requested`,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName, existingDim, requestedDim: dimension },
+      });
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
+      throw mastraError;
     }
   }
 
@@ -152,7 +202,19 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
   async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
     try {
       await this.client.indices.delete({ index: indexName });
-    } catch (error) {
+    } catch (error: any) {
+      // Check if error is "index not found" - allow idempotent delete
+      const isIndexNotFound =
+        error?.statusCode === 404 ||
+        error?.body?.error?.type === 'index_not_found_exception' ||
+        error?.meta?.statusCode === 404;
+
+      if (isIndexNotFound) {
+        // Silently return for idempotent delete behavior
+        return;
+      }
+
+      // For all other errors, wrap, log, track, and rethrow
       const mastraError = new MastraError(
         {
           id: 'STORAGE_ELASTICSEARCH_VECTOR_DELETE_INDEX_FAILED',
@@ -164,6 +226,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
       );
       this.logger?.error(mastraError.toString());
       this.logger?.trackException(mastraError);
+      throw mastraError;
     }
   }
 
@@ -206,7 +269,75 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
       }
 
       if (operations.length > 0) {
-        await this.client.bulk({ operations, refresh: true });
+        const response = await this.client.bulk({ operations, refresh: true });
+
+        // Check for item-level errors in bulk response
+        if (response.errors) {
+          const failedItems: Array<{ id: string; status: number; error: any }> = [];
+          const successfulIds: string[] = [];
+
+          // Iterate through items to collect failures
+          for (let i = 0; i < response.items.length; i++) {
+            const item = response.items[i];
+            if (!item) continue;
+            const operationType = Object.keys(item)[0] as 'index' | 'create' | 'update' | 'delete';
+            const operationResult = item[operationType];
+            if (!operationResult) continue;
+
+            if (operationResult.error) {
+              // Extract the ID from the original operations array
+              // Operations alternate: operation, document, operation, document...
+              const operationIndex = i * 2;
+              const operationDoc = operations[operationIndex] as { index?: { _id?: string } };
+              const failedId = operationDoc?.index?._id || vectorIds[i] || `unknown-${i}`;
+
+              failedItems.push({
+                id: failedId,
+                status: operationResult.status || 0,
+                error: operationResult.error,
+              });
+            } else if (operationResult?.status && operationResult.status < 300) {
+              // Success - extract ID
+              const operationIndex = i * 2;
+              const operationDoc = operations[operationIndex] as { index?: { _id?: string } };
+              const successId = operationDoc?.index?._id || vectorIds[i];
+              if (successId) {
+                successfulIds.push(successId);
+              }
+            }
+          }
+
+          // If there are failures, log and throw error
+          if (failedItems.length > 0) {
+            const failedItemDetails = failedItems
+              .map(item => `${item.id}: ${item.error?.reason || item.error?.type || JSON.stringify(item.error)}`)
+              .join('; ');
+
+            const mastraError = new MastraError(
+              {
+                id: 'STORAGE_ELASTICSEARCH_VECTOR_BULK_PARTIAL_FAILURE',
+                text: `Bulk upsert partially failed: ${failedItems.length} of ${response.items.length} operations failed. Failed items: ${failedItemDetails}`,
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.THIRD_PARTY,
+                details: {
+                  indexName,
+                  totalOperations: response.items.length,
+                  failedCount: failedItems.length,
+                  successfulCount: successfulIds.length,
+                  failedItemIds: failedItems.map(item => item.id).join(','),
+                  failedItemErrors: failedItemDetails,
+                },
+              },
+              new Error(`Bulk operation had ${failedItems.length} failures`),
+            );
+
+            this.logger?.error(mastraError.toString());
+            this.logger?.trackException(mastraError);
+
+            // Throw error with details about failures
+            throw mastraError;
+          }
+        }
       }
 
       return vectorIds;
@@ -589,10 +720,77 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
         // Delete by IDs using bulk API
         const bulkBody = ids.flatMap(id => [{ delete: { _index: indexName, _id: id } }]);
 
-        await this.client.bulk({
+        const response = await this.client.bulk({
           operations: bulkBody,
           refresh: true,
         });
+
+        // Check for item-level errors in bulk response
+        if (response.errors) {
+          const failedItems: Array<{ id: string; status: number; error: any }> = [];
+          const successfulIds: string[] = [];
+
+          // Iterate through items to collect failures
+          for (let i = 0; i < response.items.length; i++) {
+            const item = response.items[i];
+            if (!item) continue;
+            const operationType = Object.keys(item)[0] as 'index' | 'create' | 'update' | 'delete';
+            const operationResult = item[operationType];
+            if (!operationResult) continue;
+
+            if (operationResult.error) {
+              // Extract the ID from the original operations array
+              const operationIndex = i;
+              const operationDoc = bulkBody[operationIndex] as { delete?: { _id?: string } };
+              const failedId = operationDoc?.delete?._id || ids[i] || `unknown-${i}`;
+
+              failedItems.push({
+                id: failedId,
+                status: operationResult.status || 0,
+                error: operationResult.error,
+              });
+            } else if (operationResult?.status && operationResult.status < 300) {
+              // Success - extract ID
+              const operationIndex = i;
+              const operationDoc = bulkBody[operationIndex] as { delete?: { _id?: string } };
+              const successId = operationDoc?.delete?._id || ids[i];
+              if (successId) {
+                successfulIds.push(successId);
+              }
+            }
+          }
+
+          // If there are failures, log and throw error
+          if (failedItems.length > 0) {
+            const failedItemDetails = failedItems
+              .map(item => `${item.id}: ${item.error?.reason || item.error?.type || JSON.stringify(item.error)}`)
+              .join('; ');
+
+            const mastraError = new MastraError(
+              {
+                id: 'STORAGE_ELASTICSEARCH_VECTOR_BULK_DELETE_PARTIAL_FAILURE',
+                text: `Bulk delete partially failed: ${failedItems.length} of ${response.items.length} operations failed. Failed items: ${failedItemDetails}`,
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.THIRD_PARTY,
+                details: {
+                  indexName,
+                  totalOperations: response.items.length,
+                  failedCount: failedItems.length,
+                  successfulCount: successfulIds.length,
+                  failedItemIds: failedItems.map(item => item.id).join(','),
+                  failedItemErrors: failedItemDetails,
+                },
+              },
+              new Error(`Bulk delete operation had ${failedItems.length} failures`),
+            );
+
+            this.logger?.error(mastraError.toString());
+            this.logger?.trackException(mastraError);
+
+            // Throw error with details about failures
+            throw mastraError;
+          }
+        }
       } else if (filter) {
         // Delete by filter using delete_by_query
         const translator = new ElasticSearchFilterTranslator();

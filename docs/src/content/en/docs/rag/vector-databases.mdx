@@ -483,12 +483,16 @@ Each vector database enforces specific naming conventions for indexes and collec
   <TabItem value="elasticsearch" label="ElasticSearch">
     Index names must:
     - Use only lowercase letters
+    - Not exceed 255 bytes (counting multi-byte characters)
     - Not begin with underscores, hyphens, or plus signs
     - Not contain spaces, commas
     - Not contain special characters (e.g. `:`, `"`, `*`, `+`, `/`, `\`, `|`, `?`, `#`, `>`, `<`)
+    - Not be "." or ".."
+    - Not start with "." (deprecated except for system/hidden indices)
     - Example: `my-index-123` is valid
     - Example: `My_Index` is not valid (contains uppercase letters)
     - Example: `_myindex` is not valid (begins with underscore)
+    - Example: `.myindex` is not valid (begins with dot, deprecated)
   </TabItem>
   <TabItem value="s3vectors" label="S3 Vectors">
     Index names must:

@@ -8,4 +8,4 @@
 - ElasticSearch 8.x+ vector store implementation for Mastra
 - Full support for vector similarity search using `dense_vector` field type
 - Filter translator supporting MongoDB-style query operators
-- Support for cosine, euclidean, and dotproduct similarity metrics
+- Support for cosine, euclidean, and dot_product similarity metrics

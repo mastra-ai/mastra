@@ -286,10 +286,12 @@ export class ElasticSearchFilterTranslator extends BaseFilterTranslator<ElasticS
    * Escapes wildcard metacharacters (* and ?) for use in wildcard queries.
    * Existing wildcard metacharacters in the pattern are escaped before
    * adding leading/trailing * to prevent semantic changes.
+   * First escapes backslashes to avoid ambiguous encoding sequences.
    */
   private escapeWildcardMetacharacters(pattern: string): string {
-    // Escape * and ? which are wildcard metacharacters
-    return pattern.replace(/\*/g, '\\*').replace(/\?/g, '\\?');
+    // First escape backslashes to avoid ambiguous encoding sequences
+    // Then escape * and ? which are wildcard metacharacters
+    return pattern.replace(/\\/g, '\\\\').replace(/\*/g, '\\*').replace(/\?/g, '\\?');
   }
 
   /**
@@ -308,14 +310,12 @@ export class ElasticSearchFilterTranslator extends BaseFilterTranslator<ElasticS
       const char = pattern[i];
 
       if (char === '\\') {
-        // This is a backslash - check if it's escaping something
+        // This is a backslash - escape it for JSON serialization
+        // The next character will be handled in the next iteration
         if (i + 1 < pattern.length) {
-          const nextChar = pattern[i + 1];
-          // Escape the backslash for JSON serialization
-          // The next character will be handled in the next iteration
+          // Escape the backslash and continue to process the next character
           result += '\\\\';
           i += 1;
-          // Continue to process the next character
           continue;
         } else {
           // Lone backslash at end - escape it
