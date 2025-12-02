@@ -17,7 +17,6 @@ result.response.messages[0].content[0].text; // "HELLO WORLD" (processed)
 ```ts
 const result = await agent.generate('hello');
 result.text; // "HELLO WORLD" (processed)
-result.object; // also now reflects processed values for structured output
 ```
 
-The bug was caused by the `text` delayed promise being resolved twice - first correctly with the processed text, then overwritten with the unprocessed buffered text. Also moved `object` resolution to the finish step so structured output can also be processed.
+The bug was caused by the `text` delayed promise being resolved twice - first correctly with the processed text, then overwritten with the unprocessed buffered text. 
