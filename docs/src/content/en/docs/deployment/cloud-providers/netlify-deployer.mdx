@@ -15,12 +15,11 @@ npm install @mastra/deployer-netlify@beta
 
 ## Usage example
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { NetlifyDeployer } from "@mastra/deployer-netlify";
 
 export const mastra = new Mastra({
-  // ...
   deployer: new NetlifyDeployer(),
 });
 ```
@@ -43,32 +42,64 @@ Your project is now configured with automatic deployments which occur whenever y
 
 ## Manual deployment
 
-Manual deployments are also possible using the [Netlify CLI](https://docs.netlify.com/cli/get-started/). With the Netlify CLI installed run the following from your project root to deploy your application.
+Manual deployments are also possible using the [Netlify CLI](https://docs.netlify.com/cli/get-started/). With the Netlify CLI installed run the following from your project root to deploy your application. You can also run `netlify dev` from your project root to test your Mastra application locally.
 
 ```bash copy
 netlify deploy --prod
 ```
 
-> You can also run `netlify dev` from your project root to test your Mastra application locally.
+:::warning
+
+When using `netlify deploy` instead of continuous deployment, you need to create a `netlify.toml` file with these contents:
+
+```toml
+[build]
+  command = "npm run build"
+  publish = ".netlify/v1/functions"
+
+[functions]
+  directory = ".netlify/v1/functions"
+  node_bundler = "none"
+  included_files = [".netlify/v1/functions/**"]
+
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+[build.environment]
+  NODE_VERSION = "22.13.0"
+```
+
+Adjust the `build.command` to your project.
+
+:::
 
 ## Build output
 
-The build output for Mastra applications using the `NetlifyDeployer` includes all agents, tools, and workflows in your project, along with Mastra specific files required to run your application on Netlify.
+The build output for Mastra applications using the `NetlifyDeployer` includes all agents, tools, and workflows in your project, along with Mastra-specific files required to run your application on Netlify.
 
-```
-.netlify/
-└── v1/
-    ├── functions/
-    │   └── api/
-    │       └── index.mjs
-    └── config.json
-package.json
+```bash
+your-project/
+└── .netlify/
+    └── v1/
+        ├── config.json
+        └── functions/
+            └── api/
+                ├── index.js
+                ├── package.json
+                └── node_modules/
 ```
 
 The `NetlifyDeployer` automatically generates a `config.json` configuration file in `.netlify/v1` with the following settings:
 
 ```json
 {
+  "functions": {
+    "directory": ".netlify/v1/functions",
+    "node_bundler": "none",
+    "included_files": [".netlify/v1/functions/**"]
+  },
   "redirects": [
     {
       "force": true,

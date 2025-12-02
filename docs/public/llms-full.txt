@@ -4618,7 +4618,6 @@ Standalone Mastra applications can be deployed to popular cloud providers, see o
 - [Netlify](/docs/v1/deployment/cloud-providers/netlify-deployer)
 - [Vercel](/docs/v1/deployment/cloud-providers/vercel-deployer)
 
-
 For self-hosted Node.js server deployment, see the [Creating A Mastra Server](/docs/v1/deployment/building-mastra) guide.
 
 ## Prerequisites
@@ -4633,35 +4632,29 @@ Before deploying to a cloud provider, ensure you have:
 
 ## LibSQLStore
 
-`LibSQLStore` writes to the local filesystem, which is not supported in cloud environments that use ephemeral file systems. If you're deploying to platforms like **AWS Lambda**, **Azure App Services**, or **Digital Ocean App Platform**, you **must remove** all usage of `LibSQLStore`.
+`LibSQLStore` writes to the local filesystem, which is not supported in cloud environments that use ephemeral file systems. If you're deploying to platforms like AWS Lambda, Netlify, Azure App Services, or Digital Ocean App Platform, you must remove all usage of `LibSQLStore`.
 
-Specifically, ensure you've removed it from both `src/mastra/index.ts` and `src/mastra/agents/weather-agent.ts`:
+Specifically, ensure you've removed it from all Mastra files, including configuration on the main Mastra instance and any agents using it, e.g. for memory storage.
 
-```typescript title="src/mastra/index.ts" showLineNumbers
-export const mastra = new Mastra({
-  // ...
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    // [!code --]
-    // stores telemetry, scorer results, ... into memory storage, if it needs to persist, change to file:../mastra.db // [!code --]
-    url: ":memory:", // [!code --]
-  }), //[!code --]
-});
+```diff title="src/mastra/index.ts"
+ export const mastra = new Mastra({
+-  storage: new LibSQLStore({
+-    id: 'mastra-storage',
+-    url: ":memory:",
+-  }),
+ });
 ```
 
-```typescript title="src/mastra/agents/weather-agent.ts" showLineNumbers
-export const weatherAgent = new Agent({
-  id: "weather-agent",
-  // ..
-  memory: new Memory({
-    // [!code --]
-    storage: new LibSQLStore({
-      id: 'mastra-storage',
-      // [!code --]
-      url: "file:../mastra.db", // path is relative to the .mastra/output directory // [!code --]
-    }), // [!code --]
-  }), //  [!code --]
-});
+```diff
+ export const weatherAgent = new Agent({
+   id: "weather-agent",
+   memory: new Memory({
+-    storage: new LibSQLStore({
+-      id: 'mastra-storage',
+-      url: "file:../mastra.db",
+-    }),
+   }),
+ });
 ```
 
 
@@ -4683,12 +4676,11 @@ npm install @mastra/deployer-netlify@beta
 
 ## Usage example
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { NetlifyDeployer } from "@mastra/deployer-netlify";
 
 export const mastra = new Mastra({
-  // ...
   deployer: new NetlifyDeployer(),
 });
 ```
@@ -4711,32 +4703,64 @@ Your project is now configured with automatic deployments which occur whenever y
 
 ## Manual deployment
 
-Manual deployments are also possible using the [Netlify CLI](https://docs.netlify.com/cli/get-started/). With the Netlify CLI installed run the following from your project root to deploy your application.
+Manual deployments are also possible using the [Netlify CLI](https://docs.netlify.com/cli/get-started/). With the Netlify CLI installed run the following from your project root to deploy your application. You can also run `netlify dev` from your project root to test your Mastra application locally.
 
 ```bash copy
 netlify deploy --prod
 ```
 
-> You can also run `netlify dev` from your project root to test your Mastra application locally.
+:::warning
+
+When using `netlify deploy` instead of continuous deployment, you need to create a `netlify.toml` file with these contents:
+
+```toml
+[build]
+  command = "npm run build"
+  publish = ".netlify/v1/functions"
+
+[functions]
+  directory = ".netlify/v1/functions"
+  node_bundler = "none"
+  included_files = [".netlify/v1/functions/**"]
+
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+[build.environment]
+  NODE_VERSION = "22.13.0"
+```
+
+Adjust the `build.command` to your project.
+
+:::
 
 ## Build output
 
-The build output for Mastra applications using the `NetlifyDeployer` includes all agents, tools, and workflows in your project, along with Mastra specific files required to run your application on Netlify.
+The build output for Mastra applications using the `NetlifyDeployer` includes all agents, tools, and workflows in your project, along with Mastra-specific files required to run your application on Netlify.
 
-```
-.netlify/
-└── v1/
-    ├── functions/
-    │   └── api/
-    │       └── index.mjs
-    └── config.json
-package.json
+```bash
+your-project/
+└── .netlify/
+    └── v1/
+        ├── config.json
+        └── functions/
+            └── api/
+                ├── index.js
+                ├── package.json
+                └── node_modules/
 ```
 
 The `NetlifyDeployer` automatically generates a `config.json` configuration file in `.netlify/v1` with the following settings:
 
 ```json
 {
+  "functions": {
+    "directory": ".netlify/v1/functions",
+    "node_bundler": "none",
+    "included_files": [".netlify/v1/functions/**"]
+  },
   "redirects": [
     {
       "force": true,
@@ -6239,6 +6263,283 @@ describe('Weather Agent Tests', () => {
 
 
 ---
+title: "Manual Install | Getting Started"
+description: Set up a Mastra project manually without using the create mastra CLI.
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Manual Install
+[EN] Source: https://mastra.ai/en/docs/getting-started/manual-install
+
+:::info
+Use this guide to manually build a standalone Mastra server step by step. In most cases, it's quicker to follow a [getting-started guide](/docs/v1/getting-started/start), which achieves the same result using the [`mastra create`](/reference/v1/cli/create-mastra) command. For existing projects, you can also use [`mastra init`](/reference/v1/cli/mastra#mastra-init).
+:::
+
+If you prefer not to use our automatic CLI tool, you can set up your project yourself by following the guide below.
+
+<Steps>
+
+<StepItem>
+
+Create a new project and change directory:
+
+```bash copy
+mkdir my-first-agent && cd my-first-agent
+```
+
+Initialize a TypeScript project and install the following dependencies:
+
+<Tabs>
+<TabItem value="npm" label="npm">
+
+```bash copy
+npm init -y
+npm install -D typescript @types/node mastra@beta
+npm install @mastra/core@beta zod@^4
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm init
+pnpm add -D typescript @types/node mastra@beta
+pnpm add @mastra/core@beta zod@^4
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn init -y
+yarn add -D typescript @types/node mastra@beta
+yarn add @mastra/core@beta zod@^4
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bun init -y
+bun add -d typescript @types/node mastra@beta
+bun add @mastra/core@beta zod@^4
+```
+
+</TabItem>
+</Tabs>
+
+Add `dev` and `build` scripts to your `package.json` file:
+
+```json title="package.json" copy /,/ /"dev": "mastra dev",/ /"build": "mastra build"/
+{
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev",
+    "build": "mastra build"
+  }
+}
+```
+
+</StepItem>
+
+<StepItem>
+
+Create a `tsconfig.json` file:
+
+```bash copy
+touch tsconfig.json
+```
+
+Add the following configuration:
+
+```json title="tsconfig.json" copy
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "outDir": "dist"
+  },
+  "include": ["src/**/*"]
+}
+```
+
+:::info
+
+Mastra requires modern `module` and `moduleResolution` settings. Using `CommonJS` or `node` will cause resolution errors.
+
+:::
+
+</StepItem>
+
+<StepItem>
+
+Create an `.env` file:
+
+```bash copy
+touch .env
+```
+
+Add your API key:
+
+```bash title=".env" copy
+GOOGLE_GENERATIVE_AI_API_KEY=<your-api-key>
+```
+
+:::note
+
+This guide uses Google Gemini, but you can use any supported [model provider](/models/v1), including OpenAI, Anthropic, and more.
+
+:::
+
+</StepItem>
+
+<StepItem>
+
+Create a `weather-tool.ts` file:
+
+```bash copy
+mkdir -p src/mastra/tools && touch src/mastra/tools/weather-tool.ts
+```
+
+Add the following code:
+
+```ts title="src/mastra/tools/weather-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const weatherTool = createTool({
+  id: "get-weather",
+  description: "Get current weather for a location",
+  inputSchema: z.object({
+    location: z.string().describe("City name"),
+  }),
+  outputSchema: z.object({
+    output: z.string(),
+  }),
+  execute: async () => {
+    return {
+      output: "The weather is sunny",
+    };
+  },
+});
+```
+
+:::info
+
+We've shortened and simplified the `weatherTool` example here. You can see the complete weather tool under [Giving an Agent a Tool](/docs/v1/agents/using-tools).
+
+:::
+
+</StepItem>
+
+<StepItem>
+
+Create a `weather-agent.ts` file:
+
+```bash copy
+mkdir -p src/mastra/agents && touch src/mastra/agents/weather-agent.ts
+```
+
+Add the following code:
+
+```ts title="src/mastra/agents/weather-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { weatherTool } from "../tools/weather-tool";
+
+export const weatherAgent = new Agent({
+  id: "weather-agent",
+  name: "Weather Agent",
+  instructions: `
+      You are a helpful weather assistant that provides accurate weather information.
+
+      Your primary function is to help users get weather details for specific locations. When responding:
+      - Always ask for a location if none is provided
+      - If the location name isn't in English, please translate it
+      - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
+      - Include relevant details like humidity, wind conditions, and precipitation
+      - Keep responses concise but informative
+
+      Use the weatherTool to fetch current weather data.
+`,
+  model: "google/gemini-2.5-pro",
+  tools: { weatherTool },
+});
+```
+
+</StepItem>
+
+<StepItem>
+
+Create the Mastra entry point and register your agent:
+
+```bash copy
+touch src/mastra/index.ts
+```
+
+Add the following code:
+
+```ts title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { weatherAgent } from "./agents/weather-agent";
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+});
+```
+
+</StepItem>
+
+<StepItem>
+
+You can now launch [Studio](/docs/v1/getting-started/studio) and test your agent.
+
+<Tabs>
+<TabItem value="npm" label="npm">
+
+```bash copy
+npm run dev
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm run dev
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn run dev
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bun run dev
+```
+
+</TabItem>
+</Tabs>
+
+</StepItem>
+
+</Steps>
+
+
+---
 title: "Mastra Docs Server | Getting Started"
 description: "Learn how to use the Mastra MCP documentation server in your IDE to turn it into an agentic Mastra expert."
 ---
@@ -6773,7 +7074,7 @@ Explore real-world examples in our [community showcase](/showcase).
 
 ## Get started
 
-Choose a [getting started guide](/docs/v1/getting-started/start) to get started, or see the [manual installation guide](/guides/v1/getting-started/manual-install) if you need more control over your setup.
+Choose a [getting started guide](/docs/v1/getting-started/start) to get started, or see the [manual installation guide](/docs/v1/getting-started/manual-install) if you need more control over your setup.
 
 If you're new to AI agents, check out our [templates](https://mastra.ai/templates), [course](https://mastra.ai/course), and [YouTube videos](https://youtube.com/@mastra-ai). You can also join our [Discord](https://discord.gg/BTYqqHKUrf) community to get help and share your projects.
 
@@ -25607,283 +25908,6 @@ npm run mastra:dev
 
 
 ---
-title: "Manual Install | Guides"
-description: Set up a Mastra project manually without using the create mastra CLI.
----
-
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
-
-# Manual Install
-[EN] Source: https://mastra.ai/en/guides/getting-started/manual-install
-
-:::info
-Use this guide to manually build a standalone Mastra server step by step. In most cases, it's quicker to follow the [Standalone Server Quickstart](/guides/v1/getting-started/quickstart), which achieves the same result using the [`mastra create`](/reference/v1/cli/create-mastra) command. For existing projects, you can also use [`mastra init`](/reference/v1/cli/mastra#mastra-init).
-:::
-
-If you prefer not to use our automatic CLI tool, you can set up your project yourself by following the guide below.
-
-<Steps>
-
-<StepItem>
-
-Create a new project and change directory:
-
-```bash copy
-mkdir my-first-agent && cd my-first-agent
-```
-
-Initialize a TypeScript project and install the following dependencies:
-
-<Tabs>
-<TabItem value="npm" label="npm">
-
-```bash copy
-npm init -y
-npm install -D typescript @types/node mastra@beta
-npm install @mastra/core@beta zod@^4
-```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash copy
-pnpm init
-pnpm add -D typescript @types/node mastra@beta
-pnpm add @mastra/core@beta zod@^4
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash copy
-yarn init -y
-yarn add -D typescript @types/node mastra@beta
-yarn add @mastra/core@beta zod@^4
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash copy
-bun init -y
-bun add -d typescript @types/node mastra@beta
-bun add @mastra/core@beta zod@^4
-```
-
-</TabItem>
-</Tabs>
-
-Add `dev` and `build` scripts to your `package.json` file:
-
-```json title="package.json" copy /,/ /"dev": "mastra dev",/ /"build": "mastra build"/
-{
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "mastra dev",
-    "build": "mastra build"
-  }
-}
-```
-
-</StepItem>
-
-<StepItem>
-
-Create a `tsconfig.json` file:
-
-```bash copy
-touch tsconfig.json
-```
-
-Add the following configuration:
-
-```json title="tsconfig.json" copy
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ES2022",
-    "moduleResolution": "bundler",
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "skipLibCheck": true,
-    "noEmit": true,
-    "outDir": "dist"
-  },
-  "include": ["src/**/*"]
-}
-```
-
-:::info
-
-Mastra requires modern `module` and `moduleResolution` settings. Using `CommonJS` or `node` will cause resolution errors.
-
-:::
-
-</StepItem>
-
-<StepItem>
-
-Create an `.env` file:
-
-```bash copy
-touch .env
-```
-
-Add your API key:
-
-```bash title=".env" copy
-GOOGLE_GENERATIVE_AI_API_KEY=<your-api-key>
-```
-
-:::note
-
-This guide uses Google Gemini, but you can use any supported [model provider](/models/v1), including OpenAI, Anthropic, and more.
-
-:::
-
-</StepItem>
-
-<StepItem>
-
-Create a `weather-tool.ts` file:
-
-```bash copy
-mkdir -p src/mastra/tools && touch src/mastra/tools/weather-tool.ts
-```
-
-Add the following code:
-
-```ts title="src/mastra/tools/weather-tool.ts" showLineNumbers copy
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
-
-export const weatherTool = createTool({
-  id: "get-weather",
-  description: "Get current weather for a location",
-  inputSchema: z.object({
-    location: z.string().describe("City name"),
-  }),
-  outputSchema: z.object({
-    output: z.string(),
-  }),
-  execute: async () => {
-    return {
-      output: "The weather is sunny",
-    };
-  },
-});
-```
-
-:::info
-
-We've shortened and simplified the `weatherTool` example here. You can see the complete weather tool under [Giving an Agent a Tool](/docs/v1/agents/using-tools).
-
-:::
-
-</StepItem>
-
-<StepItem>
-
-Create a `weather-agent.ts` file:
-
-```bash copy
-mkdir -p src/mastra/agents && touch src/mastra/agents/weather-agent.ts
-```
-
-Add the following code:
-
-```ts title="src/mastra/agents/weather-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-import { weatherTool } from "../tools/weather-tool";
-
-export const weatherAgent = new Agent({
-  id: "weather-agent",
-  name: "Weather Agent",
-  instructions: `
-      You are a helpful weather assistant that provides accurate weather information.
-
-      Your primary function is to help users get weather details for specific locations. When responding:
-      - Always ask for a location if none is provided
-      - If the location name isn't in English, please translate it
-      - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
-      - Include relevant details like humidity, wind conditions, and precipitation
-      - Keep responses concise but informative
-
-      Use the weatherTool to fetch current weather data.
-`,
-  model: "google/gemini-2.5-pro",
-  tools: { weatherTool },
-});
-```
-
-</StepItem>
-
-<StepItem>
-
-Create the Mastra entry point and register your agent:
-
-```bash copy
-touch src/mastra/index.ts
-```
-
-Add the following code:
-
-```ts title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
-import { weatherAgent } from "./agents/weather-agent";
-
-export const mastra = new Mastra({
-  agents: { weatherAgent },
-});
-```
-
-</StepItem>
-
-<StepItem>
-
-You can now launch [Studio](/docs/v1/getting-started/studio) and test your agent.
-
-<Tabs>
-<TabItem value="npm" label="npm">
-
-```bash copy
-npm run dev
-```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash copy
-pnpm run dev
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash copy
-yarn run dev
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash copy
-bun run dev
-```
-
-</TabItem>
-</Tabs>
-
-</StepItem>
-
-</Steps>
-
-
----
 title: "Next.js | Frameworks"
 description: "Get started with Mastra and Next.js"
 ---
@@ -26178,7 +26202,7 @@ import { VideoPlayer } from "@site/src/components/video-player";
 
 The `create mastra` CLI command is the quickest way to get started. It walks you through setup and creates example agents, workflows, and tools for you to run locally or adapt
 
-If you need more control over the setup, see the [manual installation guide](/guides/v1/getting-started/manual-install). You can also use [`mastra init`](/reference/v1/cli/mastra#mastra-init) for existing projects.
+If you need more control over the setup, see the [manual installation guide](/docs/v1/getting-started/manual-install). You can also use [`mastra init`](/reference/v1/cli/mastra#mastra-init) for existing projects.
 
 ## Before you begin
 
@@ -32256,6 +32280,25 @@ Step `suspendPayload` is now validated for steps that have a `suspendSchema` def
   });
 ```
 
+### Branch result fields are now optional
+
+The `.branch()` method now returns a schema where all branch output fields are optional. This reflects the runtime behavior where each branch only executes if its condition is truthy, so outputs from any branch may be undefined.
+
+To migrate, update any code that consumes branch outputs to handle optional values.
+
+```diff
+  const workflow = createWorkflow({...})
+    .branch([
+      [condition1, stepA],  // outputSchema: { result: z.string() }
+      [condition2, stepB],  // outputSchema: { data: z.number() }
+    ])
+-   // Previously: stepA.result typed as string, stepB.data typed as number
++   // Now: stepA.result typed as string | undefined, stepB.data typed as number | undefined
+    .then(nextStep);
+```
+
+If your code depends on non-optional types, add runtime checks or provide default values when accessing branch outputs.
+
 ## Removed
 
 ### Legacy workflows export
@@ -34031,7 +34074,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 58+ AI providers and 1156+ models through Mastra's model router."
+description: "Access 59+ AI providers and 1157+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -34044,7 +34087,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1156 models from 58 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1157 models from 59 providers through a single API.
 
 ## Features
 
@@ -34172,7 +34215,7 @@ Browse the directory of available models using the navigation on the left, or ex
             <span>Google</span>
           </div>
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 51 more</div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 52 more</div>
       </div>
     </CardGridItem>
 </CardGrid>
@@ -41034,6 +41077,11 @@ Direct access to individual AI model providers. Each provider offers unique mode
       href="/models/v1/providers/io-net"
       logo="https://models.dev/logos/io-net.svg"
     />    <CardGridItem
+      title="Kimi For Coding"
+      description="1 models"
+      href="/models/v1/providers/kimi-for-coding"
+      logo="https://models.dev/logos/kimi-for-coding.svg"
+    />    <CardGridItem
       title="Llama"
       description="7 models"
       href="/models/v1/providers/llama"
@@ -41969,6 +42017,118 @@ const agent = new Agent({
 });
 ```
 
+
+
+
+---
+title: "Kimi For Coding | Models | Mastra"
+description: "Use Kimi For Coding models with Mastra. 1 model available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# <img src="https://models.dev/logos/kimi-for-coding.svg" alt="Kimi For Coding logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Kimi For Coding
+[EN] Source: https://mastra.ai/en/models/providers/kimi-for-coding
+
+Access 1 Kimi For Coding model through Mastra's model router. Authentication is handled automatically using the `KIMI_API_KEY` environment variable.
+
+Learn more in the [Kimi For Coding documentation](https://www.kimi.com/coding/docs/en/third-party-agents.html).
+
+```bash
+KIMI_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "kimi-for-coding/kimi-k2-thinking"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Kimi For Coding documentation](https://www.kimi.com/coding/docs/en/third-party-agents.html) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "kimi-for-coding/kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 32768,
+    "inputCost": null,
+    "outputCost": null
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.kimi.com/coding/v1",
+    id: "kimi-for-coding/kimi-k2-thinking",
+    apiKey: process.env.KIMI_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "kimi-for-coding/kimi-k2-thinking"
+      : "kimi-for-coding/kimi-k2-thinking";
+  }
+});
+```
+
+
+
+## Direct Provider Installation
+
+This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/@ai-sdk/anthropic) for more details.
+
+```bash npm2yarn copy
+npm install @ai-sdk/anthropic
+```
 
 
 
@@ -58204,12 +58364,11 @@ The `NetlifyDeployer` class handles deployment of standalone Mastra applications
 
 ## Usage example
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { NetlifyDeployer } from "@mastra/deployer-netlify";
 
 export const mastra = new Mastra({
-  // ...
   deployer: new NetlifyDeployer(),
 });
 ```
