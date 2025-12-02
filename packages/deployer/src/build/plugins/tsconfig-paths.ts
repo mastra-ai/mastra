@@ -10,7 +10,6 @@ const PLUGIN_NAME = 'tsconfig-paths';
 export type PluginOptions = Omit<RegisterOptions, 'loggerID'> & { localResolve?: boolean };
 
 export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }: PluginOptions = {}): Plugin {
-  let handler: ReturnType<typeof createHandler>;
   const handlerCache = new Map<string, ReturnType<typeof createHandler>>();
 
   // Find tsconfig.json file starting from a directory and walking up
@@ -106,18 +105,6 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
 
   return {
     name: PLUGIN_NAME,
-    buildStart() {
-      // Only create a global handler if a specific tsConfigPath was provided
-      if (tsConfigPath) {
-        handler = createHandler({
-          log: () => {},
-          tsConfigPath,
-          respectCoreModule,
-          falllback: moduleName => fs.existsSync(moduleName),
-        });
-      }
-      return;
-    },
     async resolveId(request, importer, options) {
       if (!importer || request.startsWith('\0')) {
         return null;
