@@ -26,7 +26,6 @@ export interface ToolSearchResult {
   id: string;
   description: string;
   score: number;
-  tool: ToolAction<any, any, any>;
 }
 
 /**
@@ -48,10 +47,37 @@ export interface ToolSearchConfig {
   id?: string;
   /** Custom description for the search tool */
   description?: string;
-  /** Maximum number of tools to consider (defaults to 5) */
+  /** Maximum number of tools to return (defaults to 5) */
   topK?: number;
   /** Minimum score threshold (defaults to 0.3 for embedding, 0 for others) */
   minScore?: number;
+}
+
+/**
+ * A callable tool search that returns tools for use with Agent toolsets.
+ * Call it with an optional threadId to get the search tool plus any loaded tools.
+ */
+export interface ToolSearch {
+  /** Get tools for a thread. Returns search tool + any loaded tools. */
+  (threadId?: string): Record<string, ToolAction<any, any, any>>;
+
+  /** Search for tools matching a query */
+  search(query: string): Promise<ToolSearchResult[]>;
+
+  /** Manually load a tool for a thread */
+  loadTool(toolId: string, threadId?: string): boolean;
+
+  /** Unload a tool from a thread */
+  unloadTool(toolId: string, threadId?: string): boolean;
+
+  /** Unload all tools for a thread */
+  unloadAll(threadId?: string): void;
+
+  /** Get IDs of loaded tools for a thread */
+  getLoadedToolIds(threadId?: string): string[];
+
+  /** Get all available tool IDs */
+  getToolIds(): string[];
 }
 
 // ============================================================================
@@ -72,7 +98,6 @@ function regexSearch(query: string, tools: Map<string, IndexedTool>, topK: numbe
         id: indexed.id,
         description: indexed.description,
         score: Math.min(1, (positionScore + lengthScore) / 2),
-        tool: indexed.tool,
       });
     }
   }
@@ -125,7 +150,7 @@ function bm25Search(
     }
 
     if (score > 0) {
-      results.push({ id: indexed.id, description: indexed.description, score, tool: indexed.tool });
+      results.push({ id: indexed.id, description: indexed.description, score });
     }
   }
 
@@ -172,63 +197,51 @@ function getSearchText(tool: ToolAction<any, any, any>, id: string): string {
   return parts.filter(Boolean).join('. ');
 }
 
-/**
- * Schema for the tool search input
- */
+const GLOBAL_THREAD_KEY = '__global__';
+
 const toolSearchInputSchema = z.object({
-  query: z.string().describe('Describe what you need to do - the system will find and execute the right tool'),
-  input: z.record(z.any()).optional().describe('Input parameters to pass to the matched tool'),
+  query: z.string().describe('Natural language description of the capability or tool you need'),
 });
 
 /**
- * Creates a tool search tool that finds and executes the right tool based on a query.
+ * Creates a tool search for on-demand tool loading.
  *
- * Pass many tools to createToolSearch, and it returns a single "tool_search" tool.
- * When the agent calls this tool with a description of what it needs, the tool
- * automatically finds the best matching tool and executes it.
+ * Returns a callable that provides tools for use with Agent toolsets.
+ * The search tool finds matching tools and loads them for subsequent turns.
  *
  * @example
  * ```typescript
  * import { Agent } from '@mastra/core/agent';
  * import { createToolSearch, createTool } from '@mastra/core/tools';
  *
- * // Create many tools
- * const createPR = createTool({ id: 'github.createPR', description: 'Create a GitHub PR', ... });
- * const sendSlack = createTool({ id: 'slack.send', description: 'Send a Slack message', ... });
- * const createTicket = createTool({ id: 'jira.create', description: 'Create a Jira ticket', ... });
- * // ... 100+ more tools
- *
- * // Create a single search tool
  * const toolSearch = await createToolSearch({
- *   tools: { createPR, sendSlack, createTicket, ... },
- *   method: 'bm25', // or 'regex' or 'embedding'
+ *   tools: {
+ *     'github.createPR': createPRTool,
+ *     'slack.send': slackTool,
+ *     // ... 100+ more tools
+ *   },
+ *   method: 'bm25',
  * });
  *
- * // Pass it to the agent like any other tool
  * const agent = new Agent({
  *   name: 'Assistant',
  *   model: 'openai/gpt-4o',
- *   tools: { toolSearch },
  * });
  *
- * // Agent uses tool_search to find and execute the right tool
- * await agent.generate('Create a PR for the bug fix');
- * // Agent calls: toolSearch({ query: "create PR github", input: { title: "Bug fix", ... } })
- * // toolSearch finds github.createPR and executes it
- * ```
- *
- * @example With embedding search for better semantic matching
- * ```typescript
- * const toolSearch = await createToolSearch({
- *   tools: myTools,
- *   method: 'embedding',
- *   embedder: openai.embedding('text-embedding-3-small'),
+ * // Pass toolSearch() to get current tools (search tool + any loaded tools)
+ * let response = await agent.generate('Create a GitHub PR', {
+ *   toolsets: { available: toolSearch(threadId) },
  * });
+ * // Agent calls tool_search, which loads github.createPR
+ *
+ * // Next turn: loaded tools are now available
+ * response = await agent.generate('OK, now create it', {
+ *   toolsets: { available: toolSearch(threadId) },
+ * });
+ * // Agent can now call github.createPR directly
  * ```
  */
-export async function createToolSearch(
-  config: ToolSearchConfig,
-): Promise<Tool<typeof toolSearchInputSchema, any, any, any, any, string>> {
+export async function createToolSearch(config: ToolSearchConfig): Promise<ToolSearch> {
   const method = config.method ?? 'bm25';
   const embedder = config.embedder;
   const topK = config.topK ?? 5;
@@ -236,7 +249,7 @@ export async function createToolSearch(
   const toolId = config.id ?? 'tool_search';
   const toolDescription =
     config.description ??
-    'Search for and execute the right tool based on what you need to do. Describe your task and provide any required input.';
+    'Search for available tools based on what you need to accomplish. Found tools will be loaded and available for use.';
 
   if (method === 'embedding' && !embedder) {
     throw new Error('Embedder is required when using embedding search method');
@@ -244,6 +257,7 @@ export async function createToolSearch(
 
   // Index all tools
   const indexedTools = new Map<string, IndexedTool>();
+  const loadedToolsByThread = new Map<string, Set<string>>();
 
   const embedText = async (text: string): Promise<number[]> => {
     if (!embedder) throw new Error('Embedder not configured');
@@ -298,7 +312,7 @@ export async function createToolSearch(
           if (indexed.embedding) {
             const score = cosineSimilarity(queryEmbedding, indexed.embedding);
             if (score >= minScore) {
-              results.push({ id: indexed.id, description: indexed.description, score, tool: indexed.tool });
+              results.push({ id: indexed.id, description: indexed.description, score });
             }
           }
         }
@@ -315,53 +329,106 @@ export async function createToolSearch(
     return results;
   };
 
-  // Create the search tool
-  return createTool({
-    id: toolId,
-    description: toolDescription,
-    inputSchema: toolSearchInputSchema,
-    execute: async (
-      inputData: z.infer<typeof toolSearchInputSchema>,
-      context?: ToolExecutionContext,
-    ): Promise<any> => {
-      const { query, input } = inputData;
+  // Load tool for a thread
+  const loadTool = (id: string, threadId?: string): boolean => {
+    if (!indexedTools.has(id)) return false;
+    const key = threadId ?? GLOBAL_THREAD_KEY;
+    let loaded = loadedToolsByThread.get(key);
+    if (!loaded) {
+      loaded = new Set();
+      loadedToolsByThread.set(key, loaded);
+    }
+    loaded.add(id);
+    return true;
+  };
 
-      const results = await search(query);
+  // Unload tool from a thread
+  const unloadTool = (id: string, threadId?: string): boolean => {
+    const key = threadId ?? GLOBAL_THREAD_KEY;
+    const loaded = loadedToolsByThread.get(key);
+    return loaded?.delete(id) ?? false;
+  };
 
-      if (results.length === 0) {
-        return {
-          success: false,
-          error: 'No matching tool found for your query',
-          query,
-          availableTools: Array.from(indexedTools.keys()),
-        };
-      }
+  // Unload all tools for a thread
+  const unloadAll = (threadId?: string): void => {
+    const key = threadId ?? GLOBAL_THREAD_KEY;
+    loadedToolsByThread.delete(key);
+  };
 
-      const bestMatch = results[0]!;
-      const tool = bestMatch.tool;
+  // Get loaded tool IDs for a thread
+  const getLoadedToolIds = (threadId?: string): string[] => {
+    const key = threadId ?? GLOBAL_THREAD_KEY;
+    const loaded = loadedToolsByThread.get(key);
+    return loaded ? Array.from(loaded) : [];
+  };
 
-      if (!tool.execute) {
-        return {
-          success: false,
-          error: `Tool "${bestMatch.id}" does not have an execute function`,
-          matchedTool: { id: bestMatch.id, description: bestMatch.description, score: bestMatch.score },
-        };
-      }
+  // Get all available tool IDs
+  const getToolIds = (): string[] => Array.from(indexedTools.keys());
 
-      try {
-        const result = await tool.execute(input ?? {}, context);
+  // Create search tool for a specific thread
+  const createSearchTool = (threadId?: string): Tool<typeof toolSearchInputSchema, any, any, any, any, string> => {
+    return createTool({
+      id: toolId,
+      description: toolDescription,
+      inputSchema: toolSearchInputSchema,
+      execute: async (input: z.infer<typeof toolSearchInputSchema>, _context?: ToolExecutionContext) => {
+        const results = await search(input.query);
+
+        if (results.length === 0) {
+          return {
+            success: false,
+            loadedTools: [],
+            message: 'No matching tools found for your query.',
+            availableTools: getToolIds(),
+            query: input.query,
+          };
+        }
+
+        // Load matching tools for this thread
+        for (const result of results) {
+          loadTool(result.id, threadId);
+        }
+
         return {
           success: true,
-          toolUsed: { id: bestMatch.id, description: bestMatch.description, score: bestMatch.score },
-          result,
+          loadedTools: results.map(r => ({ id: r.id, description: r.description, score: r.score })),
+          message: `Loaded ${results.length} tool(s). You can now call them directly.`,
+          query: input.query,
         };
-      } catch (error) {
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : 'Tool execution failed',
-          toolUsed: { id: bestMatch.id, description: bestMatch.description, score: bestMatch.score },
-        };
+      },
+    });
+  };
+
+  // Get tools for a thread (search tool + loaded tools)
+  const getTools = (threadId?: string): Record<string, ToolAction<any, any, any>> => {
+    const tools: Record<string, ToolAction<any, any, any>> = {};
+
+    // Add search tool
+    tools[toolId] = createSearchTool(threadId);
+
+    // Add loaded tools for this thread
+    const key = threadId ?? GLOBAL_THREAD_KEY;
+    const loadedIds = loadedToolsByThread.get(key);
+    if (loadedIds) {
+      for (const id of loadedIds) {
+        const indexed = indexedTools.get(id);
+        if (indexed) {
+          tools[id] = indexed.tool;
+        }
       }
-    },
-  });
+    }
+
+    return tools;
+  };
+
+  // Create the callable ToolSearch
+  const toolSearch = ((threadId?: string) => getTools(threadId)) as ToolSearch;
+  toolSearch.search = search;
+  toolSearch.loadTool = loadTool;
+  toolSearch.unloadTool = unloadTool;
+  toolSearch.unloadAll = unloadAll;
+  toolSearch.getLoadedToolIds = getLoadedToolIds;
+  toolSearch.getToolIds = getToolIds;
+
+  return toolSearch;
 }
