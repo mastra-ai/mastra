@@ -6,44 +6,35 @@ import {
   createStreamWithSensitiveData,
   consumeSSEStream,
 } from '@internal/server-adapter-test-utils';
-import { SERVER_ROUTES } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import express from 'express';
 import type { Application } from 'express';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { ExpressServerAdapter } from '../index';
+import { MastraServer } from '../index';
 
 // Wrapper describe block so the factory can call describe() inside
 describe('Express Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Express Adapter Integration Tests',
-    routes: SERVER_ROUTES,
 
-    setupAdapter: (context: AdapterTestContext) => {
+    setupAdapter: async (context: AdapterTestContext) => {
+      // Create Express app
       const app = express();
-
-      // Add JSON body parser
       app.use(express.json());
 
-      // Create Express adapter
-      const adapter = new ExpressServerAdapter({
+      // Create adapter
+      const adapter = new MastraServer({
+        app,
         mastra: context.mastra,
-        tools: context.tools,
         taskStore: context.taskStore,
         customRouteAuthConfig: context.customRouteAuthConfig,
         playground: context.playground,
         isDev: context.isDev,
       });
 
-      // Register context middleware
-      app.use(adapter.createContextMiddleware());
+      await adapter.init();
 
-      // Register all routes
-      SERVER_ROUTES.forEach(route => {
-        adapter.registerRoute(app, route, { prefix: '' });
-      });
-
-      return { adapter, app };
+      return { app, adapter };
     },
 
     executeHttpRequest: async (app: Application, httpRequest: HttpRequest): Promise<HttpResponse> => {
@@ -167,13 +158,14 @@ describe('Express Server Adapter', () => {
       const app = express();
       app.use(express.json());
 
-      const adapter = new ExpressServerAdapter({
+      const adapter = new MastraServer({
+        app,
         mastra: context.mastra,
         // Default: streamOptions.redact = true
       });
 
       // Create a test route that returns a stream with sensitive data
-      const testRoute: ServerRoute = {
+      const testRoute: ServerRoute<any, any, any> = {
         method: 'POST',
         path: '/test/stream',
         responseType: 'stream',
@@ -234,13 +226,14 @@ describe('Express Server Adapter', () => {
       const app = express();
       app.use(express.json());
 
-      const adapter = new ExpressServerAdapter({
+      const adapter = new MastraServer({
+        app,
         mastra: context.mastra,
         streamOptions: { redact: false },
       });
 
       // Create a test route that returns a stream with sensitive data
-      const testRoute: ServerRoute = {
+      const testRoute: ServerRoute<any, any, any> = {
         method: 'POST',
         path: '/test/stream',
         responseType: 'stream',
@@ -290,13 +283,14 @@ describe('Express Server Adapter', () => {
       const app = express();
       app.use(express.json());
 
-      const adapter = new ExpressServerAdapter({
+      const adapter = new MastraServer({
+        app,
         mastra: context.mastra,
         // Default: streamOptions.redact = true
       });
 
       // Create a test route that returns a v1 format stream
-      const testRoute: ServerRoute = {
+      const testRoute: ServerRoute<any, any, any> = {
         method: 'POST',
         path: '/test/stream-v1',
         responseType: 'stream',
@@ -348,11 +342,12 @@ describe('Express Server Adapter', () => {
       const app = express();
       app.use(express.json());
 
-      const adapter = new ExpressServerAdapter({
+      const adapter = new MastraServer({
+        app,
         mastra: context.mastra,
       });
 
-      const testRoute: ServerRoute = {
+      const testRoute: ServerRoute<any, any, any> = {
         method: 'POST',
         path: '/test/stream',
         responseType: 'stream',

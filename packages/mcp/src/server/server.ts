@@ -313,6 +313,50 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
+   * Reads and parses the JSON body from an HTTP request.
+   * If the request body was already parsed by middleware (e.g., express.json()),
+   * it uses the pre-parsed body from req.body. Otherwise, it reads from the stream.
+   *
+   * This allows the MCP server to work with Express apps that use express.json()
+   * globally without requiring special route exclusions.
+   *
+   * @param req - The incoming HTTP request
+   * @param options - Optional configuration
+   * @param options.preParsedOnly - If true, only return pre-parsed body from middleware,
+   *   returning undefined if not available. This allows the caller to fall back to
+   *   their own body reading logic (e.g., SDK's getRawBody with size limits).
+   */
+  private async readJsonBody(
+    req: http.IncomingMessage,
+    options?: { preParsedOnly?: boolean },
+  ): Promise<unknown | undefined> {
+    // Check if body was already parsed by middleware (e.g., express.json())
+    const reqWithBody = req as http.IncomingMessage & { body?: unknown };
+    if (reqWithBody.body !== undefined) {
+      return reqWithBody.body;
+    }
+
+    // If preParsedOnly is set, return undefined to let caller handle raw stream
+    if (options?.preParsedOnly) {
+      return undefined;
+    }
+
+    // Read and parse body from stream
+    return new Promise((resolve, reject) => {
+      let data = '';
+      req.on('data', chunk => (data += chunk));
+      req.on('end', () => {
+        try {
+          resolve(JSON.parse(data));
+        } catch (e) {
+          reject(e);
+        }
+      });
+      req.on('error', reject);
+    });
+  }
+
+  /**
    * Creates a new Server instance configured with all handlers for HTTP sessions.
    * Each HTTP client connection gets its own Server instance to avoid routing conflicts.
    */
@@ -1067,7 +1111,11 @@ export class MCPServer extends MCPServerBase {
           res.end('SSE connection not established');
           return;
         }
-        await this.sseTransport.handlePostMessage(req, res);
+        // Check for pre-parsed body from middleware like express.json()
+        // If not available, let the SDK's handlePostMessage read from the stream
+        // (which has built-in size limits and charset handling)
+        const parsedBody = await this.readJsonBody(req, { preParsedOnly: true });
+        await this.sseTransport.handlePostMessage(req, res, parsedBody);
       } else {
         this.logger.debug('Unknown path:', { path: url.pathname });
         res.writeHead(404);
@@ -1294,21 +1342,7 @@ export class MCPServer extends MCPServerBase {
 
         // Handle the request using the existing transport
         // Need to parse body for POST requests before passing to handleRequest
-        const body =
-          req.method === 'POST'
-            ? await new Promise((resolve, reject) => {
-                let data = '';
-                req.on('data', chunk => (data += chunk));
-                req.on('end', () => {
-                  try {
-                    resolve(JSON.parse(data));
-                  } catch (e) {
-                    reject(e);
-                  }
-                });
-                req.on('error', reject);
-              })
-            : undefined;
+        const body = req.method === 'POST' ? await this.readJsonBody(req) : undefined;
 
         await transport.handleRequest(req, res, body);
       } else {
@@ -1317,18 +1351,7 @@ export class MCPServer extends MCPServerBase {
 
         // Only allow new sessions via POST initialize request
         if (req.method === 'POST') {
-          const body = await new Promise((resolve, reject) => {
-            let data = '';
-            req.on('data', chunk => (data += chunk));
-            req.on('end', () => {
-              try {
-                resolve(JSON.parse(data));
-              } catch (e) {
-                reject(e);
-              }
-            });
-            req.on('error', reject);
-          });
+          const body = await this.readJsonBody(req);
 
           // Import isInitializeRequest from the correct path
           const { isInitializeRequest } = await import('@modelcontextprotocol/sdk/types.js');
@@ -1459,20 +1482,7 @@ export class MCPServer extends MCPServerBase {
 
       // Parse the request body (for POST requests)
       const body =
-        req.method === 'POST'
-          ? await new Promise<any>((resolve, reject) => {
-              let data = '';
-              req.on('data', chunk => (data += chunk));
-              req.on('end', () => {
-                try {
-                  resolve(JSON.parse(data));
-                } catch (e) {
-                  reject(new Error(`Invalid JSON in request body: ${e instanceof Error ? e.message : String(e)}`));
-                }
-              });
-              req.on('error', reject);
-            })
-          : undefined;
+        req.method === 'POST' ? ((await this.readJsonBody(req)) as { method?: string; id?: unknown }) : undefined;
 
       this.logger.debug(`handleServerlessRequest: Processing ${req.method} request`, {
         method: body?.method,

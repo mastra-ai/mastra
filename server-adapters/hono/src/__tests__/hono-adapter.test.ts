@@ -5,23 +5,22 @@ import {
   createStreamWithSensitiveData,
   consumeSSEStream,
 } from '@internal/server-adapter-test-utils';
-import { SERVER_ROUTES } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { HonoServerAdapter } from '../index';
+import { MastraServer } from '../index';
 
 // Wrapper describe block so the factory can call describe() inside
 describe('Hono Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Hono Adapter Integration Tests',
-    routes: SERVER_ROUTES,
 
-    setupAdapter: (context: AdapterTestContext) => {
+    setupAdapter: async (context: AdapterTestContext) => {
       const app = new Hono();
 
       // Create Hono adapter
-      const adapter = new HonoServerAdapter({
+      const adapter = new MastraServer({
+        app,
         mastra: context.mastra,
         tools: context.tools,
         taskStore: context.taskStore,
@@ -30,13 +29,7 @@ describe('Hono Server Adapter', () => {
         isDev: context.isDev,
       });
 
-      // Register context middleware
-      app.use('*', adapter.createContextMiddleware());
-
-      // Register all routes
-      SERVER_ROUTES.forEach(route => {
-        adapter.registerRoute(app, route, { prefix: '' });
-      });
+      await adapter.init();
 
       return { adapter, app };
     },
@@ -69,7 +62,7 @@ describe('Hono Server Adapter', () => {
         body: request.body ? JSON.stringify(request.body) : undefined,
       });
 
-      // Execute request through Hono
+      // Execute request through Hono - app.request() always returns Promise<Response>
       let response: Response;
       try {
         response = await app.request(req);
@@ -79,16 +72,6 @@ describe('Hono Server Adapter', () => {
           status: 500,
           type: 'json',
           data: { error: error instanceof Error ? error.message : 'Unknown error' },
-          headers: {},
-        };
-      }
-
-      // Check if response is defined
-      if (!response) {
-        return {
-          status: 500,
-          type: 'json',
-          data: { error: 'No response returned from handler' },
           headers: {},
         };
       }
@@ -138,13 +121,14 @@ describe('Hono Server Adapter', () => {
     it('should redact sensitive data from stream chunks by default', async () => {
       const app = new Hono();
 
-      const adapter = new HonoServerAdapter({
+      const adapter = new MastraServer({
+        app,
         mastra: context.mastra,
         // Default: streamOptions.redact = true
       });
 
       // Create a test route that returns a stream with sensitive data
-      const testRoute: ServerRoute = {
+      const testRoute: ServerRoute<any, any, any> = {
         method: 'POST',
         path: '/test/stream',
         responseType: 'stream',
@@ -195,13 +179,14 @@ describe('Hono Server Adapter', () => {
     it('should NOT redact sensitive data when streamOptions.redact is false', async () => {
       const app = new Hono();
 
-      const adapter = new HonoServerAdapter({
+      const adapter = new MastraServer({
+        app,
         mastra: context.mastra,
         streamOptions: { redact: false },
       });
 
       // Create a test route that returns a stream with sensitive data
-      const testRoute: ServerRoute = {
+      const testRoute: ServerRoute<any, any, any> = {
         method: 'POST',
         path: '/test/stream',
         responseType: 'stream',
@@ -241,13 +226,14 @@ describe('Hono Server Adapter', () => {
     it('should redact v1 format stream chunks', async () => {
       const app = new Hono();
 
-      const adapter = new HonoServerAdapter({
+      const adapter = new MastraServer({
+        app,
         mastra: context.mastra,
         // Default: streamOptions.redact = true
       });
 
       // Create a test route that returns a v1 format stream
-      const testRoute: ServerRoute = {
+      const testRoute: ServerRoute<any, any, any> = {
         method: 'POST',
         path: '/test/stream-v1',
         responseType: 'stream',
@@ -289,11 +275,12 @@ describe('Hono Server Adapter', () => {
     it('should pass through non-sensitive chunk types unchanged', async () => {
       const app = new Hono();
 
-      const adapter = new HonoServerAdapter({
+      const adapter = new MastraServer({
+        app,
         mastra: context.mastra,
       });
 
-      const testRoute: ServerRoute = {
+      const testRoute: ServerRoute<any, any, any> = {
         method: 'POST',
         path: '/test/stream',
         responseType: 'stream',

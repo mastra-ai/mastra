@@ -136,6 +136,15 @@ export const supportAgent = new Agent({
   model: openai("gpt-4o"),
   defaultGenerateOptions: {
     tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)),
+## Using Tags
+
+Tags help you categorize and filter traces in the Langfuse dashboard. Add tags when executing agents or workflows:
+
+```typescript
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Hello" }],
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
   },
 });
 ```
@@ -173,6 +182,12 @@ You can link prompts using either:
 - All three fields
 
 When set on a `MODEL_GENERATION` span, the Langfuse exporter automatically links the generation to the corresponding prompt.
+Tags appear in Langfuse's trace view and can be used to filter and search traces. Common use cases include:
+
+- Environment labels: `"production"`, `"staging"`
+- Experiment tracking: `"experiment-v1"`, `"control-group"`
+- Priority levels: `"priority-high"`, `"batch-job"`
+- User segments: `"beta-user"`, `"enterprise"`
 
 ## Related
 
