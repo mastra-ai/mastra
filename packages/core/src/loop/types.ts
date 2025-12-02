@@ -1,13 +1,18 @@
-import type { WritableStream } from 'stream/web';
-import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { WritableStream } from 'node:stream/web';
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { CallSettings, IdGenerator, StopCondition, ToolChoice, ToolSet, StepResult, ModelMessage } from 'ai-v5';
 import z from 'zod';
 import type { MessageList } from '../agent/message-list';
+import type { SaveQueueManager } from '../agent/save-queue';
 import type { StructuredOutputOptions } from '../agent/types';
+import type { ModelMethodType } from '../llm/model/model.loop.types';
+import type { MastraLanguageModelV2 } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { MastraMemory, MemoryConfig } from '../memory';
 import type { IModelSpanTracker } from '../observability';
-import type { OutputProcessor, ProcessorState } from '../processors';
+import type { InputProcessor, OutputProcessor, ProcessorState } from '../processors';
+import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream/base/schema';
 import type {
   ChunkType,
@@ -21,10 +26,16 @@ export type StreamInternal = {
   now?: () => number;
   generateId?: IdGenerator;
   currentDate?: () => Date;
+  saveQueueManager?: SaveQueueManager; // SaveQueueManager from agent/save-queue
+  memoryConfig?: MemoryConfig; // MemoryConfig from memory/types
+  threadId?: string;
+  resourceId?: string;
+  memory?: MastraMemory; // MastraMemory from memory/memory
+  threadExists?: boolean;
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
-  model?: LanguageModelV2;
+  model?: MastraLanguageModelV2;
   toolChoice?: ToolChoice<TOOLS>;
   activeTools?: Array<keyof TOOLS>;
   system?: string;
@@ -34,7 +45,7 @@ export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
 export type PrepareStepFunction<TOOLS extends ToolSet = ToolSet> = (options: {
   steps: Array<StepResult<TOOLS>>;
   stepNumber: number;
-  model: LanguageModelV2;
+  model: MastraLanguageModelV2;
   messages: Array<ModelMessage>;
 }) => PromiseLike<PrepareStepResult<TOOLS> | undefined> | PrepareStepResult<TOOLS> | undefined;
 
@@ -72,6 +83,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   providerOptions?: SharedV2ProviderOptions;
   tools?: Tools;
   outputProcessors?: OutputProcessor[];
+  inputProcessors?: InputProcessor[];
   experimental_generateMessageId?: () => string;
   stopWhen?: StopCondition<NoInfer<Tools>> | Array<StopCondition<NoInfer<Tools>>>;
   maxSteps?: number;
@@ -83,6 +95,8 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   modelSpanTracker?: IModelSpanTracker;
   requireToolApproval?: boolean;
   agentId: string;
+  requestContext?: RequestContext;
+  methodType: ModelMethodType;
 };
 
 export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = LoopOptions<
@@ -97,6 +111,7 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema
     serialize: () => any;
     deserialize: (state: any) => void;
   };
+  methodType: ModelMethodType;
   processorStates?: Map<string, ProcessorState<OUTPUT>>;
 };
 

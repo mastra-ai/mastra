@@ -22,21 +22,30 @@ export class SaveQueueManager {
    * Debounces save operations for a thread, ensuring that consecutive save requests
    * are batched and only the latest is executed after a short delay.
    * @param threadId - The ID of the thread to debounce saves for.
-   * @param saveFn - The save function to debounce.
+   * @param messageList - The MessageList instance containing unsaved messages.
+   * @param memoryConfig - Optional memory configuration to use for saving.
+   * @returns A promise that resolves when the debounced save completes.
    */
-  private debounceSave(threadId: string, messageList: MessageList, memoryConfig?: MemoryConfig) {
-    if (this.saveDebounceTimers.has(threadId)) {
-      clearTimeout(this.saveDebounceTimers.get(threadId)!);
-    }
-    this.saveDebounceTimers.set(
-      threadId,
-      setTimeout(() => {
-        this.enqueueSave(threadId, messageList, memoryConfig).catch(err => {
-          this.logger?.error?.('Error in debounceSave', { err, threadId });
-        });
-        this.saveDebounceTimers.delete(threadId);
-      }, this.debounceMs),
-    );
+  private debounceSave(threadId: string, messageList: MessageList, memoryConfig?: MemoryConfig): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (this.saveDebounceTimers.has(threadId)) {
+        clearTimeout(this.saveDebounceTimers.get(threadId)!);
+      }
+      this.saveDebounceTimers.set(
+        threadId,
+        setTimeout(() => {
+          this.enqueueSave(threadId, messageList, memoryConfig)
+            .then(resolve)
+            .catch(err => {
+              this.logger?.error?.('Error in debounceSave', { err, threadId });
+              reject(err);
+            })
+            .finally(() => {
+              this.saveDebounceTimers.delete(threadId);
+            });
+        }, this.debounceMs),
+      );
+    });
   }
 
   /**

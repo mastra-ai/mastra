@@ -20,9 +20,6 @@ describe('provider-defined tools', () => {
     // Test actual execution with agent
     const result = await agent.generate(
       'Search for information about TypeScript programming language using the search tool',
-      {
-        toolChoice: 'search',
-      },
     );
 
     expect(result).toBeDefined();
@@ -65,7 +62,51 @@ describe('provider-defined tools', () => {
     expect(agent.name).toBe('test-google-code-agent');
   });
 
-  it('should handle openai web search tool', { timeout: 30000 }, async () => {
+  it('stream - should handle openai web search tool', { timeout: 30000 }, async () => {
+    const tool = openai.tools.webSearch({});
+
+    const agent = new Agent({
+      id: 'test-openai-web-search-agent',
+      name: 'test-openai-web-search-agent',
+      instructions: 'You are a search assistant. When asked to search for something, always use the search tool.',
+      model: 'openai/gpt-4o-mini',
+      tools: { search: tool },
+    });
+
+    const result = await agent.stream(
+      'Search for information about TypeScript programming language using the search tool',
+      {},
+    );
+
+    await result.consumeStream();
+
+    expect(result).toBeDefined();
+
+    const text = await result.text;
+
+    expect(text).toBeDefined();
+    expect(text).toContain('TypeScript');
+
+    const sources = await result.sources;
+
+    // These are the web search sources that were used to generate the response
+    expect(sources.length).toBeGreaterThan(0);
+
+    const toolCalls = await result.toolCalls;
+
+    // Openai web search acts as a reguar tool call/result
+    const webSearchToolCall = toolCalls.find(tc => tc.payload.toolName === 'web_search');
+    expect(webSearchToolCall).toBeDefined();
+    expect(webSearchToolCall?.payload.providerExecuted).toBe(true);
+
+    const toolResults = await result.toolResults;
+
+    const webSearchToolResult = toolResults.find(tr => tr.payload.toolName === 'web_search');
+    expect(webSearchToolResult).toBeDefined();
+    expect(webSearchToolResult?.payload.providerExecuted).toBe(true);
+  });
+
+  it('generate - should handle openai web search tool', { timeout: 30000 }, async () => {
     const tool = openai.tools.webSearch({});
 
     const agent = new Agent({
@@ -98,12 +139,55 @@ describe('provider-defined tools', () => {
     expect(webSearchToolResult?.payload.providerExecuted).toBe(true);
   });
 
-  it('should handle anthropic web search tool', { timeout: 30000 }, async () => {
+  it('stream - should handle anthropic web search tool', { timeout: 30000 }, async () => {
     const tool = anthropic.tools.webSearch_20250305({});
 
     const agent = new Agent({
-      id: 'minimal-agent',
-      name: 'minimal-agent',
+      id: 'test-anthropic-web-search-agent',
+      name: 'test-anthropic-web-search-agent',
+      instructions: 'You are a search assistant. When asked to search for something, always use the search tool.',
+      model: 'anthropic/claude-haiku-4-5-20251001',
+      tools: { search: tool },
+    });
+
+    const result = await agent.stream(
+      'Search for information about TypeScript programming language using the search tool',
+      {},
+    );
+
+    await result.consumeStream();
+
+    expect(result).toBeDefined();
+
+    const text = await result.text;
+
+    expect(text).toBeDefined();
+
+    const sources = await result.sources;
+
+    // These are the web search sources that were used to generate the response
+    expect(sources.length).toBeGreaterThan(0);
+
+    const toolCalls = await result.toolCalls;
+
+    // Anthropic web search acts as a reguar tool call/result
+    const webSearchToolCall = toolCalls.find(tc => tc.payload.toolName === 'web_search');
+    expect(webSearchToolCall).toBeDefined();
+    expect(webSearchToolCall?.payload.providerExecuted).toBe(true);
+
+    const toolResults = await result.toolResults;
+
+    const webSearchToolResult = toolResults.find(tr => tr.payload.toolName === 'web_search');
+    expect(webSearchToolResult).toBeDefined();
+    expect(webSearchToolResult?.payload.providerExecuted).toBe(true);
+  });
+
+  it('generate - should handle anthropic web search tool', { timeout: 30000 }, async () => {
+    const tool = anthropic.tools.webSearch_20250305({});
+
+    const agent = new Agent({
+      id: 'test-anthropic-web-search-agent',
+      name: 'test-anthropic-web-search-agent',
       instructions: 'You are a search assistant. When asked to search for something, always use the search tool.',
       model: 'anthropic/claude-haiku-4-5-20251001',
       tools: { search: tool },
@@ -111,6 +195,7 @@ describe('provider-defined tools', () => {
 
     const result = await agent.generate(
       'Search for information about TypeScript programming language using the search tool',
+      {},
     );
 
     expect(result).toBeDefined();
@@ -129,13 +214,58 @@ describe('provider-defined tools', () => {
     expect(webSearchToolResult?.payload.providerExecuted).toBe(true);
   });
 
-  it('should handle anthropic skills', { timeout: 30000 }, async () => {
+  it('stream - should handle anthropic skills', { timeout: 30000 }, async () => {
     const tool = anthropic.tools.codeExecution_20250522({});
 
     const agent = new Agent({
       id: 'test-anthropic-skills-agent',
-      name: 'minimal-agent',
-      instructions: 'You are a search assistant.',
+      name: 'test-anthropic-skills-agent',
+      instructions: 'You are an assistant that can execute code.',
+      model: 'anthropic/claude-haiku-4-5-20251001',
+      tools: { codeExecution: tool },
+    });
+
+    const result = await agent.stream('Create a short document about the benefits of using Typescript in 100 words', {
+      providerOptions: {
+        container: {
+          skills: [
+            {
+              type: 'anthropic',
+              skillId: 'docx',
+            },
+          ],
+        },
+      } satisfies AnthropicProviderOptions,
+    });
+
+    await result.consumeStream();
+
+    expect(result).toBeDefined();
+
+    const text = await result.text;
+    expect(text).toBeDefined();
+
+    const toolCalls = await result.toolCalls;
+
+    const toolCall = toolCalls.find(tc => tc.payload.toolName === 'code_execution');
+    expect(toolCall).toBeDefined();
+    expect(toolCall?.payload.providerExecuted).toBe(true);
+
+    const toolResults = await result.toolResults;
+
+    const toolResult = toolResults.find(tr => tr.payload.toolName === 'code_execution');
+    expect(toolResult).toBeDefined();
+    expect(toolResult?.payload.providerExecuted).toBe(true);
+    expect((toolResult?.payload.result as any).type).toBe('code_execution_result');
+  });
+
+  it('generate - should handle anthropic skills', { timeout: 30000 }, async () => {
+    const tool = anthropic.tools.codeExecution_20250522({});
+
+    const agent = new Agent({
+      id: 'test-anthropic-skills-agent',
+      name: 'test-anthropic-skills-agent',
+      instructions: 'You are an assistant that can execute code.',
       model: 'anthropic/claude-haiku-4-5-20251001',
       tools: { codeExecution: tool },
     });

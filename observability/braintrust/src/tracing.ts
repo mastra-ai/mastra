@@ -159,10 +159,12 @@ export class BraintrustExporter extends BaseExporter {
     });
 
     // Include the Mastra trace ID in the span metadata for correlation
+    // Also include tags if present (only for root spans)
     braintrustSpan.log({
       metadata: {
         [MASTRA_TRACE_ID_METADATA_KEY]: span.traceId,
       },
+      ...(span.isRootSpan && span.tags?.length ? { tags: span.tags } : {}),
     });
 
     spanData.spans.set(span.id, braintrustSpan);

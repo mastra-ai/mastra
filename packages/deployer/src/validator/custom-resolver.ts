@@ -1,8 +1,9 @@
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import type { ResolveHookContext } from 'node:module';
 import { builtinModules } from 'node:module';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { isDependencyPartOfPackage } from '../build/utils';
 
 const cache = new Map<string, Record<string, string>>();
 
@@ -41,24 +42,35 @@ function isRelativePath(specifier: string): boolean {
  */
 async function getParentPath(specifier: string, url: string): Promise<string | null> {
   if (!cache.size) {
-    const moduleResolveMap = JSON.parse(
-      // cwd refers to the output/build directory
-      await readFile(join(process.cwd(), 'module-resolve-map.json'), 'utf-8'),
-    ) as Record<string, Record<string, string>>;
+    let moduleResolveMapLocation = process.env.MODULE_MAP;
+    if (!moduleResolveMapLocation) {
+      moduleResolveMapLocation = join(process.cwd(), 'module-resolve-map.json');
+    }
+
+    let moduleResolveMap: Record<string, Record<string, string>> = {};
+    if (existsSync(moduleResolveMapLocation)) {
+      moduleResolveMap = JSON.parse(await readFile(moduleResolveMapLocation, 'utf-8')) as Record<
+        string,
+        Record<string, string>
+      >;
+    }
 
     for (const [id, rest] of Object.entries(moduleResolveMap)) {
-      cache.set(pathToFileURL(id).toString(), rest);
+      cache.set(id, rest);
     }
   }
 
   const importers = cache.get(url);
-  if (!importers || !importers[specifier]) {
+  if (!importers) {
     return null;
   }
 
-  const specifierParent = importers[specifier];
-
-  return pathToFileURL(specifierParent).toString();
+  const matchedPackage = Object.keys(importers).find(external => isDependencyPartOfPackage(specifier, external));
+  if (!matchedPackage) {
+    return null;
+  }
+  const specifierParent = importers[matchedPackage]!;
+  return specifierParent;
 }
 
 export async function resolve(

@@ -37,7 +37,6 @@ You can add built-in scorers to your agents to automatically evaluate their outp
 
 ```typescript title="src/mastra/agents/evaluated-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import {
   createAnswerRelevancyScorer,
   createToxicityScorer,
@@ -47,11 +46,11 @@ export const evaluatedAgent = new Agent({
   // ...
   scorers: {
     relevancy: {
-      scorer: createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") }),
+      scorer: createAnswerRelevancyScorer({ model: "openai/gpt-4.1-nano" }),
       sampling: { type: "ratio", rate: 0.5 },
     },
     safety: {
-      scorer: createToxicityScorer({ model: openai("gpt-4o-mini") }),
+      scorer: createToxicityScorer({ model: "openai/gpt-4.1-nano" }),
       sampling: { type: "ratio", rate: 1 },
     },
   },

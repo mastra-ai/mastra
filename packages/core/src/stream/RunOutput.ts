@@ -1,6 +1,6 @@
-import EventEmitter from 'events';
-import { ReadableStream, WritableStream } from 'stream/web';
-import type { ReadableStreamGetReaderOptions, ReadableWritablePair, StreamPipeOptions } from 'stream/web';
+import EventEmitter from 'node:events';
+import { ReadableStream, WritableStream } from 'node:stream/web';
+import type { ReadableStreamGetReaderOptions, ReadableWritablePair, StreamPipeOptions } from 'node:stream/web';
 import type { LanguageModelUsage } from 'ai-v5';
 import type { WorkflowResult, WorkflowRunStatus } from '../workflows';
 import { DelayedPromise } from './aisdk/v5/compat';

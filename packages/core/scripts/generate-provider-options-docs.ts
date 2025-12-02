@@ -5,8 +5,8 @@
  * and generates markdown documentation for each provider's options.
  */
 
-import path from 'path';
-import { fileURLToPath } from 'url';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Node, Project, TypeFormatFlags } from 'ts-morph';
 import type { Type } from 'ts-morph';
 
@@ -189,7 +189,7 @@ export function generateProviderOptionsSection(providerId: string): string {
     const exportedDeclarations = sourceFile.getExportedDeclarations();
     const typeExport = exportedDeclarations.get(providerInfo.typeName);
     if (typeExport && typeExport.length > 0) {
-      targetType = typeExport[0].getType();
+      targetType = typeExport[0]?.getType();
       break;
     }
   }

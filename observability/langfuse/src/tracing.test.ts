@@ -67,7 +67,9 @@ describe('LangfuseExporter', () => {
 
     // Get the mocked Langfuse constructor and configure it
     LangfuseMock = vi.mocked(Langfuse);
-    LangfuseMock.mockImplementation(() => mockLangfuseClient);
+    LangfuseMock.mockImplementation(function () {
+      return mockLangfuseClient;
+    });
 
     config = {
       publicKey: 'test-public-key',
@@ -1420,6 +1422,173 @@ describe('LangfuseExporter', () => {
     });
   });
 
+  describe('Tags Support', () => {
+    it('should include tags in trace payload for root spans with tags', async () => {
+      const rootSpanWithTags = createMockSpan({
+        id: 'root-with-tags',
+        name: 'tagged-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: { agentId: 'agent-123' },
+        metadata: { userId: 'user-456' },
+        tags: ['production', 'experiment-v2', 'user-request'],
+      });
+
+      const event: TracingEvent = {
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpanWithTags,
+      };
+
+      await exporter.exportTracingEvent(event);
+
+      // Should create Langfuse trace with tags
+      expect(mockLangfuseClient.trace).toHaveBeenCalledWith({
+        id: 'root-with-tags',
+        name: 'tagged-agent',
+        userId: 'user-456',
+        metadata: {
+          agentId: 'agent-123',
+          spanType: 'agent_run',
+        },
+        tags: ['production', 'experiment-v2', 'user-request'],
+      });
+    });
+
+    it('should not include tags in trace payload when tags array is empty', async () => {
+      const rootSpanEmptyTags = createMockSpan({
+        id: 'root-empty-tags',
+        name: 'agent-no-tags',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: { agentId: 'agent-123' },
+        tags: [],
+      });
+
+      const event: TracingEvent = {
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpanEmptyTags,
+      };
+
+      await exporter.exportTracingEvent(event);
+
+      // Should create Langfuse trace without tags property
+      expect(mockLangfuseClient.trace).toHaveBeenCalledWith({
+        id: 'root-empty-tags',
+        name: 'agent-no-tags',
+        metadata: {
+          agentId: 'agent-123',
+          spanType: 'agent_run',
+        },
+      });
+      // Verify tags is not in the call
+      const traceCall = mockLangfuseClient.trace.mock.calls[0][0];
+      expect(traceCall.tags).toBeUndefined();
+    });
+
+    it('should not include tags in trace payload when tags is undefined', async () => {
+      const rootSpanNoTags = createMockSpan({
+        id: 'root-no-tags',
+        name: 'agent-undefined-tags',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: { agentId: 'agent-123' },
+      });
+      // tags is undefined by default
+
+      const event: TracingEvent = {
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpanNoTags,
+      };
+
+      await exporter.exportTracingEvent(event);
+
+      // Should create Langfuse trace without tags property
+      const traceCall = mockLangfuseClient.trace.mock.calls[0][0];
+      expect(traceCall.tags).toBeUndefined();
+    });
+
+    it('should include tags with workflow spans', async () => {
+      const workflowSpanWithTags = createMockSpan({
+        id: 'workflow-with-tags',
+        name: 'data-processing-workflow',
+        type: SpanType.WORKFLOW_RUN,
+        isRoot: true,
+        attributes: { workflowId: 'wf-123' },
+        tags: ['batch-processing', 'priority-high'],
+      });
+
+      const event: TracingEvent = {
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: workflowSpanWithTags,
+      };
+
+      await exporter.exportTracingEvent(event);
+
+      // Should create Langfuse trace with tags
+      expect(mockLangfuseClient.trace).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'workflow-with-tags',
+          name: 'data-processing-workflow',
+          tags: ['batch-processing', 'priority-high'],
+        }),
+      );
+    });
+
+    it('should not include tags for child spans (only root spans get tags)', async () => {
+      // First create a root span with tags
+      const rootSpan = createMockSpan({
+        id: 'root-span-id',
+        name: 'root-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        tags: ['root-tag'],
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      // Clear mock to check child span call
+      mockLangfuseClient.trace.mockClear();
+      mockSpan.span.mockClear();
+
+      // Create child span (should not have tags even if we set them)
+      // Child spans should not have tags set by the system
+      // but let's verify the exporter handles it correctly even if accidentally set
+      const childSpan = createMockSpan({
+        id: 'child-span-id',
+        name: 'child-tool',
+        type: SpanType.TOOL_CALL,
+        isRoot: false,
+        attributes: { toolId: 'calculator' },
+        tags: ['should-not-appear'],
+      });
+      childSpan.traceId = 'root-span-id';
+      childSpan.parentSpanId = 'root-span-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: childSpan,
+      });
+
+      // Should not create new trace for child spans
+      expect(mockLangfuseClient.trace).not.toHaveBeenCalled();
+
+      // Span should be created on the parent span, not the trace
+      expect(mockSpan.span).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'child-span-id',
+          name: 'child-tool',
+        }),
+      );
+      // The span call should not include tags (tags are only in trace payload)
+      const spanCall = mockSpan.span.mock.calls[0][0];
+      expect(spanCall.tags).toBeUndefined();
+    });
+  });
+
   describe('Shutdown', () => {
     it('should shutdown Langfuse client and clear maps', async () => {
       // Add some data to internal maps
@@ -1463,6 +1632,7 @@ function createMockSpan({
   input,
   output,
   errorInfo,
+  tags,
 }: {
   id: string;
   name: string;
@@ -1473,6 +1643,7 @@ function createMockSpan({
   input?: any;
   output?: any;
   errorInfo?: any;
+  tags?: string[];
 }): AnyExportedSpan {
   return {
     id,
@@ -1483,6 +1654,7 @@ function createMockSpan({
     input,
     output,
     errorInfo,
+    tags,
     startTime: new Date(),
     endTime: undefined,
     traceId: isRoot ? id : 'parent-trace-id',

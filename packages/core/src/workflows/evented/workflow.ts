@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import z from 'zod';
 import type { Agent } from '../../agent';
 import { RequestContext } from '../../di';
@@ -48,6 +48,7 @@ export function cloneWorkflow<
     outputSchema: workflow.outputSchema,
     steps: workflow.stepDefs,
     mastra: workflow.mastra,
+    options: workflow.options,
   });
 
   wf.setStepFlow(workflow.stepGraph);
@@ -64,7 +65,12 @@ export function cloneStep<TStepId extends string>(
     description: step.description,
     inputSchema: step.inputSchema,
     outputSchema: step.outputSchema,
+    suspendSchema: step.suspendSchema,
+    resumeSchema: step.resumeSchema,
+    stateSchema: step.stateSchema,
     execute: step.execute,
+    retries: step.retries,
+    scorers: step.scorers,
     component: step.component,
   };
 }
@@ -163,7 +169,7 @@ export function createStep<
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType> {
   if (isAgent(params)) {
     return {
-      id: params.name,
+      id: params.id,
       description: params.getDescription(),
       // @ts-ignore
       inputSchema: z.object({
@@ -314,7 +320,7 @@ export function createWorkflow<
     mastra: params.mastra!,
     eventProcessor,
     options: {
-      validateInputs: params.options?.validateInputs ?? false,
+      validateInputs: params.options?.validateInputs ?? true,
       shouldPersistSnapshot: params.options?.shouldPersistSnapshot ?? (() => true),
       tracingPolicy: params.options?.tracingPolicy,
     },
@@ -500,7 +506,7 @@ export class EventedRun<
       abortController: this.abortController,
     });
 
-    console.dir({ startResult: result }, { depth: null });
+    // console.dir({ startResult: result }, { depth: null });
 
     if (result.status !== 'suspended') {
       this.cleanup?.();

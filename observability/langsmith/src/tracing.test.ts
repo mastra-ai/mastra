@@ -54,7 +54,9 @@ describe('LangSmithExporter', () => {
 
     // Mock RunTree constructor
     MockRunTreeClass = vi.mocked(RunTree);
-    MockRunTreeClass.mockImplementation(() => mockRunTree);
+    MockRunTreeClass.mockImplementation(function () {
+      return mockRunTree;
+    });
 
     // Set up mock for Client
     mockClient = {
@@ -63,7 +65,9 @@ describe('LangSmithExporter', () => {
     };
 
     MockClientClass = vi.mocked(Client);
-    MockClientClass.mockImplementation(() => mockClient);
+    MockClientClass.mockImplementation(function () {
+      return mockClient;
+    });
 
     config = {
       apiKey: 'test-api-key',
@@ -77,6 +81,34 @@ describe('LangSmithExporter', () => {
   describe('Initialization', () => {
     it('should initialize with correct configuration', () => {
       expect(exporter.name).toBe('langsmith');
+    });
+
+    it('should pass projectName to RunTree when configured', async () => {
+      // Create exporter with custom projectName
+      const exporterWithProject = new LangSmithExporter({
+        apiKey: 'test-api-key',
+        projectName: 'my-custom-project',
+      });
+
+      const rootSpan = createMockSpan({
+        id: 'test-span',
+        name: 'test',
+        type: SpanType.GENERIC,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporterWithProject.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      // Should pass project_name to the RunTree constructor
+      expect(MockRunTreeClass).toHaveBeenCalledWith(
+        expect.objectContaining({
+          project_name: 'my-custom-project',
+        }),
+      );
     });
 
     it('should disable exporter when apiKey is missing', async () => {

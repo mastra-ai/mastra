@@ -20,6 +20,7 @@ import type {
   MemoryConfig,
   StorageThreadType,
 } from '@mastra/core/memory';
+import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type {
@@ -33,7 +34,7 @@ import type {
 import type { OutputSchema } from '@mastra/core/stream';
 
 import type { QueryResult } from '@mastra/core/vector';
-import type { Workflow, WorkflowResult, WorkflowState } from '@mastra/core/workflows';
+import type { TimeTravelContext, Workflow, WorkflowResult, WorkflowState } from '@mastra/core/workflows';
 
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
@@ -53,6 +54,8 @@ export interface ClientOptions {
   abortSignal?: AbortSignal;
   /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
   credentials?: 'omit' | 'same-origin' | 'include';
+  /** Custom fetch function to use for HTTP requests. Useful for environments like Tauri that require custom fetch implementations. */
+  fetch?: typeof fetch;
 }
 
 export interface RequestOptions {
@@ -76,11 +79,13 @@ type WithoutMethods<T> = {
 
 export type NetworkStreamParams = {
   messages: MessageListInput;
+  tracingOptions?: TracingOptions;
 } & MultiPrimitiveExecutionOptions;
 
 export interface GetAgentResponse {
   id: string;
   name: string;
+  description?: string;
   instructions: AgentInstructions;
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;
@@ -127,6 +132,7 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
 
 export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
   messages: MessageListInput;
+  tracingOptions?: TracingOptions;
   structuredOutput?: SerializableStructuredOutputOptions<OUTPUT>;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
@@ -163,8 +169,8 @@ export interface GetToolResponse {
 export interface ListWorkflowRunsParams {
   fromDate?: Date;
   toDate?: Date;
-  perPage?: number | false;
-  page?: number;
+  limit?: number | false;
+  offset?: number;
   resourceId?: string;
 }
 
@@ -322,7 +328,6 @@ export type GetLogsResponse = {
 };
 
 export type RequestFunction = (path: string, options?: RequestOptions) => Promise<any>;
-
 export interface GetVNextNetworkResponse {
   id: string;
   name: string;
@@ -527,6 +532,18 @@ export interface MemorySearchResult {
       createdAt: string;
     }>;
   };
+}
+
+export interface TimeTravelParams {
+  runId: string;
+  step: string | string[];
+  inputData?: Record<string, any>;
+  resumeData?: Record<string, any>;
+  initialState?: Record<string, any>;
+  context?: TimeTravelContext<any, any, any, any>;
+  nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+  requestContext?: RequestContext | Record<string, any>;
+  tracingOptions?: TracingOptions;
 }
 
 export interface ListAgentsModelProvidersResponse {

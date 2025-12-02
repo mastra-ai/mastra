@@ -1,6 +1,6 @@
-import { createReadStream, writeFileSync, mkdirSync } from 'fs';
-import { join } from 'path';
-import { Readable } from 'stream';
+import { createReadStream, writeFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { Readable } from 'node:stream';
 import { describe, it, expect, beforeAll } from 'vitest';
 
 import { AzureVoice } from './index';

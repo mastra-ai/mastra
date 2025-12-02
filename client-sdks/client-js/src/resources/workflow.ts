@@ -9,6 +9,7 @@ import type {
   GetWorkflowRunByIdResponse,
   GetWorkflowRunExecutionResultResponse,
   StreamVNextChunkType,
+  TimeTravelParams,
 } from '../types';
 
 import { parseClientRequestContext, base64RequestContext, requestContextQueryString } from '../utils';
@@ -52,15 +53,15 @@ export class Workflow extends BaseResource {
     if (params?.toDate) {
       searchParams.set('toDate', params.toDate.toISOString());
     }
-    if (params?.perPage !== null && params?.perPage !== undefined) {
-      if (params.perPage === false) {
-        searchParams.set('perPage', 'false');
-      } else if (typeof params.perPage === 'number' && params.perPage > 0 && Number.isInteger(params.perPage)) {
-        searchParams.set('perPage', String(params.perPage));
+    if (params?.limit !== null && params?.limit !== undefined) {
+      if (params.limit === false) {
+        searchParams.set('limit', 'false');
+      } else if (typeof params.limit === 'number' && params.limit > 0 && Number.isInteger(params.limit)) {
+        searchParams.set('limit', String(params.limit));
       }
     }
-    if (params?.page !== null && params?.page !== undefined && !isNaN(Number(params?.page))) {
-      searchParams.set('page', String(params.page));
+    if (params?.offset !== null && params?.offset !== undefined && !isNaN(Number(params?.offset))) {
+      searchParams.set('offset', String(params.offset));
     }
     if (params?.resourceId) {
       searchParams.set('resourceId', params.resourceId);
@@ -121,6 +122,7 @@ export class Workflow extends BaseResource {
     runId: string;
     start: (params: {
       inputData: Record<string, any>;
+      initialState?: Record<string, any>;
       requestContext?: RequestContext | Record<string, any>;
       tracingOptions?: TracingOptions;
     }) => Promise<{ message: string }>;
@@ -132,10 +134,12 @@ export class Workflow extends BaseResource {
     }) => Promise<{ message: string }>;
     stream: (params: {
       inputData: Record<string, any>;
+      initialState?: Record<string, any>;
       requestContext?: RequestContext | Record<string, any>;
     }) => Promise<ReadableStream>;
     startAsync: (params: {
       inputData: Record<string, any>;
+      initialState?: Record<string, any>;
       requestContext?: RequestContext | Record<string, any>;
       tracingOptions?: TracingOptions;
     }) => Promise<WorkflowRunResult>;
@@ -170,30 +174,43 @@ export class Workflow extends BaseResource {
       runId,
       start: async (p: {
         inputData: Record<string, any>;
+        initialState?: Record<string, any>;
         requestContext?: RequestContext | Record<string, any>;
         tracingOptions?: TracingOptions;
       }) => {
         return this.start({
           runId,
           inputData: p.inputData,
+          initialState: p.initialState,
           requestContext: p.requestContext,
           tracingOptions: p.tracingOptions,
         });
       },
       startAsync: async (p: {
         inputData: Record<string, any>;
+        initialState?: Record<string, any>;
         requestContext?: RequestContext | Record<string, any>;
         tracingOptions?: TracingOptions;
       }) => {
         return this.startAsync({
           runId,
           inputData: p.inputData,
+          initialState: p.initialState,
           requestContext: p.requestContext,
           tracingOptions: p.tracingOptions,
         });
       },
-      stream: async (p: { inputData: Record<string, any>; requestContext?: RequestContext | Record<string, any> }) => {
-        return this.stream({ runId, inputData: p.inputData, requestContext: p.requestContext });
+      stream: async (p: {
+        inputData: Record<string, any>;
+        initialState?: Record<string, any>;
+        requestContext?: RequestContext | Record<string, any>;
+      }) => {
+        return this.stream({
+          runId,
+          inputData: p.inputData,
+          initialState: p.initialState,
+          requestContext: p.requestContext,
+        });
       },
       resume: async (p: {
         step?: string | string[];
@@ -240,19 +257,25 @@ export class Workflow extends BaseResource {
 
   /**
    * Starts a workflow run synchronously without waiting for the workflow to complete
-   * @param params - Object containing the runId, inputData and requestContext
+   * @param params - Object containing the runId, inputData, initialState and requestContext
    * @returns Promise containing success message
    */
   start(params: {
     runId: string;
     inputData: Record<string, any>;
+    initialState?: Record<string, any>;
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
   }): Promise<{ message: string }> {
     const requestContext = parseClientRequestContext(params.requestContext);
     return this.request(`/api/workflows/${this.workflowId}/start?runId=${params.runId}`, {
       method: 'POST',
-      body: { inputData: params?.inputData, requestContext, tracingOptions: params.tracingOptions },
+      body: {
+        inputData: params?.inputData,
+        initialState: params?.initialState,
+        requestContext,
+        tracingOptions: params.tracingOptions,
+      },
     });
   }
 
@@ -288,12 +311,13 @@ export class Workflow extends BaseResource {
 
   /**
    * Starts a workflow run asynchronously and returns a promise that resolves when the workflow is complete
-   * @param params - Object containing the optional runId, inputData and requestContext
+   * @param params - Object containing the optional runId, inputData, initialState and requestContext
    * @returns Promise containing the workflow execution results
    */
   startAsync(params: {
     runId?: string;
     inputData: Record<string, any>;
+    initialState?: Record<string, any>;
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
   }): Promise<WorkflowRunResult> {
@@ -307,18 +331,24 @@ export class Workflow extends BaseResource {
 
     return this.request(`/api/workflows/${this.workflowId}/start-async?${searchParams.toString()}`, {
       method: 'POST',
-      body: { inputData: params.inputData, requestContext, tracingOptions: params.tracingOptions },
+      body: {
+        inputData: params.inputData,
+        initialState: params.initialState,
+        requestContext,
+        tracingOptions: params.tracingOptions,
+      },
     });
   }
 
   /**
    * Starts a workflow run and returns a stream
-   * @param params - Object containing the optional runId, inputData and requestContext
+   * @param params - Object containing the optional runId, inputData, initialState and requestContext
    * @returns Promise containing the workflow execution results
    */
   async stream(params: {
     runId?: string;
     inputData: Record<string, any>;
+    initialState?: Record<string, any>;
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
   }) {
@@ -333,7 +363,12 @@ export class Workflow extends BaseResource {
       `/api/workflows/${this.workflowId}/stream?${searchParams.toString()}`,
       {
         method: 'POST',
-        body: { inputData: params.inputData, requestContext, tracingOptions: params.tracingOptions },
+        body: {
+          inputData: params.inputData,
+          initialState: params.initialState,
+          requestContext,
+          tracingOptions: params.tracingOptions,
+        },
         stream: true,
       },
     );
@@ -446,12 +481,13 @@ export class Workflow extends BaseResource {
 
   /**
    * Starts a workflow run and returns a stream
-   * @param params - Object containing the optional runId, inputData and requestContext
+   * @param params - Object containing the optional runId, inputData, initialState and requestContext
    * @returns Promise containing the workflow execution results
    */
   async streamVNext(params: {
     runId?: string;
     inputData?: Record<string, any>;
+    initialState?: Record<string, any>;
     requestContext?: RequestContext;
     closeOnSuspend?: boolean;
     tracingOptions?: TracingOptions;
@@ -469,6 +505,7 @@ export class Workflow extends BaseResource {
         method: 'POST',
         body: {
           inputData: params.inputData,
+          initialState: params.initialState,
           requestContext,
           closeOnSuspend: params.closeOnSuspend,
           tracingOptions: params.tracingOptions,
@@ -704,5 +741,169 @@ export class Workflow extends BaseResource {
         }
       },
     });
+  }
+
+  /**
+   * Restarts an active workflow run synchronously without waiting for the workflow to complete
+   * @param params - Object containing the runId and requestContext
+   * @returns Promise containing success message
+   */
+  restart(params: {
+    runId: string;
+    requestContext?: RequestContext | Record<string, any>;
+    tracingOptions?: TracingOptions;
+  }): Promise<{ message: string }> {
+    const requestContext = parseClientRequestContext(params.requestContext);
+    return this.request(`/api/workflows/${this.workflowId}/restart?runId=${params.runId}`, {
+      method: 'POST',
+      body: {
+        requestContext,
+        tracingOptions: params.tracingOptions,
+      },
+    });
+  }
+
+  /**
+   * Restarts an active workflow run asynchronously
+   * @param params - Object containing the runId and requestContext
+   * @returns Promise containing the workflow restart results
+   */
+  restartAsync(params: {
+    runId: string;
+    requestContext?: RequestContext | Record<string, any>;
+    tracingOptions?: TracingOptions;
+  }): Promise<WorkflowRunResult> {
+    const requestContext = parseClientRequestContext(params.requestContext);
+    return this.request(`/api/workflows/${this.workflowId}/restart-async?runId=${params.runId}`, {
+      method: 'POST',
+      body: {
+        requestContext,
+        tracingOptions: params.tracingOptions,
+      },
+    });
+  }
+
+  /**
+   * Restart all active workflow runs synchronously without waiting for the workflow to complete
+   * @returns Promise containing success message
+   */
+  restartAllActiveWorkflowRuns(): Promise<{ message: string }> {
+    return this.request(`/api/workflows/${this.workflowId}/restart-all-active-workflow-runs`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Restart all active workflow runs asynchronously
+   * @returns Promise containing success message
+   */
+  restartAllActiveWorkflowRunsAsync(): Promise<{ message: string }> {
+    return this.request(`/api/workflows/${this.workflowId}/restart-all-active-workflow-runs-async`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Time travels a workflow run synchronously without waiting for the workflow to complete
+   * @param params - Object containing the runId, step, inputData, resumeData, initialState, context, nestedStepsContext, requestContext and tracingOptions
+   * @returns Promise containing success message
+   */
+  timeTravel({
+    runId,
+    requestContext: paramsRequestContext,
+    ...params
+  }: TimeTravelParams): Promise<{ message: string }> {
+    const requestContext = parseClientRequestContext(paramsRequestContext);
+    return this.request(`/api/workflows/${this.workflowId}/time-travel?runId=${runId}`, {
+      method: 'POST',
+      body: {
+        ...params,
+        requestContext,
+      },
+    });
+  }
+
+  /**
+   * Time travels a workflow run asynchronously
+   * @param params - Object containing the runId, step, inputData, resumeData, initialState, context, nestedStepsContext, requestContext and tracingOptions
+   * @returns Promise containing the workflow time travel results
+   */
+  timeTravelAsync({
+    runId,
+    requestContext: paramsRequestContext,
+    ...params
+  }: TimeTravelParams): Promise<WorkflowRunResult> {
+    const requestContext = parseClientRequestContext(paramsRequestContext);
+    return this.request(`/api/workflows/${this.workflowId}/time-travel-async?runId=${runId}`, {
+      method: 'POST',
+      body: {
+        ...params,
+        requestContext,
+      },
+    });
+  }
+
+  /**
+   * Time travels a workflow run and returns a stream
+   * @param params - Object containing the runId, step, inputData, resumeData, initialState, context, nestedStepsContext, requestContext and tracingOptions
+   * @returns Promise containing the workflow execution results
+   */
+  async timeTravelStream({ runId, requestContext: paramsRequestContext, ...params }: TimeTravelParams) {
+    const requestContext = parseClientRequestContext(paramsRequestContext);
+    const response: Response = await this.request(
+      `/api/workflows/${this.workflowId}/time-travel-stream?runId=${runId}`,
+      {
+        method: 'POST',
+        body: {
+          ...params,
+          requestContext,
+        },
+        stream: true,
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to time travel workflow: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    //using undefined instead of empty string to avoid parsing errors
+    let failedChunk: string | undefined = undefined;
+
+    // Create a transform stream that processes the response body
+    const transformStream = new TransformStream<ArrayBuffer, StreamVNextChunkType>({
+      start() {},
+      async transform(chunk, controller) {
+        try {
+          // Decode binary data to text
+          const decoded = new TextDecoder().decode(chunk);
+
+          // Split by record separator
+          const chunks = decoded.split(RECORD_SEPARATOR);
+
+          // Process each chunk
+          for (const chunk of chunks) {
+            if (chunk) {
+              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
+              try {
+                const parsedChunk = JSON.parse(newChunk);
+                controller.enqueue(parsedChunk);
+                failedChunk = undefined;
+              } catch {
+                failedChunk = newChunk;
+              }
+            }
+          }
+        } catch {
+          // Silently ignore processing errors
+        }
+      },
+    });
+
+    // Pipe the response body through the transform stream
+    return response.body.pipeThrough(transformStream);
   }
 }

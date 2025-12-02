@@ -37,7 +37,7 @@ export const WorkflowBadge = ({
   const { data: runs, isLoading: isRunsLoading } = useWorkflowRuns(workflowId, {
     enabled: Boolean(runId) && !isStreaming,
   });
-  const run = runs?.runs.find(run => run.runId === runId);
+  const run = runs?.find(run => run.runId === runId);
   const isLoading = isRunsLoading || !run;
 
   const snapshot = typeof run?.snapshot === 'object' ? run?.snapshot : undefined;
@@ -63,7 +63,7 @@ export const WorkflowBadge = ({
       }
     >
       {!isStreaming && !isLoading && (
-        <WorkflowRunProvider snapshot={snapshot}>
+        <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId} withoutTimeTravel>
           <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />
         </WorkflowRunProvider>
       )}
