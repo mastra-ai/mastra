@@ -10,7 +10,7 @@ import { Memory } from '@mastra/memory';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { z } from 'zod';
-import { HonoServerAdapter } from '../src/index';
+import { MastraServer } from '../src/index';
 
 const storage = new LibSQLStore({
   id: 'hono-storage',
@@ -418,9 +418,8 @@ const mastra = new Mastra({
 const app = new Hono();
 app.use('*', cors());
 
-const honoServerAdapter = new HonoServerAdapter({ mastra });
-honoServerAdapter.registerContextMiddleware(app);
-await honoServerAdapter.registerRoutes(app, { openapiPath: '/openapi.json' });
+const srv = new MastraServer({ mastra, openapiPath: '/openapi.json', app });
+await srv.init();
 
 // Add Swagger UI
 app.use('/swagger-ui/*', swaggerUI({ url: '/openapi.json' }));
@@ -439,9 +438,3 @@ serve(
     console.log('Swagger UI: http://localhost:3001/swagger-ui');
   },
 );
-
-// TODOs
-/*
-- Body should always be passed in the same way (as 'body')
-- All streaming should have the {fullStream: ReadableStream} shape, right now sometimes our handlers are already piping the fullstream and returning a readable stream, we should standardize this.
-*/

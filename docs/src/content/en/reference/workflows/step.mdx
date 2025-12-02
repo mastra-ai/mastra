@@ -104,6 +104,12 @@ const step1 = createStep({
         "The resume data matching the resumeSchema, when resuming the step from a suspended state. Only exists if the step is being resumed.",
     },
     {
+      name: "suspendData",
+      type: "z.infer<TSuspendSchema>",
+      description:
+        "The suspend data that was originally passed to suspend() when the step was suspended. Only exists if the step is being resumed and was previously suspended with data.",
+    },
+    {
       name: "mastra",
       type: "Mastra",
       description: "Access to Mastra services (agents, tools, etc.)",

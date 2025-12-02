@@ -13,7 +13,7 @@ import { Mastra } from '../mastra';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools';
-import type { ChunkType, StreamEvent } from './types';
+import type { ChunkType, StreamEvent, WorkflowStreamEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
 const testStorage = new MockStore();
@@ -10028,6 +10028,112 @@ describe('Workflow', () => {
       });
     });
 
+    it('should handle writer.custom during resume operations', async () => {
+      let customEvents: WorkflowStreamEvent[] = [];
+
+      const stepWithWriter = createStep({
+        id: 'step-with-writer',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number(), success: z.boolean() }),
+        suspendSchema: z.object({ suspendValue: z.number() }),
+        resumeSchema: z.object({ resumeValue: z.number() }),
+        execute: async ({ inputData, resumeData, writer, suspend }) => {
+          if (!resumeData?.resumeValue) {
+            // First run - emit custom event and suspend
+            await writer?.custom({
+              type: 'suspend-event',
+              data: { message: 'About to suspend', value: inputData.value },
+            });
+
+            await suspend({ suspendValue: inputData.value });
+            return { value: inputData.value, success: false };
+          } else {
+            // Resume - emit custom event to test that writer works on resume
+            await writer?.custom({
+              type: 'resume-event',
+              data: {
+                message: 'Successfully resumed',
+                originalValue: inputData.value,
+                resumeValue: resumeData.resumeValue,
+              },
+            });
+
+            return { value: resumeData.resumeValue, success: true };
+          }
+        },
+      });
+
+      const testWorkflow = createWorkflow({
+        id: 'test-resume-writer',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number(), success: z.boolean() }),
+      });
+
+      testWorkflow.then(stepWithWriter).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-resume-writer': testWorkflow },
+      });
+
+      // Create run and start workflow
+      const run = await testWorkflow.createRun();
+
+      // Use streaming to capture custom events
+      let streamResult = run.stream({ inputData: { value: 42 } });
+
+      // Collect all events from the stream - custom events come through directly
+      for await (const event of streamResult.fullStream) {
+        //@ts-expect-error `suspend-event` is custom
+        if (event.type === 'suspend-event') {
+          customEvents.push(event);
+        }
+      }
+
+      const firstResult = await streamResult.result;
+      expect(firstResult.status).toBe('suspended');
+
+      // Check that suspend event was emitted
+      expect(customEvents).toHaveLength(1);
+      expect(customEvents[0].type).toBe('suspend-event');
+      // @ts-expect-error data.message exists on this custom event
+      expect(customEvents[0].data.message).toBe('About to suspend');
+      // @ts-expect-error data.value exists on this custom event
+      expect(customEvents[0].data.value).toBe(42);
+
+      // Reset events for resume test
+      customEvents = [];
+
+      // Resume the workflow using streaming
+      streamResult = run.resumeStream({
+        resumeData: { resumeValue: 99 },
+      });
+
+      // Collect events from resume stream
+      for await (const event of streamResult.fullStream) {
+        // @ts-expect-error `resume-event` is custom
+        if (event.type === 'resume-event') {
+          customEvents.push(event);
+        }
+      }
+
+      const resumeResult = await streamResult.result;
+      expect(resumeResult.status).toBe('success');
+      // @ts-expect-error output exists on success result
+      expect(resumeResult.result).toEqual({ value: 99, success: true });
+
+      // Check that resume event was emitted (this proves writer.custom works during resume)
+      expect(customEvents).toHaveLength(1);
+      expect(customEvents[0].type).toBe('resume-event');
+      // @ts-expect-error data.message exists on this custom event
+      expect(customEvents[0].data.message).toBe('Successfully resumed');
+      // @ts-expect-error data.originalValue exists on this custom event
+      expect(customEvents[0].data.originalValue).toBe(42);
+      // @ts-expect-error data.resumeValue exists on this custom event
+      expect(customEvents[0].data.resumeValue).toBe(99);
+    });
+
     it('should handle basic suspend and resume in nested dountil workflow - bug #5650', async () => {
       let incrementLoopValue = 2;
       const resumeStep = createStep({
@@ -17034,6 +17140,134 @@ describe('Workflow', () => {
       });
 
       expect(typedStep).toBeDefined();
+    });
+  });
+
+  describe('Suspend Data Access', () => {
+    it('should provide access to suspendData in workflow step on resume', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+      });
+
+      const suspendDataAccess = createStep({
+        id: 'suspend-data-access-test',
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        resumeSchema: z.object({
+          confirm: z.boolean(),
+        }),
+        suspendSchema: z.object({
+          reason: z.string(),
+          originalValue: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+          wasResumed: z.boolean(),
+          suspendReason: z.string().optional(),
+        }),
+        execute: async ({ inputData, resumeData, suspend, suspendData }) => {
+          const { value } = inputData;
+          const { confirm } = resumeData ?? {};
+
+          // On first execution, suspend with context
+          if (!confirm) {
+            return await suspend({
+              reason: 'User confirmation required',
+              originalValue: value,
+            });
+          }
+
+          // On resume, we can now access the suspend data!
+          const suspendReason = suspendData?.reason || 'Unknown';
+          const originalValue = suspendData?.originalValue || 'Unknown';
+
+          return {
+            result: `Processed ${originalValue} after ${suspendReason}`,
+            wasResumed: true,
+            suspendReason,
+          };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'suspend-data-test-workflow',
+        mastra,
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+          wasResumed: z.boolean(),
+          suspendReason: z.string().optional(),
+        }),
+      });
+
+      workflow.then(suspendDataAccess).commit();
+
+      const run = await workflow.createRun();
+
+      // Start the workflow - should suspend
+      const initialResult = await run.start({
+        inputData: { value: 'test-value' },
+      });
+
+      expect(initialResult.status).toBe('suspended');
+
+      // Resume the workflow with confirmation
+      const resumedResult = await run.resume({
+        step: suspendDataAccess,
+        resumeData: { confirm: true },
+      });
+
+      expect(resumedResult.status).toBe('success');
+      expect(resumedResult.result.suspendReason).toBe('User confirmation required');
+      expect(resumedResult.result.result).toBe('Processed test-value after User confirmation required');
+    });
+
+    it('should handle missing suspendData gracefully', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+      });
+
+      const stepWithoutSuspend = createStep({
+        id: 'no-suspend-step',
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        execute: async ({ inputData, suspendData }) => {
+          // Should handle missing suspendData gracefully
+          const message = suspendData ? 'Had suspend data' : 'No suspend data';
+          return { result: `${inputData.value}: ${message}` };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'no-suspend-workflow',
+        mastra,
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      });
+
+      workflow.then(stepWithoutSuspend).commit();
+
+      const run = await workflow.createRun();
+
+      const result = await run.start({
+        inputData: { value: 'test' },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.result.result).toBe('test: No suspend data');
     });
   });
 });
