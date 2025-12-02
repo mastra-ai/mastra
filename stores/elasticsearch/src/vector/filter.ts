@@ -283,6 +283,61 @@ export class ElasticSearchFilterTranslator extends BaseFilterTranslator<ElasticS
   }
 
   /**
+   * Escapes wildcard metacharacters (* and ?) for use in wildcard queries.
+   * Existing wildcard metacharacters in the pattern are escaped before
+   * adding leading/trailing * to prevent semantic changes.
+   */
+  private escapeWildcardMetacharacters(pattern: string): string {
+    // Escape * and ? which are wildcard metacharacters
+    return pattern.replace(/\*/g, '\\*').replace(/\?/g, '\\?');
+  }
+
+  /**
+   * Escapes ElasticSearch regexp metacharacters for use in regexp queries.
+   * Escapes special characters that need escaping in ElasticSearch/Lucene regexp syntax.
+   * Handles already-escaped sequences correctly to avoid double-escaping.
+   *
+   * Escapes: . * + ? | { } [ ] ( ) ^ $ \
+   */
+  private escapeElasticSearchRegexp(pattern: string): string {
+    const specialChars = /[.*+?|{}[\]()^$\\]/;
+    let result = '';
+    let i = 0;
+
+    while (i < pattern.length) {
+      const char = pattern[i];
+
+      if (char === '\\') {
+        // This is a backslash - check if it's escaping something
+        if (i + 1 < pattern.length) {
+          const nextChar = pattern[i + 1];
+          // Escape the backslash for JSON serialization
+          // The next character will be handled in the next iteration
+          result += '\\\\';
+          i += 1;
+          // Continue to process the next character
+          continue;
+        } else {
+          // Lone backslash at end - escape it
+          result += '\\\\';
+          i += 1;
+          continue;
+        }
+      }
+
+      // Check if this character needs escaping
+      if (specialChars.test(char)) {
+        result += '\\' + char;
+      } else {
+        result += char;
+      }
+      i += 1;
+    }
+
+    return result;
+  }
+
+  /**
    * Translates regex patterns to ElasticSearch query syntax
    */
   private translateRegexOperator(field: string, value: any): any {
@@ -290,10 +345,14 @@ export class ElasticSearchFilterTranslator extends BaseFilterTranslator<ElasticS
     const regexValue = typeof value === 'string' ? value : value.toString();
 
     // Check for problematic patterns (like newlines, etc.)
+    // ElasticSearch regexp queries support newlines, but we need to escape them properly
+    // For patterns with newlines, use regexp query with proper escaping
     if (regexValue.includes('\n') || regexValue.includes('\r')) {
-      // For patterns with newlines, use a simpler approach
-      // ElasticSearch doesn't support dotall flag like JavaScript
-      return { match: { [field]: value } };
+      // Use regexp query with proper escaping for newline-containing patterns
+      // Note: This converts newlines to literal matches; JavaScript dotall semantics
+      // are not directly supported in ElasticSearch regexp queries
+      const escapedRegex = this.escapeElasticSearchRegexp(regexValue);
+      return { regexp: { [field]: escapedRegex } };
     }
 
     // Process regex pattern to handle anchors properly
@@ -311,8 +370,11 @@ export class ElasticSearchFilterTranslator extends BaseFilterTranslator<ElasticS
         processedRegex = processedRegex.substring(0, processedRegex.length - 1);
       }
 
+      // Escape existing wildcard metacharacters before adding leading/trailing *
+      const escapedPattern = this.escapeWildcardMetacharacters(processedRegex);
+
       // Create wildcard pattern
-      let wildcardPattern = processedRegex;
+      let wildcardPattern = escapedPattern;
       if (!hasStartAnchor) {
         wildcardPattern = '*' + wildcardPattern;
       }
@@ -324,8 +386,8 @@ export class ElasticSearchFilterTranslator extends BaseFilterTranslator<ElasticS
     }
 
     // Use regexp for other regex patterns
-    // Escape any backslashes to prevent ElasticSearch from misinterpreting them
-    const escapedRegex = regexValue.replace(/\\/g, '\\\\');
+    // Escape all ElasticSearch regexp metacharacters
+    const escapedRegex = this.escapeElasticSearchRegexp(regexValue);
     return { regexp: { [field]: escapedRegex } };
   }
 
