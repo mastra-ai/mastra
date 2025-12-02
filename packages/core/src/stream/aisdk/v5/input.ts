@@ -1,5 +1,5 @@
-import { randomUUID } from 'node:crypto';
 import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
+import { generateId } from 'ai-v5';
 import type { RegisteredLogger } from '../../../logger';
 import { MastraModelInput } from '../../base';
 import type { ChunkType } from '../../types';
@@ -29,7 +29,7 @@ export class AISDKV5InputStream extends MastraModelInput {
     stream: ReadableStream<LanguageModelV2StreamPart>;
     controller: ReadableStreamDefaultController<ChunkType>;
   }) {
-    // Map numeric IDs to UUIDs for uniqueness across steps.
+    // Map numeric IDs to unique IDs for uniqueness across steps.
     // Workaround for @ai-sdk/anthropic and @ai-sdk/google duplicate IDs bug:
     // These providers use numeric indices ("0", "1", etc.) that reset per LLM call.
     // See: https://github.com/mastra-ai/mastra/issues/9909
@@ -48,7 +48,7 @@ export class AISDKV5InputStream extends MastraModelInput {
       const transformedChunk = convertFullStreamChunkToMastra(rawChunk, { runId });
 
       if (transformedChunk) {
-        // Replace numeric IDs with UUIDs for text chunks
+        // Replace numeric IDs with unique IDs for text chunks
         if (
           (transformedChunk.type === 'text-start' ||
             transformedChunk.type === 'text-delta' ||
@@ -58,7 +58,7 @@ export class AISDKV5InputStream extends MastraModelInput {
         ) {
           const originalId = transformedChunk.payload.id;
           if (!idMap.has(originalId)) {
-            idMap.set(originalId, randomUUID());
+            idMap.set(originalId, generateId());
           }
           transformedChunk.payload.id = idMap.get(originalId)!;
         }
