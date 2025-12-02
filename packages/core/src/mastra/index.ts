@@ -1190,6 +1190,9 @@ export class Mastra<
       return;
     }
 
+    // Register Mastra instance with scorer to enable custom gateway access (fixes #10745)
+    scorer.__registerMastra(this);
+
     scorers[scorerKey] = scorer;
   }
 
