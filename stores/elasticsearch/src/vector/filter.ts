@@ -308,6 +308,10 @@ export class ElasticSearchFilterTranslator extends BaseFilterTranslator<ElasticS
 
     while (i < pattern.length) {
       const char = pattern[i];
+      if (char === undefined) {
+        i += 1;
+        continue;
+      }
 
       if (char === '\\') {
         // This is a backslash - escape it for JSON serialization
