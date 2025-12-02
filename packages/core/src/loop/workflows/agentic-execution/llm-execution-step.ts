@@ -564,7 +564,13 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
                     ) as typeof tools;
                   }
                   if (prepareStepResult.messages) {
-                    messageList.add(prepareStepResult.messages, 'input');
+                    for (const message of prepareStepResult.messages) {
+                      if (message.role === 'assistant' || message.role === 'tool') {
+                        messageList.add(message, 'response');
+                      } else {
+                        messageList.add(message, 'input');
+                      }
+                    }
                   }
 
                   // Re-fetch inputMessages from messageList after any modifications
