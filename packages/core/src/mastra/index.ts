@@ -1874,6 +1874,11 @@ export class Mastra<
    * ```
    */
   public setMastraServer(adapter: MastraServerBase): void {
+    if (this.#serverAdapter) {
+      this.#logger?.debug(
+        'Replacing existing server adapter. Only one adapter should be registered per Mastra instance.',
+      );
+    }
     this.#serverAdapter = adapter;
     // Inject the logger into the adapter
     if (this.#logger) {
