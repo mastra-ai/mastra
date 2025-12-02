@@ -12,6 +12,7 @@ import {
   useWorkflowRunExecutionResult,
   Skeleton,
   Txt,
+  WorkflowSettingsProvider,
 } from '@mastra/playground-ui';
 
 import { WorkflowHeader } from './workflow-header';
@@ -69,17 +70,19 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
       : undefined;
 
   return (
-    <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId}>
-      <MainContentLayout>
-        <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} runId={runId} />
-        <MainContentContent isDivided={true} hasLeftServiceColumn={true}>
-          <WorkflowRunList workflowId={workflowId} runId={runId} />
+    <WorkflowSettingsProvider workflowId={workflowId}>
+      <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId}>
+        <MainContentLayout>
+          <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} runId={runId} />
+          <MainContentContent isDivided={true} hasLeftServiceColumn={true}>
+            <WorkflowRunList workflowId={workflowId} runId={runId} />
 
-          {children}
+            {children}
 
-          <WorkflowInformation workflowId={workflowId} initialRunId={runId} />
-        </MainContentContent>
-      </MainContentLayout>
-    </WorkflowRunProvider>
+            <WorkflowInformation workflowId={workflowId} initialRunId={runId} />
+          </MainContentContent>
+        </MainContentLayout>
+      </WorkflowRunProvider>
+    </WorkflowSettingsProvider>
   );
 };
