@@ -11,6 +11,7 @@
     "test:working-memory-additive": "vitest run ./src/working-memory-additive.test.ts",
     "test:processors": "vitest run ./src/processors.test.ts",
     "test:fastembed": "vitest run ./src/fastembed.test.ts",
+    "test:ordering": "vitest run ./src/message-ordering.test.ts",
     "dev": "mastra dev"
   },
   "dependencies": {
