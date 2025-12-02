@@ -1349,6 +1349,7 @@ network-execution-event-step-finish
 - [Agent Memory](./agent-memory)
 - [Workflows Overview](../workflows/overview)
 - [Request Context](/docs/v1/server-db/request-context)
+- [Supervisor example](https://github.com/mastra-ai/mastra/tree/main/examples/supervisor-agent)
 
 
 ---
@@ -9903,6 +9904,23 @@ new ArizeExporter({
 });
 ```
 
+### Custom metadata
+
+Non-reserved span attributes are serialized into the OpenInference `metadata` payload and surface in Arize/Phoenix. You can add them via `tracingOptions.metadata`:
+
+```ts
+await agent.generate(input, {
+  tracingOptions: {
+    metadata: {
+      companyId: "acme-co",
+      tier: "enterprise",
+    },
+  },
+});
+```
+
+Reserved fields such as `input`, `output`, `sessionId`, thread/user IDs, and OpenInference IDs are excluded automatically.
+
 ## OpenInference Semantic Conventions
 
 This exporter implements the [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/tree/main/spec) for generative AI applications, providing standardized trace structure across different observability platforms.
@@ -9982,6 +10000,25 @@ new BraintrustExporter({
   logLevel: "info", // Diagnostic logging: debug | info | warn | error
 });
 ```
+
+## Using Tags
+
+Tags help you categorize and filter traces in the Braintrust dashboard. Add tags when executing agents or workflows:
+
+```typescript
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Hello" }],
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+```
+
+Tags appear in Braintrust's trace view and can be used to filter and search traces. Common use cases include:
+
+- Environment labels: `"production"`, `"staging"`
+- Experiment tracking: `"experiment-v1"`, `"control-group"`
+- Priority levels: `"priority-high"`, `"batch-job"`
 
 ## Related
 
@@ -10383,6 +10420,26 @@ new LangfuseExporter({
 });
 ```
 
+## Using Tags
+
+Tags help you categorize and filter traces in the Langfuse dashboard. Add tags when executing agents or workflows:
+
+```typescript
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Hello" }],
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+```
+
+Tags appear in Langfuse's trace view and can be used to filter and search traces. Common use cases include:
+
+- Environment labels: `"production"`, `"staging"`
+- Experiment tracking: `"experiment-v1"`, `"control-group"`
+- Priority levels: `"priority-high"`, `"batch-job"`
+- User segments: `"beta-user"`, `"enterprise"`
+
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
@@ -10415,6 +10472,7 @@ npm install @mastra/langsmith@beta
 
 ```bash title=".env"
 LANGSMITH_API_KEY=ls-xxxxxxxxxxxx
+LANGCHAIN_PROJECT=my-project  # Optional: default project for traces
 LANGSMITH_BASE_URL=https://api.smith.langchain.com  # Optional for self-hosted
 ```
 
@@ -10452,6 +10510,7 @@ new LangSmithExporter({
 
   // Optional settings
   apiUrl: process.env.LANGSMITH_BASE_URL, // Default: https://api.smith.langchain.com
+  projectName: "my-project", // Project to send traces to (overrides LANGCHAIN_PROJECT env var)
   callerOptions: {
     // HTTP client options
     timeout: 30000, // Request timeout in ms
@@ -10464,6 +10523,16 @@ new LangSmithExporter({
   hideOutputs: false, // Hide output data in UI
 });
 ```
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `LANGSMITH_API_KEY` | Your LangSmith API key (required) |
+| `LANGCHAIN_PROJECT` | Default project name for traces (optional, defaults to "default") |
+| `LANGSMITH_BASE_URL` | API URL for self-hosted instances (optional) |
+
+The `projectName` config option takes precedence over the `LANGCHAIN_PROJECT` environment variable, allowing you to programmatically route traces to different projects.
 
 ## Related
 
@@ -11323,6 +11392,55 @@ requestContext.set("session", { data: { experimentId: "exp-999" } });
 2. **Automatic Extraction**: Root spans (agent runs, workflow executions) automatically extract metadata from RequestContext
 3. **Child Span Extraction**: Child spans can also extract metadata if you pass `requestContext` when creating them
 4. **Metadata Precedence**: Explicit metadata passed to span options always takes precedence over extracted metadata
+
+### Adding Tags to Traces
+
+Tags are string labels that help you categorize and filter traces. Unlike metadata (which contains structured key-value data), tags are simple strings designed for quick filtering and organization.
+
+Use `tracingOptions.tags` to add tags when executing agents or workflows:
+
+```ts showLineNumbers copy
+// With agents
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Hello" }],
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+
+// With workflows
+const run = await mastra.getWorkflow("myWorkflow").createRun();
+const result = await run.start({
+  inputData: { data: "process this" },
+  tracingOptions: {
+    tags: ["batch-processing", "priority-high"],
+  },
+});
+```
+
+#### How Tags Work
+
+- **Root span only**: Tags are applied only to the root span of a trace (the agent run or workflow run span)
+- **Platform-specific**: Tags appear in Braintrust and Langfuse dashboards for filtering and searching
+- **Combinable with metadata**: You can use both `tags` and `metadata` in the same `tracingOptions`
+
+```ts showLineNumbers copy
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Analyze this" }],
+  tracingOptions: {
+    tags: ["production", "analytics"],
+    metadata: { userId: "user-123", experimentId: "exp-456" },
+  },
+});
+```
+
+#### Common Tag Patterns
+
+- **Environment**: `"production"`, `"staging"`, `"development"`
+- **Feature flags**: `"feature-x-enabled"`, `"beta-user"`
+- **Request types**: `"user-request"`, `"batch-job"`, `"scheduled-task"`
+- **Priority levels**: `"priority-high"`, `"priority-low"`
+- **Experiments**: `"experiment-v1"`, `"control-group"`, `"treatment-a"`
 
 #### Child Spans and Metadata Extraction
 
@@ -15176,14 +15294,14 @@ console.log("Token usage:", await networkStream.usage);
 
 Streaming from a workflow returns a sequence of structured events describing the run lifecycle, rather than incremental text chunks. This event-based format makes it possible to track and respond to workflow progress in real time once a run is created using `.createRun()`.
 
-### Using `Run.streamVNext()`
+### Using `Run.stream()`
 
-This is the experimental API. It returns a `ReadableStream` of events directly.
+The `stream()` method returns a `ReadableStream` of events directly.
 
 ```typescript {3,9} showLineNumbers copy
 const run = await testWorkflow.createRun();
 
-const stream = await run.streamVNext({
+const stream = await run.stream({
   inputData: {
     value: "initial data",
   },
@@ -15194,16 +15312,16 @@ for await (const chunk of stream) {
 }
 ```
 
-> See Run.streamVNext() method documentation for more information.
+> See [Run.stream()](/reference/v1/streaming/workflows/stream) method documentation for more information.
 
 ### Output from `Run.stream()`
 
-The experimental API event structure includes `runId` and `from` at the top level, making it easier to identify and track workflow runs without digging into the payload.
+The event structure includes `runId` and `from` at the top level, making it easier to identify and track workflow runs without digging into the payload.
 
 ```typescript
 // ...
 {
-  type: 'step-start',
+  type: 'workflow-start',
   runId: '1eeaf01a-d2bf-4e3f-8d1b-027795ccd3df',
   from: 'WORKFLOW',
   payload: {
@@ -15439,12 +15557,6 @@ By combining writable workflow streams with agent streaming, you gain fine-grain
 
 ### Using the `writer` argument
 
-:::warning
-
-The writer is only available when using `streamVNext`.
-
-:::
-
 The `writer` argument is passed to a workflow step's `execute` function and can be used to emit custom events, data, or values into the active stream. This enables workflow steps to provide intermediate results or status updates while execution is still in progress.
 
 :::warning
@@ -15489,7 +15601,7 @@ const testWorkflow = mastra.getWorkflow("testWorkflow");
 
 const run = await testWorkflow.createRun();
 
-const stream = await run.streamVNext({
+const stream = await run.stream({
   inputData: {
     value: "initial data",
   },
@@ -15500,8 +15612,8 @@ for await (const chunk of stream) {
 }
 
 if (result!.status === "suspended") {
-  // if the workflow is suspended, we can resume it with the resumeStreamVNext method
-  const resumedStream = await run.resumeStreamVNext({
+  // if the workflow is suspended, we can resume it with the resumeStream method
+  const resumedStream = await run.resumeStream({
     resumeData: { value: "resume data" },
   });
 
@@ -15513,10 +15625,10 @@ if (result!.status === "suspended") {
 
 ### Resuming an interrupted workflow stream
 
-If a workflow stream is closed or interrupted for any reason, you can resume it with the `resumeStreamVNext` method. This will return a new `ReadableStream` that you can use to observe the workflow events.
+If a workflow stream is closed or interrupted for any reason, you can resume it with the `resumeStream` method. This will return a new `ReadableStream` that you can use to observe the workflow events.
 
 ```typescript showLineNumbers copy
-const newStream = await run.resumeStreamVNext();
+const newStream = await run.resumeStream();
 
 for await (const chunk of newStream) {
   console.log(chunk);
@@ -18384,7 +18496,7 @@ When a workflow is suspended, you can access the payload returned by `suspend()`
 
 ```typescript {12} title="src/test-workflow.ts" showLineNumbers copy
 const workflow = mastra.getWorkflow("testWorkflow");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({
   inputData: {
@@ -18415,7 +18527,7 @@ As with [restarting a workflow](/docs/v1/workflows/suspend-and-resume#restarting
 
 ```typescript {13} showLineNumbers copy
 const workflow = mastra.getWorkflow("testWorkflow");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 await run.start({
   inputData: {
@@ -19707,7 +19819,7 @@ Use `resume()` to restart a suspended workflow from the step where it paused. To
 
 ```typescript {13} showLineNumbers copy
 const workflow = mastra.getWorkflow("testWorkflow");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 await run.start({
   inputData: {
@@ -19788,7 +19900,7 @@ When a workflow is suspended, it restarts from the step where it paused. You can
 
 ```typescript {11} showLineNumbers copy
 const workflow = mastra.getWorkflow("testWorkflow");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({
   inputData: {
@@ -20343,186 +20455,6 @@ const parentWorkflow = createWorkflow({
 
 
 ---
-title: "Example: Supervisor Agent | Agents"
-description: Example of creating a supervisor agent using Mastra, where agents interact through tool functions.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
-# Supervisor Agent
-[EN] Source: https://mastra.ai/en/examples/agents/supervisor-agent
-
-When building complex AI applications, you often need multiple specialized agents to collaborate on different aspects of a task. A supervisor agent enables one agent to act as a supervisor, coordinating the work of other agents, each focused on their own area of expertise. This structure allows agents to delegate, collaborate, and produce more advanced outputs than any single agent alone.
-
-In this example, this system consists of three agents:
-
-1. A [**Copywriter agent**](#copywriter-agent) that writes the initial content.
-2. A [**Editor agent**](#editor-agent) that refines the content.
-3. A [**Publisher agent**](#publisher-agent) that supervises and coordinates the other agents.
-
-## Prerequisites
-
-This example uses the `openai` model. Make sure to add `OPENAI_API_KEY` to your `.env` file.
-
-```bash title=".env" copy
-OPENAI_API_KEY=<your-api-key>
-```
-
-## Copywriter agent
-
-This `copywriterAgent` is responsible for writing the initial blog post content based on a given topic.
-
-```typescript title="src/mastra/agents/example-copywriter-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-
-export const copywriterAgent = new Agent({
-  id: "copywriter-agent",
-  name: "Copywriter Agent",
-  instructions: "You are a copywriter agent that writes blog post copy.",
-  model: "openai/gpt-5.1",
-});
-```
-
-## Copywriter tool
-
-The `copywriterTool` provides an interface to call the `copywriterAgent` and passes in the `topic`.
-
-```typescript title="src/mastra/tools/example-copywriter-tool.ts"
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
-
-export const copywriterTool = createTool({
-  id: "copywriter-agent",
-  description: "Calls the copywriter agent to write blog post copy.",
-  inputSchema: z.object({
-    topic: z.string(),
-  }),
-  outputSchema: z.object({
-    copy: z.string(),
-  }),
-  execute: async ({ context, mastra }) => {
-    const { topic } = context;
-
-    const agent = mastra!.getAgent("copywriterAgent");
-    const result = await agent!.generate(`Create a blog post about ${topic}`);
-
-    return {
-      copy: result.text,
-    };
-  },
-});
-```
-
-## Editor agent
-
-This `editorAgent` takes the initial copy and refines it to improve quality and readability.
-
-```typescript title="src/mastra/agents/example-editor-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-
-export const editorAgent = new Agent({
-  id: "editor-agent",
-  name: "Editor Agent",
-  instructions: "You are an editor agent that edits blog post copy.",
-  model: "openai/gpt-5.1",
-});
-```
-
-## Editor tool
-
-The `editorTool` provides an interface to call the `editorAgent` and passes in the `copy`.
-
-```typescript title="src/mastra/tools/example-editor-tool.ts" showLineNumbers copy
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
-
-export const editorTool = createTool({
-  id: "editor-agent",
-  description: "Calls the editor agent to edit blog post copy.",
-  inputSchema: z.object({
-    copy: z.string(),
-  }),
-  outputSchema: z.object({
-    copy: z.string(),
-  }),
-  execute: async ({ context, mastra }) => {
-    const { copy } = context;
-
-    const agent = mastra!.getAgent("editorAgent");
-    const result = await agent.generate(
-      `Edit the following blog post only returning the edited copy: ${copy}`,
-    );
-
-    return {
-      copy: result.text,
-    };
-  },
-});
-```
-
-## Publisher agent
-
-This `publisherAgent` coordinates the entire process by calling the `copywriterTool` first, then the `editorTool`.
-
-```typescript title="src/mastra/agents/example-publisher-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-
-import { copywriterTool } from "../tools/example-copywriter-tool";
-import { editorTool } from "../tools/example-editor-tool";
-
-export const publisherAgent = new Agent({
-  id: "publisher-agent",
-  name: "Publisher Agent",
-  instructions:
-    "You are a publisher agent that first calls the copywriter agent to write blog post copy about a specific topic and then calls the editor agent to edit the copy. Just return the final edited copy.",
-  model: "openai/gpt-5.1",
-  tools: { copywriterTool, editorTool },
-});
-```
-
-## Registering the agents
-
-All three agents are registered in the main Mastra instance so they can be accessed by each other.
-
-```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
-
-import { publisherAgent } from "./agents/example-publisher-agent";
-import { copywriterAgent } from "./agents/example-copywriter-agent";
-import { editorAgent } from "./agents/example-editor-agent";
-
-export const mastra = new Mastra({
-  agents: { copywriterAgent, editorAgent, publisherAgent },
-});
-```
-
-## Example usage
-
-Use `getAgent()` to retrieve a reference to the agent, then call `generate()` with a prompt.
-
-```typescript title="src/test-publisher-agent.ts" showLineNumbers copy
-import "dotenv/config";
-
-import { mastra } from "./mastra";
-
-const agent = mastra.getAgent("publisherAgent");
-
-const response = await agent.generate(
-  "Write a blog post about React JavaScript frameworks. Only return the final edited copy.",
-);
-
-console.log(response.text);
-```
-
-<GithubLink
-  outdated={true}
-  marginTop="mt-16"
-  href="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/hierarchical-multi-agent"
-/>
-
-
-
----
 title: "Examples List: Workflows, Agents, RAG"
 description: "Explore practical examples of AI development with Mastra, including text generation, RAG implementations, structured outputs, and multi-modal interactions. Learn how to build AI applications using OpenAI, Anthropic, and Google Gemini."
 ---
@@ -20536,47 +20468,15 @@ The Examples section is a short list of example projects demonstrating basic AI 
 
 <CardItems
   titles={[
-    "Agent",
     "Workflow",
-    "Processors",
-    "Memory",
     "RAG",
     "Voice",
   ]}
   items={{
-    Agent: [
-      { title: "Supervisor Agent", href: "/examples/v1/agents/supervisor-agent" },
-      {
-        title: "Image Analysis Agent",
-        href: "/docs/v1/agents/overview#analyzing-images",
-      },
-      {
-        title: "Deploying an MCP Server",
-        href: "/docs/v1/mcp/publishing-mcp-server",
-      },
-      {
-        title: "WhatsApp Chat Bot",
-        href: "/guides/v1/guide/whatsapp-chat-bot",
-      },
-    ],
     Workflow: [
       {
         title: "Inngest Workflow",
         href: "/examples/v1/workflows/inngest-workflow",
-      },
-    ],
-    Processors: [
-      {
-        title: "Message Length Limiter",
-        href: "https://github.com/mastra-ai/mastra/tree/main/examples/processors-message-length-limiter",
-      },
-      {
-        title: "Response Length Limiter",
-        href: "https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-length-limiter",
-      },
-      {
-        title: "Response Validator",
-        href: "https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-validator",
       },
     ],
     RAG: [
@@ -32299,7 +32199,17 @@ To migrate, update any code that consumes branch outputs to handle optional valu
 
 If your code depends on non-optional types, add runtime checks or provide default values when accessing branch outputs.
 
+See [Run.resumeStream()](/reference/v1/streaming/workflows/resumeStream) for details.
+
 ## Removed
+
+### `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods
+
+The experimental `streamVNext()`, `resumeStreamVNext()`, and `observeStreamVNext()` methods have been removed. These methods are now the standard implementation with updated event structures and return types.
+
+To migrate, use the standard `stream()`, `resumeStream()`, and `observeStream()` methods. Update event type checks to use workflow-prefixed names and access stream properties directly.
+
+See [`Run.stream()`](/reference/v1/streaming/workflows/stream), [`Run.resumeStream()`](/reference/v1/streaming/workflows/resumeStream), and [`Run.observeStream()`](/reference/v1/streaming/workflows/observeStream) for details.
 
 ### Legacy workflows export
 
@@ -34074,7 +33984,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 59+ AI providers and 1157+ models through Mastra's model router."
+description: "Access 59+ AI providers and 1159+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -34087,7 +33997,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1157 models from 59 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1159 models from 59 providers through a single API.
 
 ## Features
 
@@ -36951,7 +36861,7 @@ For detailed provider-specific documentation, see the [AI SDK Cerebras provider 
 
 ---
 title: "Chutes | Models | Mastra"
-description: "Use Chutes models with Mastra. 52 models available."
+description: "Use Chutes models with Mastra. 54 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -36961,7 +36871,7 @@ description: "Use Chutes models with Mastra. 52 models available."
 # <img src="https://models.dev/logos/chutes.svg" alt="Chutes logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Chutes
 [EN] Source: https://mastra.ai/en/models/providers/chutes
 
-Access 52 Chutes models through Mastra's model router. Authentication is handled automatically using the `CHUTES_API_KEY` environment variable.
+Access 54 Chutes models through Mastra's model router. Authentication is handled automatically using the `CHUTES_API_KEY` environment variable.
 
 Learn more in the [Chutes documentation](https://llm.chutes.ai).
 
@@ -37144,6 +37054,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.9
   },
   {
+    "model": "chutes/deepseek-ai/DeepSeek-V3.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 65536,
+    "inputCost": 0.27,
+    "outputCost": 0.41
+  },
+  {
     "model": "chutes/deepseek-ai/DeepSeek-V3.2-Exp",
     "imageInput": false,
     "audioInput": false,
@@ -37154,6 +37076,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 163840,
     "inputCost": 0.25,
     "outputCost": 0.35
+  },
+  {
+    "model": "chutes/deepseek-ai/DeepSeek-V3.2-Speciale",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.27,
+    "outputCost": 0.41
   },
   {
     "model": "chutes/meituan-longcat/LongCat-Flash-Chat-FP8",
@@ -41023,7 +40957,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/cerebras.svg"
     />    <CardGridItem
       title="Chutes"
-      description="52 models"
+      description="54 models"
       href="/models/v1/providers/chutes"
       logo="https://models.dev/logos/chutes.svg"
     />    <CardGridItem
@@ -51717,12 +51651,6 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
       ],
     },
     {
-      name: "tracingContext",
-      type: "TracingContext",
-      isOptional: true,
-      description: "Tracing context for span hierarchy and metadata.",
-    },
-    {
       name: "returnScorerData",
       type: "boolean",
       isOptional: true,
@@ -52176,6 +52104,50 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
               isOptional: true,
               description:
                 "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
             },
           ],
         },
@@ -53968,6 +53940,50 @@ await agent.network(`
               isOptional: true,
               description:
                 "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
             },
           ],
         },
@@ -66010,6 +66026,10 @@ Inherits from `OtelExporterConfig` (excluding `provider`), which includes:
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: WARN)
 - `resourceAttributes?: Record<string, any>` - Custom resource attributes
 
+### Metadata passthrough
+
+Non-reserved span attributes are serialized into the OpenInference `metadata` payload. Add them via `tracingOptions.metadata` (e.g., `companyId`, `tier`). Reserved fields such as `input`, `output`, `sessionId`, thread/user IDs, and OpenInference IDs are excluded automatically.
+
 <PropertiesTable
   props={[
     {
@@ -66980,6 +67000,7 @@ new LangSmithExporter(config: LangSmithExporterConfig)
 ```typescript
 interface LangSmithExporterConfig extends ClientConfig, BaseExporterConfig {
   client?: Client;
+  projectName?: string;
 }
 ```
 
@@ -66992,7 +67013,13 @@ Extends both `ClientConfig` (from LangSmith SDK) and `BaseExporterConfig`:
     {
       name: "apiKey",
       type: "string",
-      description: "LangSmith API key",
+      description: "LangSmith API key. Defaults to LANGSMITH_API_KEY env var.",
+      required: false,
+    },
+    {
+      name: "projectName",
+      type: "string",
+      description: "The LangSmith project to send traces to. Overrides LANGCHAIN_PROJECT env var. Defaults to 'default'.",
       required: false,
     },
     {
@@ -67059,10 +67086,19 @@ import { LangSmithExporter } from "@mastra/langsmith";
 
 const exporter = new LangSmithExporter({
   apiKey: process.env.LANGSMITH_API_KEY,
+  projectName: "my-project", // Optional: specify which project to send traces to
   apiUrl: "https://api.smith.langchain.com",
   logLevel: "info",
 });
 ```
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `LANGSMITH_API_KEY` | Your LangSmith API key |
+| `LANGCHAIN_PROJECT` | Default project name for traces (used if `projectName` not specified) |
+| `LANGSMITH_BASE_URL` | API URL for self-hosted instances |
 
 ## Span Type Mapping
 
@@ -67848,6 +67884,9 @@ interface Span<TType extends SpanType> {
   output?: any;
   errorInfo?: any;
 
+  /** Tags for categorizing traces (only present on root spans) */
+  tags?: string[];
+
   /** End the span */
   end(options?: EndSpanOptions<TType>): void;
 
@@ -68307,6 +68346,32 @@ Options passed when starting a new agent or workflow execution.
 interface TracingOptions {
   /** Metadata to add to the root trace span */
   metadata?: Record<string, any>;
+
+  /**
+   * Additional RequestContext keys to extract as metadata for this trace.
+   * These keys are added to the requestContextKeys config.
+   * Supports dot notation for nested values (e.g., 'user.id', 'session.data.experimentId').
+   */
+  requestContextKeys?: string[];
+
+  /**
+   * Trace ID to use for this execution (1-32 hexadecimal characters).
+   * If provided, this trace will be part of the specified trace rather than starting a new one.
+   */
+  traceId?: string;
+
+  /**
+   * Parent span ID to use for this execution (1-16 hexadecimal characters).
+   * If provided, the root span will be created as a child of this span.
+   */
+  parentSpanId?: string;
+
+  /**
+   * Tags to apply to this trace.
+   * Tags are string labels that can be used to categorize and filter traces
+   * Note: Tags are only applied to the root span of a trace.
+   */
+  tags?: string[];
 }
 ```
 
@@ -76110,7 +76175,7 @@ for await (const chunk of stream.fullStream) {
 
 - [.stream()](./agents/stream) - Method that returns streams emitting these chunks
 - [MastraModelOutput](./agents/MastraModelOutput) - The stream object that emits these chunks
-- [workflow.streamVNext()](./workflows/streamVNext) - Method that returns streams emitting these chunks for workflows
+- [workflow.stream()](./workflows/stream) - Method that returns streams emitting these chunks for workflows
 
 
 ---
@@ -77191,6 +77256,50 @@ const aiSdkStream = await agent.stream("message for agent", {
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
+            },
+          ],
+        },
       ],
     },
   ]}
@@ -77942,59 +78051,7 @@ run.stream({
   },
 });
 
-const { stream } = await run.observeStream();
-
-for await (const chunk of stream) {
-  console.log(chunk);
-}
-```
-
-## Returns
-
-`ReadableStream<ChunkType>`
-
-## Stream Events
-
-The stream emits various event types during workflow execution. Each event has a `type` field and a `payload` containing relevant data:
-
-- **`start`**: Workflow execution begins
-- **`step-start`**: A step begins execution
-- **`tool-call`**: A tool call is initiated
-- **`tool-call-streaming-start`**: Tool call streaming begins
-- **`tool-call-delta`**: Incremental tool output updates
-- **`step-result`**: A step completes with results
-- **`step-finish`**: A step finishes execution
-- **`finish`**: Workflow execution completes
-
-## Related
-
-- [Workflows overview](/docs/v1/workflows/overview#running-workflows)
-- [Workflow.createRun()](/reference/v1/workflows/workflow-methods/create-run)
-- [Run.stream()](./stream)
-
-
----
-title: "Reference: Run.observeStreamVNext() (Experimental) | Streaming"
-description: Documentation for the `Run.observeStreamVNext()` method in workflows, which enables reopening the stream of an already active workflow run.
----
-
-# Run.observeStreamVNext() (Experimental)
-[EN] Source: https://mastra.ai/en/reference/streaming/workflows/observeStreamVNext
-
-The `.observeStreamVNext()` method opens a new `ReadableStream` to a workflow run that is currently running, allowing you to observe the stream of events if the original stream is no longer available.
-
-## Usage example
-
-```typescript showLineNumbers copy
-const run = await workflow.createRun();
-
-run.streamVNext({
-  inputData: {
-    value: "initial data",
-  },
-});
-
-const stream = await run.observeStreamVNext();
+const stream = await run.observeStream();
 
 for await (const chunk of stream) {
   console.log(chunk);
@@ -78019,30 +78076,26 @@ The stream emits various event types during workflow execution. Each event has a
 
 - [Workflows overview](/docs/v1/workflows/overview#running-workflows)
 - [Workflow.createRun()](/reference/v1/workflows/workflow-methods/create-run)
-- [Run.streamVNext()](./streamVNext)
-- [Run.resumeStreamVNext()](./resumeStreamVNext)
+- [Run.stream()](./stream)
+- [Run.resumeStream()](./resumeStream)
 
 
 ---
-title: "Reference: Run.resumeStreamVNext() (Experimental) | Streaming"
-description: Documentation for the `Run.resumeStreamVNext()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
+title: "Reference: Run.resumeStream() | Streaming"
+description: Documentation for the `Run.resumeStream()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
 ---
 
-# Run.resumeStreamVNext() (Experimental)
-[EN] Source: https://mastra.ai/en/reference/streaming/workflows/resumeStreamVNext
+# Run.resumeStream()
+[EN] Source: https://mastra.ai/en/reference/streaming/workflows/resumeStream
 
-:::caution Experimental Feature
-This is an experimental API that may change in future versions. The `resumeStreamVNext()` method is part of the enhanced streaming system that will eventually replace the current streaming methods. Use with caution in production environments.
-:::
-
-The `.resumeStreamVNext()` method resumes a suspended workflow run with new data, allowing you to continue execution from a specific step and to observe the stream of events.
+The `.resumeStream()` method resumes a suspended workflow run with new data, allowing you to continue execution from a specific step and to observe the stream of events.
 
 ## Usage example
 
 ```typescript showLineNumbers copy
 const run = await workflow.createRun();
 
-const stream = run.streamVNext({
+const stream = run.stream({
   inputData: {
     value: "initial data",
   },
@@ -78051,7 +78104,7 @@ const stream = run.streamVNext({
 const result = await stream.result;
 
 if (result!.status === "suspended") {
-  const resumedStream = await run.resumeStreamVNext({
+  const resumedStream = await run.resumeStream({
     resumeData: {
       value: "resume data",
     },
@@ -78095,6 +78148,50 @@ if (result!.status === "suspended") {
               isOptional: true,
               description:
                 "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
             },
           ],
         },
@@ -78145,166 +78242,25 @@ The stream emits various event types during workflow execution. Each event has a
 
 - [Workflows overview](/docs/v1/workflows/overview#running-workflows)
 - [Workflow.createRun()](/reference/v1/workflows/workflow-methods/create-run)
-- [Run.streamVNext()](./streamVNext)
+- [Run.stream()](./stream)
 
 
 ---
 title: "Reference: Run.stream() | Streaming"
-description: Documentation for the `Run.stream()` method in workflows, which allows you to monitor the execution of a workflow run as a stream.
+description: Documentation for the `Run.stream()` method in workflows, which enables real-time streaming of responses.
 ---
 
 # Run.stream()
 [EN] Source: https://mastra.ai/en/reference/streaming/workflows/stream
 
-The `.stream()` method allows you to monitor the execution of a workflow run, providing real-time updates on the status of steps.
+The `.stream()` method enables real-time streaming of responses from a workflow.
 
 ## Usage example
 
 ```typescript showLineNumbers copy
 const run = await workflow.createRun();
 
-const { stream } = await run.stream({
-  inputData: {
-    value: "initial data",
-  },
-});
-```
-
-## Parameters
-
-<PropertiesTable
-  content={[
-    {
-      name: "inputData",
-      type: "z.infer<TInput>",
-      description: "Input data that matches the workflow's input schema",
-      isOptional: true,
-    },
-    {
-      name: "requestContext",
-      type: "RequestContext",
-      description: "Request Context data to use during workflow execution",
-      isOptional: true,
-    },
-    {
-      name: "tracingContext",
-      type: "TracingContext",
-      isOptional: true,
-      description:
-        "Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
-      properties: [
-        {
-          parameters: [
-            {
-              name: "currentSpan",
-              type: "Span",
-              isOptional: true,
-              description:
-                "Current span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "tracingOptions",
-      type: "TracingOptions",
-      isOptional: true,
-      description: "Options for Tracing configuration.",
-      properties: [
-        {
-          parameters: [
-            {
-              name: "metadata",
-              type: "Record<string, any>",
-              isOptional: true,
-              description:
-                "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "stream",
-      type: "ReadableStream<StreamEvent>",
-      description:
-        "A readable stream that emits workflow execution events in real-time",
-    },
-    {
-      name: "getWorkflowState",
-      type: "() => Promise<WorkflowResult<TState, TOutput, TSteps>>",
-      description:
-        "A function that returns a promise resolving to the final workflow result",
-    },
-    {
-      name: "traceId",
-      type: "string",
-      isOptional: true,
-      description:
-        "The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
-    },
-  ]}
-/>
-
-## Extended usage example
-
-```typescript showLineNumbers copy
-const { getWorkflowState } = await run.stream({
-  inputData: {
-    value: "initial data",
-  },
-});
-
-const result = await getWorkflowState();
-```
-
-## Stream Events
-
-The stream emits various event types during workflow execution. Each event has a `type` field and a `payload` containing relevant data:
-
-- **`start`**: Workflow execution begins
-- **`step-start`**: A step begins execution
-- **`tool-call`**: A tool call is initiated
-- **`tool-call-streaming-start`**: Tool call streaming begins
-- **`tool-call-delta`**: Incremental tool output updates
-- **`step-result`**: A step completes with results
-- **`step-finish`**: A step finishes execution
-- **`finish`**: Workflow execution completes
-
-## Related
-
-- [Workflows overview](/docs/v1/workflows/overview#running-workflows)
-- [Workflow.createRun()](/reference/v1/workflows/workflow-methods/create-run)
-
-
----
-title: "Reference: Run.streamVNext() (Experimental) | Streaming"
-description: Documentation for the `Run.streamVNext()` method in workflows, which enables real-time streaming of responses.
----
-
-# Run.streamVNext() (Experimental)
-[EN] Source: https://mastra.ai/en/reference/streaming/workflows/streamVNext
-
-:::caution Experimental Feature
-This is an experimental API that may change in future versions. The `streamVNext()` method will eventually replace the current `stream()` method. Use with caution in production environments.
-:::
-
-The `.streamVNext()` method enables real-time streaming of responses from a workflow. This enhanced streaming capability will eventually replace the current `stream()` method.
-
-## Usage example
-
-```typescript showLineNumbers copy
-const run = await workflow.createRun();
-
-const stream = run.streamVNext({
+const stream = run.stream({
   inputData: {
     value: "initial data",
   },
@@ -78363,6 +78319,50 @@ const stream = run.streamVNext({
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
+            },
+          ],
+        },
       ],
     },
     {
@@ -78415,7 +78415,7 @@ const stream = run.streamVNext({
 ```typescript showLineNumbers copy
 const run = await workflow.createRun();
 
-const stream = run.streamVNext({
+const stream = run.stream({
   inputData: {
     value: "initial data",
   },
@@ -78438,7 +78438,7 @@ The stream emits various event types during workflow execution. Each event has a
 
 - [Workflows overview](/docs/v1/workflows/overview#running-workflows)
 - [Workflow.createRun()](/reference/v1/workflows/workflow-methods/create-run)
-- [Run.resumeStreamVNext()](./resumeStreamVNext)
+- [Run.resumeStream()](./resumeStream)
 
 
 ---
@@ -93649,6 +93649,50 @@ const restartedResult = await run.restart();
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
+            },
+          ],
+        },
       ],
     },
   ]}
@@ -93768,6 +93812,50 @@ if (result.status === "suspended") {
               isOptional: true,
               description:
                 "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
             },
           ],
         },
@@ -93917,6 +94005,50 @@ const result = await run.start({
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
+            },
+          ],
+        },
       ],
     },
     {
@@ -94029,14 +94161,14 @@ if (result.status === "suspended") {
     },
     {
       name: "stream",
-      type: "(options?: StreamOptions) => Promise<StreamResult>",
-      description: "Monitors workflow execution as a stream of events",
+      type: "(options?: StreamOptions) => MastraWorkflowStream",
+      description: "Monitors workflow execution as a stream of events with enhanced streaming features",
       required: true,
     },
     {
-      name: "streamVNext",
-      type: "(options?: StreamOptions) => MastraWorkflowStream",
-      description: "Enables real-time streaming with enhanced features",
+      name: "resumeStream",
+      type: "(options?: ResumeStreamOptions) => MastraWorkflowStream",
+      description: "Resumes a suspended workflow with streaming support",
       required: true,
     },
     {
@@ -94087,6 +94219,7 @@ A workflow run's `status` indicates its current execution state. The possible va
 - [Run.resume()](./run-methods/resume)
 - [Run.cancel()](./run-methods/cancel)
 - [Run.restart()](./run-methods/restart)
+- [Run.stream()](/docs/v1/streaming/workflow-streaming)
 
 
 ---
