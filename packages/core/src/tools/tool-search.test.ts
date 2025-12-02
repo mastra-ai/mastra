@@ -1,737 +1,336 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { z } from 'zod';
 
 import { createTool } from './tool';
-import { createToolSearch, ToolSearch } from './tool-search';
+import { createToolSearch } from './tool-search';
 
-// Create a mock embedding model
-const mockEmbedder = {
-  specificationVersion: 'v1',
-  provider: 'test',
-  modelId: 'test-embedding',
-  maxEmbeddingsPerCall: 100,
-  supportsParallelCalls: true,
-  doEmbed: vi.fn().mockImplementation(async ({ values }: { values: string[] }) => {
-    // Create embeddings based on keyword presence for predictable testing
-    const keywords = [
-      'github',
-      'pull',
-      'request',
-      'pr',
-      'slack',
-      'message',
-      'send',
-      'jira',
-      'ticket',
-      'email',
-      'weather',
-      'temperature',
-      'calculate',
-      'math',
-    ];
-    return {
-      embeddings: values.map(v => {
-        const lower = v.toLowerCase();
-        return keywords.map(kw => (lower.includes(kw) ? 1 : 0));
-      }),
-    };
-  }),
-} as any;
-
-// ============================================================================
-// Sample Tools
-// ============================================================================
-
-const githubCreatePR = createTool({
+// Mock tools for testing
+const createPRTool = createTool({
   id: 'github.createPR',
-  description: 'Create a GitHub pull request for code changes',
-  inputSchema: z.object({
-    title: z.string(),
-    body: z.string(),
-    base: z.string().default('main'),
-  }),
-  execute: async ({ title, body, base }) => ({
-    success: true,
-    prNumber: 123,
-    title,
-    body,
-    base,
-    url: 'https://github.com/org/repo/pull/123',
-  }),
+  description: 'Create a pull request on GitHub with title and description',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string' },
+      description: { type: 'string' },
+    },
+  } as any,
+  execute: async ({ title }: { title: string }) => ({ prUrl: `https://github.com/pr/${title}` }),
 });
 
-const githubListIssues = createTool({
-  id: 'github.listIssues',
-  description: 'List GitHub issues for a repository',
-  inputSchema: z.object({
-    repo: z.string(),
-    state: z.enum(['open', 'closed', 'all']).default('open'),
-  }),
-  execute: async ({ repo, state }) => ({
-    issues: [
-      { number: 1, title: 'Bug fix needed', state },
-      { number: 2, title: 'Feature request', state },
-    ],
-    repo,
-  }),
-});
-
-const slackSendMessage = createTool({
+const sendSlackTool = createTool({
   id: 'slack.sendMessage',
   description: 'Send a message to a Slack channel',
-  inputSchema: z.object({
-    channel: z.string(),
-    message: z.string(),
-  }),
-  execute: async ({ channel, message }) => ({
-    success: true,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      channel: { type: 'string' },
+      message: { type: 'string' },
+    },
+  } as any,
+  execute: async ({ channel, message }: { channel: string; message: string }) => ({
+    sent: true,
     channel,
-    messageId: 'msg-123',
     message,
   }),
 });
 
-const jiraCreateTicket = createTool({
+const createTicketTool = createTool({
   id: 'jira.createTicket',
-  description: 'Create a Jira ticket for tracking work',
-  inputSchema: z.object({
-    project: z.string(),
-    summary: z.string(),
-    description: z.string(),
-    type: z.enum(['bug', 'task', 'story']).default('task'),
-  }),
-  execute: async ({ project, summary, type }) => ({
-    success: true,
-    ticketId: 'PROJ-123',
-    project,
-    summary,
-    type,
-  }),
+  description: 'Create a Jira ticket for issue tracking',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      summary: { type: 'string' },
+      priority: { type: 'string' },
+    },
+  } as any,
+  execute: async ({ summary }: { summary: string }) => ({ ticketId: `JIRA-${summary.slice(0, 5)}` }),
 });
 
-const emailSend = createTool({
-  id: 'email.send',
-  description: 'Send an email to recipients',
-  inputSchema: z.object({
-    to: z.array(z.string()),
-    subject: z.string(),
-    body: z.string(),
-  }),
-  execute: async ({ to, subject }) => ({
-    success: true,
-    to,
-    subject,
-    messageId: 'email-456',
-  }),
-});
-
-const weatherGet = createTool({
+const weatherTool = createTool({
   id: 'weather.get',
-  description: 'Get current weather and temperature for a location',
-  inputSchema: z.object({
-    location: z.string(),
-    units: z.enum(['celsius', 'fahrenheit']).default('celsius'),
-  }),
-  execute: async ({ location, units }) => ({
-    location,
-    temperature: units === 'celsius' ? 22 : 72,
-    units,
-    conditions: 'sunny',
-  }),
+  description: 'Get current weather information for a location',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      location: { type: 'string' },
+    },
+  } as any,
+  execute: async ({ location }: { location: string }) => ({ location, temp: 72, conditions: 'sunny' }),
 });
 
-const calculatorTool = createTool({
-  id: 'calculator',
-  description: 'Perform mathematical calculations',
-  inputSchema: z.object({
-    operation: z.enum(['add', 'subtract', 'multiply', 'divide']),
-    a: z.number(),
-    b: z.number(),
-  }),
-  execute: async ({ operation, a, b }) => {
-    const ops = {
-      add: a + b,
-      subtract: a - b,
-      multiply: a * b,
-      divide: a / b,
-    };
-    return { result: ops[operation] };
-  },
+const searchWebTool = createTool({
+  id: 'web.search',
+  description: 'Search the web for information',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      query: { type: 'string' },
+    },
+  } as any,
+  execute: async ({ query }: { query: string }) => ({ results: [`Result for: ${query}`] }),
 });
 
-// ============================================================================
-// Tests
-// ============================================================================
+const allTools = {
+  'github.createPR': createPRTool,
+  'slack.sendMessage': sendSlackTool,
+  'jira.createTicket': createTicketTool,
+  'weather.get': weatherTool,
+  'web.search': searchWebTool,
+};
 
 describe('createToolSearch', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  describe('BM25 search (default)', () => {
+    it('creates a search tool with correct properties', async () => {
+      const toolSearch = await createToolSearch({ tools: allTools });
 
-  describe('Basic Usage', () => {
-    it('should create a tool search with all tools searchable', async () => {
-      const toolSearch = await createToolSearch({
-        tools: {
-          'github.createPR': githubCreatePR,
-          'slack.sendMessage': slackSendMessage,
-          'jira.createTicket': jiraCreateTicket,
-        },
-      });
-
-      expect(toolSearch).toBeInstanceOf(ToolSearch);
-      expect(toolSearch.getToolIds()).toHaveLength(3);
-      expect(toolSearch.getToolIds()).toContain('github.createPR');
-      expect(toolSearch.getToolIds()).toContain('slack.sendMessage');
-      expect(toolSearch.getToolIds()).toContain('jira.createTicket');
+      expect(toolSearch.id).toBe('tool_search');
+      expect(toolSearch.description).toContain('Search for and execute');
+      expect(toolSearch.execute).toBeDefined();
     });
 
-    it('should only expose search tool initially', async () => {
-      const toolSearch = await createToolSearch({
-        tools: {
-          'github.createPR': githubCreatePR,
-          'slack.sendMessage': slackSendMessage,
-        },
-      });
+    it('finds and executes GitHub tool', async () => {
+      const toolSearch = await createToolSearch({ tools: allTools });
 
-      const tools = toolSearch.getTools('thread-1');
-
-      // Only search tool should be available
-      expect(Object.keys(tools)).toEqual(['tool_search']);
-      expect(tools['github.createPR']).toBeUndefined();
-      expect(tools['slack.sendMessage']).toBeUndefined();
-    });
-  });
-
-  describe('Search Methods', () => {
-    describe('BM25 (default)', () => {
-      it('should find relevant tools using BM25', async () => {
-        const toolSearch = await createToolSearch({
-          tools: {
-            'github.createPR': githubCreatePR,
-            'slack.sendMessage': slackSendMessage,
-            'jira.createTicket': jiraCreateTicket,
-          },
-          method: 'bm25',
-        });
-
-        const results = await toolSearch.search('create a pull request on github');
-
-        expect(results.length).toBeGreaterThan(0);
-        expect(results[0]!.id).toBe('github.createPR');
-        expect(results[0]!.score).toBeGreaterThan(0);
-      });
-
-      it('should rank results by relevance', async () => {
-        const toolSearch = await createToolSearch({
-          tools: {
-            'github.createPR': githubCreatePR,
-            'github.listIssues': githubListIssues,
-            'slack.sendMessage': slackSendMessage,
-          },
-          method: 'bm25',
-        });
-
-        const results = await toolSearch.search('github pull request');
-
-        expect(results[0]!.id).toBe('github.createPR');
-        // github.listIssues should also match on 'github' but lower score
-        const issuesResult = results.find(r => r.id === 'github.listIssues');
-        expect(issuesResult).toBeDefined();
-        expect(issuesResult!.score).toBeLessThan(results[0]!.score);
-      });
-    });
-
-    describe('Regex', () => {
-      it('should find tools matching pattern', async () => {
-        const toolSearch = await createToolSearch({
-          tools: {
-            'github.createPR': githubCreatePR,
-            'slack.sendMessage': slackSendMessage,
-          },
-          method: 'regex',
-        });
-
-        const results = await toolSearch.search('slack');
-
-        expect(results.length).toBe(1);
-        expect(results[0]!.id).toBe('slack.sendMessage');
-      });
-
-      it('should handle special regex characters safely', async () => {
-        const toolSearch = await createToolSearch({
-          tools: { 'github.createPR': githubCreatePR },
-          method: 'regex',
-        });
-
-        // Should not throw on special regex chars
-        const results = await toolSearch.search('test.*+?^${}()|[]\\');
-        expect(results).toBeDefined();
-      });
-    });
-
-    describe('Embedding', () => {
-      it('should require embedder', async () => {
-        await expect(
-          createToolSearch({
-            tools: { 'github.createPR': githubCreatePR },
-            method: 'embedding',
-          }),
-        ).rejects.toThrow('Embedder is required');
-      });
-
-      it('should find semantically similar tools', async () => {
-        const toolSearch = await createToolSearch({
-          tools: {
-            'github.createPR': githubCreatePR,
-            'slack.sendMessage': slackSendMessage,
-            'weather.get': weatherGet,
-          },
-          method: 'embedding',
-          embedder: mockEmbedder,
-        });
-
-        const results = await toolSearch.search('I need to make a PR on github');
-
-        expect(results.length).toBeGreaterThan(0);
-        expect(results[0]!.id).toBe('github.createPR');
-      });
-    });
-  });
-
-  describe('Tool Loading Flow', () => {
-    it('should load tools when search tool is executed', async () => {
-      const toolSearch = await createToolSearch({
-        tools: {
-          'github.createPR': githubCreatePR,
-          'slack.sendMessage': slackSendMessage,
-        },
-        method: 'bm25',
-      });
-
-      // Initially no tools loaded
-      expect(toolSearch.getLoadedToolIds('thread-1')).toEqual([]);
-
-      // Get the search tool and execute it
-      const tools = toolSearch.getTools('thread-1');
-      const searchTool = tools['tool_search'];
-      const result = await searchTool!.execute!({ query: 'github pull request' });
+      const result = await toolSearch.execute!(
+        { query: 'create pull request', input: { title: 'Fix bug' } },
+        {} as any,
+      );
 
       expect(result.success).toBe(true);
-      expect(result.loadedTools.length).toBeGreaterThan(0);
-      expect(result.loadedTools[0].id).toBe('github.createPR');
-
-      // Tool should now be loaded
-      expect(toolSearch.getLoadedToolIds('thread-1')).toContain('github.createPR');
+      expect(result.toolUsed.id).toBe('github.createPR');
+      expect(result.result.prUrl).toContain('Fix bug');
     });
 
-    it('should include loaded tools in getTools', async () => {
-      const toolSearch = await createToolSearch({
-        tools: {
-          'github.createPR': githubCreatePR,
-          'slack.sendMessage': slackSendMessage,
-        },
-        method: 'bm25',
-      });
+    it('finds and executes Slack tool', async () => {
+      const toolSearch = await createToolSearch({ tools: allTools });
 
-      // Execute search
-      const tools1 = toolSearch.getTools('thread-1');
-      await tools1['tool_search']!.execute!({ query: 'github' });
-
-      // Get tools again - should now include the loaded tool
-      const tools2 = toolSearch.getTools('thread-1');
-
-      expect(Object.keys(tools2)).toContain('tool_search');
-      expect(Object.keys(tools2)).toContain('github.createPR');
-      expect(Object.keys(tools2)).not.toContain('slack.sendMessage');
-    });
-
-    it('should allow calling loaded tools', async () => {
-      const toolSearch = await createToolSearch({
-        tools: { 'github.createPR': githubCreatePR },
-        method: 'bm25',
-      });
-
-      // Load the tool via search
-      const tools1 = toolSearch.getTools('thread-1');
-      await tools1['tool_search']!.execute!({ query: 'github' });
-
-      // Get tools and call the loaded tool
-      const tools2 = toolSearch.getTools('thread-1');
-      const createPR = tools2['github.createPR'];
-
-      expect(createPR).toBeDefined();
-
-      const result = await createPR!.execute!({
-        title: 'Fix bug',
-        body: 'This PR fixes the bug',
-        base: 'main',
-      });
+      const result = await toolSearch.execute!(
+        { query: 'send slack message', input: { channel: '#general', message: 'Hello!' } },
+        {} as any,
+      );
 
       expect(result.success).toBe(true);
-      expect(result.prNumber).toBe(123);
-      expect(result.title).toBe('Fix bug');
-    });
-  });
-
-  describe('Thread Isolation', () => {
-    it('should isolate loaded tools between threads', async () => {
-      const toolSearch = await createToolSearch({
-        tools: {
-          'github.createPR': githubCreatePR,
-          'slack.sendMessage': slackSendMessage,
-        },
-        method: 'bm25',
-      });
-
-      // Load github tool for thread-1
-      const tools1 = toolSearch.getTools('thread-1');
-      await tools1['tool_search']!.execute!({ query: 'github' });
-
-      // Load slack tool for thread-2
-      const tools2 = toolSearch.getTools('thread-2');
-      await tools2['tool_search']!.execute!({ query: 'slack message' });
-
-      // Verify isolation
-      const thread1Tools = toolSearch.getTools('thread-1');
-      const thread2Tools = toolSearch.getTools('thread-2');
-
-      expect(Object.keys(thread1Tools)).toContain('github.createPR');
-      expect(Object.keys(thread1Tools)).not.toContain('slack.sendMessage');
-
-      expect(Object.keys(thread2Tools)).toContain('slack.sendMessage');
-      expect(Object.keys(thread2Tools)).not.toContain('github.createPR');
+      expect(result.toolUsed.id).toBe('slack.sendMessage');
+      expect(result.result.sent).toBe(true);
+      expect(result.result.message).toBe('Hello!');
     });
 
-    it('should use global scope when no threadId', async () => {
-      const toolSearch = await createToolSearch({
-        tools: { 'github.createPR': githubCreatePR },
-        method: 'bm25',
-      });
+    it('finds weather tool by keyword match', async () => {
+      const toolSearch = await createToolSearch({ tools: allTools });
 
-      // Load without threadId
-      const tools = toolSearch.getTools();
-      await tools['tool_search']!.execute!({ query: 'github' });
-
-      // Should be available globally
-      expect(toolSearch.getLoadedToolIds()).toContain('github.createPR');
-      expect(Object.keys(toolSearch.getTools())).toContain('github.createPR');
-    });
-  });
-
-  describe('Manual Loading/Unloading', () => {
-    it('should manually load tools', async () => {
-      const toolSearch = await createToolSearch({
-        tools: {
-          'github.createPR': githubCreatePR,
-          'slack.sendMessage': slackSendMessage,
-        },
-      });
-
-      const loaded = toolSearch.loadTool('github.createPR', 'thread-1');
-
-      expect(loaded).toBe(true);
-      expect(toolSearch.getLoadedToolIds('thread-1')).toContain('github.createPR');
-    });
-
-    it('should return false for non-existent tool', async () => {
-      const toolSearch = await createToolSearch({
-        tools: { 'github.createPR': githubCreatePR },
-      });
-
-      const loaded = toolSearch.loadTool('nonexistent', 'thread-1');
-
-      expect(loaded).toBe(false);
-    });
-
-    it('should load multiple tools at once', async () => {
-      const toolSearch = await createToolSearch({
-        tools: {
-          'github.createPR': githubCreatePR,
-          'slack.sendMessage': slackSendMessage,
-          'jira.createTicket': jiraCreateTicket,
-        },
-      });
-
-      const count = toolSearch.loadTools(['github.createPR', 'slack.sendMessage'], 'thread-1');
-
-      expect(count).toBe(2);
-      expect(toolSearch.getLoadedToolIds('thread-1')).toContain('github.createPR');
-      expect(toolSearch.getLoadedToolIds('thread-1')).toContain('slack.sendMessage');
-    });
-
-    it('should unload a tool', async () => {
-      const toolSearch = await createToolSearch({
-        tools: { 'github.createPR': githubCreatePR },
-      });
-
-      toolSearch.loadTool('github.createPR', 'thread-1');
-      expect(toolSearch.getLoadedToolIds('thread-1')).toContain('github.createPR');
-
-      const unloaded = toolSearch.unloadTool('github.createPR', 'thread-1');
-
-      expect(unloaded).toBe(true);
-      expect(toolSearch.getLoadedToolIds('thread-1')).not.toContain('github.createPR');
-    });
-
-    it('should unload all tools for a thread', async () => {
-      const toolSearch = await createToolSearch({
-        tools: {
-          'github.createPR': githubCreatePR,
-          'slack.sendMessage': slackSendMessage,
-        },
-      });
-
-      toolSearch.loadTools(['github.createPR', 'slack.sendMessage'], 'thread-1');
-      expect(toolSearch.getLoadedToolIds('thread-1')).toHaveLength(2);
-
-      toolSearch.unloadAllTools('thread-1');
-
-      expect(toolSearch.getLoadedToolIds('thread-1')).toEqual([]);
-    });
-  });
-
-  describe('Search Tool Response', () => {
-    it('should return success with loaded tools on match', async () => {
-      const toolSearch = await createToolSearch({
-        tools: { 'github.createPR': githubCreatePR },
-        method: 'bm25',
-      });
-
-      const tools = toolSearch.getTools('thread-1');
-      const result = await tools['tool_search']!.execute!({ query: 'github pull request' });
+      const result = await toolSearch.execute!({ query: 'weather location', input: { location: 'NYC' } }, {} as any);
 
       expect(result.success).toBe(true);
-      expect(result.message).toContain('Loaded');
-      expect(result.loadedTools).toHaveLength(1);
-      expect(result.loadedTools[0]).toEqual({
-        id: 'github.createPR',
-        description: expect.any(String),
-        score: expect.any(Number),
-      });
+      expect(result.toolUsed.id).toBe('weather.get');
+      expect(result.result.temp).toBe(72);
     });
 
-    it('should return failure with available tools on no match', async () => {
-      const toolSearch = await createToolSearch({
-        tools: { 'github.createPR': githubCreatePR },
-        method: 'bm25',
-      });
+    it('returns error when no tool matches', async () => {
+      const toolSearch = await createToolSearch({ tools: allTools, minScore: 0.9 });
 
-      const tools = toolSearch.getTools('thread-1');
-      const result = await tools['tool_search']!.execute!({ query: 'xyzabc123' });
+      const result = await toolSearch.execute!({ query: 'zzzzzzz' }, {} as any);
 
       expect(result.success).toBe(false);
-      expect(result.loadedTools).toEqual([]);
-      expect(result.availableTools).toContain('github.createPR');
+      expect(result.error).toContain('No matching tool');
     });
   });
 
-  describe('Configuration', () => {
-    it('should use custom search tool ID', async () => {
-      const toolSearch = await createToolSearch({
-        tools: { 'github.createPR': githubCreatePR },
-        searchToolId: 'find_tools',
-      });
+  describe('Regex search', () => {
+    it('finds tool by exact substring match', async () => {
+      const toolSearch = await createToolSearch({ tools: allTools, method: 'regex' });
 
-      const tools = toolSearch.getTools();
+      const result = await toolSearch.execute!({ query: 'GitHub', input: { title: 'Test' } }, {} as any);
 
-      expect(Object.keys(tools)).toContain('find_tools');
-      expect(Object.keys(tools)).not.toContain('tool_search');
-    });
-
-    it('should use custom search tool description', async () => {
-      const toolSearch = await createToolSearch({
-        tools: { 'github.createPR': githubCreatePR },
-        searchToolDescription: 'Find the right tool for the job',
-      });
-
-      const tools = toolSearch.getTools();
-      expect(tools['tool_search']!.description).toBe('Find the right tool for the job');
-    });
-
-    it('should respect topK limit', async () => {
-      const toolSearch = await createToolSearch({
-        tools: {
-          'github.createPR': githubCreatePR,
-          'github.listIssues': githubListIssues,
-          'slack.sendMessage': slackSendMessage,
-          'jira.createTicket': jiraCreateTicket,
-        },
-        topK: 2,
-        method: 'bm25',
-      });
-
-      const results = await toolSearch.search('create');
-
-      expect(results.length).toBeLessThanOrEqual(2);
-    });
-
-    it('should respect minScore threshold', async () => {
-      const toolSearch = await createToolSearch({
-        tools: {
-          'github.createPR': githubCreatePR,
-          'slack.sendMessage': slackSendMessage,
-        },
-        minScore: 0.9,
-        method: 'bm25',
-      });
-
-      // With high minScore, weak matches should be filtered
-      const results = await toolSearch.search('something');
-
-      // Results should be filtered by score
-      for (const result of results) {
-        expect(result.score).toBeGreaterThanOrEqual(0.9);
-      }
-    });
-  });
-
-  describe('Usage Patterns', () => {
-    it('should work when passed directly to Agent tools', async () => {
-      // This pattern: new Agent({ tools: toolSearch.getTools() })
-      const toolSearch = await createToolSearch({
-        tools: {
-          'github.createPR': githubCreatePR,
-          'slack.sendMessage': slackSendMessage,
-        },
-        method: 'bm25',
-      });
-
-      // Simulating what Agent receives
-      const agentTools = toolSearch.getTools();
-
-      // Agent only sees the search tool initially
-      expect(Object.keys(agentTools)).toEqual(['tool_search']);
-      expect(agentTools['tool_search']).toBeDefined();
-      expect(agentTools['tool_search']!.description).toContain('Search');
-
-      // Agent can search and load tools
-      const result = await agentTools['tool_search']!.execute!({ query: 'github' });
       expect(result.success).toBe(true);
+      expect(result.toolUsed.id).toBe('github.createPR');
     });
 
-    it('should work when passed via toolsets', async () => {
-      // This pattern: agent.generate({ toolsets: { search: toolSearch.getTools(threadId) } })
-      const toolSearch = await createToolSearch({
-        tools: {
-          'github.createPR': githubCreatePR,
-          'slack.sendMessage': slackSendMessage,
-        },
-        method: 'bm25',
-      });
+    it('finds tool case-insensitively', async () => {
+      const toolSearch = await createToolSearch({ tools: allTools, method: 'regex' });
 
-      const threadId = 'thread-123';
+      const result = await toolSearch.execute!({ query: 'JIRA', input: { summary: 'Bug' } }, {} as any);
 
-      // Simulating toolsets merge - agent tools + toolset tools
-      const agentTools = { helpTool: { id: 'help', description: 'Help', execute: async () => ({}) } };
-      const toolsetTools = toolSearch.getTools(threadId);
-
-      const allTools = { ...agentTools, ...toolsetTools };
-
-      // Agent sees its own tools + search tool
-      expect(Object.keys(allTools)).toContain('helpTool');
-      expect(Object.keys(allTools)).toContain('tool_search');
-      expect(Object.keys(allTools)).not.toContain('github.createPR');
-
-      // After search, tools are loaded for this thread
-      await toolsetTools['tool_search']!.execute!({ query: 'github' });
-
-      const updatedToolsetTools = toolSearch.getTools(threadId);
-      expect(Object.keys(updatedToolsetTools)).toContain('github.createPR');
-    });
-
-    it('should support per-request thread isolation via toolsets', async () => {
-      const toolSearch = await createToolSearch({
-        tools: {
-          'github.createPR': githubCreatePR,
-          'slack.sendMessage': slackSendMessage,
-        },
-        method: 'bm25',
-      });
-
-      // User 1's conversation
-      const user1Tools = toolSearch.getTools('user-1-thread');
-      await user1Tools['tool_search']!.execute!({ query: 'github' });
-
-      // User 2's conversation
-      const user2Tools = toolSearch.getTools('user-2-thread');
-      await user2Tools['tool_search']!.execute!({ query: 'slack' });
-
-      // Each user has different tools loaded
-      expect(Object.keys(toolSearch.getTools('user-1-thread'))).toContain('github.createPR');
-      expect(Object.keys(toolSearch.getTools('user-1-thread'))).not.toContain('slack.sendMessage');
-
-      expect(Object.keys(toolSearch.getTools('user-2-thread'))).toContain('slack.sendMessage');
-      expect(Object.keys(toolSearch.getTools('user-2-thread'))).not.toContain('github.createPR');
+      expect(result.success).toBe(true);
+      expect(result.toolUsed.id).toBe('jira.createTicket');
     });
   });
 
-  describe('Real-World Scenario', () => {
-    it('should work end-to-end like Anthropic Tool Search', async () => {
-      // Setup: Create tool search with many tools
+  describe('Embedding search', () => {
+    // Mock embedding model
+    const mockEmbedder = {
+      specificationVersion: 'v2',
+      modelId: 'test-model',
+      provider: 'test',
+    };
+
+    beforeEach(() => {
+      vi.mock('ai-v5', () => ({
+        embed: vi.fn(async ({ value }: { value: string }) => {
+          // Simple mock: create deterministic embeddings based on content
+          const words: Record<string, number[]> = {
+            github: [1, 0, 0, 0, 0],
+            pull: [0.9, 0.1, 0, 0, 0],
+            request: [0.8, 0.2, 0, 0, 0],
+            slack: [0, 1, 0, 0, 0],
+            message: [0, 0.9, 0.1, 0, 0],
+            jira: [0, 0, 1, 0, 0],
+            ticket: [0, 0, 0.9, 0.1, 0],
+            weather: [0, 0, 0, 1, 0],
+            temperature: [0, 0, 0, 0.95, 0.05],
+            web: [0, 0, 0, 0, 1],
+            search: [0, 0, 0, 0, 0.9],
+          };
+
+          const lowerValue = value.toLowerCase();
+          const embedding = [0, 0, 0, 0, 0];
+
+          for (const [word, vec] of Object.entries(words)) {
+            if (lowerValue.includes(word)) {
+              for (let i = 0; i < 5; i++) {
+                embedding[i] += vec[i]!;
+              }
+            }
+          }
+
+          // Normalize
+          const norm = Math.sqrt(embedding.reduce((s, v) => s + v * v, 0)) || 1;
+          return { embedding: embedding.map(v => v / norm) };
+        }),
+      }));
+    });
+
+    it('requires embedder when using embedding method', async () => {
+      await expect(createToolSearch({ tools: allTools, method: 'embedding' })).rejects.toThrow(
+        'Embedder is required',
+      );
+    });
+
+    it('finds tools using semantic similarity', async () => {
       const toolSearch = await createToolSearch({
-        tools: {
-          'github.createPR': githubCreatePR,
-          'github.listIssues': githubListIssues,
-          'slack.sendMessage': slackSendMessage,
-          'jira.createTicket': jiraCreateTicket,
-          'email.send': emailSend,
-          'weather.get': weatherGet,
-          calculator: calculatorTool,
+        tools: allTools,
+        method: 'embedding',
+        embedder: mockEmbedder as any,
+        minScore: 0,
+      });
+
+      const result = await toolSearch.execute!({ query: 'github PR', input: { title: 'Test' } }, {} as any);
+
+      expect(result.success).toBe(true);
+      expect(result.toolUsed.id).toBe('github.createPR');
+    });
+  });
+
+  describe('Configuration options', () => {
+    it('uses custom tool ID', async () => {
+      const toolSearch = await createToolSearch({
+        tools: allTools,
+        id: 'find_tool',
+      });
+
+      expect(toolSearch.id).toBe('find_tool');
+    });
+
+    it('uses custom description', async () => {
+      const toolSearch = await createToolSearch({
+        tools: allTools,
+        description: 'Find the perfect tool',
+      });
+
+      expect(toolSearch.description).toBe('Find the perfect tool');
+    });
+
+    it('respects minScore threshold', async () => {
+      const toolSearch = await createToolSearch({
+        tools: allTools,
+        minScore: 0.99,
+      });
+
+      const result = await toolSearch.execute!({ query: 'something random' }, {} as any);
+
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('Error handling', () => {
+    it('handles tool execution errors', async () => {
+      const failingTool = createTool({
+        id: 'failing.tool',
+        description: 'A tool that fails',
+        execute: async () => {
+          throw new Error('Tool failed!');
         },
-        method: 'bm25',
       });
 
-      const threadId = 'conversation-123';
-
-      // Step 1: Agent only sees search tool
-      let tools = toolSearch.getTools(threadId);
-      expect(Object.keys(tools)).toEqual(['tool_search']);
-
-      // Step 2: User asks "Create a PR for my bug fix"
-      // Agent searches for relevant tools
-      const searchResult = await tools['tool_search']!.execute!({
-        query: 'create pull request github',
+      const toolSearch = await createToolSearch({
+        tools: { 'failing.tool': failingTool },
       });
 
-      expect(searchResult.success).toBe(true);
-      expect(searchResult.loadedTools[0].id).toBe('github.createPR');
+      const result = await toolSearch.execute!({ query: 'failing' }, {} as any);
 
-      // Step 3: github.createPR is now loaded
-      tools = toolSearch.getTools(threadId);
-      expect(Object.keys(tools)).toContain('github.createPR');
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Tool failed!');
+      expect(result.toolUsed.id).toBe('failing.tool');
+    });
+  });
 
-      // Step 4: Agent calls the loaded tool
-      const prResult = await tools['github.createPR']!.execute!({
-        title: 'Fix critical bug',
-        body: 'This fixes issue #42',
-        base: 'main',
+  describe('Usage with Agent', () => {
+    it('can be passed directly to agent tools', async () => {
+      const toolSearch = await createToolSearch({ tools: allTools });
+
+      // Simulate how it would be passed to Agent
+      const agentTools = { toolSearch };
+
+      expect(agentTools.toolSearch.id).toBe('tool_search');
+      expect(agentTools.toolSearch.execute).toBeDefined();
+    });
+
+    it('can be combined with other tools', async () => {
+      const toolSearch = await createToolSearch({ tools: allTools });
+      const alwaysAvailable = createTool({
+        id: 'help',
+        description: 'Get help',
+        execute: async () => 'Help info',
       });
 
-      expect(prResult.success).toBe(true);
-      expect(prResult.prNumber).toBe(123);
+      // Simulate passing to Agent with other tools
+      const agentTools = { help: alwaysAvailable, toolSearch };
 
-      // Step 5: User asks "Also send a slack message about it"
-      // Agent searches again
-      const searchResult2 = await tools['tool_search']!.execute!({
-        query: 'send slack message',
-      });
+      expect(Object.keys(agentTools)).toEqual(['help', 'toolSearch']);
+    });
+  });
 
-      expect(searchResult2.success).toBe(true);
-      expect(searchResult2.loadedTools[0].id).toBe('slack.sendMessage');
+  describe('Real-world scenario', () => {
+    it('simulates agent finding and using the right tool', async () => {
+      // User has 100+ tools but agent only gets the search tool
+      const toolSearch = await createToolSearch({ tools: allTools });
 
-      // Step 6: Now both tools are loaded
-      tools = toolSearch.getTools(threadId);
-      expect(Object.keys(tools)).toContain('github.createPR');
-      expect(Object.keys(tools)).toContain('slack.sendMessage');
+      // Agent receives a request: "Create a GitHub PR for the bug fix"
+      // Agent calls tool_search with a natural language query
+      const step1 = await toolSearch.execute!(
+        {
+          query: 'create github pull request',
+          input: { title: 'Bug fix PR', description: 'Fixes the login issue' },
+        },
+        {} as any,
+      );
 
-      // Step 7: Agent sends slack message
-      const slackResult = await tools['slack.sendMessage']!.execute!({
-        channel: '#dev',
-        message: 'PR #123 created for bug fix',
-      });
+      expect(step1.success).toBe(true);
+      expect(step1.toolUsed.id).toBe('github.createPR');
+      expect(step1.result.prUrl).toContain('Bug fix PR');
 
-      expect(slackResult.success).toBe(true);
-      expect(slackResult.channel).toBe('#dev');
+      // Agent receives another request: "Let the team know on Slack"
+      const step2 = await toolSearch.execute!(
+        {
+          query: 'send notification slack channel',
+          input: { channel: '#dev', message: 'PR is ready for review!' },
+        },
+        {} as any,
+      );
+
+      expect(step2.success).toBe(true);
+      expect(step2.toolUsed.id).toBe('slack.sendMessage');
+      expect(step2.result.channel).toBe('#dev');
     });
   });
 });
