@@ -28,6 +28,7 @@ const mockEmbedder = {
 } as any;
 
 // Sample tools for testing
+// Tools WITHOUT deferred property (defaults to false)
 const calculatorTool = createTool({
   id: 'calculator',
   description: 'Perform mathematical calculations like addition, subtraction, multiplication, and division',
@@ -80,6 +81,32 @@ const helpTool = createTool({
   inputSchema: z.object({}),
   execute: async () => {
     return { message: 'How can I help you?' };
+  },
+});
+
+// Tools WITH deferred: true on the definition
+const deferredCalculatorTool = createTool({
+  id: 'deferredCalculator',
+  description: 'Perform mathematical calculations (deferred)',
+  deferred: true,
+  inputSchema: z.object({
+    a: z.number(),
+    b: z.number(),
+  }),
+  execute: async ({ a, b }) => {
+    return { result: a + b };
+  },
+});
+
+const deferredWeatherTool = createTool({
+  id: 'deferredWeather',
+  description: 'Get weather and temperature (deferred)',
+  deferred: true,
+  inputSchema: z.object({
+    location: z.string(),
+  }),
+  execute: async ({ location }) => {
+    return { location, temperature: 72 };
   },
 });
 

@@ -108,6 +108,23 @@ export class Tool<
   requireApproval?: boolean;
 
   /**
+   * Whether this tool should be deferred (not loaded into context initially).
+   * When true, the tool will only be loaded after being discovered via tool search.
+   * This is similar to Anthropic's `defer_loading` option.
+   *
+   * @example
+   * ```typescript
+   * const tool = new Tool({
+   *   id: 'my-tool',
+   *   description: 'A tool loaded on-demand',
+   *   deferred: true,
+   *   execute: async () => { ... }
+   * });
+   * ```
+   */
+  deferred?: boolean;
+
+  /**
    * Provider-specific options passed to the model when this tool is used.
    * Keys are provider names (e.g., 'anthropic', 'openai'), values are provider-specific configs.
    * @example
@@ -144,6 +161,7 @@ export class Tool<
     this.resumeSchema = opts.resumeSchema;
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
+    this.deferred = opts.deferred || false;
     this.providerOptions = opts.providerOptions;
 
     // Tools receive two parameters:

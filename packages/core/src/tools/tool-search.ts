@@ -110,7 +110,11 @@ export interface DeferredToolsetConfig {
  * Options for adding tools to a DeferredToolset
  */
 export interface AddToolOptions {
-  /** Whether to defer loading this tool (defaults to false) */
+  /**
+   * Whether to defer loading this tool.
+   * If not specified, uses the tool's `deferred` property.
+   * If the tool doesn't have a `deferred` property, defaults to false.
+   */
   deferLoading?: boolean;
 }
 
@@ -124,7 +128,7 @@ const toolSearchInputSchema = z.object({
 /**
  * DeferredToolset manages tools with deferred loading, similar to Anthropic's Tool Search Tool.
  *
- * Tools marked with `deferLoading: true` are not loaded into the agent's context initially.
+ * Tools marked with `deferred: true` are not loaded into the agent's context initially.
  * Instead, the agent gets a search tool that can discover and load relevant tools on-demand.
  * Once loaded, tools remain available for subsequent calls within the same thread/session.
  *
@@ -136,28 +140,44 @@ const toolSearchInputSchema = z.object({
  *
  * @example
  * ```typescript
- * import { DeferredToolset } from '@mastra/core/tools';
+ * import { DeferredToolset, createTool } from '@mastra/core/tools';
  * import { openai } from '@ai-sdk/openai';
  *
+ * // Define tools with deferred: true on the tool itself
+ * const helpTool = createTool({
+ *   id: 'help',
+ *   description: 'Get help',
+ *   execute: async () => ({ message: 'How can I help?' }),
+ * });
+ *
+ * const createPRTool = createTool({
+ *   id: 'github.createPR',
+ *   description: 'Create a GitHub pull request',
+ *   deferred: true, // This tool will be loaded on-demand
+ *   inputSchema: z.object({ title: z.string(), body: z.string() }),
+ *   execute: async ({ title, body }) => { ... },
+ * });
+ *
+ * const sendMessageTool = createTool({
+ *   id: 'slack.sendMessage',
+ *   description: 'Send a Slack message',
+ *   deferred: true, // This tool will be loaded on-demand
+ *   inputSchema: z.object({ channel: z.string(), message: z.string() }),
+ *   execute: async ({ channel, message }) => { ... },
+ * });
+ *
+ * // Create toolset and add tools - deferred property is respected automatically
  * const toolset = new DeferredToolset({
  *   embedder: openai.embedding('text-embedding-3-small'),
  * });
  *
- * // Add always-loaded critical tools
  * await toolset.addTools({
- *   helpTool: helpTool,
- * }, { deferLoading: false });
+ *   help: helpTool,           // Not deferred - always loaded
+ *   createPR: createPRTool,   // Deferred - loaded on-demand
+ *   sendMessage: sendMessageTool, // Deferred - loaded on-demand
+ * });
  *
- * // Add many deferred tools
- * await toolset.addTools({
- *   'github.createPR': createPRTool,
- *   'github.listIssues': listIssuesTool,
- *   'slack.sendMessage': sendMessageTool,
- *   'jira.createTicket': createTicketTool,
- *   // ... 100+ more tools
- * }, { deferLoading: true });
- *
- * // Use with an agent - pass getTools() as a toolset
+ * // Use with an agent
  * const response = await agent.generate('Create a GitHub PR for this fix', {
  *   toolsets: {
  *     myTools: toolset.getTools(threadId),
@@ -165,10 +185,10 @@ const toolSearchInputSchema = z.object({
  * });
  *
  * // The agent will:
- * // 1. See only helpTool + tool_search initially
+ * // 1. See only help + tool_search initially
  * // 2. Call tool_search with "github PR"
- * // 3. github.createPR gets loaded into context
- * // 4. Agent can now call github.createPR directly
+ * // 3. createPR gets loaded into context
+ * // 4. Agent can now call createPR directly
  * ```
  */
 export class DeferredToolset {
@@ -230,12 +250,13 @@ export class DeferredToolset {
    *
    * @param id - The tool identifier
    * @param tool - The tool to add
-   * @param options - Options including whether to defer loading
+   * @param options - Options including whether to defer loading. If not specified, uses the tool's `deferred` property.
    */
   async addTool(id: string, tool: ToolAction<any, any, any>, options: AddToolOptions = {}): Promise<void> {
-    const { deferLoading = false } = options;
+    // Use explicit option if provided, otherwise fall back to tool's deferred property
+    const shouldDefer = options.deferLoading ?? tool.deferred ?? false;
 
-    if (deferLoading) {
+    if (shouldDefer) {
       const searchText = this.getSearchText(tool, id);
       const embedding = await this.embed(searchText);
 
@@ -251,27 +272,60 @@ export class DeferredToolset {
   }
 
   /**
-   * Adds multiple tools to the toolset.
+   * Adds multiple tools to the toolset, automatically respecting each tool's `deferred` property.
    *
    * @param tools - Record of tool ID to tool instance
-   * @param options - Options including whether to defer loading
+   * @param options - Options including whether to defer loading. If not specified, uses each tool's `deferred` property.
+   *
+   * @example
+   * ```typescript
+   * // Tools with deferred: true are automatically deferred
+   * await toolset.addTools({
+   *   alwaysLoaded: createTool({ id: 'always', description: '...', execute: ... }),
+   *   deferredTool: createTool({ id: 'deferred', description: '...', deferred: true, execute: ... }),
+   * });
+   *
+   * // Or override for all tools
+   * await toolset.addTools(tools, { deferLoading: true });
+   * ```
    */
   async addTools(tools: Record<string, ToolAction<any, any, any>>, options: AddToolOptions = {}): Promise<void> {
-    const { deferLoading = false } = options;
+    // If deferLoading is explicitly set, apply to all tools
+    // Otherwise, respect each tool's individual deferred property
+    const explicitDeferLoading = options.deferLoading;
 
-    if (deferLoading) {
-      // Create embeddings in parallel for efficiency
-      const entries = Object.entries(tools);
+    const entries = Object.entries(tools);
+
+    // Separate tools into deferred and always-loaded based on their properties
+    const deferredEntries: [string, ToolAction<any, any, any>][] = [];
+    const alwaysLoadedEntries: [string, ToolAction<any, any, any>][] = [];
+
+    for (const [id, tool] of entries) {
+      const shouldDefer = explicitDeferLoading ?? tool.deferred ?? false;
+      if (shouldDefer) {
+        deferredEntries.push([id, tool]);
+      } else {
+        alwaysLoadedEntries.push([id, tool]);
+      }
+    }
+
+    // Add always-loaded tools immediately
+    for (const [id, tool] of alwaysLoadedEntries) {
+      this.alwaysLoadedTools.set(id, tool);
+    }
+
+    // Create embeddings for deferred tools in parallel
+    if (deferredEntries.length > 0) {
       const embeddings = await Promise.all(
-        entries.map(async ([id, tool]) => {
+        deferredEntries.map(async ([id, tool]) => {
           const searchText = this.getSearchText(tool, id);
           const embedding = await this.embed(searchText);
           return { id, embedding };
         }),
       );
 
-      for (let i = 0; i < entries.length; i++) {
-        const [id, tool] = entries[i]!;
+      for (let i = 0; i < deferredEntries.length; i++) {
+        const [id, tool] = deferredEntries[i]!;
         const { embedding } = embeddings[i]!;
 
         this.deferredTools.set(id, {
@@ -280,10 +334,6 @@ export class DeferredToolset {
           embedding,
           tool,
         });
-      }
-    } else {
-      for (const [id, tool] of Object.entries(tools)) {
-        this.alwaysLoadedTools.set(id, tool);
       }
     }
   }
