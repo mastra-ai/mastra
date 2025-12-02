@@ -1,15 +1,12 @@
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
-
-import type { MessageList, MastraDBMessage, MessageInput } from '../agent/message-list';
+import type { StepResult, ToolChoice, ToolSet } from 'ai-v5';
+import type { MessageList, MastraDBMessage } from '../agent/message-list';
+import type { ModelRouterModelId } from '../llm/model';
+import type { MastraLanguageModelV2, OpenAICompatibleConfig } from '../llm/model/shared.types';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { ChunkType, OutputSchema } from '../stream';
-import type { AgentExecutionOptions } from '../agent/agent.types';
-import type { AgentConfig } from '../agent/types';
-import type { StepResult, ToolChoice, ToolSet } from 'ai-v5';
-import type { MastraLanguageModelV2, OpenAICompatibleConfig } from '../llm/model/shared.types';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { ModelRouterModelId } from '../llm/model';
+import type { ChunkType } from '../stream';
 
 /**
  * Base context shared by all processor methods
@@ -77,6 +74,7 @@ export interface ProcessInputStepArgs<TOOLS extends ToolSet = ToolSet> extends P
   model: MastraLanguageModelV2;
   steps: Array<StepResult<TOOLS>>;
   toolChoice?: ToolChoice<TOOLS>;
+  tools?: TOOLS;
 }
 
 export type ProcessInputStepResult<TOOLS extends ToolSet = ToolSet> = {
@@ -141,7 +139,11 @@ export interface Processor<TId extends string = string> {
    */
   processInputStep?<TOOLS extends ToolSet = ToolSet>(
     args: ProcessInputStepArgs<TOOLS>,
-  ): Promise<ProcessInputStepResult<TOOLS>> | ProcessInputStepResult<TOOLS> | ProcessorMessageResult;
+  ):
+    | Promise<ProcessInputStepResult<TOOLS> | undefined>
+    | ProcessInputStepResult<TOOLS>
+    | ProcessorMessageResult
+    | undefined;
 }
 
 type WithRequired<T, K extends keyof T> = T & { [P in K]-?: NonNullable<T[P]> };

@@ -1,8 +1,8 @@
 import type { WritableStream } from 'node:stream/web';
 import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import type { CallSettings, IdGenerator, StopCondition, ToolChoice, ToolSet, StepResult, ModelMessage } from 'ai-v5';
+import type { CallSettings, IdGenerator, StopCondition, ToolChoice, ToolSet } from 'ai-v5';
 import z from 'zod';
-import type { MastraDBMessage, MessageInput, MessageList } from '../agent/message-list';
+import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { ModelRouterModelId } from '../llm/model';
@@ -48,9 +48,9 @@ export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
   messages?: Array<MessageInput>;
 };
 
-export type PrepareStepFunction<TOOLS extends ToolSet = ToolSet> = (
+export type PrepareStepFunction = <TOOLS extends ToolSet>(
   args: ProcessInputStepArgs<TOOLS>,
-) => Promise<ProcessInputStepResult<TOOLS>> | ProcessInputStepResult<TOOLS>;
+) => Promise<ProcessInputStepResult<TOOLS> | undefined> | ProcessInputStepResult<TOOLS> | undefined;
 
 // export type PrepareStepFunction<TOOLS extends ToolSet = ToolSet> = (options: {
 //   steps: Array<StepResult<TOOLS>>;
@@ -69,10 +69,10 @@ export type LoopConfig<OUTPUT extends OutputSchema = undefined> = {
   activeTools?: Array<keyof ToolSet> | undefined;
   abortSignal?: AbortSignal;
   returnScorerData?: boolean;
-  prepareStep?: PrepareStepFunction<any>;
+  prepareStep?: PrepareStepFunction;
 };
 
-export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
+export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
   mastra?: Mastra;
   resumeContext?: {
     resumeData: any;
@@ -89,14 +89,14 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   includeRawChunks?: boolean;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   headers?: Record<string, string>;
-  toolChoice?: ToolChoice<any>;
+  toolChoice?: ToolChoice<TOOLS>;
   options?: LoopConfig<OUTPUT>;
   providerOptions?: SharedV2ProviderOptions;
-  tools?: Tools;
+  tools?: TOOLS;
   outputProcessors?: OutputProcessor[];
   inputProcessors?: InputProcessor[];
   experimental_generateMessageId?: () => string;
-  stopWhen?: StopCondition<NoInfer<Tools>> | Array<StopCondition<NoInfer<Tools>>>;
+  stopWhen?: StopCondition<NoInfer<TOOLS>> | Array<StopCondition<NoInfer<TOOLS>>>;
   maxSteps?: number;
   _internal?: StreamInternal;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;

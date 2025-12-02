@@ -525,8 +525,9 @@ export class ProcessorRunner {
     tracingContext?: TracingContext;
     requestContext?: RequestContext;
     toolChoice?: ToolChoice<TOOLS>;
-  }): Promise<ProcessInputStepResult> {
-    const { messageList, stepNumber, tracingContext, requestContext, model, steps, toolChoice } = args;
+    tools?: TOOLS;
+  }): Promise<ProcessInputStepResult<TOOLS>> {
+    const { messageList, stepNumber, tracingContext, requestContext, model, steps, toolChoice, tools } = args;
 
     let stepModel = model;
     let stepToolChoice: ToolChoice<TOOLS> | undefined = toolChoice;

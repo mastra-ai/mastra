@@ -115,7 +115,7 @@ export type AgentExecutionOptions<
   tracingOptions?: TracingOptions;
 
   /** Callback function called before each step of multi-step execution */
-  prepareStep?: PrepareStepFunction<any>;
+  prepareStep?: PrepareStepFunction;
 
   /** Require approval for all tool calls */
   requireToolApproval?: boolean;
