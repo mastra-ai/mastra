@@ -15,7 +15,7 @@ import { toAssistantUIMessage, useMastraClient } from '@mastra/react';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient, UIMessageWithMetadata } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
-
+import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { ModelSettings, MastraUIMessage, useChat } from '@mastra/react';
 import { ToolCallProvider } from './tool-call-provider';
 import { useAgentPromptExperiment } from '@/domains/agents/context';
@@ -176,6 +176,7 @@ export function MastraRuntimeProvider({
 }> &
   ChatProps) {
   const { prompt: instructions } = useAgentPromptExperiment();
+  const { settings: tracingSettings } = useTracingSettings();
   const [isLegacyRunning, setIsLegacyRunning] = useState(false);
   const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>(() =>
     memory ? initializeMessageState(initialLegacyMessages || []) : [],
@@ -271,6 +272,7 @@ export function MastraRuntimeProvider({
             threadId,
             modelSettings: modelSettingsArgs,
             signal: controller.signal,
+            tracingOptions: tracingSettings?.tracingOptions,
             onNetworkChunk: async chunk => {
               if (
                 chunk.type === 'tool-execution-end' &&
@@ -297,6 +299,7 @@ export function MastraRuntimeProvider({
               threadId,
               modelSettings: modelSettingsArgs,
               signal: controller.signal,
+              tracingOptions: tracingSettings?.tracingOptions,
             });
 
             await refreshThreadList?.();
@@ -310,6 +313,7 @@ export function MastraRuntimeProvider({
               requestContext: requestContextInstance,
               threadId,
               modelSettings: modelSettingsArgs,
+              tracingOptions: tracingSettings?.tracingOptions,
               onChunk: async chunk => {
                 if (chunk.type === 'finish') {
                   await refreshThreadList?.();

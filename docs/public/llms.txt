@@ -51,6 +51,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Custom Scorers | Evals](https://mastra.ai/en/docs/evals/custom-scorers)
 - [Scorers overview | Evals](https://mastra.ai/en/docs/evals/overview): Overview of scorers in Mastra, detailing their capabilities for evaluating AI outputs and measuring performance.
 - [Running Scorers in CI | Evals](https://mastra.ai/en/docs/evals/running-in-ci): Learn how to run scorer experiments in your CI/CD pipeline using the runEvals function.
+- [Manual Install | Getting Started](https://mastra.ai/en/docs/getting-started/manual-install): Set up a Mastra project manually without using the create mastra CLI.
 - [Mastra Docs Server | Getting Started](https://mastra.ai/en/docs/getting-started/mcp-docs-server): Learn how to use the Mastra MCP documentation server in your IDE to turn it into an agentic Mastra expert.
 - [Project Structure | Getting Started](https://mastra.ai/en/docs/getting-started/project-structure): Guide on organizing folders and files in Mastra, including best practices and recommended structures.
 - [Start with Mastra | Getting Started](https://mastra.ai/en/docs/getting-started/start): Choose how to get started with Mastra - quickstart, framework integration, or agentic UI.
@@ -115,7 +116,6 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Workflow state | Workflows](https://mastra.ai/en/docs/workflows/workflow-state): Share values across workflow steps using global state that persists through the entire workflow run.
 
 ## EN - examples
-- [Example: Supervisor Agent | Agents](https://mastra.ai/en/examples/agents/supervisor-agent): Example of creating a supervisor agent using Mastra, where agents interact through tool functions.
 - [Examples List: Workflows, Agents, RAG](https://mastra.ai/en/examples): Explore practical examples of AI development with Mastra, including text generation, RAG implementations, structured outputs, and multi-modal interactions. Learn how to build AI applications using OpenAI, Anthropic, and Google Gemini.
 - [Example: Metadata Extraction | RAG](https://mastra.ai/en/examples/rag/embedding/metadata-extraction): Example of extracting and utilizing metadata from documents in Mastra for enhanced document processing and retrieval.
 - [Example: Hybrid Vector Search | RAG](https://mastra.ai/en/examples/rag/query/hybrid-vector-search): Example of using metadata filters with PGVector to enhance vector search results in Mastra.
@@ -137,7 +137,6 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Using CopilotKit | Frameworks](https://mastra.ai/en/guides/build-your-ui/copilotkit): Learn how to integrate CopilotKit with Mastra
 - [Integrate Mastra in your Astro project | Frameworks](https://mastra.ai/en/guides/getting-started/astro): A step-by-step guide to integrating Mastra with Astro.
 - [Integrate Mastra in your Express project | Frameworks](https://mastra.ai/en/guides/getting-started/express): A step-by-step guide to integrating Mastra with an Express backend.
-- [Manual Install | Guides](https://mastra.ai/en/guides/getting-started/manual-install): Set up a Mastra project manually without using the create mastra CLI.
 - [Next.js | Frameworks](https://mastra.ai/en/guides/getting-started/next-js): Get started with Mastra and Next.js
 - [Quickstart](https://mastra.ai/en/guides/getting-started/quickstart): Get started with Mastra using the create mastra CLI to build a server with agents, workflows, and tools.
 - [Integrate Mastra in your SvelteKit project | Frameworks](https://mastra.ai/en/guides/getting-started/sveltekit): A step-by-step guide to integrating Mastra with SvelteKit.
@@ -178,7 +177,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 58+ AI providers and 1156+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 59+ AI providers and 1159+ models through Mastra's model router.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
@@ -189,7 +188,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Bailing | Models | Mastra](https://mastra.ai/en/models/providers/bailing): Use Bailing models with Mastra. 2 models available.
 - [Baseten | Models | Mastra](https://mastra.ai/en/models/providers/baseten): Use Baseten models with Mastra. 4 models available.
 - [Cerebras | Models | Mastra](https://mastra.ai/en/models/providers/cerebras): Use Cerebras models with Mastra. 3 models available.
-- [Chutes | Models | Mastra](https://mastra.ai/en/models/providers/chutes): Use Chutes models with Mastra. 52 models available.
+- [Chutes | Models | Mastra](https://mastra.ai/en/models/providers/chutes): Use Chutes models with Mastra. 54 models available.
 - [Cloudflare Workers AI](https://mastra.ai/en/models/providers/cloudflare-workers-ai): Use Cloudflare Workers AI models via the AI SDK.
 - [Cohere](https://mastra.ai/en/models/providers/cohere): Use Cohere models via the AI SDK.
 - [Cortecs | Models | Mastra](https://mastra.ai/en/models/providers/cortecs): Use Cortecs models with Mastra. 11 models available.
@@ -208,6 +207,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Inference | Models | Mastra](https://mastra.ai/en/models/providers/inference): Use Inference models with Mastra. 9 models available.
 - [IO Intelligence | Models | Mastra](https://mastra.ai/en/models/providers/io-intelligence): Use IO Intelligence models with Mastra. 17 models available.
 - [IO.NET | Models | Mastra](https://mastra.ai/en/models/providers/io-net): Use IO.NET models with Mastra. 17 models available.
+- [Kimi For Coding | Models | Mastra](https://mastra.ai/en/models/providers/kimi-for-coding): Use Kimi For Coding models with Mastra. 1 model available.
 - [Llama | Models | Mastra](https://mastra.ai/en/models/providers/llama): Use Llama models with Mastra. 7 models available.
 - [LMStudio | Models | Mastra](https://mastra.ai/en/models/providers/lmstudio): Use LMStudio models with Mastra. 3 models available.
 - [LucidQuery AI | Models | Mastra](https://mastra.ai/en/models/providers/lucidquery): Use LucidQuery AI models with Mastra. 2 models available.
@@ -390,10 +390,8 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Agent.stream() | Streaming](https://mastra.ai/en/reference/streaming/agents/stream): Documentation for the `Agent.stream()` method in Mastra agents, which enables real-time streaming of responses with enhanced capabilities.
 - [Reference: Agent.streamLegacy() (Legacy) | Streaming](https://mastra.ai/en/reference/streaming/agents/streamLegacy): Documentation for the legacy `Agent.streamLegacy()` method in Mastra agents. This method is deprecated and will be removed in a future version.
 - [Reference: Run.observeStream() | Streaming](https://mastra.ai/en/reference/streaming/workflows/observeStream): Documentation for the `Run.observeStream()` method in workflows, which enables reopening the stream of an already active workflow run.
-- [Reference: Run.observeStreamVNext() (Experimental) | Streaming](https://mastra.ai/en/reference/streaming/workflows/observeStreamVNext): Documentation for the `Run.observeStreamVNext()` method in workflows, which enables reopening the stream of an already active workflow run.
-- [Reference: Run.resumeStreamVNext() (Experimental) | Streaming](https://mastra.ai/en/reference/streaming/workflows/resumeStreamVNext): Documentation for the `Run.resumeStreamVNext()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
-- [Reference: Run.stream() | Streaming](https://mastra.ai/en/reference/streaming/workflows/stream): Documentation for the `Run.stream()` method in workflows, which allows you to monitor the execution of a workflow run as a stream.
-- [Reference: Run.streamVNext() (Experimental) | Streaming](https://mastra.ai/en/reference/streaming/workflows/streamVNext): Documentation for the `Run.streamVNext()` method in workflows, which enables real-time streaming of responses.
+- [Reference: Run.resumeStream() | Streaming](https://mastra.ai/en/reference/streaming/workflows/resumeStream): Documentation for the `Run.resumeStream()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
+- [Reference: Run.stream() | Streaming](https://mastra.ai/en/reference/streaming/workflows/stream): Documentation for the `Run.stream()` method in workflows, which enables real-time streaming of responses.
 - [Reference: LLM provider API keys (choose one or more) | Templates](https://mastra.ai/en/reference/templates/overview): Complete guide to creating, using, and contributing Mastra templates
 - [Reference: MastraMCPClient (Deprecated) | Tools & MCP](https://mastra.ai/en/reference/tools/client): API Reference for MastraMCPClient - A client implementation for the Model Context Protocol.
 - [Reference: createTool() | Tools & MCP](https://mastra.ai/en/reference/tools/create-tool): Documentation for the `createTool()` function in Mastra, used to define custom tools for agents.

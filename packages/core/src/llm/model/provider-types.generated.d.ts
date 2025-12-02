@@ -380,7 +380,9 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-V3-0324',
     'deepseek-ai/DeepSeek-V3.1',
     'deepseek-ai/DeepSeek-V3.1-Terminus',
+    'deepseek-ai/DeepSeek-V3.2',
     'deepseek-ai/DeepSeek-V3.2-Exp',
+    'deepseek-ai/DeepSeek-V3.2-Speciale',
     'meituan-longcat/LongCat-Flash-Chat-FP8',
     'microsoft/MAI-DS-R1-FP8',
     'moonshotai/Kimi-K2-Instruct-0905',
@@ -421,6 +423,7 @@ export type ProviderModelsMap = {
     'gpt-5.1',
     'kimi-k2-thinking',
   ];
+  readonly 'kimi-for-coding': readonly ['kimi-k2-thinking'];
   readonly cortecs: readonly [
     'claude-4-5-sonnet',
     'claude-sonnet-4',
