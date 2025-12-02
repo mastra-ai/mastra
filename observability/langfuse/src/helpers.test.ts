@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTracingOptions, withUserId, withSessionId } from '@mastra/observability';
+import { buildTracingOptions } from '@mastra/observability';
 import { withLangfusePrompt } from './helpers';
 
 describe('withLangfusePrompt', () => {
@@ -75,11 +75,12 @@ describe('withLangfusePrompt', () => {
   });
 
   it('should compose with other updaters', () => {
-    const result = buildTracingOptions(
-      withLangfusePrompt({ name: 'test-prompt', version: 1 }),
-      withUserId('user-123'),
-      withSessionId('session-456'),
-    );
+    const withUserId = (userId: string) => (opts: any) => ({
+      ...opts,
+      metadata: { ...opts.metadata, userId },
+    });
+
+    const result = buildTracingOptions(withLangfusePrompt({ name: 'test-prompt', version: 1 }), withUserId('user-123'));
 
     expect(result).toEqual({
       metadata: {
@@ -90,7 +91,6 @@ describe('withLangfusePrompt', () => {
           },
         },
         userId: 'user-123',
-        sessionId: 'session-456',
       },
     });
   });

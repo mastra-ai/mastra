@@ -159,19 +159,4 @@ withLangfusePrompt({ name: "my-prompt", version: 1 })
 withLangfusePrompt({ id: "prompt-uuid" })
 ```
 
-### Composing Options
-
-Use `buildTracingOptions` from `@mastra/observability` to compose multiple updaters:
-
-```typescript
-import { buildTracingOptions, withUserId, withSessionId } from "@mastra/observability";
-import { withLangfusePrompt } from "@mastra/langfuse";
-
-const tracingOptions = buildTracingOptions(
-  withLangfusePrompt(prompt),
-  withUserId("user-123"),
-  withSessionId("session-456"),
-);
-```
-
 When `metadata.langfuse.prompt` is set on a `MODEL_GENERATION` span (with either `id` alone, or `name` + `version`), the exporter automatically links the generation to the prompt in Langfuse.

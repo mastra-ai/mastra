@@ -142,21 +142,6 @@ export const supportAgent = new Agent({
 
 The `withLangfusePrompt` helper automatically extracts `name`, `version`, and `id` from the Langfuse prompt object.
 
-### Composing Multiple Options
-
-You can compose multiple tracing options together:
-
-```typescript
-import { buildTracingOptions, withUserId, withSessionId } from "@mastra/observability";
-import { withLangfusePrompt } from "@mastra/langfuse";
-
-const tracingOptions = buildTracingOptions(
-  withLangfusePrompt(prompt),
-  withUserId("user-123"),
-  withSessionId("session-456"),
-);
-```
-
 ### Manual Fields
 
 You can also pass manual fields if you're not using the Langfuse SDK:
