@@ -1,5 +1,6 @@
 import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
-import { generateId } from 'ai-v5';
+import type { IdGenerator } from 'ai-v5';
+import { generateId as defaultGenerateId } from 'ai-v5';
 import type { RegisteredLogger } from '../../../logger';
 import { MastraModelInput } from '../../base';
 import type { ChunkType } from '../../types';
@@ -16,8 +17,19 @@ function isNumericId(id: string): boolean {
 }
 
 export class AISDKV5InputStream extends MastraModelInput {
-  constructor({ component, name }: { component: RegisteredLogger; name: string }) {
+  #generateId: IdGenerator;
+
+  constructor({
+    component,
+    name,
+    generateId,
+  }: {
+    component: RegisteredLogger;
+    name: string;
+    generateId?: IdGenerator;
+  }) {
     super({ component, name });
+    this.#generateId = generateId ?? defaultGenerateId;
   }
 
   async transform({
@@ -58,7 +70,7 @@ export class AISDKV5InputStream extends MastraModelInput {
         ) {
           const originalId = transformedChunk.payload.id;
           if (!idMap.has(originalId)) {
-            idMap.set(originalId, generateId());
+            idMap.set(originalId, this.#generateId());
           }
           transformedChunk.payload.id = idMap.get(originalId)!;
         }
