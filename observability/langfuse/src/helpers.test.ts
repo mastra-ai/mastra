@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
 import { buildTracingOptions } from '@mastra/observability';
+import { describe, expect, it } from 'vitest';
 import { withLangfusePrompt } from './helpers';
 
 describe('withLangfusePrompt', () => {
