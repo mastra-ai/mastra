@@ -17,12 +17,12 @@
 import { randomUUID } from 'node:crypto';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { MastraModelConfig } from '@mastra/core/llm';
 
 type MessagePart = MastraMessageContentV2['parts'][number];
 type OrderEntry = { type: string; content?: string };
@@ -46,8 +46,8 @@ const MODEL_CONFIGS: ModelConfig[] = [
     envVar: 'ANTHROPIC_API_KEY',
   },
   {
-    name: 'Google Gemini 2.5 Flash',
-    model: 'poe/google/gemini-3.0-pro',
+    name: 'Google Gemini 3.0',
+    model: 'google/gemini-pro-latest',
     envVar: 'GOOGLE_GENERATIVE_AI_API_KEY',
   },
 ];
@@ -222,7 +222,7 @@ for (const modelConfig of MODEL_CONFIGS) {
       return false;
     };
 
-    it.only('should preserve text ordering: stream -> raw storage -> recall', async () => {
+    it('should preserve text ordering: stream -> raw storage -> recall', async () => {
       if (skipIfNoApiKey()) return;
 
       const memory = createMemory();
