@@ -124,8 +124,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     details?: Record<string, any>;
   };
   public metadata?: Record<string, any>;
-  public traceState?: TraceState;
   public tags?: string[];
+  public traceState?: TraceState;
   /** Parent span ID (for root spans that are children of external spans) */
   protected parentSpanId?: string;
 

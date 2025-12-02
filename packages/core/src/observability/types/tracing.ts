@@ -337,6 +337,8 @@ interface BaseSpan<TType extends SpanType> {
   attributes?: SpanTypeMap[TType];
   /** User-defined metadata */
   metadata?: Record<string, any>;
+  /** Labels used to categorize and filter traces. Only valid on root spans. */
+  tags?: string[];
   /** Input passed at the start of the span */
   input?: any;
   /** Output generated at the end of the span */
@@ -365,11 +367,6 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
   observabilityInstance: ObservabilityInstance;
   /** Trace-level state shared across all spans in this trace */
   traceState?: TraceState;
-  /**
-   * Tags for this trace (only set on root spans).
-   * Tags are string labels used to categorize and filter traces.
-   */
-  tags?: string[];
 
   // Methods for span lifecycle
   /** End the span */
@@ -602,6 +599,8 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
   input?: any;
   /** Output data (for event spans) */
   output?: any;
+  /** Labels used to categorize and filter traces. Only valid on root spans. */
+  tags?: string[];
   /** Parent span */
   parent?: AnySpan;
   /** Is an event span? */
@@ -618,11 +617,6 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
   parentSpanId?: string;
   /** Trace-level state shared across all spans in this trace */
   traceState?: TraceState;
-  /**
-   * Tags for this trace (only used for root spans).
-   * Tags are string labels used to categorize and filter traces.
-   */
-  tags?: string[];
 }
 
 /**
